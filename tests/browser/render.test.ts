@@ -43,7 +43,9 @@ afterAll(async () => {
 
 async function frame(sceneId: string): Promise<Uint8Array> {
   const data = (await page.evaluate(
-    (id) => (window as unknown as { __princeFrame(id: string): number[] }).__princeFrame(id),
+    (id) => (window as unknown as {
+      __princeFrame(id: string): Promise<number[]> | number[];
+    }).__princeFrame(id),
     sceneId,
   )) as number[];
   return Uint8Array.from(data);

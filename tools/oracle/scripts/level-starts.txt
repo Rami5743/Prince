@@ -1,0 +1,26 @@
+# Start of each of the first seven levels, which covers both the dungeon and
+# the palace tile sets. Return leaves the title sequence; Shift+L is the
+# cheat build's "skip to the next level". The long waits are to let the
+# between-level cut-scenes finish before the frame is taken.
+wait 10
+key Return
+wait 8
+shot level01-start
+key shift+l
+wait 30
+shot level02-start
+key shift+l
+wait 30
+shot level03-start
+key shift+l
+wait 30
+shot level04-start
+key shift+l
+wait 30
+shot level05-start
+key shift+l
+wait 30
+shot level06-start
+key shift+l
+wait 30
+shot level07-start

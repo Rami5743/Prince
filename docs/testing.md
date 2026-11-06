@@ -72,7 +72,32 @@ description of the format. The implementation here is written independently in
 TypeScript; what was taken is the description of the on-disk layout, which the
 test suite then verifies against the original game's own output.
 
-## 3. The port, in a real browser
+## 3. Rooms, compared tile for tile
+
+`tests/render/rooms.test.ts` draws six rooms -- three dungeon, three palace --
+and requires each to equal a capture of the same room, pixel for pixel, except
+in regions the test names explicitly. Today the only such region is the Prince
+himself, who is not drawn yet: the test pins his exact bounding box and pixel
+count, so the exception cannot quietly grow, and it disappears when characters
+are implemented.
+
+Some tiles look different from one moment to the next. Torch flames pick a
+random frame and mostly advance by one per tick, so two torches side by side
+are rarely in step; gates are part way through opening; potion bubbles rise.
+The capture caught each of those in some state. Rather than exclude them, the
+test is given the state the capture was in -- found once by searching each
+tile's own small range of states against the capture, then pinned in the test
+with the rest of the case.
+
+`tools/dev/render-room.ts` is the tool that does that search, and writes our
+frame, theirs, and a difference map side by side:
+
+```bash
+node --experimental-strip-types tools/dev/render-room.ts 4 1 \
+    tests/golden/level04-start.png /tmp/out
+```
+
+## 4. The port, in a real browser
 
 `tests/browser/render.test.ts` serves the repository, opens the page in
 headless Chromium, and reads back the exact 320x200 frame the page drew

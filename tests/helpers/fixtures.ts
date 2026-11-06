@@ -104,3 +104,53 @@ export function compareRgb(
   }
   return { count, first };
 }
+
+export interface DiffCluster {
+  x0: number; y0: number; x1: number; y1: number; count: number;
+}
+
+/**
+ * Group differing pixels into bounding boxes, so a test can state exactly
+ * which regions are expected to differ rather than quoting a total.
+ */
+export function diffClusters(
+  got: Uint8Array, want: Uint8Array, width: number, height: number,
+): DiffCluster[] {
+  const pending = new Set<number>();
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 3;
+      if (got[i] !== want[i] || got[i + 1] !== want[i + 1] || got[i + 2] !== want[i + 2]) {
+        pending.add(y * width + x);
+      }
+    }
+  }
+  const out: DiffCluster[] = [];
+  while (pending.size) {
+    const first: number = pending.values().next().value as number;
+    pending.delete(first);
+    const stack = [first];
+    let x0 = first % width, x1 = x0, y0 = (first / width) | 0, y1 = y0, count = 1;
+    while (stack.length) {
+      const p = stack.pop() as number;
+      const px = p % width, py = (p / width) | 0;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = px + dx, ny = py + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const q = ny * width + nx;
+          if (!pending.has(q)) continue;
+          pending.delete(q);
+          stack.push(q);
+          count++;
+          if (nx < x0) x0 = nx;
+          if (nx > x1) x1 = nx;
+          if (ny < y0) y0 = ny;
+          if (ny > y1) y1 = ny;
+        }
+      }
+    }
+    out.push({ x0, y0, x1, y1, count });
+  }
+  return out.sort((a, b) => b.count - a.count);
+}

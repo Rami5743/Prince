@@ -1,91 +1,138 @@
 /**
- * Browser entry point. Loads the original `.DAT` files and draws with them.
+ * Browser entry point. Loads the original `.DAT` files and the original
+ * executable, and draws with them.
  */
 import { Assets, browserFetcher } from '../src/render/assets.ts';
 import { Display } from '../src/render/display.ts';
-import { Surface } from '../src/render/surface.ts';
-import { paletteToRgba } from '../src/dat/palette.ts';
+import { Surface, ScreenPalette } from '../src/render/surface.ts';
+import { RoomRenderer } from '../src/render/room.ts';
+import { buildLevelScene, type LevelScene } from '../src/game/scene.ts';
+import { parsePalette } from '../src/dat/palette.ts';
 
 const DATA_URL = '../original/prince1';
-
-interface Scene {
-  readonly id: string;
-  readonly label: string;
-  draw(surface: Surface): Uint8Array;
-}
 
 async function boot(): Promise<void> {
   const canvas = document.getElementById('screen') as HTMLCanvasElement;
   const sceneSel = document.getElementById('scene') as HTMLSelectElement;
+  const roomSel = document.getElementById('room') as HTMLSelectElement;
   const aspectSel = document.getElementById('aspect') as HTMLSelectElement;
   const status = document.getElementById('status') as HTMLElement;
 
   const display = new Display(canvas);
   const surface = new Surface();
   const assets = new Assets(browserFetcher(DATA_URL));
+  const exe = await assets.dat('UNCRKD.EXE').then(
+    () => undefined,
+    () => undefined,
+  ).then(async () => new Uint8Array(
+    await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer(),
+  ));
 
-  const opening = await assets.group('TITLE.DAT', 40);
+  const titlePalette = new ScreenPalette();
   const title = await assets.group('TITLE.DAT', 50);
+  const opening = await assets.group('TITLE.DAT', 40);
 
-  const scenes: Scene[] = [
-    {
-      id: 'title-background',
-      label: 'title screen background',
-      draw(s) {
-        const img = title.images[1]!;
-        s.blitOpaque(img, 0, 0);
-        return title.paletteRgba;
-      },
-    },
-    {
-      id: 'opening-background',
-      label: 'opening screen background',
-      draw(s) {
-        s.blitOpaque(opening.images[1]!, 0, 0);
-        return opening.paletteRgba;
-      },
-    },
+  const scenes = new Map<string, LevelScene>();
+  async function level(n: number): Promise<LevelScene> {
+    let s = scenes.get(`L${n}`);
+    if (!s) {
+      s = await buildLevelScene(assets, exe, n);
+      scenes.set(`L${n}`, s);
+    }
+    return s;
+  }
+
+  type View =
+    | { kind: 'image'; label: string; group: typeof title; index: number }
+    | { kind: 'room'; label: string; level: number };
+
+  const views: View[] = [
+    { kind: 'image', label: 'title screen', group: title, index: 1 },
+    { kind: 'image', label: 'opening screen', group: opening, index: 1 },
   ];
+  for (let n = 1; n <= 14; n++) {
+    views.push({ kind: 'room', label: `level ${n}`, level: n });
+  }
 
-  for (const sc of scenes) {
+  for (const [i, v] of views.entries()) {
     const o = document.createElement('option');
-    o.value = sc.id;
-    o.textContent = sc.label;
+    o.value = String(i);
+    o.textContent = v.label;
     sceneSel.append(o);
   }
 
-  let current = scenes[0];
-  const render = (): void => {
+  let current = 0;
+  let room = 1;
+
+  async function render(): Promise<void> {
+    const v = views[current];
     surface.clear();
-    const pal = current.draw(surface);
-    display.present(surface, pal);
-    status.textContent = `${current.label} — 320x200, drawn from the original data files`;
-  };
+    if (v.kind === 'image') {
+      roomSel.disabled = true;
+      titlePalette.loadBlock(0, v.group.palette.vga);
+      surface.blitOpaque(v.group.images[v.index]!, 0, 0);
+      display.present(surface, titlePalette.toRgba());
+      status.textContent = `${v.label} — 320x200, drawn from the original data files`;
+    } else {
+      roomSel.disabled = false;
+      const scene = await level(v.level);
+      if (roomSel.options.length !== 24) {
+        roomSel.replaceChildren();
+        for (let r = 1; r <= 24; r++) {
+          const o = document.createElement('option');
+          o.value = String(r);
+          o.textContent = `room ${r}`;
+          roomSel.append(o);
+        }
+      }
+      roomSel.value = String(room);
+      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room);
+      display.present(surface, scene.screenPalette.toRgba());
+      const type = scene.options.levelType ? 'palace' : 'dungeon';
+      status.textContent =
+        `${v.label} (${type}), room ${room} — the Prince and the guards are not drawn yet`;
+    }
+  }
 
   sceneSel.addEventListener('change', () => {
-    current = scenes.find((s) => s.id === sceneSel.value) ?? scenes[0];
-    render();
+    current = Number(sceneSel.value);
+    const v = views[current];
+    if (v.kind === 'room') {
+      void level(v.level).then((s) => { room = s.level.startRoom; void render(); });
+    } else {
+      void render();
+    }
   });
+  roomSel.addEventListener('change', () => { room = Number(roomSel.value); void render(); });
   aspectSel.addEventListener('change', () => {
     display.setAspect(aspectSel.value as 'original-4-3' | 'square-pixels');
   });
 
-  render();
+  await render();
 
-  // Hook for the browser-level comparison tests: hand back the exact 320x200
-  // RGB the page is showing, so it can be diffed against a DOSBox capture.
-  (window as unknown as Record<string, unknown>).__princeFrame = (sceneId?: string) => {
-    if (sceneId) {
-      const sc = scenes.find((s) => s.id === sceneId);
-      if (!sc) throw new Error(`no scene ${sceneId}`);
+  // Hook for the browser-level comparison tests.
+  (window as unknown as Record<string, unknown>).__princeFrame = async (id?: string) => {
+    if (id === 'title-background') {
       surface.clear();
-      const pal = sc.draw(surface);
-      return Array.from(surface.toRgb(pal));
+      titlePalette.loadBlock(0, title.palette.vga);
+      surface.blitOpaque(title.images[1]!, 0, 0);
+      return Array.from(surface.toRgb(titlePalette.toRgba()));
     }
-    return Array.from(surface.toRgb(current.draw(surface)));
+    await render();
+    const v = views[current];
+    const pal = v.kind === 'image' ? titlePalette : (await level(v.level)).screenPalette;
+    return Array.from(surface.toRgb(pal.toRgba()));
+  };
+  (window as unknown as Record<string, unknown>).__princeShow = async (
+    lvl: number, rm: number,
+  ) => {
+    current = views.findIndex((v) => v.kind === 'room' && v.level === lvl);
+    room = rm;
+    sceneSel.value = String(current);
+    await render();
   };
   (window as unknown as Record<string, unknown>).__princeReady = true;
-  void paletteToRgba;
+  void parsePalette;
 }
 
 boot().catch((err: unknown) => {

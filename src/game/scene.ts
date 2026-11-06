@@ -1,0 +1,97 @@
+/**
+ * Assembling everything a level needs to be drawn: the right tile set for its
+ * type, the sprite groups, the palette, and the level's tiles with their
+ * modifiers already rewritten the way the original rewrites them on load.
+ */
+import type { Assets } from '../render/assets.ts';
+import type { Chtabs, RoomTiles, RoomRenderOptions } from '../render/room.ts';
+import { ScreenPalette } from '../render/surface.ts';
+import { parseLevel, resourceIdOfLevel, type Level } from '../dat/level.ts';
+import { alterModifiers, TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
+import { readExeConstants, type ExeConstants } from './exe-constants.ts';
+
+export interface LevelScene {
+  readonly level: Level;
+  readonly constants: ExeConstants;
+  readonly chtabs: Chtabs;
+  /** The 256-colour hardware palette, with each group's block loaded. */
+  readonly screenPalette: ScreenPalette;
+  readonly tiles: RoomTiles;
+  readonly options: RoomRenderOptions;
+}
+
+/**
+ * Where each sprite group's sixteen colours sit in the 256-colour palette.
+ * These are the blocks the original asked for when it loaded each group.
+ */
+export const PALETTE_BASE = {
+  /** The default VGA colours; mono blits and the status bar use these. */
+  global: 0,
+  sword: 2 * 16,
+  flameSwordPotion: 3 * 16,
+  environment: 5 * 16,
+  environmentWall: 6 * 16,
+  kid: 7 * 16,
+  guard: 8 * 16,
+} as const;
+
+/** Tile set file for a level, by video mode prefix and level type. */
+export function tilesetFileFor(levelType: number, prefix = 'V'): string {
+  return `${prefix}${levelType ? 'PALACE' : 'DUNGEON'}.DAT`;
+}
+
+export async function buildLevelScene(
+  assets: Assets,
+  exe: Uint8Array,
+  levelNumber: number,
+  prefix = 'V',
+): Promise<LevelScene> {
+  const constants = readExeConstants(exe);
+  const levelsDat = await assets.dat('LEVELS.DAT');
+  const resourceId = resourceIdOfLevel(levelNumber);
+  const level = parseLevel(levelsDat.get(resourceId), resourceId);
+
+  const levelType = constants.levelType[levelNumber] ?? 0;
+  const tilesetFile = tilesetFileFor(levelType, prefix);
+
+  const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
+  const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
+  const flameSwordPotion = await assets.group('PRINCE.DAT', 150, PALETTE_BASE.flameSwordPotion);
+
+  const screenPalette = new ScreenPalette();
+  screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
+  for (const set of [environment, environmentWall, flameSwordPotion]) {
+    screenPalette.loadBlock(set.paletteBase, set.palette.vga);
+  }
+
+  const modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
+
+  const tiles: RoomTiles = {
+    typeAt(room, column, row) {
+      if (room < 1 || room > 24) return 0;
+      return level.fg[(room - 1) * 30 + row * ROOM_COLUMNS + column] & TILE_TYPE_MASK;
+    },
+    modifierAt(room, column, row) {
+      if (room < 1 || room > 24) return 0;
+      return modifiers[(room - 1) * 30 + row * ROOM_COLUMNS + column];
+    },
+    linkOf(room, dir) {
+      if (room < 1 || room > 24) return 0;
+      return level.roomLinks[(room - 1) * 4 + dir];
+    },
+  };
+
+  return {
+    level,
+    constants,
+    chtabs: { environment, environmentWall, flameSwordPotion },
+    screenPalette,
+    tiles,
+    options: {
+      levelType,
+      topLevelEdgeTile: constants.drawnTileTopLevelEdge,
+      leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
+      enableWdaInPalace: constants.enableWdaInPalace,
+    },
+  };
+}
