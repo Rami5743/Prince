@@ -2591,7 +2591,6 @@ var EN_GARDE_FIRST = 170;
 var EN_GARDE_LAST = 171;
 function advanceOnKid(guard, ctx) {
   if (guard.alive >= 0 || guard.sword !== 2) return;
-  if (ctx.kidArmed === false) return;
   if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   if (ctx.kidX === void 0) return;

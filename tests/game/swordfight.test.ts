@@ -131,7 +131,7 @@ describe('a Prince with no sword', () => {
     expect(game.kid.sword, 'the Prince has none to draw').toBe(0);
   });
 
-  it('is held off, not walked at, and one blow finishes him', async () => {
+  it('is walked at, and one blow finishes him', async () => {
     const game = await Game.start(assets, exe, 1);
     game.showRoom(3);
     const kid = game.kid;
@@ -146,7 +146,12 @@ describe('a Prince with no sword', () => {
     }
     expect(died, 'running at him unarmed is fatal').toBeGreaterThan(0);
     expect(game.hitPoints, 'and it takes everything at once').toBe(0);
-    // He drew his sword, which shifts him a little, but he did not walk in.
-    expect(Math.abs(game.guard.x - guardStart)).toBeLessThan(14);
+    // And he comes to meet him. A grabbed video of this very room shows
+    // the guard walking in from x 273 to x 100 on the screen over fifty
+    // ticks while the Prince, who has no sword on level 1, is in front of
+    // him; the sparse captures this used to rest on could not see it, and
+    // had the guard standing in his corner.
+    expect(game.guard.x, 'the guard closes on him')
+      .toBeLessThan(guardStart - 14);
   });
 });

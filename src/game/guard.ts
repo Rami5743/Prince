@@ -323,12 +323,12 @@ const EN_GARDE_LAST = 171;
  */
 function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.alive >= 0 || guard.sword !== 2) return;
-  // Not at an unarmed Prince. The guard of level 1's room 3 stands his
-  // ground while an unarmed Prince runs at him and only strikes when he
-  // arrives, where level 2's guard -- met by a Prince with a sword --
-  // leaves his corner and closes. Both captures are explained by the
-  // Prince's sword and nothing else, so that is what this reads.
-  if (ctx.kidArmed === false) return;
+  // A guard closes on an unarmed Prince too. This used to stop at one,
+  // read off `session-level1-guard`, where the guard of level 1's room 3
+  // looked as though he stood his ground; a grabbed video of that same
+  // room shows him walking in from x 273 to x 100 over fifty ticks while
+  // the Prince, who has no sword on level 1, backs away in front of him.
+  // The captures were too sparse to see it.
   if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   if (ctx.kidX === undefined) return;
