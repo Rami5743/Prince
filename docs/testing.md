@@ -71,3 +71,13 @@ The compression schemes were cross-checked against the SDLPoP project's
 description of the format. The implementation here is written independently in
 TypeScript; what was taken is the description of the on-disk layout, which the
 test suite then verifies against the original game's own output.
+
+## 3. The port, in a real browser
+
+`tests/browser/render.test.ts` serves the repository, opens the page in
+headless Chromium, and reads back the exact 320x200 frame the page drew
+through a `__princeFrame()` hook. That frame is then compared with the same
+DOSBox capture, again requiring zero differing pixels.
+
+So the title screen is verified twice: once as a decode in Node, and once as
+something a browser actually painted.

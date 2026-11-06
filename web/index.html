@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Prince of Persia</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0b0d; --fg: #cfc7b8; --dim: #6d6659; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; padding: 16px;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #screen {
+    width: min(100%, 1280px); aspect-ratio: 4 / 3; image-rendering: pixelated;
+    background: #000; border: 1px solid #24222a; display: block;
+  }
+  #bar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  label { color: var(--dim); display: inline-flex; gap: 6px; align-items: center; }
+  select, button {
+    font: inherit; background: #17161b; color: var(--fg);
+    border: 1px solid #2e2b36; border-radius: 4px; padding: 3px 8px;
+  }
+  #status { color: var(--dim); min-height: 1.5em; text-align: center; }
+</style>
+</head>
+<body>
+  <canvas id="screen" width="320" height="200"></canvas>
+  <div id="bar">
+    <label>scene
+      <select id="scene"></select>
+    </label>
+    <label>pixels
+      <select id="aspect">
+        <option value="original-4-3">4:3 (as on a CRT)</option>
+        <option value="square-pixels">square</option>
+      </select>
+    </label>
+  </div>
+  <div id="status">loading the game's data files…</div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

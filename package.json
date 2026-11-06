@@ -7,7 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "vitest run",
+    "build": "esbuild web/main.ts --bundle --format=esm --target=es2022 --outfile=web/main.js",
+    "watch": "esbuild web/main.ts --bundle --format=esm --target=es2022 --outfile=web/main.js --watch",
+    "serve": "node tools/dev/serve.mjs 8099 .",
+    "test": "npm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "repository": {
@@ -24,6 +27,8 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/pngjs": "^6.0.5",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.65.0",
     "pngjs": "^7.0.0",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
