@@ -15,7 +15,7 @@ npm run serve     # then open http://localhost:8099/web/
 Arrow keys to move, shift to step carefully.
 
 ```bash
-npm test          # 258 tests
+npm test          # 317 tests
 npm run typecheck
 ```
 
@@ -38,7 +38,8 @@ npm run typecheck
 | Gates, buttons and their wiring | ✅ |
 | Loose floors: shake, give way, fall, crash | ✅ |
 | Spikes and chompers | ✅ |
-| Guards and sword fighting | ❌ not yet |
+| Guards: placed, coloured, drawn with their swords | ✅ |
+| Guard behaviour and sword fighting | ❌ not yet |
 | Sound | ❌ not yet |
 | Status bar: the clock | ❌ not yet |
 
@@ -88,6 +89,8 @@ docs/               the file inventory and the testing notes
 
 ## Documentation
 
+* [docs/status.md](docs/status.md) — where the work stands, what is known
+  to be unfinished, and what to pick up next.
 * [docs/file-inventory.md](docs/file-inventory.md) — what each of the 33
   original files is for, and the decoded on-disk formats.
 * [docs/testing.md](docs/testing.md) — how the port is compared with the
