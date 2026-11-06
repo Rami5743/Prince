@@ -56,12 +56,17 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // you. Do not read it as a score.
   { name: 'level1-down', reproduces: 9 },
 
-  // The Prince walks up to the guard of level 2's room 4. 9 of 41, and the
-  // session is here for what it shows rather than for its count. What it
-  // shows is the one thing still missing: the original's Prince cannot get
-  // past the guard and is still in that room twenty captures later, while
-  // the port's runs straight through him and out the far side. Until a
-  // guard can stop him, nothing after the ninth capture is comparable.
+  // Level 2's room 4, which has a guard at its left end. 9 of 41. What it
+  // settles is the guard: he stands idle, comes on guard, and then holds
+  // the stance for twenty captures without advancing a step.
+  //
+  // It settles nothing about whether a guard can stop the Prince, because
+  // neither Prince gets near him. The original's stops on one of the two
+  // loose floors at columns 7 and 8, which gives way, and he spends the
+  // rest of the session on the row below; the port's run-stop carries it a
+  // few units further, onto the solid floor at column 6, so it stays up.
+  // The two also part company at the ninth capture, where the original
+  // blanks the screen to change room and the port does not.
   { name: 'level2-guard', reproduces: 9 },
 ];
 

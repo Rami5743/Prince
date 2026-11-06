@@ -92,10 +92,16 @@ one.
   Prince turns up in his room on his row: sequence 55 draws the sword and
   settles into the stance, which is what `tests/golden/session-level2-guard`
   shows the original doing. He does nothing else. He does not advance,
-  retreat, strike or parry, and, most of all, **he does not stop the
-  Prince**: in the capture the original's Prince is still in that room
-  twenty captures after meeting the guard, while the port's runs straight
-  through him and out the far side.
+  retreat, strike or parry, and nothing stops the Prince walking through
+  him.
+
+  Be careful reading `session-level2-guard` on that last point: it does
+  *not* show the original stopping the Prince at the guard. I claimed it
+  did and was wrong. Neither Prince gets near the guard in it -- the
+  original's stops on one of room 4's two loose floors and drops to the row
+  below, and the port's run-stop carries it one tile further onto solid
+  floor. Whether a guard blocks the Prince is still an open question and
+  wants a capture of its own, with the Prince walked right up to one.
 
   What the capture does not settle is what makes a guard come on guard at
   the moment he does -- he waited five captures after the Prince walked in
