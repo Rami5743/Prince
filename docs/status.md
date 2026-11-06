@@ -47,7 +47,8 @@ equal — see [docs/testing.md](testing.md).
 | Two whole play sessions on level 1 | `tests/oracle/play-session.test.ts` |
 | A held Up climbing and carrying on | `tests/game/hang.test.ts` |
 | Nothing leaves the world, however badly it is played | `tests/game/fuzz.test.ts` |
-| Climbing, in a real browser with real key events | `tests/browser/play.test.ts` |
+| Climbing and a sword fight, in a real browser | `tests/browser/play.test.ts` |
+| The blank while the view changes room | `tests/game/run-jump.test.ts` |
 
 `npm test` runs all of it; `npm run typecheck` is separate. Both should be
 clean before anything is pushed.
@@ -62,7 +63,7 @@ left behind -- and that is what found the bug below. It reports the first
 capture it cannot reproduce and carries on, so one run names every place the
 port and the original part company. See [docs/testing.md](testing.md) §5.
 
-Level 1's opening reproduces 32 of its 51 captures and the climbing session
+Level 1's opening reproduces 34 of its 51 captures and the climbing session
 34 of its 54; the test lists what the rest are. Between them they found
 four real bugs, every one of them reachable in the first ten seconds of
 play and none of them visible to the move-by-move comparisons:
@@ -137,9 +138,7 @@ one.
 * **The clock.** The status bar shows hit points but not the time left.
 * **Cut-scenes.** The princess, the mouse and the vizier are decoded but
   never animated.
-* **The screen does not blank on a room change.** The original blanks it for
-  a few frames; the port does not. This is why a handful of captured frames
-  in the jump and session tests are recorded as unreproduced.
+
 * **After a climb the Prince stands still** where the original walks on
   along the floor he has just reached. The last twenty captures of the
   climbing session follow from that one difference.
@@ -241,8 +240,5 @@ the honest route, and the session harness is the tool for it.
 interpreter already reads the sound numbers out of the byte-code and hands
 them to `effects.sound`, which nothing listens to.
 
-**The clock**, the cut-scenes, and the screen blanking on a room change are
-the remainder. The blank is worth doing early if anyone wants the jump
-captures to go green: three of its thirteen frames are black because the
-original blanks and the port does not.
+**The clock** and the cut-scenes are the remainder.
 
