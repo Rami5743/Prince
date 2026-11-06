@@ -73,7 +73,11 @@ export class ControlLatch {
 }
 
 function step(latch: number, down: boolean): number {
-  if (latch < CONTROL.released) return latch; // held, and not yet acted on
+  // Letting go always clears the latch, even one that nothing has acted on
+  // yet. Keeping it would hand the next move a press the player has already
+  // finished with: tap Up to climb a ledge, let go, then press left, and
+  // the stale Up turns the step into a standing jump.
   if (!down) return CONTROL.released;
-  return latch === CONTROL.released ? CONTROL.held : latch;
+  // Held down: still waiting to be acted on, unless it already has been.
+  return latch === CONTROL.ignore ? CONTROL.ignore : CONTROL.held;
 }

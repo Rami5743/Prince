@@ -120,4 +120,33 @@ describe('taking hold of a ledge', () => {
     expect(frames.some((f) => f >= 135 && f < 150)).toBe(true);
     expect(frames.indexOf(67)).toBeGreaterThan(frames.lastIndexOf(149));
   });
+
+  /**
+   * And an Up that has been let go does not. The latch keeps a press that
+   * nothing has acted on yet, which is how a careful step happens once per
+   * press; what it must not do is keep one whose key is already back up.
+   * It did, and the press that climbed the ledge was still sitting there
+   * afterwards: the next direction read as Up+forward and the Prince
+   * jumped along the floor above instead of walking it.
+   */
+  it('an Up let go of before the climb ends does not jump afterwards', async () => {
+    const game = await atTheLedge();
+    play(game, 30, true);
+    expect(HANGING(game.kid.frame)).toBe(true);
+    // Up for one tick to start the climb, then nothing: the key is up long
+    // before he is.
+    game.step({ x: 0, y: -1, shift: false });
+    const frames: number[] = [];
+    for (let i = 0; i < 24; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+      frames.push(game.kid.frame);
+    }
+    expect(frames.some((f) => f >= 135 && f < 150), 'he should climb').toBe(true);
+    // On his feet, and now walked along the floor he has just reached.
+    for (let i = 0; i < 20; i++) {
+      game.step({ x: game.kid.direction === 0 ? 1 : -1, y: 0, shift: false });
+      frames.push(game.kid.frame);
+    }
+    expect(frames.some((f) => f >= 67 && f <= 85), 'and never jump').toBe(false);
+  });
 });

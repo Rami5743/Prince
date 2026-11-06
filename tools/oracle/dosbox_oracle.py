@@ -82,7 +82,7 @@ def free_display():
 
 class Dosbox:
     def __init__(self, workdir, machine='vgaonly', cycles=3000, display=None,
-                 autoexec='', game=GAME):
+                 autoexec='', game=GAME, record=None, fps=30):
         # Absolute: DOSBox resolves `captures=` against its own working
         # directory, so a relative path there is silently appended to it and
         # no screenshot is ever written.
@@ -96,6 +96,12 @@ class Dosbox:
         self.xvfb = None
         self.dosbox = None
         self.winid = None
+        # Video is grabbed off the X display, not through DOSBox's own AVI
+        # capture: ctrl+alt+F5 produces no file in this build, and grabbing
+        # the display also leaves the emulator's key timing untouched.
+        self.record = os.path.abspath(record) if record else None
+        self.fps = fps
+        self.ffmpeg = None
 
     def __enter__(self):
         os.makedirs(self.capture, exist_ok=True)
@@ -135,6 +141,19 @@ class Dosbox:
         self._xdo('windowactivate', self.winid)
         self._xdo('windowfocus', self.winid)
         time.sleep(0.5)
+        if self.record:
+            os.makedirs(os.path.dirname(self.record) or '.', exist_ok=True)
+            self.ffmpeg = subprocess.Popen(
+                ['ffmpeg', '-y', '-loglevel', 'error',
+                 '-f', 'x11grab', '-draw_mouse', '0',
+                 '-framerate', str(self.fps), '-video_size', '1024x768',
+                 '-i', self.display,
+                 '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0',
+                 '-pix_fmt', 'yuv444p', self.record],
+                env=dict(os.environ, DISPLAY=self.display),
+                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                stderr=open(self.record + '.log', 'w'), start_new_session=True)
+            time.sleep(1.0)
         return self
 
     def _xdo(self, *args):
@@ -177,7 +196,17 @@ class Dosbox:
                 return dst
         raise RuntimeError('screenshot %r was not produced' % name)
 
+    def stop_record(self):
+        if not self.ffmpeg or self.ffmpeg.poll() is not None:
+            return
+        try:
+            self.ffmpeg.communicate(b'q', timeout=15)
+        except subprocess.TimeoutExpired:
+            self.ffmpeg.kill()
+            self.ffmpeg.wait()
+
     def __exit__(self, *exc):
+        self.stop_record()
         # Both were started in sessions of their own, so the whole group can
         # be signalled; a DOSBox that ignores SIGTERM is killed outright. A
         # survivor would hold its display and break the next run.
@@ -196,13 +225,14 @@ class Dosbox:
                     continue
 
 
-def run_script(path, outdir, machine, cycles, autoexec, display):
+def run_script(path, outdir, machine, cycles, autoexec, display,
+               record=None, fps=30):
     outdir = os.path.abspath(outdir)
     workdir = os.path.join(outdir, '_work')
     os.makedirs(workdir, exist_ok=True)
     made = []
     with Dosbox(workdir, machine=machine, cycles=cycles, display=display,
-                autoexec=autoexec) as db:
+                autoexec=autoexec, record=record, fps=fps) as db:
         for raw in open(path):
             line = raw.strip()
             if not line or line.startswith('#'):
@@ -226,6 +256,12 @@ def run_script(path, outdir, machine, cycles, autoexec, display):
             elif op == 'cmd':
                 db.type_(rest)
                 db.key('Return')
+            elif op == 'video':
+                # DOSBox's own AVI capture. Unlike a screenshot it costs no
+                # wall-clock time, so the key timings of a replayed
+                # recording are not pulled about by the act of recording.
+                db.key('ctrl+alt+F5')
+                time.sleep(0.4)
             elif op == 'shot':
                 made.append(db.shot(rest, outdir))
                 print('captured', made[-1], flush=True)
@@ -243,10 +279,15 @@ def main():
     ap.add_argument('--autoexec', default='prince megahit')
     ap.add_argument('--display', default=None,
                     help='X display to use; one is chosen if not given')
+    ap.add_argument('--record', default=None,
+                    help='grab the X display to this video file while the '
+                         'script runs (lossless; needs ffmpeg)')
+    ap.add_argument('--fps', type=int, default=30)
     a = ap.parse_args()
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
-    run_script(a.script, a.out, a.machine, a.cycles, a.autoexec, a.display)
+    run_script(a.script, a.out, a.machine, a.cycles, a.autoexec, a.display,
+               record=a.record, fps=a.fps)
 
 
 if __name__ == '__main__':

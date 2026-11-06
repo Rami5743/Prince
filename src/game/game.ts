@@ -3,7 +3,7 @@
  */
 import type { Assets } from '../render/assets.ts';
 import { Surface } from '../render/surface.ts';
-import { RoomRenderer, type CharacterDraw } from '../render/room.ts';
+import { RoomRenderer, type CharacterDraw, type MobDraw } from '../render/room.ts';
 import { buildLevelScene, type LevelScene } from './scene.ts';
 import { readExeTables, type ExeTables } from './exe-tables.ts';
 import {
@@ -336,7 +336,10 @@ export class Game {
       if (sword) characters.push(sword);
     }
 
-    this.renderer.render(this.surface, this.drawnRoom, characters);
+    const mobs: MobDraw[] = this.traps.mobs.map((m) => ({
+      room: m.room, column: m.xh >> 2, y: m.y,
+    }));
+    this.renderer.render(this.surface, this.drawnRoom, characters, mobs);
     this.drawStatusBar();
     return this.surface;
   }

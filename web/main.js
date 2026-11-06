@@ -921,7 +921,7 @@ var RoomRenderer = class {
     return this.opt.levelType !== 0;
   }
   /** Build the draw lists for a room and paint them onto `surface`. */
-  render(surface, room, characters = []) {
+  render(surface, room, characters = [], mobs = []) {
     this.back = [];
     this.mid = [];
     this.fore = [];
@@ -932,6 +932,7 @@ var RoomRenderer = class {
     this.loadRoomLinks();
     this.drawRoom();
     for (const c of characters) this.addCharacter(c);
+    for (const m of mobs) this.addMob(m);
     this.paint(surface);
   }
   // ---------------------------------------------------------------- lists
@@ -1700,6 +1701,47 @@ var RoomRenderer = class {
    * horizontal position is in internal units and is stretched to pixels only
    * here, at the last moment, exactly as the original does.
    */
+  /**
+   * A floor that has come away and is on its way down.
+   *
+   * It is drawn out of the same three pieces a floor tile is -- the base,
+   * the right-hand half that belongs to the next column along, and the
+   * underside -- but at the height the falling block has reached rather
+   * than at its row's. Until this existed nothing drew them at all: the
+   * tile was taken out of the room the moment it gave way and the block
+   * simply vanished instead of falling.
+   */
+  addMob(m) {
+    if (m.room !== this.drawnRoom) return;
+    const col = m.column + 1;
+    if (col < 0 || col >= COL_X.length) return;
+    const x = COL_X[col];
+    const main = m.y - 3;
+    const floor = TILE_TABLE[TILE.floor];
+    this.mid.push({
+      chtab: CHTAB.environment,
+      id: LOOSE_FRAM_BOTTOM[0],
+      x,
+      yBottom: m.y,
+      blit: BLIT.opaque
+    });
+    this.mid.push({
+      chtab: CHTAB.environment,
+      id: LOOSE_FRAM_LEFT[0],
+      x,
+      yBottom: floor.baseY + main,
+      blit: BLIT.transparent
+    });
+    if (col + 1 < COL_X.length) {
+      this.mid.push({
+        chtab: CHTAB.environment,
+        id: LOOSE_FRAM_RIGHT[0],
+        x: COL_X[col + 1],
+        yBottom: floor.rightY + main,
+        blit: BLIT.transparent
+      });
+    }
+  }
   addCharacter(c) {
     const set = this.chtabs[c.chtab];
     if (!set) return;
@@ -2851,9 +2893,8 @@ var ControlLatch = class {
   }
 };
 function step(latch, down) {
-  if (latch < CONTROL.released) return latch;
   if (!down) return CONTROL.released;
-  return latch === CONTROL.released ? CONTROL.held : latch;
+  return latch === CONTROL.ignore ? CONTROL.ignore : CONTROL.held;
 }
 
 // src/game/kid.ts
@@ -2973,10 +3014,12 @@ function controlSwordPlay(state, controls, ctx) {
     return true;
   }
   const latch = ctx.latch;
-  if (latch.up === CONTROL.held) {
-    latch.up = latch.releaseArrows();
+  if (latch.shift2 === CONTROL.held) {
+    latch.shift2 = CONTROL.ignore;
+    latch.releaseArrows();
     startSequence(state, SWORD_SEQ.strike, ctx.tables);
-  } else if (controls.y > 0) {
+  } else if (latch.up === CONTROL.held) {
+    latch.up = latch.releaseArrows();
     startSequence(state, SWORD_SEQ.block, ctx.tables);
   } else if (state.direction !== facingOf(state, foe)) {
     startSequence(state, SWORD_SEQ.turn, ctx.tables);
@@ -4395,7 +4438,12 @@ var Game = class _Game {
       const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);
       if (sword) characters.push(sword);
     }
-    this.renderer.render(this.surface, this.drawnRoom, characters);
+    const mobs = this.traps.mobs.map((m) => ({
+      room: m.room,
+      column: m.xh >> 2,
+      y: m.y
+    }));
+    this.renderer.render(this.surface, this.drawnRoom, characters, mobs);
     this.drawStatusBar();
     return this.surface;
   }

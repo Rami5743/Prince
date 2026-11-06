@@ -86,6 +86,15 @@ export interface Chtabs {
  * list that is sorted and then merged into the middle draw list, so that they
  * pass behind the front edge of a floor and in front of its back.
  */
+/** A falling floor, on its way down. */
+export interface MobDraw {
+  room: number;
+  /** Tile column of the room it is falling through. */
+  column: number;
+  /** Where its underside has got to, in the same units a tile's bottom is. */
+  y: number;
+}
+
 export interface CharacterDraw {
   readonly chtab: ChtabId;
   /** 1-based sprite id within the group. */
@@ -300,7 +309,10 @@ export class RoomRenderer {
   }
 
   /** Build the draw lists for a room and paint them onto `surface`. */
-  render(surface: Surface, room: number, characters: readonly CharacterDraw[] = []): void {
+  render(
+    surface: Surface, room: number, characters: readonly CharacterDraw[] = [],
+    mobs: readonly MobDraw[] = [],
+  ): void {
     this.back = [];
     this.mid = [];
     this.fore = [];
@@ -311,6 +323,7 @@ export class RoomRenderer {
     this.loadRoomLinks();
     this.drawRoom();
     for (const c of characters) this.addCharacter(c);
+    for (const m of mobs) this.addMob(m);
     this.paint(surface);
   }
 
@@ -1044,6 +1057,39 @@ export class RoomRenderer {
    * horizontal position is in internal units and is stretched to pixels only
    * here, at the last moment, exactly as the original does.
    */
+  /**
+   * A floor that has come away and is on its way down.
+   *
+   * It is drawn out of the same three pieces a floor tile is -- the base,
+   * the right-hand half that belongs to the next column along, and the
+   * underside -- but at the height the falling block has reached rather
+   * than at its row's. Until this existed nothing drew them at all: the
+   * tile was taken out of the room the moment it gave way and the block
+   * simply vanished instead of falling.
+   */
+  private addMob(m: MobDraw): void {
+    if (m.room !== this.drawnRoom) return;
+    const col = m.column + 1;
+    if (col < 0 || col >= COL_X.length) return;
+    const x = COL_X[col];
+    const main = m.y - 3;
+    const floor = TILE_TABLE[TILE.floor];
+    this.mid.push({
+      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[0], x, yBottom: m.y,
+      blit: BLIT.opaque,
+    });
+    this.mid.push({
+      chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[0], x,
+      yBottom: floor.baseY + main, blit: BLIT.transparent,
+    });
+    if (col + 1 < COL_X.length) {
+      this.mid.push({
+        chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[0], x: COL_X[col + 1],
+        yBottom: floor.rightY + main, blit: BLIT.transparent,
+      });
+    }
+  }
+
   private addCharacter(c: CharacterDraw): void {
     const set = this.chtabs[c.chtab];
     if (!set) return;

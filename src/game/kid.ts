@@ -230,10 +230,17 @@ function controlSwordPlay(
   }
 
   const latch = ctx.latch;
-  if (latch.up === CONTROL.held) {
-    latch.up = latch.releaseArrows();
+  // The original's fighting controls, as the manual gives them: Shift
+  // strikes, Up parries, Down puts the blade away, forward and back close
+  // and open the distance. Strike and parry are one-shot -- a held key does
+  // it once -- so they go through the latch; stepping repeats, so it reads
+  // the keys.
+  if (latch.shift2 === CONTROL.held) {
+    latch.shift2 = CONTROL.ignore;
+    latch.releaseArrows();
     startSequence(state, SWORD_SEQ.strike, ctx.tables);
-  } else if (controls.y > 0) {
+  } else if (latch.up === CONTROL.held) {
+    latch.up = latch.releaseArrows();
     startSequence(state, SWORD_SEQ.block, ctx.tables);
   } else if (state.direction !== facingOf(state, foe)) {
     startSequence(state, SWORD_SEQ.turn, ctx.tables);
@@ -434,8 +441,9 @@ function canClimbUp(state: CharacterState, ctx: KidContext): void {
   ctx.latch.shift2 = CONTROL.ignore;
   // The arrows are forgotten, but Up is not marked as used: the original
   // keeps going while it is held, jumping again as soon as the Prince is
-  // back on his feet. Nothing reads the latch while the climb runs -- no
-  // control handler covers frames 135..149 -- so this cannot cut it short.
+  // back on his feet, and the level1-grab captures pin that. What must not
+  // happen is the same thing after the key has been let go -- that is the
+  // latch's own business, and `ControlLatch.step` clears a release.
   ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq: number = KID_SEQ.climbUp;

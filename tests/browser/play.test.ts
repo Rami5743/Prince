@@ -145,22 +145,16 @@ describe('played in the browser', () => {
 
   /**
    * The narrow thing that has to go through real keys: with a sword out,
-   * Up is a lunge and not a jump. Each press is watched over the frames
-   * that follow it, so a sample landing between two of the game's own
-   * frames cannot miss it.
+   * Shift lunges and Up parries -- and neither of them jumps. Each press
+   * is watched over the frames that follow it, so a sample landing between
+   * two of the game's own frames cannot miss it.
    */
-  it('Up lunges rather than jumping once the sword is out', async () => {
-    await meetTheGuard();
-    const met = await state();
-    expect(met?.room, 'he should have reached the guard\'s room').toBe(4);
-    expect(met?.sword, 'and drawn his sword').toBe(2);
-
-    await pause(false); // real keys need the page's own clock back
+  async function tapAndWatch(key: 'Shift' | 'ArrowUp', hit: (f: number) => boolean) {
     const seen: number[] = [];
-    for (let i = 0; i < 15 && !seen.some((f) => f >= 151 && f <= 157); i++) {
-      await page.keyboard.down('ArrowUp');
+    for (let i = 0; i < 15 && !seen.some(hit); i++) {
+      await page.keyboard.down(key);
       await page.waitForTimeout(100);
-      await page.keyboard.up('ArrowUp');
+      await page.keyboard.up(key);
       for (let k = 0; k < 5; k++) {
         await page.waitForTimeout(60);
         const now = await state();
@@ -170,8 +164,23 @@ describe('played in the browser', () => {
       const now = await state();
       if (now?.dead) break;
     }
-    expect(seen.some((f) => f >= 151 && f <= 157), 'Up should lunge').toBe(true);
-    expect(seen.some((f) => f >= 67 && f <= 85), 'and never jump').toBe(false);
+    return seen;
+  }
+
+  it('Shift lunges and Up parries once the sword is out', async () => {
+    await meetTheGuard();
+    const met = await state();
+    expect(met?.room, 'he should have reached the guard\'s room').toBe(4);
+    expect(met?.sword, 'and drawn his sword').toBe(2);
+
+    await pause(false); // real keys need the page's own clock back
+    const lunged = await tapAndWatch('Shift', (f) => f >= 151 && f <= 157);
+    expect(lunged.some((f) => f >= 151 && f <= 157), 'Shift should lunge').toBe(true);
+    expect(lunged.some((f) => f >= 67 && f <= 85), 'and never jump').toBe(false);
+
+    const parried = await tapAndWatch('ArrowUp', (f) => f === 150 || f === 169);
+    expect(parried.some((f) => f === 150 || f === 169), 'Up should parry').toBe(true);
+    expect(parried.some((f) => f >= 67 && f <= 85), 'and never jump').toBe(false);
     expect(consoleErrors).toEqual([]);
   }, 180000);
 
@@ -191,9 +200,10 @@ describe('played in the browser', () => {
         } | null;
       };
       for (let i = 0; i < 400; i++) {
-        // Lunge, and press forward otherwise: stepping in is refused once
-        // he is already within a blade's length, so it costs nothing.
-        w.__princeStep(1, i % 8 < 2 ? { y: -1 } : { x: -1 });
+        // Lunge on Shift, and press forward otherwise: stepping in is
+        // refused once he is already within a blade's length, so it costs
+        // nothing.
+        w.__princeStep(1, i % 2 === 0 ? { shift: true } : { x: -1 });
         const s = w.__princeState();
         if (!s) return 'no state';
         if (s.dead) return 'the Prince died';

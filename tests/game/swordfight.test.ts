@@ -30,6 +30,8 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 const NOTHING: Controls = { x: 0, y: 0, shift: false };
 const LEFT: Controls = { x: -1, y: 0, shift: false };
 const UP: Controls = { x: 0, y: -1, shift: false };
+/** Shift is the strike key once the blade is out; Up is the parry. */
+const STRIKE: Controls = { x: 0, y: 0, shift: true };
 
 /** Level 2 opens one room to the right of a guard; run at him. */
 async function walkUpToTheGuard(): Promise<Game> {
@@ -55,15 +57,27 @@ describe('sword fighting', () => {
     expect(game.hitPoints).toBeLessThan(before);
   });
 
-  it('pressing Up kills the guard', async () => {
+  it('pressing Shift kills the guard', async () => {
     const game = await walkUpToTheGuard();
     expect(game.guard.hitPoints).toBeGreaterThan(0);
-    // Press and release: one lunge per press, as everywhere else.
+    // Press and release: one lunge per press, as everywhere else, so a
+    // player who wants to keep attacking has to keep tapping.
     for (let i = 0; i < 220 && game.guard.alive < 0 && !game.isDead; i++) {
-      game.step(i % 8 < 2 ? UP : NOTHING);
+      game.step(i % 2 === 0 ? STRIKE : NOTHING);
     }
     expect(game.guard.hitPoints).toBe(0);
     expect(game.guard.alive).toBeGreaterThanOrEqual(0);
+  }, 30000);
+
+  it('pressing Up parries instead of striking', async () => {
+    const game = await walkUpToTheGuard();
+    const before = game.guard.hitPoints;
+    for (let i = 0; i < 220 && game.guard.alive < 0 && !game.isDead; i++) {
+      game.step(i % 2 === 0 ? UP : NOTHING);
+    }
+    // Up is the block: it keeps the guard's blows off and lands none of
+    // its own, so the guard is no worse off at the end of it.
+    expect(game.guard.hitPoints).toBe(before);
   }, 30000);
 
   it('a guard far away is left alone, and the sword goes away with him',
