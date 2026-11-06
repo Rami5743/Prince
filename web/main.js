@@ -3284,9 +3284,10 @@ function stepKid(state, controls, ctx) {
   }
 }
 function checkBumped(state, ctx) {
-  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight || state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
+  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight || state.action === ACTION.bumped || state.action === ACTION.inFreefall || state.action === ACTION.inMidair) {
     return;
   }
+  if (state.y !== floorHeightOfRow(state.currentRow)) return;
   const frame = frameOf(ctx.tables, state);
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
   const penetration = (column) => {

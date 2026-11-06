@@ -735,15 +735,24 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
  * room, and since there is no floor out there, falls: on level 1 he runs off
  * the right of the bottom room and drops into the room below.
  *
- * Climbing and hanging are left alone, as is a character already bumped --
- * the original does not interrupt those -- and so is the edge of the level,
- * which is not a wall to walk into but a way out of the world.
+ * Climbing, hanging and anything in mid-air are left alone, as is a
+ * character already bumped -- the original does not interrupt those -- and so
+ * is the edge of the level, which is not a wall to walk into but a way out of
+ * the world.
  */
 function checkBumped(state: CharacterState, ctx: KidContext): void {
   if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight
-    || state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
+    || state.action === ACTION.bumped || state.action === ACTION.inFreefall
+    || state.action === ACTION.inMidair) {
     return;
   }
+  // Only with both feet on the floor of the row he counts as being in.
+  // Bumping into something in mid-air is a different move in the original --
+  // sequences 45 and 46, which knock the character down -- and neither is
+  // written yet. Pushing a falling character sideways instead walks him into
+  // the wall column and he falls through the floor, which is what happened
+  // when this guard was missing.
+  if (state.y !== floorHeightOfRow(state.currentRow)) return;
   const frame = frameOf(ctx.tables, state);
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
 
