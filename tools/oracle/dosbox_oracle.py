@@ -20,7 +20,7 @@ Script file: one command per line.
     shot <name>             capture a screenshot and name it <name>.png
     cmd <dos command>       typed into the DOS prompt, followed by Return
 """
-import argparse, os, shutil, signal, subprocess, sys, time, glob
+import argparse, os, shutil, signal, subprocess, sys, time, glob, random
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -63,12 +63,32 @@ c:
 """
 
 
+def free_display():
+    """An X display number nothing else is using.
+
+    Runs used to share one fixed display, which meant that a DOSBox left
+    behind by an earlier run would be found by the next one: its window
+    matched the search, so the keys went to the wrong emulator and the
+    screenshots came out of the wrong session -- or never appeared at all.
+    Each run now gets a display of its own.
+    """
+    for _ in range(200):
+        n = random.randint(80, 980)
+        if not os.path.exists('/tmp/.X%d-lock' % n) and \
+           not os.path.exists('/tmp/.X11-unix/X%d' % n):
+            return ':%d' % n
+    raise RuntimeError('no free X display')
+
+
 class Dosbox:
-    def __init__(self, workdir, machine='vgaonly', cycles=3000, display=':77',
+    def __init__(self, workdir, machine='vgaonly', cycles=3000, display=None,
                  autoexec='', game=GAME):
-        self.workdir = workdir
-        self.capture = os.path.join(workdir, 'capture')
-        self.display = display
+        # Absolute: DOSBox resolves `captures=` against its own working
+        # directory, so a relative path there is silently appended to it and
+        # no screenshot is ever written.
+        self.workdir = os.path.abspath(workdir)
+        self.capture = os.path.join(self.workdir, 'capture')
+        self.display = display or free_display()
         self.machine = machine
         self.cycles = cycles
         self.autoexec = autoexec
@@ -87,22 +107,26 @@ class Dosbox:
         dn = int(self.display[1:])
         self.xvfb = subprocess.Popen(
             ['Xvfb', self.display, '-screen', '0', '1024x768x24'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True)
         time.sleep(1.5)
         env = dict(os.environ, DISPLAY=self.display, SDL_VIDEODRIVER='x11')
         self.dosbox = subprocess.Popen(
             ['dosbox', '-conf', conf],
             env=env, stdout=open(os.path.join(self.workdir, 'dosbox.log'), 'w'),
-            stderr=subprocess.STDOUT)
-        # wait for the window
+            stderr=subprocess.STDOUT, start_new_session=True)
+        # Wait for the window, and take only one belonging to the process just
+        # started -- never whatever else happens to be called DOSBox.
         for _ in range(60):
             time.sleep(0.5)
+            if self.dosbox.poll() is not None:
+                raise RuntimeError('DOSBox exited at once; see dosbox.log')
             try:
                 out = subprocess.check_output(
-                    ['xdotool', 'search', '--name', 'DOSBox'], env=env,
+                    ['xdotool', 'search', '--pid', str(self.dosbox.pid)], env=env,
                     stderr=subprocess.DEVNULL).decode().split()
                 if out:
-                    self.winid = out[0]
+                    self.winid = out[-1]
                     break
             except subprocess.CalledProcessError:
                 pass
@@ -154,16 +178,26 @@ class Dosbox:
         raise RuntimeError('screenshot %r was not produced' % name)
 
     def __exit__(self, *exc):
+        # Both were started in sessions of their own, so the whole group can
+        # be signalled; a DOSBox that ignores SIGTERM is killed outright. A
+        # survivor would hold its display and break the next run.
         for p in (self.dosbox, self.xvfb):
-            if p and p.poll() is None:
-                p.send_signal(signal.SIGTERM)
+            if not p or p.poll() is not None:
+                continue
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(os.getpgid(p.pid), sig)
+                except (ProcessLookupError, PermissionError):
+                    break
                 try:
                     p.wait(timeout=5)
+                    break
                 except subprocess.TimeoutExpired:
-                    p.kill()
+                    continue
 
 
 def run_script(path, outdir, machine, cycles, autoexec, display):
+    outdir = os.path.abspath(outdir)
     workdir = os.path.join(outdir, '_work')
     os.makedirs(workdir, exist_ok=True)
     made = []
@@ -207,8 +241,10 @@ def main():
     ap.add_argument('--machine', default='vgaonly')
     ap.add_argument('--cycles', type=int, default=3000)
     ap.add_argument('--autoexec', default='prince megahit')
-    ap.add_argument('--display', default=':77')
+    ap.add_argument('--display', default=None,
+                    help='X display to use; one is chosen if not given')
     a = ap.parse_args()
+    a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
     run_script(a.script, a.out, a.machine, a.cycles, a.autoexec, a.display)
 
