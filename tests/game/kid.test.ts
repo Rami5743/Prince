@@ -96,3 +96,69 @@ describe('the Prince', () => {
     }
   });
 });
+
+describe('jumping, climbing and crouching', () => {
+  const UP = { x: 0, y: -1, shift: false };
+  const DOWN = { x: 0, y: 1, shift: false };
+
+  async function standing(level: number) {
+    const game = await Game.start(assets, exe, level);
+    for (let i = 0; i < 12; i++) game.step(STILL);
+    return game;
+  }
+
+  it('jumps straight up when up is pressed', async () => {
+    const game = await standing(3);
+    const floor = game.kid.y;
+    let highest = floor;
+    game.step(UP);
+    for (let i = 0; i < 20; i++) {
+      game.step(STILL);
+      if (game.kid.y < highest) highest = game.kid.y;
+    }
+    expect(highest).toBeLessThan(floor);
+    expect(game.kid.y).toBe(floor); // and comes back down to the same floor
+  });
+
+  it('jumps forward when up and the facing direction are pressed together', async () => {
+    const game = await standing(3);
+    const dir = game.kid.direction;
+    const startX = game.kid.x;
+    game.step({ x: dir < 0 ? -1 : 1, y: -1, shift: false });
+    for (let i = 0; i < 24; i++) game.step(STILL);
+    const moved = dir < 0 ? startX - game.kid.x : game.kid.x - startX;
+    expect(moved).toBeGreaterThan(0);
+  });
+
+  it('crouches when down is pressed, and stands up again when it is released', async () => {
+    const game = await standing(3);
+    let crouched = false;
+    for (let i = 0; i < 12; i++) {
+      game.step(DOWN);
+      if (game.kid.frame === 109) crouched = true;
+    }
+    expect(crouched).toBe(true);
+    for (let i = 0; i < 20; i++) game.step(STILL);
+    expect(game.kid.frame).toBe(FRAME_STAND);
+  });
+
+  it('a jump never leaves the Prince hanging in the air', async () => {
+    const game = await standing(3);
+    game.step(UP);
+    for (let i = 0; i < 60; i++) game.step(STILL);
+    // Back to a resting state: standing, crouching after landing, or hanging.
+    expect(game.kid.action).not.toBe(3); // not still in midair
+  });
+
+  it('every move leaves the Prince in a state the frame table knows', async () => {
+    const game = await standing(3);
+    const moves = [UP, DOWN, STILL, { x: 1, y: -1, shift: false }, { x: -1, y: 0, shift: false },
+      { x: 1, y: 0, shift: true }, { x: 0, y: -1, shift: true }];
+    for (let i = 0; i < 400; i++) {
+      game.step(moves[i % moves.length]);
+      expect(game.kid.frame).toBeGreaterThanOrEqual(0);
+      expect(game.kid.frame).toBeLessThan(241);
+      expect(game.tables.frameTableKid[game.kid.frame]).toBeDefined();
+    }
+  });
+});

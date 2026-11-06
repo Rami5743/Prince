@@ -45,6 +45,7 @@ export class Game {
       tables,
       world,
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
+      controls: { x: 0, y: 0, shift: false },
     };
     enterLevel(
       this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir, this.ctx,

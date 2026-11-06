@@ -47,6 +47,8 @@ export interface CharacterState {
   alive: number;
   sword: number;
   repeat: number;
+  /** Counts down after grabbing a ledge, before a climb is allowed. */
+  grabTimer: number;
 }
 
 /** A character standing still at a given spot, before any sequence runs. */
@@ -55,7 +57,7 @@ export function newCharacter(partial: Partial<CharacterState> = {}): CharacterSt
     x: 0, y: 0, direction: DIRECTION.left, frame: 0,
     room: 1, currentColumn: 0, currentRow: 0, charId: CHAR_ID.kid,
     currentSequence: 0, action: 0, fallX: 0, fallY: 0,
-    alive: -1, sword: 0, repeat: 0,
+    alive: -1, sword: 0, repeat: 0, grabTimer: 0,
     ...partial,
   };
 }

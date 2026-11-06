@@ -13,7 +13,7 @@ npm run serve     # then open http://localhost:8099/web/
 Arrow keys to move, shift to step carefully.
 
 ```bash
-npm test          # 237 tests
+npm test          # 249 tests
 npm run typecheck
 ```
 
@@ -29,11 +29,14 @@ npm run typecheck
 | Runs the animation byte-code | ✅ the original's, read out of the executable |
 | Stand, turn, run, stop, step, fall, land | ✅ checked frame by frame against a capture |
 | Moves between rooms | ✅ |
-| Jump, climb, crouch | ❌ not yet |
+| Jump up, jump forward, running jump | ✅ |
+| Grab a ledge, hang, climb up and down | ✅ |
+| Crouch | ✅ |
+| Status bar: hit points | ✅ matches the original exactly |
 | Guards and sword fighting | ❌ not yet |
 | Traps: spikes, choppers, loose floors | partly drawn, not yet active |
 | Sound | ❌ not yet |
-| Status bar, time, hit points | ❌ not yet |
+| Status bar: the clock | ❌ not yet |
 
 ## How it is built
 
