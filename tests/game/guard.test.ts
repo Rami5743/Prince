@@ -147,6 +147,46 @@ describe('a guard left to himself', () => {
     expect(game.guard.frame).toBe(166);
   });
 
+  /**
+   * A guard's frames are looked up in `frameTableGuard` and drawn out of
+   * the guard sprite set, which between them cover a narrow span of frame
+   * numbers. Nothing in the engine complains when a guard reaches a frame
+   * outside it -- the renderer finds no image and quietly draws nothing --
+   * so a guard sent through one of the Prince's sequences goes invisible
+   * for as long as it lasts. This walks every guard in the game through
+   * meeting the Prince and insists that each frame on the way is one he
+   * can actually be seen in.
+   */
+  it('never reaches a frame it has no sprite for', async () => {
+    for (const level of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) {
+      const game = await Game.start(assets, exe, level);
+      const set = game.scene.chtabs.guard;
+      if (!set) continue;
+      for (let room = 1; room <= 24; room++) {
+        game.showRoom(room);
+        if (game.guard.direction === NO_DIRECTION) continue;
+        // Stand the Prince in front of him so that he stirs.
+        game.kid.room = room;
+        game.kid.currentRow = game.guard.currentRow;
+        game.kid.currentColumn = game.guard.currentColumn + 3;
+        game.kid.x = standX(game.kid.currentColumn);
+        game.kid.y = standY(game.kid.currentRow);
+        for (let i = 0; i < 60; i++) {
+          game.step({ x: 0, y: 0, shift: false });
+          if (game.guard.direction === NO_DIRECTION) break;
+          const frame = guardFrame(game.guard, game.tables);
+          expect(frame, `level ${level} room ${room}: no frame for ${game.guard.frame}`)
+            .not.toBeNull();
+          expect(
+            set.images[frame!.image],
+            `level ${level} room ${room}: guard frame ${game.guard.frame} `
+            + `wants image ${frame!.image}, and the set has ${set.images.length}`,
+          ).toBeDefined();
+        }
+      }
+    }
+  }, 60000);
+
   it('comes on guard when the Prince is in his room on his row', async () => {
     const game = await inRoomFour();
     game.kid.room = 4;
@@ -157,10 +197,15 @@ describe('a guard left to himself', () => {
       frames.push(game.guard.frame);
     }
     expect(game.guard.sword).toBe(2);
-    // 207..210 draw the sword; what follows is one of the sword frames --
-    // the stance at 170/171, or a move out of it if the Prince is already
-    // close enough to be worth lunging at.
-    expect(frames.filter((f) => f >= 207 && f <= 210).length).toBeGreaterThan(0);
+    // Every frame of it has to be one a guard has a sprite for -- 149 to
+    // 189, the span of `frameTableGuard`. The Prince's own draw runs
+    // through 207..210, which a guard cannot show at all: sending him
+    // through it left him missing for those four frames.
+    expect(frames.every((f) => f >= 149 && f <= 189), `frames ${frames}`).toBe(true);
+    // 167 opens it; what follows is one of the sword frames -- the stance
+    // at 170/171, or a move out of it if the Prince is already close
+    // enough to be worth lunging at.
+    expect(frames).toContain(167);
     expect(frames[frames.length - 1]).toBeGreaterThanOrEqual(150);
     expect(frames[frames.length - 1]).toBeLessThanOrEqual(171);
   });

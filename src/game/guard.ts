@@ -27,7 +27,18 @@ import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_SIZE_X, Y_LAND } from './geometry.t
 export const GUARD_SEQ = {
   standInactive: 77,
   activeAfterFall: 63,
-  enGarde: 55,
+  /**
+   * Coming on guard, which is NOT the Prince's sequence 55. A guard's
+   * frames are looked up in `frameTableGuard`, which runs from 149 to 189
+   * only, and 55 opens with frames 207..210 -- the Prince's own flourish as
+   * he draws. Those indices fall off the end of the guard's table and out
+   * of its sprite set, so a guard sent through 55 is simply not drawn for
+   * the four frames it takes, which is what made one appear out of nothing
+   * a moment after the Prince walked in. Sequence 69 is the guard's: frame
+   * 167, then 155..157 and 158, 170, 171 into the stance, all of them
+   * inside his own table.
+   */
+  enGarde: 69,
   advance: 56,
   retreat: 57,
   strike: 58,
