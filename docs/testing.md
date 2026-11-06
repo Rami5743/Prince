@@ -121,6 +121,33 @@ and keeps going, a turn reverses the facing, standing still holds the
 standing frame forever, and walking about never leaves the floor heights the
 level defines or a room that is not linked.
 
+### Running, frame by frame
+
+`tests/game/run.test.ts` is the strongest of these. `tests/golden/level3-run`
+holds eleven frames captured from the original while the Right key was held
+on level 3. The port is given the same input, every simulated frame is
+rendered, and each capture has to be reproduced by one of them pixel for
+pixel -- including the moment the Prince runs out of one room into the next.
+
+The one allowance is torch flames: the original picks each flame's phase at
+random on entering a room, so no simulation can agree on it. Differences
+inside a flame's box are ignored, and only there.
+
+Nine of the eleven are reproduced exactly, in the order they were captured.
+The two that are not are recorded as such, with what is known about them,
+rather than excused.
+
+To capture a run of your own:
+
+```bash
+python3 tools/oracle/dosbox_oracle.py \
+    --script tools/oracle/scripts/level3-run.txt --out /tmp/run
+```
+
+```bash
+node --experimental-strip-types tools/dev/match-run.ts 3 /tmp/run
+```
+
 ## 5. The port, in a real browser
 
 `tests/browser/render.test.ts` serves the repository, opens the page in

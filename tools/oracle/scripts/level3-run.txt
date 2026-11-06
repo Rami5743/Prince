@@ -1,0 +1,24 @@
+# Level 3: let the entry turn finish, then hold Right and capture a burst of
+# frames while the Prince runs. The captures are used to check that the port's
+# movement produces the same frames in the same order.
+wait 10
+key Return
+wait 8
+key shift+l
+wait 30
+key shift+l
+wait 30
+shot run00
+keydown Right
+shot run01
+shot run02
+shot run03
+shot run04
+shot run05
+shot run06
+shot run07
+shot run08
+shot run09
+keyup Right
+wait 3
+shot run10

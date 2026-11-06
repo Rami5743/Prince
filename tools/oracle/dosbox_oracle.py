@@ -15,6 +15,8 @@ Script file: one command per line.
     wait <seconds>          sleep
     key <xdotool-keyspec>   send one key press
     hold <key> <seconds>    press and hold a key
+    keydown <key>           press and keep held
+    keyup <key>             release
     shot <name>             capture a screenshot and name it <name>.png
     cmd <dos command>       typed into the DOS prompt, followed by Return
 """
@@ -122,8 +124,14 @@ class Dosbox:
             time.sleep(0.06)
 
     def hold(self, spec, seconds):
-        self._xdo('keydown', '--window', self.winid, spec)
+        self.keydown(spec)
         time.sleep(seconds)
+        self.keyup(spec)
+
+    def keydown(self, spec):
+        self._xdo('keydown', '--window', self.winid, spec)
+
+    def keyup(self, spec):
         self._xdo('keyup', '--window', self.winid, spec)
 
     def type_(self, text):
@@ -175,6 +183,10 @@ def run_script(path, outdir, machine, cycles, autoexec, display):
             elif op == 'hold':
                 k, s = rest.split()
                 db.hold(k, float(s))
+            elif op == 'keydown':
+                db.keydown(rest)
+            elif op == 'keyup':
+                db.keyup(rest)
             elif op == 'type':
                 db.type_(rest)
             elif op == 'cmd':
