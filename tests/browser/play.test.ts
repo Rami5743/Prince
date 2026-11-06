@@ -121,10 +121,12 @@ describe('played in the browser', () => {
   }, 60000);
 
   /**
-   * A whole fight through the page: the approach is driven through the
-   * step hook so it does not depend on the clock, and the fight itself is
-   * real key presses, because the point is that Up reaches the game as a
-   * lunge rather than as a jump.
+   * A fight through the page. The part that has to go through real keys is
+   * narrow -- that Up reaches the game as a lunge rather than as a jump --
+   * so that is what real keys are used for. Finishing the guard off is done
+   * through the step hook, because a fight driven by wall-clock key presses
+   * in a headless browser takes as many frames as it takes, and a test
+   * should not depend on that.
    */
   it('Up fights the guard of level 2 rather than jumping', async () => {
     await page.evaluate(() => (window as unknown as {
@@ -142,17 +144,39 @@ describe('played in the browser', () => {
     expect(met?.sword, 'and drawn his sword').toBe(2);
     expect(met?.guard).not.toBeNull();
 
-    for (let i = 0; i < 30; i++) {
+    // One real press: it has to come out as a lunge, frames 151..157.
+    const lunged: number[] = [];
+    for (let i = 0; i < 12 && lunged.length === 0; i++) {
       await page.keyboard.down('ArrowUp');
-      await page.waitForTimeout(160);
+      await page.waitForTimeout(120);
       await page.keyboard.up('ArrowUp');
-      await page.waitForTimeout(260);
       const now = await state();
-      if (now?.dead || (now?.guard?.hitPoints ?? 1) === 0) break;
+      if (now && now.frame >= 151 && now.frame <= 157) lunged.push(now.frame);
+      await page.waitForTimeout(200);
     }
-    const after = await state();
-    expect(after?.dead ?? true).toBe(false);
-    expect(after?.guard?.hitPoints ?? -1).toBe(0);
+    expect(lunged.length, 'Up should lunge, not jump').toBeGreaterThan(0);
+
+    // And the fight can be finished. Lunge, and otherwise press forward:
+    // the real-key part above leaves him wherever its timing left him, and
+    // stepping in is refused once he is already within a blade's length,
+    // so this closes the gap if there is one and costs nothing if not.
+    const outcome = await page.evaluate(() => {
+      const w = window as unknown as {
+        __princeStep(n: number, c: object): unknown;
+        __princeState(): {
+          dead: boolean; guard: { hitPoints: number } | null;
+        } | null;
+      };
+      for (let i = 0; i < 400; i++) {
+        w.__princeStep(1, i % 8 < 2 ? { y: -1 } : { x: -1 });
+        const s = w.__princeState();
+        if (!s) return 'no state';
+        if (s.dead) return 'the Prince died';
+        if (s.guard && s.guard.hitPoints === 0) return 'killed';
+      }
+      return 'ran out of frames';
+    });
+    expect(outcome, 'the guard should go down').toBe('killed');
     expect(consoleErrors).toEqual([]);
   }, 180000);
 });
