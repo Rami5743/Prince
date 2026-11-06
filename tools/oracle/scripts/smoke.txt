@@ -1,0 +1,6 @@
+# minimal check that the harness can drive the real game and capture frames
+wait 10
+shot 01-boot
+key Return
+wait 6
+shot 02-after-return

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+/tmp/
+*.log
+tools/dosbox-run/
+tests/__artifacts__/

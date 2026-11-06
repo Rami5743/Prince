@@ -1,0 +1,33 @@
+{
+  "name": "prince-web",
+  "version": "0.0.0",
+  "description": "Porting the 1989/1990 DOS game to run in a web browser.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rami5743/Prince.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Rami5743/Prince/issues"
+  },
+  "homepage": "https://github.com/Rami5743/Prince#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "type": "module",
+  "private": true
+}

@@ -25,7 +25,7 @@ says so.
 | `CHEATS.BAT` | 18 | 2004-08-19 | One line: `prince.exe megahit` — starts the game with the built-in cheat mode on. Added by the repackager. |
 | `README.TXT` | 519 | 2011-09-16 | Notes from the repackager (popuw.com) explaining the cracked exe, `CHEATS.BAT` and `POPTRAIN.EXE`. |
 | `CHKLIST.MS` | 54 | 1996-02-20 | Leftover junk: a Microsoft Anti-Virus (MS-DOS 6 `MSAV`) checksum record for `INSTALL.EXE` and `PRINCE.EXE`. Irrelevant to the game. |
-| `PRINCE.DAT` | 3 278 | 1990-03-29 | Core resource file, always loaded. Holds two **font** resources (ids 1, 2), a **7 × 16-colour palette table** (id 10), the **sword sprite set** (id 150 palette + ids 151–173) and the **item sprite set** — flame, potions, sword on the floor (id 700 palette + ids 701–734). |
+| `PRINCE.DAT` | 3 278 | 1990-03-29 | Core resource file, always loaded. Holds the **sword sprite set** (group header id 150 + 23 images) and the **item sprite set** — flame, potions, sword on the floor (header id 700 + 34 images), plus three resources that are neither images nor group headers: id 10 is 112 six-bit RGB triples (seven 16-colour tables) and ids 1 and 2 are **not yet identified**. The game's text font is not here — it is built into `PRINCE.EXE`. |
 | `LEVELS.DAT` | 37 031 | 1990-03-29 | **All 16 level maps** (ids 2000–2015): tile map, room links, door links, guard placement, start position. Fully decoded in §3. |
 | `KID.DAT` | 37 149 | 1990-03-29 | All animation frames of the **Prince** (the "Kid") — palette id 400 + 219 sprites, ids 401–619. |
 | `GUARD.DAT` | 6 950 | 1990-03-29 | Sprite set of the ordinary **guard**, ids 751–784. The only character file with no palette of its own (it uses `GUARD1/2.DAT`). |
@@ -134,32 +134,66 @@ at each item's offset:
   resource; holds in all 16.
 * `index_size == 2 + 8 * item_count` in every file.
 
-### 3.2 Palette payload — 100 bytes
+### 3.2 Shape-list payload — 100 bytes
 
-Always the lowest id in a graphics file (40/50, 150, 200, 400, 700, 750, 800…).
+A sprite group begins with one of these; the images follow it at consecutive
+ids. The group ids are hard-coded in `PRINCE.EXE`: 40 and 50 in `TITLE.DAT`,
+150 and 700 in `PRINCE.DAT`, 200 and 360 in every tile set, 400 in `KID.DAT`,
+750 in each enemy file, and 800/850/900/950/980 in `PV.DAT`.
 
 | Offset | Size | Content |
 |---:|---:|---|
-| 0 | 4 | header; byte 3 is `0x10` = 16, the colour count |
+| 0 | 1 | number of images in the group |
+| 1 | 2 | row bits |
+| 3 | 1 | colour count (always 16) |
 | 4 | 48 | 16 × RGB, 6-bit components (0–63), VGA |
 | 52 | 16 | CGA colour table |
 | 68 | 32 | EGA colour table |
 
-One resource therefore carries the colours for every video mode at once.
+One resource therefore carries the colours for every video mode at once. The
+image count is checked in the test suite against the ids that actually follow:
+`KID.DAT` 400 says 219 and ids 401–619 are exactly 219 images.
+
+`GUARD1.DAT` and `GUARD2.DAT` consist of nothing but this header; the 34
+images it counts live in `GUARD.DAT`, which has no header of its own.
+
+Unused slots inside a group are stored as a two-byte payload of zeroes — a
+height of 0. `VDUNGEON.DAT` has 88 of them among its 151 room tiles.
 
 ### 3.3 Image / sprite payload
 
 ```
 uint16 height
-uint16 width
-uint16 flags      // low byte 0, high-byte low nibble = compression scheme
-uint8  data[]     // RLE / LZ compressed bit-plane data
+uint16 width            pixels
+uint16 flags
+uint8  data[]
+
+depth  = ((flags >> 12) & 7) + 1       bits per pixel
+method = (flags >> 8) & 0x0F           compression scheme
+stride = (depth * width + 7) >> 3      bytes per packed row
 ```
 
-Confirmed by `TITLE.DAT` ids 41 and 51, which both report 200 × 320 — the two
-full-screen title images. Observed values of the flags word: `0x0000`, `0x0100`,
-`0x0400`, `0xb100`–`0xb400`. The compression schemes themselves were **not**
-decoded at this stage.
+| method | scheme |
+|---:|---|
+| 0 | raw |
+| 1 | RLE, row-major |
+| 2 | RLE, column-major |
+| 3 | LZ, row-major |
+| 4 | LZ, column-major |
+
+The RLE is a signed count byte: `n >= 0` copies `n+1` literals, `n < 0`
+repeats the next byte `-n` times. The LZ is LZ77 over a 1 KiB ring buffer
+whose write cursor starts at `0x400 - 0x42`; a rolling bit mask selects
+literal or back-reference, and a back-reference is a big-endian word holding a
+10-bit window offset and a 6-bit length biased by 3.
+
+All five methods appear in the shipped data. The tile sets mix 16-colour
+images with a few 1-bit masks (nine of the seventeen palace wall pieces are
+masks), so a renderer must handle both depths.
+
+This decoder is verified end to end: decoding `TITLE.DAT` resource 51 with
+palette 50 reproduces a DOSBox capture of the real game's title screen with
+**zero** differing pixels out of 64 000 (see `tests/oracle/`).
 
 ### 3.4 Level payload — 2305 bytes (`LEVELS.DAT`, ids 2000–2015)
 
