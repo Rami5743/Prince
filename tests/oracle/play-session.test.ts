@@ -40,6 +40,21 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   //  s039..s050  after that room change. Five to seven hundred pixels out,
   //              not yet looked into.
   { name: 'level1-open', reproduces: 32 },
+
+  // A short run, a stop, and Up held twice. 12 of 37. The port stops a tile
+  // short of where the original's run carries it, so it is standing under
+  // the ledge while the original has already gone over the edge; everything
+  // after that compares two different situations. What it does pin is the
+  // opening and the run.
+  { name: 'level1-climb', reproduces: 12 },
+
+  // Careful steps, then Up alone, then Up with Shift. 18 of 54. The first
+  // two careful steps are reproduced exactly, which is the useful part; the
+  // third is not -- the original steps off the edge and takes hold of the
+  // ledge below, and the port stays on the floor. That is the next thing to
+  // look at: tests/game/careful-step.test.ts pins the move itself, so what
+  // differs is what a second and third press of the pair do.
+  { name: 'level1-grab', reproduces: 18 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */

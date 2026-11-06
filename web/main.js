@@ -4150,6 +4150,7 @@ async function boot() {
     y: (held.has("down") ? 1 : 0) - (held.has("up") ? 1 : 0),
     shift: held.has("shift")
   });
+  const CONTROLS = "arrow keys or the numeric keypad to move, up to jump; hold shift to step carefully and to keep hold of a ledge, then up again to climb it";
   function directionsOf(e) {
     switch (e.code) {
       case "Numpad7":
@@ -4218,7 +4219,7 @@ async function boot() {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     const v = views[current];
     const type = game.scene.options.levelType ? "palace" : "dungeon";
-    status.textContent = game.isDead ? `${label(v)} \u2014 you are dead; press any direction to begin again` : watchRoom === null ? `${label(v)} (${type}) \u2014 arrow keys or the numeric keypad; shift to step` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
+    status.textContent = game.isDead ? `${label(v)} \u2014 you are dead; press any direction to begin again` : watchRoom === null ? `${label(v)} (${type}) \u2014 ${CONTROLS}` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
   }
   sceneSel.addEventListener("change", () => {
     sceneSel.blur();

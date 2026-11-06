@@ -73,6 +73,16 @@ async function boot(): Promise<void> {
     shift: held.has('shift'),
   });
 
+  /**
+   * What the keys do. Shift is the one worth spelling out: it is not only
+   * the careful step, it is also what takes hold of a ledge, and without it
+   * the Prince lets go the moment he grabs one -- so a player who does not
+   * know about it cannot climb at all.
+   */
+  const CONTROLS = 'arrow keys or the numeric keypad to move, up to jump; '
+    + 'hold shift to step carefully and to keep hold of a ledge, '
+    + 'then up again to climb it';
+
   /** Which directions a key stands for. */
   function directionsOf(e: KeyboardEvent): string[] | null {
     switch (e.code) {
@@ -132,7 +142,7 @@ async function boot(): Promise<void> {
     status.textContent = game.isDead
       ? `${label(v)} — you are dead; press any direction to begin again`
       : watchRoom === null
-        ? `${label(v)} (${type}) — arrow keys or the numeric keypad; shift to step`
+        ? `${label(v)} (${type}) — ${CONTROLS}`
         : `${label(v)} (${type}), room ${watchRoom} — looking around; press a key to play`;
   }
 
