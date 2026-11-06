@@ -353,6 +353,13 @@ async function boot(): Promise<void> {
    * steps evenly spaced; a plain interval drifts and the running stutters.
    */
   const STEP_MS = 1000 / FRAMES_PER_SECOND;
+  /**
+   * Set by `__princePause`, for tests that drive the game through
+   * `__princeStep`. Without it the loop keeps stepping between a test's
+   * own calls, on the machine's clock rather than the test's, and nothing
+   * driven through the hook is reproducible.
+   */
+  let paused = false;
   let owed = 0;
   let last = performance.now();
   function tick(now: number): void {
@@ -360,6 +367,7 @@ async function boot(): Promise<void> {
     owed += now - last;
     last = now;
     if (owed > STEP_MS * 5) owed = STEP_MS; // came back from a pause
+    if (paused) { owed = 0; return; }
     let stepped = false;
     while (owed >= STEP_MS) {
       owed -= STEP_MS;
@@ -393,6 +401,7 @@ async function boot(): Promise<void> {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     return { ...game.kid };
   };
+  w.__princePause = (on: boolean): void => { paused = on; };
   w.__princeState = () => (game ? {
     frame: game.kid.frame, room: game.kid.room, x: game.kid.x, y: game.kid.y,
     hitPoints: game.hitPoints, dead: game.isDead, held: [...held].sort(),

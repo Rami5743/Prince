@@ -63,9 +63,11 @@ describe('played in the browser', () => {
       await page.evaluate(() => (window as unknown as {
         __princeShow(level: number, room: number): Promise<void>;
       }).__princeShow(1, 1));
+      await pause(true);
       await page.evaluate(() => (window as unknown as {
         __princeStep(n: number, c: object): unknown;
       }).__princeStep(19, {}));
+      await pause(false);
 
       const settled = await state();
       expect(settled?.y).toBe(Y_LAND[2]); // the middle row
@@ -102,9 +104,11 @@ describe('played in the browser', () => {
     await page.evaluate(() => (window as unknown as {
       __princeShow(level: number, room: number): Promise<void>;
     }).__princeShow(1, 1));
+    await pause(true);
     await page.evaluate(() => (window as unknown as {
       __princeStep(n: number, c: object): unknown;
     }).__princeStep(19, {}));
+    await pause(false);
 
     const before = await state();
     expect(before?.frame, 'he should be standing still').toBe(15);
@@ -120,15 +124,14 @@ describe('played in the browser', () => {
     expect(after?.frame, 'but the tap was acted on').not.toBe(15);
   }, 60000);
 
-  /**
-   * A fight through the page. The part that has to go through real keys is
-   * narrow -- that Up reaches the game as a lunge rather than as a jump --
-   * so that is what real keys are used for. Finishing the guard off is done
-   * through the step hook, because a fight driven by wall-clock key presses
-   * in a headless browser takes as many frames as it takes, and a test
-   * should not depend on that.
-   */
-  it('Up fights the guard of level 2 rather than jumping', async () => {
+  const pause = (on: boolean): Promise<void> => page.evaluate(
+    (v) => (window as unknown as { __princePause(on: boolean): void }).__princePause(v),
+    on,
+  );
+
+  /** Walk up to the guard of level 2's room 4, through the step hook. */
+  async function meetTheGuard(): Promise<void> {
+    await pause(true);
     await page.evaluate(() => (window as unknown as {
       __princeShow(level: number, room: number): Promise<void>;
     }).__princeShow(2, 5));
@@ -138,28 +141,48 @@ describe('played in the browser', () => {
       w.__princeStep(40, { x: -1 });
       w.__princeStep(10, {});
     });
+  }
 
+  /**
+   * The narrow thing that has to go through real keys: with a sword out,
+   * Up is a lunge and not a jump. Each press is watched over the frames
+   * that follow it, so a sample landing between two of the game's own
+   * frames cannot miss it.
+   */
+  it('Up lunges rather than jumping once the sword is out', async () => {
+    await meetTheGuard();
     const met = await state();
     expect(met?.room, 'he should have reached the guard\'s room').toBe(4);
     expect(met?.sword, 'and drawn his sword').toBe(2);
-    expect(met?.guard).not.toBeNull();
 
-    // One real press: it has to come out as a lunge, frames 151..157.
-    const lunged: number[] = [];
-    for (let i = 0; i < 12 && lunged.length === 0; i++) {
+    await pause(false); // real keys need the page's own clock back
+    const seen: number[] = [];
+    for (let i = 0; i < 15 && !seen.some((f) => f >= 151 && f <= 157); i++) {
       await page.keyboard.down('ArrowUp');
-      await page.waitForTimeout(120);
+      await page.waitForTimeout(100);
       await page.keyboard.up('ArrowUp');
+      for (let k = 0; k < 5; k++) {
+        await page.waitForTimeout(60);
+        const now = await state();
+        if (now?.dead) break;
+        if (now) seen.push(now.frame);
+      }
       const now = await state();
-      if (now && now.frame >= 151 && now.frame <= 157) lunged.push(now.frame);
-      await page.waitForTimeout(200);
+      if (now?.dead) break;
     }
-    expect(lunged.length, 'Up should lunge, not jump').toBeGreaterThan(0);
+    expect(seen.some((f) => f >= 151 && f <= 157), 'Up should lunge').toBe(true);
+    expect(seen.some((f) => f >= 67 && f <= 85), 'and never jump').toBe(false);
+    expect(consoleErrors).toEqual([]);
+  }, 180000);
 
-    // And the fight can be finished. Lunge, and otherwise press forward:
-    // the real-key part above leaves him wherever its timing left him, and
-    // stepping in is refused once he is already within a blade's length,
-    // so this closes the gap if there is one and costs nothing if not.
+  /**
+   * And the fight can be won. This one is driven entirely through the step
+   * hook: a fight is a race between two hit point counts, and running it
+   * on a headless browser's wall clock decides that race by how busy the
+   * machine is.
+   */
+  it('the guard of level 2 can be killed', async () => {
+    await meetTheGuard();
     const outcome = await page.evaluate(() => {
       const w = window as unknown as {
         __princeStep(n: number, c: object): unknown;
@@ -168,6 +191,8 @@ describe('played in the browser', () => {
         } | null;
       };
       for (let i = 0; i < 400; i++) {
+        // Lunge, and press forward otherwise: stepping in is refused once
+        // he is already within a blade's length, so it costs nothing.
         w.__princeStep(1, i % 8 < 2 ? { y: -1 } : { x: -1 });
         const s = w.__princeState();
         if (!s) return 'no state';
@@ -176,6 +201,7 @@ describe('played in the browser', () => {
       }
       return 'ran out of frames';
     });
+    await pause(false);
     expect(outcome, 'the guard should go down').toBe('killed');
     expect(consoleErrors).toEqual([]);
   }, 180000);

@@ -4683,6 +4683,7 @@ async function boot() {
   });
   await select(0);
   const STEP_MS = 1e3 / FRAMES_PER_SECOND;
+  let paused = false;
   let owed = 0;
   let last = performance.now();
   function tick(now) {
@@ -4690,6 +4691,10 @@ async function boot() {
     owed += now - last;
     last = now;
     if (owed > STEP_MS * 5) owed = STEP_MS;
+    if (paused) {
+      owed = 0;
+      return;
+    }
     let stepped = false;
     while (owed >= STEP_MS) {
       owed -= STEP_MS;
@@ -4720,6 +4725,9 @@ async function boot() {
     for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
     display.present(game.render(), game.scene.screenPalette.toRgba());
     return { ...game.kid };
+  };
+  w.__princePause = (on) => {
+    paused = on;
   };
   w.__princeState = () => game ? {
     frame: game.kid.frame,
