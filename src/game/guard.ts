@@ -304,7 +304,20 @@ function fight(guard: GuardState, ctx: GuardStepContext): void {
   startSequence(guard, SWORD_SEQ.strike, ctx.tables);
 }
 
-/** The frames of the en garde stance, which a guard holds between moves. */
+/**
+ * The frames of the en garde stance, which a guard holds between moves.
+ *
+ * This makes his stride five ticks -- 163, 164, 165, 158 and then 170,
+ * where the next one starts. The original's is four: the grabbed video
+ * of level 1's room 3 has its guard covering 14 pixels every four ticks
+ * against the port's 12 every five, so the port trails where the
+ * original keeps up. Letting the stride start from 158 as well gives the
+ * right four ticks and the right speed -- and makes everything after it
+ * worse, because 158 is also on the way back from a lunge and the guard
+ * then walks in instead of holding. `session-level1-guard` drops from 14
+ * captures to fewer and the recorded run parts company 150 ticks
+ * earlier. Left as it is until what else reads 158 is understood.
+ */
 const EN_GARDE_FIRST = 170;
 const EN_GARDE_LAST = 171;
 
