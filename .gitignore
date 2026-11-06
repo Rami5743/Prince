@@ -6,3 +6,4 @@ coverage/
 tools/dosbox-run/
 tests/__artifacts__/
 tests/golden/**/_work/
+.scratch/
