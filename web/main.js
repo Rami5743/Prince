@@ -2510,6 +2510,7 @@ var EN_GARDE_FIRST = 170;
 var EN_GARDE_LAST = 171;
 function advanceOnKid(guard, ctx) {
   if (guard.alive >= 0 || guard.sword !== 2) return;
+  if (ctx.kidArmed === false) return;
   if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   if (ctx.kidX === void 0) return;
@@ -2893,6 +2894,8 @@ var KID_SEQ = {
   /** The landing that kills: a fall of three rows or more. */
   crushed: 52,
   unsafeStep: 39,
+  /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
+  pickUpSword: 91,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47
 };
@@ -2954,6 +2957,7 @@ function controlSwordPlay(state, controls, ctx) {
   const foe = ctx.opponent?.() ?? null;
   const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN && foe.room === state.room && foe.currentRow === state.currentRow && Math.abs(foe.x - state.x) <= DRAW_SWORD_RANGE;
   if (state.sword !== SWORD_DRAWN) {
+    if (ctx.hasSword && !ctx.hasSword()) return false;
     const onFoot = state.y === floorHeightOfRow(state.currentRow) && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair && state.action !== ACTION.hangClimb && state.action !== ACTION.hangStraight;
     if (!engaged || foe === null || !onFoot) return false;
     state.direction = facingOf(state, foe);
@@ -3444,6 +3448,13 @@ function checkSpiked(state, ctx) {
     state.alive = 0;
   }
 }
+function checkPickUpSword(state, ctx) {
+  if (state.alive >= 0 || !ctx.hasSword || ctx.hasSword()) return;
+  if (state.frame !== FRAME.stand) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.sword || !tile.room) return;
+  startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
+}
 function checkChomped(state, ctx) {
   if (!ctx.traps || state.alive >= 0) return;
   const tile = tileHere(state, ctx);
@@ -3479,6 +3490,7 @@ function stepKid(state, controls, ctx) {
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
   checkChomped(state, ctx);
+  checkPickUpSword(state, ctx);
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
@@ -4124,6 +4136,12 @@ var Game = class _Game {
   blankFrames = 0;
   hitPoints;
   maxHitPoints;
+  /**
+   * Has the Prince got a sword? It lies on the floor of level 1 and he
+   * carries it from then on, so every later level starts with it -- which
+   * is also the right answer for a level picked straight off the menu.
+   */
+  hasSword;
   traps;
   prng = new Prng2();
   guard = newGuard();
@@ -4140,6 +4158,7 @@ var Game = class _Game {
     this.kid = newCharacter();
     this.hitPoints = scene.constants.startHitPoints;
     this.maxHitPoints = scene.constants.startHitPoints;
+    this.hasSword = levelNumber > 1;
     const world = {
       tileAt: (room, column, row) => scene.tiles.typeAt(room, column, row) & TILE_TYPE_MASK,
       modifierAt: (room, column, row) => scene.tiles.modifierAt(room, column, row),
@@ -4165,7 +4184,21 @@ var Game = class _Game {
       traps: trapHooks,
       latch: new ControlLatch(),
       damage: (amount) => this.damage(amount),
-      opponent: () => this.guard.direction === NO_DIRECTION ? null : this.guard
+      opponent: () => this.guard.direction === NO_DIRECTION ? null : this.guard,
+      hasSword: () => this.hasSword,
+      effects: {
+        sound: effects.sound,
+        // `getItem 1` is the sword being lifted off the floor; the tile it
+        // was lying on becomes plain floor behind him.
+        getItem: (which) => {
+          if (which !== 1) return;
+          this.hasSword = true;
+          const k = this.kid;
+          if (this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow) === TILE_SWORD) {
+            this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
+          }
+        }
+      }
     };
     enterLevel(
       this.kid,
@@ -4204,7 +4237,8 @@ var Game = class _Game {
       kidRoom: this.kid.room,
       kidRow: this.kid.currentRow,
       kidX: this.kid.x,
-      kid: this.kid
+      kid: this.kid,
+      kidArmed: this.hasSword
     });
     this.resolveSwordplay();
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
@@ -4233,7 +4267,7 @@ var Game = class _Game {
     if (!strikeLands(attacker) || !withinReach(attacker, defender)) return;
     if (isBlocking(defender)) return;
     if (defender === this.kid) {
-      const dead2 = this.damage(1);
+      const dead2 = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
       startSequence(defender, dead2 ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
       if (dead2) defender.alive = 0;
       return;
@@ -4393,6 +4427,8 @@ var Game = class _Game {
   }
 };
 var ROOM_CHANGE_BLANK = 1;
+var TILE_SWORD = TILE.sword;
+var TILE_FLOOR = TILE.floor;
 var FULL_HP_IMAGE = 217;
 var EMPTY_HP_IMAGE = 218;
 var HP_TOP_Y = 194;

@@ -159,6 +159,12 @@ that fails.
   nothing checks the tile behind him. Doing it properly means refusing the
   move rather than correcting it afterwards. `tests/game/gate.test.ts`
   records it.
+* **Picking the sword up is half there.** The Prince carries one on every
+  level but the first, and on level 1 he picks it up by standing on it,
+  which runs the original's own sequence 91. Whether the original lets him
+  walk onto that tile at all, or stops him in front of it, is not pinned;
+  `getEdgeDistance` treats a sword on the floor as something to stop short
+  of.
 * **Bumping is only half there.** `checkBumped` in `src/game/kid.ts` stops
   the Prince at a wall he walks into, which is sequence 47. The original also
   has sequences 45 and 46 -- bumping while in the air, which knocks him down

@@ -68,6 +68,8 @@ export const KID_SEQ = {
   /** The landing that kills: a fall of three rows or more. */
   crushed: 52,
   unsafeStep: 39,
+  /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
+  pickUpSword: 91,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47,
 } as const;
@@ -119,6 +121,8 @@ export interface KidContext {
   damage?(amount: number): boolean;
   /** The guard of the room, if there is one, for sword play. */
   opponent?(): CharacterState | null;
+  /** Has the Prince picked up a sword? Without one he cannot draw. */
+  hasSword?(): boolean;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -194,6 +198,12 @@ function controlSwordPlay(
     && Math.abs(foe.x - state.x) <= DRAW_SWORD_RANGE;
 
   if (state.sword !== SWORD_DRAWN) {
+    // No sword, no drawing it. On level 1 the Prince has not got one until
+    // he picks it up, and the guard of room 3 stands between him and the
+    // room it lies in -- so meeting that guard is meant to be something to
+    // run away from, and a Prince who draws a blade he has never picked up
+    // turns the opening level into a fight it was never meant to be.
+    if (ctx.hasSword && !ctx.hasSword()) return false;
     // Drawing happens on the way in, not only from a standstill: the
     // original's Prince stops out of a run when he comes up on a guard. He
     // has to have his feet on the floor of his row, though -- a jump or a
@@ -762,6 +772,19 @@ function checkSpiked(state: CharacterState, ctx: KidContext): void {
   }
 }
 
+/**
+ * The sword on the floor. Standing on it picks it up: sequence 91 is the
+ * original's own animation for it, and its byte-code raises `getItem 1`,
+ * which is what tells the game the Prince is armed from now on.
+ */
+function checkPickUpSword(state: CharacterState, ctx: KidContext): void {
+  if (state.alive >= 0 || !ctx.hasSword || ctx.hasSword()) return;
+  if (state.frame !== FRAME.stand) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.sword || !tile.room) return;
+  startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
+}
+
 /** A chomper whose blade is down cuts whatever is standing in it. */
 function checkChomped(state: CharacterState, ctx: KidContext): void {
   if (!ctx.traps || state.alive >= 0) return;
@@ -811,6 +834,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
   checkChomped(state, ctx);
+  checkPickUpSword(state, ctx);
 
   // Falling out of the level is fatal, as it is in the original.
   if (state.room === 0 && state.alive < 0) {

@@ -22,6 +22,7 @@ import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import type { Controls } from '../../src/game/kid.ts';
 import { SWORD_DRAWN } from '../../src/game/sword.ts';
+// `Game` and the fixtures above are shared with the cases at the end.
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -87,4 +88,51 @@ describe('a guard in the way', () => {
     // there, or the Prince is dead for having tried it.
     expect(leftTheRoom).toBe(false);
   }, 30000);
+});
+
+/**
+ * Level 1, where the Prince has no sword.
+ *
+ * It lies on the floor of room 15 and the guard of room 3 stands between
+ * him and it, so the first guard in the game is one he cannot fight.
+ * `tests/golden/session-level1-guard` shows what the original makes of
+ * that: the guard stands his ground while the Prince runs at him, strikes
+ * once when he arrives, and the hit point markers go out altogether.
+ */
+describe('a Prince with no sword', () => {
+  it('starts level 1 without one, and later levels with one', async () => {
+    expect((await Game.start(assets, exe, 1)).hasSword).toBe(false);
+    expect((await Game.start(assets, exe, 2)).hasSword).toBe(true);
+  });
+
+  it('cannot draw one he has not got', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.showRoom(3);
+    const kid = game.kid;
+    kid.room = 3; kid.currentRow = 1; kid.currentColumn = 0;
+    kid.x = 72; kid.y = 118; kid.direction = 0; kid.frame = 15;
+    kid.action = 0; kid.fallX = 0; kid.fallY = 0;
+    for (let i = 0; i < 20; i++) game.step(NOTHING);
+    expect(game.guard.sword, 'the guard draws his').toBe(SWORD_DRAWN);
+    expect(game.kid.sword, 'the Prince has none to draw').toBe(0);
+  });
+
+  it('is held off, not walked at, and one blow finishes him', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.showRoom(3);
+    const kid = game.kid;
+    kid.room = 3; kid.currentRow = 1; kid.currentColumn = 0;
+    kid.x = 72; kid.y = 118; kid.direction = 0; kid.frame = 15;
+    kid.action = 0; kid.fallX = 0; kid.fallY = 0;
+    const guardStart = game.guard.x;
+    let died = -1;
+    for (let i = 0; i < 60 && died < 0; i++) {
+      game.step({ x: 1, y: 0, shift: false });
+      if (game.isDead) died = i;
+    }
+    expect(died, 'running at him unarmed is fatal').toBeGreaterThan(0);
+    expect(game.hitPoints, 'and it takes everything at once').toBe(0);
+    // He drew his sword, which shifts him a little, but he did not walk in.
+    expect(Math.abs(game.guard.x - guardStart)).toBeLessThan(14);
+  });
 });

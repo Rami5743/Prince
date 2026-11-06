@@ -218,6 +218,8 @@ export interface GuardStepContext {
   readonly kidX?: number;
   /** The Prince himself, for the part of the fight that needs more than x. */
   readonly kid?: CharacterState;
+  /** Has the Prince got a sword? A guard treats him differently without one. */
+  readonly kidArmed?: boolean;
 }
 
 /**
@@ -298,7 +300,7 @@ const EN_GARDE_LAST = 171;
 /**
  * A guard who is on guard walks in on the Prince.
  *
- * `session-level2-meet` shows it plainly: the Prince stops a few tiles
+ * `session-level2-meet` shows it plainly: an armed Prince stops a few tiles
  * away, the guard draws his sword and then closes the distance a step at a
  * time until the two are within a sword's length of each other, and holds
  * there. Sequence 56 is the step, and it ends back on the stance, so one
@@ -310,6 +312,12 @@ const EN_GARDE_LAST = 171;
  */
 function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.alive >= 0 || guard.sword !== 2) return;
+  // Not at an unarmed Prince. The guard of level 1's room 3 stands his
+  // ground while an unarmed Prince runs at him and only strikes when he
+  // arrives, where level 2's guard -- met by a Prince with a sword --
+  // leaves his corner and closes. Both captures are explained by the
+  // Prince's sword and nothing else, so that is what this reads.
+  if (ctx.kidArmed === false) return;
   if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   if (ctx.kidX === undefined) return;

@@ -1,0 +1,20 @@
+# Level 1 has a guard in room 3, and the sword that lets the Prince fight
+# him is in room 15 -- so when the player meets this guard he has no sword
+# yet. This walks the route the player's own recording took: right along
+# the middle row, down to the bottom one, back over the loose floor until
+# it gives way, down into room 2, and right into room 3 where the guard is.
+#
+# The question it answers is what the original does when the Prince meets a
+# guard he cannot fight.
+level 1
+cycles 400
+settle 40
+phase - 3
+phase r 14
+phase - 4
+phase r 10
+phase - 4
+phase l 8
+phase - 12
+phase r 16
+phase - 16

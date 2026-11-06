@@ -12,7 +12,7 @@ import {
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
 import type { World } from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
-import { TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
+import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
 import { toScreenX } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
@@ -46,6 +46,12 @@ export class Game {
   private blankFrames = 0;
   hitPoints: number;
   maxHitPoints: number;
+  /**
+   * Has the Prince got a sword? It lies on the floor of level 1 and he
+   * carries it from then on, so every later level starts with it -- which
+   * is also the right answer for a level picked straight off the menu.
+   */
+  hasSword: boolean;
   readonly traps: Traps;
   readonly prng = new Prng();
   readonly guard: GuardState = newGuard();
@@ -67,6 +73,7 @@ export class Game {
     this.kid = newCharacter();
     this.hitPoints = scene.constants.startHitPoints;
     this.maxHitPoints = scene.constants.startHitPoints;
+    this.hasSword = levelNumber > 1;
 
     const world: World = {
       tileAt: (room, column, row) => scene.tiles.typeAt(room, column, row) & TILE_TYPE_MASK,
@@ -94,6 +101,21 @@ export class Game {
       latch: new ControlLatch(),
       damage: (amount) => this.damage(amount),
       opponent: () => (this.guard.direction === NO_DIRECTION ? null : this.guard),
+      hasSword: () => this.hasSword,
+      effects: {
+        sound: effects.sound,
+        // `getItem 1` is the sword being lifted off the floor; the tile it
+        // was lying on becomes plain floor behind him.
+        getItem: (which) => {
+          if (which !== 1) return;
+          this.hasSword = true;
+          const k = this.kid;
+          if (this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow)
+            === TILE_SWORD) {
+            this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
+          }
+        },
+      },
     };
     enterLevel(
       this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir,
@@ -133,6 +155,7 @@ export class Game {
       kidRow: this.kid.currentRow,
       kidX: this.kid.x,
       kid: this.kid,
+      kidArmed: this.hasSword,
     });
     this.resolveSwordplay();
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
@@ -163,7 +186,13 @@ export class Game {
     if (!strikeLands(attacker) || !withinReach(attacker, defender)) return;
     if (isBlocking(defender)) return; // parried
     if (defender === this.kid) {
-      const dead = this.damage(1);
+      // A blow on a Prince with no sword kills him where he stands. The
+      // capture of level 1's room 3 shows it: he runs at that guard with
+      // two hit points left, is struck once, and the markers go out
+      // altogether. Whether the original takes all of them or simply ends
+      // him is not something two hit points can tell apart; either way he
+      // does not get up.
+      const dead = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
       startSequence(defender, dead ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
       if (dead) defender.alive = 0;
       return;
@@ -347,6 +376,9 @@ export class Game {
  * at the speed they were taken that is a couple of ticks either way.
  */
 export const ROOM_CHANGE_BLANK = 1;
+
+const TILE_SWORD = TILE.sword;
+const TILE_FLOOR = TILE.floor;
 
 /** Sprite ids of the full and empty hit point markers in the Prince's group. */
 const FULL_HP_IMAGE = 217;

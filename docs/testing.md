@@ -190,6 +190,14 @@ requires the states to match tick for tick. A recording of a session that
 went wrong is therefore the shortest path from "it does this when I play
 it" to a failing test.
 
+One thing to be clear about: a recording is a snapshot of what the game
+did, not of what it should do. Once the bug it caught is fixed the replay
+*stops* matching -- which is the point, and is how you know the fix landed
+-- but it also means a recording of a bug does not belong in
+`tests/recordings/`, where everything has to keep replaying. Keep those
+ones to hand, use them to find the bug, and record a fresh one afterwards
+if the session is worth keeping.
+
 ## 5. A whole play session
 
 The comparisons above each pin one move. They pass even when the game is

@@ -76,6 +76,16 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // and giving ground. The closing is now reproduced; the fight is not
   // written at all. 9 of 55.
   { name: 'level2-meet', reproduces: 9 },
+
+  // Level 1's own guard, in room 3, met by a Prince who has not got a
+  // sword yet -- it lies in room 15, on the far side of him. 14 of 87.
+  // This is the one that settled three things at once: the Prince must
+  // not draw a blade he has never picked up, a guard holds his ground
+  // against an unarmed Prince instead of walking in, and his blow on one
+  // is fatal. The route to room 3 is long and the two part company well
+  // before it, so the count is low and says little; the frames are what
+  // matter.
+  { name: 'level1-guard', reproduces: 14 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */
