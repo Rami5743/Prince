@@ -169,20 +169,33 @@ tools/dev/          tools for working out what the original did
 
 ## A good next step
 
-Either of these:
+In the order I would do them.
 
-**More sessions.** Each one is an hour's work and the first one found a bug
-that eleven move-by-move comparisons had missed. Climbing and the traps have
-no session yet.
+**More sessions.** Four bugs so far, all of them reachable in the first ten
+seconds of play and none of them visible to the move-by-move comparisons.
+An hour buys a session. Read what docs/testing.md says about what a session
+can tell you first -- in particular, chase categorical differences and leave
+the forty-pixel ones alone. Nothing yet covers the gates, the potions, or
+a level other than the first.
 
-**Guard behaviour**, in this order:
+**Guard behaviour**, which is the largest thing missing and the reason no
+level can actually be finished. Guards are placed, coloured, drawn and hold
+their swords correctly; nothing in `src/game/guard.ts` decides anything. In
+order: `autocontrol_guard` -- how a guard notices the Prince and decides to
+advance, retreat or wait, which reads `can_guard_see_kid` -- then drawing a
+sword, then the fight itself. Be careful how this is arrived at. The
+convention here is that what gets taken from elsewhere is a *description*
+of a format, with the implementation written here and then checked against
+the original's own output; guard logic copied out of another project would
+not be that, and the licences differ. Capturing a fight and pinning it is
+the honest route, and the session harness is the tool for it.
 
-1. `autocontrol_guard` — how a guard notices the Prince and decides to
-   advance, retreat or wait. It reads `can_guard_see_kid`, which is in
-   `seg007.c` of the reference.
-2. Drawing a sword, and the fight: `control_with_sword`, `swordfight`,
-   `sword_strike`, `parry`.
-3. Capture a fight from the original on level 2 or 3 and pin it frame by
-   frame, the way `tests/game/run-jump.test.ts` does.
+**Sound**, which is independent of everything above. The sequence
+interpreter already reads the sound numbers out of the byte-code and hands
+them to `effects.sound`, which nothing listens to.
 
-Sound can follow; it is independent of all of the above.
+**The clock**, the cut-scenes, and the screen blanking on a room change are
+the remainder. The blank is worth doing early if anyone wants the jump
+captures to go green: three of its thirteen frames are black because the
+original blanks and the port does not.
+
