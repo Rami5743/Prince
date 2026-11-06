@@ -51,7 +51,7 @@ mkdirSync(outdir, { recursive: true });
 let written = 0;
 for (let t = 0; t < ticks.length; t++) {
   game.step(ticks[t]);
-  if (t < from || t > to || t % stride !== 0) continue;
+  if (t < from || t > to || (stride > 1 && t % stride !== 0)) continue;
   const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
   const png = new PNG({ width: W, height: H });
   for (let i = 0; i < W * H; i++) {

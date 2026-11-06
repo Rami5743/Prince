@@ -10,11 +10,24 @@
  * player's fingers did, with millisecond stamps, and those are what the
  * original gets here.
  *
- * Capture is DOSBox's AVI recorder rather than screenshots, because a
- * screenshot costs the better part of a second of wall-clock time and
- * would pull the key timings apart as it went.
+ * Two things make the replay keep time with the recording.
+ *
+ * The whole schedule goes out as one chained xdotool invocation with its
+ * own `sleep`s. A process per key edge costs twenty to forty milliseconds
+ * that the script's waits know nothing about, and a few hundred edges of
+ * that is seconds of drift -- which is what made the first replay part
+ * company with the port after about nine seconds.
+ *
+ * And the schedule is anchored on Ctrl+A, the original's restart-level
+ * key, because that is what the recorder does too: it restarts the level
+ * and begins at once. Without it the emulator has been standing about at
+ * the level start for however long the script waited, and the first key
+ * arrives to a Prince in a different pose from the port's.
  *
  *   node tools/oracle/recording_to_script.mjs <recording.json> [out.txt]
+ *
+ * `--settle <seconds>` is how long after Ctrl+A the level is running
+ * again; see tools/oracle/README for how it was measured.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -29,6 +42,11 @@ const KEYS = {
   ShiftLeft: 'shift', ShiftRight: 'shift',
 };
 
+function arg(name, dflt) {
+  const i = process.argv.indexOf('--' + name);
+  return i > 0 ? Number(process.argv[i + 1]) : dflt;
+}
+
 const src = process.argv[2];
 if (!src) {
   console.error('usage: recording_to_script.mjs <recording.json> [out.txt]');
@@ -37,18 +55,21 @@ if (!src) {
 const rec = parseRecording(readFileSync(src, 'utf8'));
 const name = basename(src).replace(/\.json$/, '');
 const out = process.argv[3] ?? `tools/oracle/scripts/replay-${name}.txt`;
+const settle = arg('settle', 1.6);
+/** Nothing is sent closer together than this, so two edges cannot merge. */
+const MIN_GAP = 0.002;
 
 const lines = [
   `# generated from ${basename(src)} -- the player's own key events, replayed`,
   'wait 25',
   'key Return',
-  'wait 20',
+  'wait 25',
 ];
 for (let l = 1; l < rec.level; l++) lines.push('key shift+l', 'wait 70');
-// The recording starts where the level does, so the game has to be settled
-// before the first event goes in.
-lines.push('wait 40', 'video');
+// Ctrl+A restarts the level, which is where the recording starts too.
+lines.push('key ctrl+a', `wait ${settle.toFixed(3)}`);
 
+const chain = [];
 const down = new Set();
 let at = 0;
 let sent = 0;
@@ -60,19 +81,20 @@ for (const e of rec.events) {
   // held. The emulator needs the edges, not the repeats.
   if (e.type === 'down' && down.has(key)) { dropped++; continue; }
   if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
-  const wait = Math.max(0, e.ms - at) / 1000;
-  if (wait >= 0.001) lines.push(`wait ${wait.toFixed(3)}`);
-  at = e.ms;
-  if (e.type === 'down') { down.add(key); lines.push(`keydown ${key}`); }
-  else { down.delete(key); lines.push(`keyup ${key}`); }
+  const want = e.ms / 1000;
+  const wait = Math.max(MIN_GAP, want - at);
+  chain.push('sleep', wait.toFixed(3));
+  at = Math.max(want, at + MIN_GAP);
+  if (e.type === 'down') { down.add(key); chain.push('keydown', '--window', '@W', key); }
+  else { down.delete(key); chain.push('keyup', '--window', '@W', key); }
   sent++;
 }
-for (const key of down) lines.push(`keyup ${key}`);
-lines.push('wait 2', 'video', 'wait 2');
+for (const key of down) chain.push('keyup', '--window', '@W', key);
+lines.push(`xdo ${chain.join(' ')}`, 'wait 3');
 
 writeFileSync(out, lines.join('\n') + '\n');
 console.error(`${out}: level ${rec.level}, ${sent} key edges `
   + `(${dropped} auto-repeats and strays dropped), `
-  + `${(at / 1000).toFixed(1)}s of play`);
+  + `${at.toFixed(1)}s of play, settle ${settle}s`);
 console.log(`python3 tools/oracle/dosbox_oracle.py --script ${out} \\
-    --out /tmp/replay-${name}`);
+    --out /tmp/replay-${name} --record /tmp/replay-${name}/run.mkv --fps 30`);

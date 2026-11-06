@@ -374,9 +374,29 @@ export class Game {
 }
 
 /**
- * How many frames the screen stays blank when the view changes room. Read
- * off the captures, which hold two or three black frames at that moment --
- * at the speed they were taken that is a couple of ticks either way.
+ * How many ticks the screen stays blank when the view changes room.
+ *
+ * One, and the two kinds of evidence disagree about it.
+ *
+ * A grabbed video of the original says two. The display is grabbed well
+ * above the game's twelve ticks a second, so a tick is a run of frames
+ * and the black ones can be counted: both room changes of the replayed
+ * level 1 recording hold black for four or five grabbed frames, which is
+ * two ticks of wall clock, not one.
+ *
+ * The screenshots say one. tests/game/run.test.ts and run-jump.test.ts
+ * match captures of the original pixel for pixel, and the frame each one
+ * caught just after a room change is the state one tick after the view
+ * moved -- a state a two-tick blank would hide, and which then matches
+ * nothing at all.
+ *
+ * Both can be true: the original clears the screen and redraws it, and
+ * the redraw takes longer than a refresh, so the grab sees black for
+ * about two ticks while a screenshot -- which saves the finished buffer
+ * -- sees the drawn room. That makes the two-tick blank a property of the
+ * redraw rather than of the game, and the pixel-exact captures the better
+ * evidence for what the game shows. It stays at one until something
+ * settles it the other way.
  */
 export const ROOM_CHANGE_BLANK = 1;
 

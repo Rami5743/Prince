@@ -177,6 +177,22 @@ class Dosbox:
     def keyup(self, spec):
         self._xdo('keyup', '--window', self.winid, spec)
 
+    def xdo(self, args):
+        """One xdotool process for a whole chain of commands.
+
+        A separate process per key edge costs twenty to forty milliseconds
+        of wall clock that the script's own waits know nothing about, and
+        over a few hundred edges that is seconds of drift -- which is what
+        made a replayed recording part company with the port after about
+        nine seconds. xdotool takes `sleep` as a command of its own, so the
+        entire schedule goes in one invocation and the waits are the only
+        thing that times it. `@W` stands for the window id.
+        """
+        env = dict(os.environ, DISPLAY=self.display)
+        argv = ['xdotool'] + [self.winid if a == '@W' else a for a in args]
+        subprocess.run(argv, env=env, check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def type_(self, text):
         self._xdo('type', '--window', self.winid, '--delay', '60', text)
 
@@ -251,6 +267,8 @@ def run_script(path, outdir, machine, cycles, autoexec, display,
                 db.keydown(rest)
             elif op == 'keyup':
                 db.keyup(rest)
+            elif op == 'xdo':
+                db.xdo(rest.split())
             elif op == 'type':
                 db.type_(rest)
             elif op == 'cmd':
