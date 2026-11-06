@@ -86,8 +86,38 @@ describe('taking hold of a ledge', () => {
     const game = await atTheLedge();
     play(game, 30, true);
     expect(HANGING(game.kid.frame)).toBe(true);
+    // He is hanging from the floor of the room above, having dropped into
+    // this one through the loose tile, so the climb takes him back up into
+    // it. y is measured within a room, so the room is what to watch.
+    const hangingRoom = game.kid.room;
+    expect(game.scene.tiles.linkOf(hangingRoom, 2)).toBeGreaterThan(0);
+    const above = game.scene.tiles.linkOf(hangingRoom, 2);
     for (let i = 0; i < 25; i++) game.step({ x: 0, y: -1, shift: true });
     expect(HANGING(game.kid.frame)).toBe(false);
-    expect(game.kid.frame).toBe(15); // standing on the ledge again
+    expect(game.kid.room).toBe(above);
+    // Let the key go and he settles on his feet.
+    for (let i = 0; i < 20; i++) game.step({ x: 0, y: 0, shift: false });
+    expect(game.kid.frame).toBe(15);
+  });
+
+  /**
+   * Holding Up does not stop at the top. The original carries on while the
+   * key is down -- it jumps again as soon as the Prince is back on his feet
+   * -- which the climbing session catches it doing: after the climb it is
+   * off along the floor above while a port that waited for a fresh press
+   * stood still. See `canClimbUp` in src/game/kid.ts.
+   */
+  it('a held Up carries on once he is up', async () => {
+    const game = await atTheLedge();
+    play(game, 30, true);
+    expect(HANGING(game.kid.frame)).toBe(true);
+    const frames: number[] = [];
+    for (let i = 0; i < 45; i++) {
+      game.step({ x: 0, y: -1, shift: true });
+      frames.push(game.kid.frame);
+    }
+    // The climb itself, and then a jump begun without the key being let go.
+    expect(frames.some((f) => f >= 135 && f < 150)).toBe(true);
+    expect(frames.indexOf(67)).toBeGreaterThan(frames.lastIndexOf(149));
   });
 });

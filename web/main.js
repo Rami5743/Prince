@@ -2969,7 +2969,7 @@ function controlHanging(state, controls, ctx) {
 }
 function canClimbUp(state, ctx) {
   ctx.latch.shift2 = CONTROL.ignore;
-  ctx.latch.up = ctx.latch.releaseArrows();
+  ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq = KID_SEQ.climbUp;
   if ((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0 || above.type === TILE.gate && state.direction !== 0 && modifierOf(ctx, above) >> 2 < 6) {
@@ -3285,6 +3285,10 @@ function stepKid(state, controls, ctx) {
 }
 function checkBumped(state, ctx) {
   if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight || state.action === ACTION.bumped || state.action === ACTION.inFreefall || state.action === ACTION.inMidair) {
+    return;
+  }
+  const f = state.frame;
+  if (f >= 135 && f < 150 || f >= 110 && f < 120 || f >= 150 && f < 163 || f >= 166 && f < 169 || f >= FRAME.hangingFirst && f < 100) {
     return;
   }
   if (state.y !== floorHeightOfRow(state.currentRow)) return;

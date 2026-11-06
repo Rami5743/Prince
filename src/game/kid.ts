@@ -347,7 +347,11 @@ function controlHanging(state: CharacterState, controls: Controls, ctx: KidConte
 
 function canClimbUp(state: CharacterState, ctx: KidContext): void {
   ctx.latch.shift2 = CONTROL.ignore;
-  ctx.latch.up = ctx.latch.releaseArrows();
+  // The arrows are forgotten, but Up is not marked as used: the original
+  // keeps going while it is held, jumping again as soon as the Prince is
+  // back on his feet. Nothing reads the latch while the climb runs -- no
+  // control handler covers frames 135..149 -- so this cannot cut it short.
+  ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq: number = KID_SEQ.climbUp;
   if (((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0)
@@ -751,6 +755,17 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
   if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight
     || state.action === ACTION.bumped || state.action === ACTION.inFreefall
     || state.action === ACTION.inMidair) {
+    return;
+  }
+  // Not while he is climbing, landing or hanging. These are the frames
+  // `leaveDirection` refuses to carry across a room boundary, for the same
+  // reason: between them the character is moving from one tile to another
+  // and is not simply walking about. A climb begins `action 1`, so the
+  // action alone does not tell them apart -- and bumping mid-climb knocks
+  // him off the ledge he is pulling himself onto.
+  const f = state.frame;
+  if ((f >= 135 && f < 150) || (f >= 110 && f < 120) || (f >= 150 && f < 163)
+    || (f >= 166 && f < 169) || (f >= FRAME.hangingFirst && f < 100)) {
     return;
   }
   // Only with both feet on the floor of the row he counts as being in.

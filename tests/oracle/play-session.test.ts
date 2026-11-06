@@ -42,12 +42,9 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   { name: 'level1-open', reproduces: 32 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
-  // 26 of 54. All three careful steps are reproduced exactly, and so is the
-  // climb: the captures that show the Prince arriving on the floor above
-  // are matched pixel for pixel. What is not reproduced is what he does
-  // after it -- the original walks on along the top floor and the port
-  // stands still -- and the last stretch follows from that.
-  { name: 'level1-grab', reproduces: 26 },
+  // 34 of 54. All three careful steps are reproduced exactly, and so is the
+  // climb and the jumping that follows it while the key stays down.
+  { name: 'level1-grab', reproduces: 34 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */
