@@ -3866,14 +3866,25 @@ var Traps = class {
     trob.type = -1;
     return 255;
   }
+  /**
+   * The exit door. Its modifier is how far it has risen, 0 to 43.
+   *
+   * The trob types are the gate's: `triggerOne` hands a level door a 1 when
+   * a button is pressed on it, the same 1 that means "opening" to a gate.
+   * Only 3 opened the door here, and 3 is what nothing ever asked for --
+   * `openLevelDoor` is called from nowhere -- so the button of level 1's
+   * room 9 pressed, sounded, ran its trigger list and left the door shut.
+   * No level could be finished.
+   */
   animateLevelDoor(trob, modifier) {
     if (trob.type < 0) return modifier;
-    if (trob.type === 3) {
+    if (trob.type >= 1 && trob.type <= 3) {
       modifier += 1;
       if (modifier >= 43) {
         trob.type = -1;
         return 43;
       }
+      if ((modifier & 7) === 0) this.effects.sound?.(SOUND.gateOpening);
       return modifier;
     }
     const speed = LEVEL_DOOR_CLOSE_SPEEDS[Math.min(trob.type, 4)];
@@ -4124,10 +4135,9 @@ var Traps = class {
     const modifier = this.level.modifierAtPos(room, tilePos);
     this.level.setModifierAtPos(room, tilePos, modifier | 128);
   }
-  /** Start a level's exit door opening. */
+  /** Start a level's exit door opening, as a button on it would. */
   openLevelDoor(room, tilePos) {
-    this.level.setModifierAtPos(room, tilePos, 43);
-    this.add(room, tilePos, 3);
+    this.add(room, tilePos, 1);
   }
 };
 function nextChomperTiming(timing) {

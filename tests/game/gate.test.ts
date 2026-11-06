@@ -16,6 +16,7 @@ import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { standX, standY } from '../../src/game/geometry.ts';
 import { gateBlocks, GATE_OPEN_ENOUGH } from '../../src/game/physics.ts';
+import { TILE } from '../../src/game/tiles.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -79,5 +80,38 @@ describe('a gate', () => {
    */
   it('that is shut does not stop him yet', async () => {
     expect(await runAtTheGate(0)).toBeGreaterThan(GATE_COLUMN);
+  });
+});
+
+/**
+ * The way out. A level's exit door is a trob like a gate, and takes the
+ * same type from `triggerOne` -- a 1 for "opening". It was only opened by a
+ * 3, which nothing ever sent, so standing on the plate that opens level 1's
+ * exit clicked, ran its trigger list and left the door where it was: no
+ * level could be finished at all.
+ */
+describe('the exit door', () => {
+  it('rises when the Prince stands on its button', async () => {
+    const game = await Game.start(assets, exe, 1);
+    // Level 1's way out is in room 9: the plate at column 0 of the top row
+    // opens the door at column 3 of the middle one.
+    const kid = game.kid;
+    kid.room = 9;
+    kid.currentRow = 0;
+    kid.currentColumn = 0;
+    kid.x = standX(0);
+    kid.y = standY(0);
+    kid.direction = 0;
+    kid.frame = 15;
+    kid.action = 0;
+    kid.fallX = 0;
+    kid.fallY = 0;
+    game.showRoom(9);
+    expect(game.scene.state.typeAt(9, 0, 0)).toBe(TILE.opener);
+    expect(game.scene.state.typeAt(9, 3, 1)).toBe(TILE.levelDoorLeft);
+    expect(game.scene.state.modifierAt(9, 3, 1)).toBe(0);
+    for (let i = 0; i < 60; i++) game.step({ x: 0, y: 0, shift: false });
+    // 43 is fully open.
+    expect(game.scene.state.modifierAt(9, 3, 1)).toBe(43);
   });
 });
