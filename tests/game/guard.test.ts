@@ -157,9 +157,11 @@ describe('a guard left to himself', () => {
       frames.push(game.guard.frame);
     }
     expect(game.guard.sword).toBe(2);
-    // 207..210 draw the sword; the stance that follows is 170/171.
+    // 207..210 draw the sword; what follows is one of the sword frames --
+    // the stance at 170/171, or a move out of it if the Prince is already
+    // close enough to be worth lunging at.
     expect(frames.filter((f) => f >= 207 && f <= 210).length).toBeGreaterThan(0);
-    expect(frames[frames.length - 1]).toBeGreaterThanOrEqual(170);
+    expect(frames[frames.length - 1]).toBeGreaterThanOrEqual(150);
     expect(frames[frames.length - 1]).toBeLessThanOrEqual(171);
   });
 

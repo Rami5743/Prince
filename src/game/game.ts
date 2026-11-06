@@ -6,7 +6,9 @@ import { Surface } from '../render/surface.ts';
 import { RoomRenderer, type CharacterDraw } from '../render/room.ts';
 import { buildLevelScene, type LevelScene } from './scene.ts';
 import { readExeTables, type ExeTables } from './exe-tables.ts';
-import { newCharacter, placeCharacter, placeSword, type CharacterState } from './character.ts';
+import {
+  newCharacter, placeCharacter, placeSword, type CharacterState,
+} from './character.ts';
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
 import type { World } from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
@@ -14,6 +16,8 @@ import { TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
 import { toScreenX } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
+import { SWORD_SEQ, strikeLands, withinReach, isBlocking } from './sword.ts';
+import { startSequence } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
   guardFrame, stepGuard, NO_DIRECTION, type GuardState, type GuardsData,
@@ -81,6 +85,7 @@ export class Game {
       traps: trapHooks,
       latch: new ControlLatch(),
       damage: (amount) => this.damage(amount),
+      opponent: () => (this.guard.direction === NO_DIRECTION ? null : this.guard),
     };
     enterLevel(
       this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir,
@@ -119,9 +124,41 @@ export class Game {
       kidRoom: this.kid.room,
       kidRow: this.kid.currentRow,
       kidX: this.kid.x,
+      kid: this.kid,
     });
+    this.resolveSwordplay();
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+  }
+
+  /**
+   * A lunge that reaches an opponent who is not blocking costs him a hit
+   * point, and the last of them kills him.
+   *
+   * Both characters are stepped before this runs, so each has already
+   * reached this frame's pose: the one lunging is on the contact frame or
+   * it is not, and the other is holding his blade up or he is not.
+   */
+  private resolveSwordplay(): void {
+    if (this.guard.direction === NO_DIRECTION) return;
+    this.tryHit(this.kid, this.guard);
+    this.tryHit(this.guard, this.kid);
+  }
+
+  private tryHit(attacker: CharacterState, defender: CharacterState): void {
+    if (attacker.alive >= 0 || defender.alive >= 0) return;
+    if (!strikeLands(attacker) || !withinReach(attacker, defender)) return;
+    if (isBlocking(defender)) return; // parried
+    if (defender === this.kid) {
+      const dead = this.damage(1);
+      startSequence(defender, dead ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
+      if (dead) defender.alive = 0;
+      return;
+    }
+    this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
+    const dead = this.guard.hitPoints === 0;
+    startSequence(defender, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
+    if (dead) defender.alive = 0;
   }
 
   /** Hurt the Prince. Returns true if that was the last of his hit points. */

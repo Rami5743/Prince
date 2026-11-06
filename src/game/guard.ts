@@ -17,6 +17,9 @@ import {
 } from './sequence.ts';
 import { forwardX } from './character.ts';
 import { determineColumn, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX } from './physics.ts';
+import {
+  SWORD_SEQ, SWORD_DRAWN, isReady, withinReach, facingOf,
+} from './sword.ts';
 import type { LevelState } from './level-state.ts';
 import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_SIZE_X, Y_LAND } from './geometry.ts';
 
@@ -73,6 +76,8 @@ export interface GuardState extends CharacterState {
   colour: number;
   hitPoints: number;
   maxHitPoints: number;
+  /** Frames to wait before lunging again; a skilled guard waits less. */
+  waitTimer: number;
 }
 
 export function newGuard(): GuardState {
@@ -82,6 +87,7 @@ export function newGuard(): GuardState {
     colour: 0,
     hitPoints: 0,
     maxHitPoints: 0,
+    waitTimer: 0,
     // A guard that is not in the room faces nowhere.
     direction: NO_DIRECTION,
   };
@@ -210,7 +216,17 @@ export interface GuardStepContext {
   readonly kidRoom?: number;
   readonly kidRow?: number;
   readonly kidX?: number;
+  /** The Prince himself, for the part of the fight that needs more than x. */
+  readonly kid?: CharacterState;
 }
+
+/**
+ * How long a guard waits between lunges, before its skill is taken off.
+ * A guess, and the thing most in need of a capture: the original varies it
+ * with skill and with what the Prince is doing, and nothing here has been
+ * measured against it.
+ */
+export const GUARD_STRIKE_WAIT = 14;
 
 /**
  * How close a guard means to get. Beyond this he walks in; within it he
@@ -244,6 +260,35 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
+}
+
+/**
+ * Within a blade's length of the Prince, a guard lunges -- not every frame,
+ * but after a wait that its skill shortens. Out of reach it does nothing
+ * here and `advanceOnKid` walks it in.
+ *
+ * The wait is a guess. `session-level2-meet` shows a guard of skill 1
+ * lunging, landing a blow and pressing on, but a handful of captures of
+ * one guard cannot say how long it waits or how skill changes that.
+ */
+function fight(guard: GuardState, ctx: GuardStepContext): void {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
+  if (!isReady(guard)) return;
+  if (kid.alive >= 0) return;
+  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
+
+  if (guard.direction !== facingOf(guard, kid)) {
+    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
+    return;
+  }
+  if (!withinReach(guard, kid)) return;
+  if (guard.waitTimer > 0) {
+    guard.waitTimer -= 1;
+    return;
+  }
+  guard.waitTimer = Math.max(2, GUARD_STRIKE_WAIT - guard.skill);
+  startSequence(guard, SWORD_SEQ.strike, ctx.tables);
 }
 
 /** The frames of the en garde stance, which a guard holds between moves. */
@@ -293,6 +338,7 @@ function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
 export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.direction === NO_DIRECTION) return;
   comeOnGuard(guard, ctx);
+  fight(guard, ctx);
   advanceOnKid(guard, ctx);
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
   if (guard.action === ACTION.inFreefall) {

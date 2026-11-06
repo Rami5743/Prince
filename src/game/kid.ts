@@ -23,6 +23,9 @@ import {
   tileDivModM7, weightX, distanceToEdge, wallTypeAt, distanceFromWallForward,
 } from './physics.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
+import {
+  SWORD_SEQ, SWORD_DRAWN, SWORD_RANGE, isReady, facingOf,
+} from './sword.ts';
 import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
 
 /** The original's 16-bit unsigned view of a value. */
@@ -114,6 +117,8 @@ export interface KidContext {
   readonly traps?: TrapHooks;
   /** Take hit points off the Prince. Returns true if that killed him. */
   damage?(amount: number): boolean;
+  /** The guard of the room, if there is one, for sword play. */
+  opponent?(): CharacterState | null;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -147,6 +152,7 @@ export function control(state: CharacterState, controls: Controls, ctx: KidConte
   if (state.alive >= 0) return;
   const f = state.frame;
   if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) return;
+  if (controlSwordPlay(state, controls, ctx)) return;
 
   if (f === FRAME.stand || (f >= FRAME.turnEnd && f < 53)) {
     controlStanding(state, controls, ctx);
@@ -163,6 +169,70 @@ export function control(state: CharacterState, controls: Controls, ctx: KidConte
   } else if (f === FRAME.crouch) {
     controlCrouched(state, controls, ctx);
   }
+}
+
+/**
+ * How close an armed guard has to be before the Prince draws. Wider than a
+ * blade's reach, so that he is ready before he is in danger.
+ */
+const DRAW_SWORD_RANGE = SWORD_RANGE * 3;
+
+/**
+ * Sword play, which takes the controls over entirely while the blade is
+ * out. Returns true when it has dealt with the frame.
+ *
+ * Drawing is automatic, as it is in the original: an armed guard on the
+ * same row, close enough to matter, and the Prince turns to face him and
+ * draws. Sheathing is automatic too, once there is nothing left to fight.
+ */
+function controlSwordPlay(
+  state: CharacterState, controls: Controls, ctx: KidContext,
+): boolean {
+  const foe = ctx.opponent?.() ?? null;
+  const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN
+    && foe.room === state.room && foe.currentRow === state.currentRow
+    && Math.abs(foe.x - state.x) <= DRAW_SWORD_RANGE;
+
+  if (state.sword !== SWORD_DRAWN) {
+    // Drawing happens on the way in, not only from a standstill: the
+    // original's Prince stops out of a run when he comes up on a guard. He
+    // has to have his feet on the floor of his row, though -- a jump or a
+    // fall finishes first.
+    const onFoot = state.y === floorHeightOfRow(state.currentRow)
+      && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair
+      && state.action !== ACTION.hangClimb && state.action !== ACTION.hangStraight;
+    if (!engaged || foe === null || !onFoot) return false;
+    state.direction = facingOf(state, foe);
+    state.sword = SWORD_DRAWN;
+    startSequence(state, SWORD_SEQ.enGarde, ctx.tables);
+    ctx.latch.releaseArrows();
+    return true;
+  }
+
+  // Mid-move: the sequence finishes on its own.
+  if (!isReady(state)) return true;
+
+  if (!engaged || foe === null) {
+    // Nothing left to fight; put it away and go back to standing.
+    state.sword = 0;
+    startSequence(state, SEQ.stand, ctx.tables);
+    return true;
+  }
+
+  const latch = ctx.latch;
+  if (latch.up === CONTROL.held) {
+    latch.up = latch.releaseArrows();
+    startSequence(state, SWORD_SEQ.strike, ctx.tables);
+  } else if (controls.y > 0) {
+    startSequence(state, SWORD_SEQ.block, ctx.tables);
+  } else if (state.direction !== facingOf(state, foe)) {
+    startSequence(state, SWORD_SEQ.turn, ctx.tables);
+  } else if (forwardHeld(state, controls)) {
+    startSequence(state, SWORD_SEQ.advance, ctx.tables);
+  } else if (backwardHeld(state, controls)) {
+    startSequence(state, SWORD_SEQ.retreat, ctx.tables);
+  }
+  return true;
 }
 
 /** Looking up at the tile above, can the character take hold of it? */

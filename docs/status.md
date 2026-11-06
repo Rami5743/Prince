@@ -15,8 +15,9 @@ file.
 The game is playable in a browser from the original's own files. Standing,
 turning, running, stepping carefully, every jump, walking into a wall,
 grabbing a ledge, hanging, climbing, falling, landing and dying are in, and
-so are the traps and the guards as figures in the rooms. **Guard behaviour,
-sword fighting and sound are not written yet** — those are the next pieces.
+so are the traps. Guards wake, draw, walk in and fight, and can be killed —
+but the fight's timing has not been measured against the original. **Sound
+is not written at all.**
 
 Play it at <https://rami5743.github.io/Prince/>.
 
@@ -39,6 +40,7 @@ equal — see [docs/testing.md](testing.md).
 | The traps: gates, buttons, loose floors, spikes, chompers | `tests/game/traps.test.ts` |
 | Walking at a gate, open and shut | `tests/game/gate.test.ts` |
 | Chompers snapping, and cutting | `tests/game/chomper.test.ts` |
+| A guard waking, closing, and fighting | `tests/game/guard.test.ts`, `tests/game/swordfight.test.ts` |
 | Hanging, dying, the painful landing | `tests/game/hang.test.ts`, `tests/game/death.test.ts` |
 | Walking into a wall | `tests/game/run.test.ts`, `tests/oracle/play-session.test.ts` |
 | Taking hold of a ledge and climbing it | `tests/oracle/play-session.test.ts` |
@@ -99,14 +101,21 @@ one.
   who gets behind him is ignored; the capture has not pinned when a guard
   decides to turn.
 
-  The fight itself is the next piece and the capture has it in full: the
-  guard closes, strikes, the Prince is hit -- the red star, and a hit point
-  gone -- and gives ground. Writing it needs the striking, the blocking and
-  the damage, and none of it is there. Be careful about the order it is
-  done in: a guard who can stop the Prince but cannot be beaten makes every
-  level after the first unfinishable, which is worse to play than a guard
-  who can be walked through. Either do the whole fight or leave him
-  passable.
+  There is now a fight. The Prince draws when an armed guard comes near,
+  Up lunges, Down blocks, forward and back step in and out, and a lunge
+  that reaches someone who is not blocking costs a hit point. A guard that
+  runs out of them drops; so does the Prince. It can be won and it can be
+  lost.
+
+  **Its timing is not the original's and is not claimed to be.** How long a
+  guard waits between lunges, how its skill changes that, and exactly when
+  the original counts a blow as landed are all unmeasured -- the head of
+  `src/game/sword.ts` says so, and so does
+  `tests/game/swordfight.test.ts`. A guard also still does not stop the
+  Prince walking past, which the original surely does. Pinning any of it
+  wants captures of a fight, and a fight is the hardest thing to capture:
+  it depends on skill, on timing and on the original's own randomness, and
+  two capture runs of the same session already disagree.
 
   Be careful reading `session-level2-guard` on that last point: it does
   *not* show the original stopping the Prince at the guard. I claimed it

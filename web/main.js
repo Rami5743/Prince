@@ -2188,6 +2188,23 @@ var SEQ_OP = {
   getItem: 243,
   die: 246
 };
+var SEQ = {
+  startRun: 1,
+  stand: 2,
+  standJump: 3,
+  runJump: 4,
+  turn: 5,
+  runTurn: 6,
+  stepFall: 7,
+  jumpHangMedium: 8,
+  hang: 9,
+  climbUp: 10,
+  hangDrop: 11,
+  freeFall: 12,
+  runStop: 13,
+  jumpUp: 14,
+  fall: 7
+};
 var ACTION = {
   stand: 0,
   runJump: 1,
@@ -2444,6 +2461,44 @@ function floorHeightOfRow(row) {
   return Y_LAND[row + 1];
 }
 
+// src/game/sword.ts
+var SWORD_SEQ = {
+  enGarde: 55,
+  advance: 56,
+  retreat: 57,
+  strike: 58,
+  turn: 60,
+  block: 62,
+  stabbed: 74,
+  dropDead: 71,
+  /** The Prince's own death, which is a different sequence from a guard's. */
+  kidDie: 54
+};
+var SWORD_DRAWN = 2;
+var STANCE_FRAME = 171;
+var STANCE_SETTLING = 170;
+var BLOCK_FRAMES = [150, 169];
+var STRIKE_CONTACT = 155;
+function isReady(c) {
+  return c.sword === SWORD_DRAWN && (c.frame === STANCE_FRAME || c.frame === STANCE_SETTLING);
+}
+function isBlocking(c) {
+  return c.sword === SWORD_DRAWN && BLOCK_FRAMES.includes(c.frame);
+}
+function strikeLands(c) {
+  return c.sword === SWORD_DRAWN && c.frame === STRIKE_CONTACT;
+}
+var SWORD_RANGE = 24;
+function withinReach(c, other) {
+  if (c.room !== other.room || c.currentRow !== other.currentRow) return false;
+  const gap = other.x - c.x;
+  const inFront = c.direction === 0 ? gap > 0 : gap < 0;
+  return inFront && Math.abs(gap) <= SWORD_RANGE;
+}
+function facingOf(c, other) {
+  return other.x > c.x ? 0 : -1;
+}
+
 // src/game/guard.ts
 var GUARD_SEQ = {
   standInactive: 77,
@@ -2501,6 +2556,7 @@ function newGuard() {
     colour: 0,
     hitPoints: 0,
     maxHitPoints: 0,
+    waitTimer: 0,
     // A guard that is not in the room faces nowhere.
     direction: NO_DIRECTION
   };
@@ -2581,6 +2637,7 @@ function leaveGuard(guard, guards) {
   }
   guard.direction = NO_DIRECTION;
 }
+var GUARD_STRIKE_WAIT = 14;
 var GUARD_REACH = 21;
 var GUARD_FRAME_INACTIVE = 166;
 function comeOnGuard(guard, ctx) {
@@ -2589,6 +2646,24 @@ function comeOnGuard(guard, ctx) {
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
+}
+function fight(guard, ctx) {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
+  if (!isReady(guard)) return;
+  if (kid.alive >= 0) return;
+  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
+  if (guard.direction !== facingOf(guard, kid)) {
+    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
+    return;
+  }
+  if (!withinReach(guard, kid)) return;
+  if (guard.waitTimer > 0) {
+    guard.waitTimer -= 1;
+    return;
+  }
+  guard.waitTimer = Math.max(2, GUARD_STRIKE_WAIT - guard.skill);
+  startSequence(guard, SWORD_SEQ.strike, ctx.tables);
 }
 var EN_GARDE_FIRST = 170;
 var EN_GARDE_LAST = 171;
@@ -2606,6 +2681,7 @@ function advanceOnKid(guard, ctx) {
 function stepGuard(guard, ctx) {
   if (guard.direction === NO_DIRECTION) return;
   comeOnGuard(guard, ctx);
+  fight(guard, ctx);
   advanceOnKid(guard, ctx);
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
   if (guard.action === ACTION.inFreefall) {
@@ -2831,6 +2907,7 @@ function control(state, controls, ctx) {
   if (state.alive >= 0) return;
   const f = state.frame;
   if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) return;
+  if (controlSwordPlay(state, controls, ctx)) return;
   if (f === FRAME.stand || f >= FRAME.turnEnd && f < 53) {
     controlStanding(state, controls, ctx);
   } else if (f === FRAME.turnMid) {
@@ -2846,6 +2923,40 @@ function control(state, controls, ctx) {
   } else if (f === FRAME.crouch) {
     controlCrouched(state, controls, ctx);
   }
+}
+var DRAW_SWORD_RANGE = SWORD_RANGE * 3;
+function controlSwordPlay(state, controls, ctx) {
+  const foe = ctx.opponent?.() ?? null;
+  const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN && foe.room === state.room && foe.currentRow === state.currentRow && Math.abs(foe.x - state.x) <= DRAW_SWORD_RANGE;
+  if (state.sword !== SWORD_DRAWN) {
+    const onFoot = state.y === floorHeightOfRow(state.currentRow) && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair && state.action !== ACTION.hangClimb && state.action !== ACTION.hangStraight;
+    if (!engaged || foe === null || !onFoot) return false;
+    state.direction = facingOf(state, foe);
+    state.sword = SWORD_DRAWN;
+    startSequence(state, SWORD_SEQ.enGarde, ctx.tables);
+    ctx.latch.releaseArrows();
+    return true;
+  }
+  if (!isReady(state)) return true;
+  if (!engaged || foe === null) {
+    state.sword = 0;
+    startSequence(state, SEQ.stand, ctx.tables);
+    return true;
+  }
+  const latch = ctx.latch;
+  if (latch.up === CONTROL.held) {
+    latch.up = latch.releaseArrows();
+    startSequence(state, SWORD_SEQ.strike, ctx.tables);
+  } else if (controls.y > 0) {
+    startSequence(state, SWORD_SEQ.block, ctx.tables);
+  } else if (state.direction !== facingOf(state, foe)) {
+    startSequence(state, SWORD_SEQ.turn, ctx.tables);
+  } else if (forwardHeld(state, controls)) {
+    startSequence(state, SWORD_SEQ.advance, ctx.tables);
+  } else if (backwardHeld(state, controls)) {
+    startSequence(state, SWORD_SEQ.retreat, ctx.tables);
+  }
+  return true;
 }
 function canGrab(ctx, through, target, direction, targetModifier) {
   if (through === TILE.wall) return false;
@@ -4020,7 +4131,8 @@ var Game = class _Game {
       controls: { x: 0, y: 0, shift: false },
       traps: trapHooks,
       latch: new ControlLatch(),
-      damage: (amount) => this.damage(amount)
+      damage: (amount) => this.damage(amount),
+      opponent: () => this.guard.direction === NO_DIRECTION ? null : this.guard
     };
     enterLevel(
       this.kid,
@@ -4058,10 +4170,40 @@ var Game = class _Game {
       effects: this.effects,
       kidRoom: this.kid.room,
       kidRow: this.kid.currentRow,
-      kidX: this.kid.x
+      kidX: this.kid.x,
+      kid: this.kid
     });
+    this.resolveSwordplay();
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+  }
+  /**
+   * A lunge that reaches an opponent who is not blocking costs him a hit
+   * point, and the last of them kills him.
+   *
+   * Both characters are stepped before this runs, so each has already
+   * reached this frame's pose: the one lunging is on the contact frame or
+   * it is not, and the other is holding his blade up or he is not.
+   */
+  resolveSwordplay() {
+    if (this.guard.direction === NO_DIRECTION) return;
+    this.tryHit(this.kid, this.guard);
+    this.tryHit(this.guard, this.kid);
+  }
+  tryHit(attacker, defender) {
+    if (attacker.alive >= 0 || defender.alive >= 0) return;
+    if (!strikeLands(attacker) || !withinReach(attacker, defender)) return;
+    if (isBlocking(defender)) return;
+    if (defender === this.kid) {
+      const dead2 = this.damage(1);
+      startSequence(defender, dead2 ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
+      if (dead2) defender.alive = 0;
+      return;
+    }
+    this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
+    const dead = this.guard.hitPoints === 0;
+    startSequence(defender, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
+    if (dead) defender.alive = 0;
   }
   /** Hurt the Prince. Returns true if that was the last of his hit points. */
   damage(amount) {
