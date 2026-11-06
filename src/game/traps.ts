@@ -60,6 +60,9 @@ export class Traps {
   /** Where the Prince is, which decides whether chompers keep snapping. */
   kidRoom = 0;
   kidRow = -1;
+  /** Where he was last frame, so that arriving on a row can be noticed. */
+  private lastKidRoom = 0;
+  private lastKidRow = -1;
   kidAlive = -1;
   readonly levelType: number;
 
@@ -84,6 +87,16 @@ export class Traps {
 
   /** Step every animated tile once. */
   step(): void {
+    // Chompers on the row the Prince has just arrived on start snapping.
+    // The original wakes them when he lands, which `startFall` and `land`
+    // ask for; it is arriving that matters, though, not how, and walking
+    // onto a row from the side used to leave its chompers asleep -- so he
+    // strolled through them untouched.
+    if (this.kidRoom !== this.lastKidRoom || this.kidRow !== this.lastKidRow) {
+      this.lastKidRoom = this.kidRoom;
+      this.lastKidRow = this.kidRow;
+      if (this.kidRoom) this.startChompers(this.kidRoom, this.kidRow);
+    }
     for (const trob of this.trobs) this.animate(trob);
     for (let i = this.trobs.length - 1; i >= 0; i--) {
       if (this.trobs[i].type < 0) this.trobs.splice(i, 1);
@@ -512,6 +525,23 @@ export class Traps {
     if (modifier < 0) return 1;
     if (modifier < 5) return 2;
     return 0;
+  }
+
+  /**
+   * Is this chomper's blade down? Phases 1 to 5 are the shut part of the
+   * cycle: `startChompers` refuses to restart a chomper that is in them
+   * because it is in the middle of a snap, and they are the ones that cut.
+   */
+  chomperHarm(room: number, tilePos: number): boolean {
+    if (this.level.typeAtPos(room, tilePos) !== TILE.chomper) return false;
+    const phase = this.level.modifierAtPos(room, tilePos) & 0x7f;
+    return phase >= 1 && phase <= 5;
+  }
+
+  /** A chomper that has caught someone keeps the mark. */
+  bloodyChomper(room: number, tilePos: number): void {
+    const modifier = this.level.modifierAtPos(room, tilePos);
+    this.level.setModifierAtPos(room, tilePos, modifier | 0x80);
   }
 
   /** Start a level's exit door opening. */

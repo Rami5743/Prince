@@ -94,6 +94,8 @@ export interface TrapHooks {
   pressButton(room: number, tilePos: number): void;
   makeLooseFall(room: number, tilePos: number): void;
   startChompers(room: number, row: number): void;
+  chomperHarm(room: number, tilePos: number): boolean;
+  bloodyChomper(room: number, tilePos: number): void;
   startSpike(room: number, tilePos: number): void;
   /** 0 harmless, 1 out and deadly, 2 coming out and deadly to a runner. */
   spikeHarm(room: number, tilePos: number): number;
@@ -687,6 +689,17 @@ function checkSpiked(state: CharacterState, ctx: KidContext): void {
   }
 }
 
+/** A chomper whose blade is down cuts whatever is standing in it. */
+function checkChomped(state: CharacterState, ctx: KidContext): void {
+  if (!ctx.traps || state.alive >= 0) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.chomper || !tile.room) return;
+  const tilePos = tile.row * 10 + tile.column;
+  if (!ctx.traps.chomperHarm(tile.room, tilePos)) return;
+  ctx.traps.bloodyChomper(tile.room, tilePos);
+  state.alive = 0;
+}
+
 /** Advance the Prince by one frame of the game. */
 export function stepKid(state: CharacterState, controls: Controls, ctx: KidContext): void {
   ctx.controls = controls;
@@ -724,6 +737,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkPress(state, ctx);
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
+  checkChomped(state, ctx);
 
   // Falling out of the level is fatal, as it is in the original.
   if (state.room === 0 && state.alive < 0) {
@@ -784,6 +798,11 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
     // `getTile` reports a wall too, but the original does not stop the
     // Prince there -- he runs out of the level and dies.
     if (tile.room === 0) return 0;
+    // A chomper is not something to walk into. Its blades are a hazard to
+    // run between, not a wall -- `safeStep` already refuses to treat one as
+    // an edge to stop at -- and bumping off it would make every chomper
+    // impassable.
+    if (tile.type === TILE.chomper) return 0;
     const wall = wallTypeAt(ctx.world, tile);
     if (wall === 0) return 0;
     const d = distanceFromWallForward(state, tile.type, column, coll, wall);

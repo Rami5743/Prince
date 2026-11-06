@@ -37,6 +37,8 @@ equal — see [docs/testing.md](testing.md).
 | Stepping carefully, and level 1's opening | `tests/game/careful-step.test.ts` |
 | A guard standing in a room, with his sword | `tests/game/guard.test.ts` |
 | The traps: gates, buttons, loose floors, spikes, chompers | `tests/game/traps.test.ts` |
+| Walking at a gate, open and shut | `tests/game/gate.test.ts` |
+| Chompers snapping, and cutting | `tests/game/chomper.test.ts` |
 | Hanging, dying, the painful landing | `tests/game/hang.test.ts`, `tests/game/death.test.ts` |
 | Walking into a wall | `tests/game/run.test.ts`, `tests/oracle/play-session.test.ts` |
 | Taking hold of a ledge and climbing it | `tests/oracle/play-session.test.ts` |

@@ -68,6 +68,8 @@ export class Game {
       pressButton: (room, tilePos) => this.traps.pressButton(room, tilePos),
       makeLooseFall: (room, tilePos) => this.traps.makeLooseFall(room, tilePos),
       startChompers: (room, row) => this.traps.startChompers(room, row),
+      chomperHarm: (room, tilePos) => this.traps.chomperHarm(room, tilePos),
+      bloodyChomper: (room, tilePos) => this.traps.bloodyChomper(room, tilePos),
       startSpike: (room, tilePos) => this.traps.startSpike(room, tilePos),
       spikeHarm: (room, tilePos) => this.traps.spikeHarm(room, tilePos),
     };

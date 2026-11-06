@@ -3273,6 +3273,15 @@ function checkSpiked(state, ctx) {
     state.alive = 0;
   }
 }
+function checkChomped(state, ctx) {
+  if (!ctx.traps || state.alive >= 0) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.chomper || !tile.room) return;
+  const tilePos = tile.row * 10 + tile.column;
+  if (!ctx.traps.chomperHarm(tile.room, tilePos)) return;
+  ctx.traps.bloodyChomper(tile.room, tilePos);
+  state.alive = 0;
+}
 function stepKid(state, controls, ctx) {
   ctx.controls = controls;
   if (state.grabTimer > 0) state.grabTimer -= 1;
@@ -3298,6 +3307,7 @@ function stepKid(state, controls, ctx) {
   checkPress(state, ctx);
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
+  checkChomped(state, ctx);
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
@@ -3317,6 +3327,7 @@ function checkBumped(state, ctx) {
   const penetration = (column) => {
     const tile = getTile(ctx.world, state.room, column, state.currentRow);
     if (tile.room === 0) return 0;
+    if (tile.type === TILE.chomper) return 0;
     const wall = wallTypeAt(ctx.world, tile);
     if (wall === 0) return 0;
     const d = distanceFromWallForward(state, tile.type, column, coll, wall);
@@ -3442,6 +3453,9 @@ var Traps = class {
   /** Where the Prince is, which decides whether chompers keep snapping. */
   kidRoom = 0;
   kidRow = -1;
+  /** Where he was last frame, so that arriving on a row can be noticed. */
+  lastKidRoom = 0;
+  lastKidRow = -1;
   kidAlive = -1;
   levelType;
   constructor(level, prng, levelType, effects = {}) {
@@ -3462,6 +3476,11 @@ var Traps = class {
   }
   /** Step every animated tile once. */
   step() {
+    if (this.kidRoom !== this.lastKidRoom || this.kidRow !== this.lastKidRow) {
+      this.lastKidRoom = this.kidRoom;
+      this.lastKidRow = this.kidRow;
+      if (this.kidRoom) this.startChompers(this.kidRoom, this.kidRow);
+    }
     for (const trob of this.trobs) this.animate(trob);
     for (let i = this.trobs.length - 1; i >= 0; i--) {
       if (this.trobs[i].type < 0) this.trobs.splice(i, 1);
@@ -3853,6 +3872,21 @@ var Traps = class {
     if (modifier < 5) return 2;
     return 0;
   }
+  /**
+   * Is this chomper's blade down? Phases 1 to 5 are the shut part of the
+   * cycle: `startChompers` refuses to restart a chomper that is in them
+   * because it is in the middle of a snap, and they are the ones that cut.
+   */
+  chomperHarm(room, tilePos) {
+    if (this.level.typeAtPos(room, tilePos) !== TILE.chomper) return false;
+    const phase = this.level.modifierAtPos(room, tilePos) & 127;
+    return phase >= 1 && phase <= 5;
+  }
+  /** A chomper that has caught someone keeps the mark. */
+  bloodyChomper(room, tilePos) {
+    const modifier = this.level.modifierAtPos(room, tilePos);
+    this.level.setModifierAtPos(room, tilePos, modifier | 128);
+  }
   /** Start a level's exit door opening. */
   openLevelDoor(room, tilePos) {
     this.level.setModifierAtPos(room, tilePos, 43);
@@ -3939,6 +3973,8 @@ var Game = class _Game {
       pressButton: (room, tilePos) => this.traps.pressButton(room, tilePos),
       makeLooseFall: (room, tilePos) => this.traps.makeLooseFall(room, tilePos),
       startChompers: (room, row) => this.traps.startChompers(room, row),
+      chomperHarm: (room, tilePos) => this.traps.chomperHarm(room, tilePos),
+      bloodyChomper: (room, tilePos) => this.traps.bloodyChomper(room, tilePos),
       startSpike: (room, tilePos) => this.traps.startSpike(room, tilePos),
       spikeHarm: (room, tilePos) => this.traps.spikeHarm(room, tilePos)
     };
