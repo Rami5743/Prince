@@ -63,6 +63,8 @@ export const CHTAB = {
   flameSwordPotion: 'flameSwordPotion',
   /** KID.DAT group 400: the Prince. */
   kid: 'kid',
+  /** The enemy sprite set of the level: a guard, a skeleton, Jaffar. */
+  guard: 'guard',
   /** The tile set's group 200. */
   environment: 'environment',
   /** The tile set's group 360. */
@@ -76,6 +78,7 @@ export interface Chtabs {
   readonly environmentWall: SpriteSet;
   readonly kid?: SpriteSet;
   readonly sword?: SpriteSet;
+  readonly guard?: SpriteSet;
 }
 
 /**
@@ -93,6 +96,8 @@ export interface CharacterDraw {
   readonly y: number;
   /** 0 facing right, -1 facing left. Sprites are stored facing left. */
   readonly direction: number;
+  /** A sword's x is already in screen pixels and must not be stretched. */
+  readonly alreadyScreenX?: boolean;
 }
 
 interface Piece {
@@ -105,6 +110,8 @@ interface Piece {
   /** Characters have their x stretched from internal units and may be flipped. */
   character?: boolean;
   flip?: boolean;
+  /** Set when x is already in screen pixels, as a sword's is. */
+  screenX?: boolean;
 }
 
 interface Wipe {
@@ -1050,6 +1057,7 @@ export class RoomRenderer {
       blit: BLIT.transparent,
       character: true,
       flip: c.direction === 0,
+      screenX: c.alreadyScreenX === true,
     });
   }
 
@@ -1084,7 +1092,7 @@ export class RoomRenderer {
     const y = p.yBottom - img.height + 1;
     const base = set.paletteBase;
     if (p.character) {
-      let x = toScreenX(p.x);
+      let x = p.screenX ? p.x : toScreenX(p.x);
       let sprite: { width: number; height: number; pixels: Uint8Array } = img;
       if (p.flip) {
         x -= img.width;

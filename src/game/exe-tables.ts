@@ -34,6 +34,7 @@ export const FRAME_FLAG = {
 
 /** Offsets into the 123 335-byte release. */
 const OFF = {
+  swordTable: 0x1c0d7,
   frameTableKid: 0x1b9a5,
   frameTableGuard: 0x1be5b,
   frameTableCutscene: 0x1bf29,
@@ -42,6 +43,7 @@ const OFF = {
 } as const;
 
 const COUNT = {
+  swordTable: 51,
   frameTableKid: 241,
   frameTableGuard: 41,
   frameTableCutscene: 86,
@@ -72,7 +74,16 @@ export const SEQUENCES_WITH_BAD_OFFSET: readonly number[] = [101, 107];
  */
 export const SEQUENCES_THAT_RUN_OFF: readonly number[] = [101, 106, 107, 111, 112, 114];
 
+/** Where a drawn sword sits relative to the hand holding it. */
+export interface SwordPlacement {
+  /** Sprite id in the sword group; 255 means no sword is drawn. */
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface ExeTables {
+  readonly swordTable: readonly SwordPlacement[];
   readonly frameTableKid: readonly Frame[];
   readonly frameTableGuard: readonly Frame[];
   readonly frameTableCutscene: readonly Frame[];
@@ -104,7 +115,18 @@ export function readExeTables(exe: Uint8Array): ExeTables {
   for (let i = 1; i <= COUNT.sequences; i++) {
     sequenceOffsets[i] = dv.getUint16(OFF.sequenceOffsets + (i - 1) * 2, true);
   }
+  const swordTable: SwordPlacement[] = [];
+  for (let i = 0; i < COUNT.swordTable; i++) {
+    const o = OFF.swordTable + i * 3;
+    swordTable.push({
+      id: exe[o],
+      x: (exe[o + 1] << 24) >> 24,
+      y: (exe[o + 2] << 24) >> 24,
+    });
+  }
+
   return {
+    swordTable,
     frameTableKid: readFrames(exe, OFF.frameTableKid, COUNT.frameTableKid),
     frameTableGuard: readFrames(exe, OFF.frameTableGuard, COUNT.frameTableGuard),
     frameTableCutscene: readFrames(exe, OFF.frameTableCutscene, COUNT.frameTableCutscene),

@@ -9,6 +9,8 @@ import { ScreenPalette } from '../render/surface.ts';
 import { parseLevel, resourceIdOfLevel, type Level } from '../dat/level.ts';
 import { LevelState } from './level-state.ts';
 import { readExeConstants, type ExeConstants } from './exe-constants.ts';
+import { GUARD_TYPE_BY_LEVEL, GUARD_FILES } from './guard.ts';
+import type { SpriteSet } from '../render/assets.ts';
 
 export interface LevelScene {
   readonly level: Level;
@@ -20,6 +22,10 @@ export interface LevelScene {
   readonly screenPalette: ScreenPalette;
   readonly tiles: RoomTiles;
   readonly options: RoomRenderOptions;
+  /** Which kind of enemy this level has, or -1 for none. */
+  readonly guardType: number;
+  /** PRINCE.DAT resource 10: seven recolourings of the guard's sixteen. */
+  readonly guardPalettes?: Uint8Array;
 }
 
 /**
@@ -62,11 +68,28 @@ export async function buildLevelScene(
   const kid = await assets.group('KID.DAT', 400, PALETTE_BASE.kid);
   const sword = await assets.group('PRINCE.DAT', 700, PALETTE_BASE.sword);
 
+  // The enemy of this level, and its colours. A plain guard's sprites carry
+  // no palette of their own: GUARD1.DAT (palace) or GUARD2.DAT (dungeon)
+  // supplies one, and a per-room recolouring may replace it.
+  const guardType: number = GUARD_TYPE_BY_LEVEL[levelNumber] ?? -1;
+  let guard: SpriteSet | undefined;
+  let guardPalettes: Uint8Array | undefined;
+  const guardFile: string | undefined = GUARD_FILES[guardType as 0 | 1 | 2 | 3 | 4];
+  if (guardFile) {
+    const headerFile = guardType === 0
+      ? (levelType ? 'GUARD1.DAT' : 'GUARD2.DAT')
+      : guardFile;
+    guard = await assets.group(guardFile, 750, PALETTE_BASE.guard, false, headerFile);
+    const princeDat = await assets.dat('PRINCE.DAT');
+    guardPalettes = princeDat.get(10);
+  }
+
   const screenPalette = new ScreenPalette();
   screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
   for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
     screenPalette.loadBlock(set.paletteBase, set.palette.vga);
   }
+  if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
 
   const state = new LevelState(level);
   const tiles: RoomTiles = {
@@ -79,7 +102,9 @@ export async function buildLevelScene(
     level,
     state,
     constants,
-    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword },
+    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword, guard },
+    guardType,
+    guardPalettes,
     screenPalette,
     tiles,
     options: {

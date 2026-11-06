@@ -97,8 +97,8 @@ async function boot(): Promise<void> {
     if (watchRoom === null) {
       game.step(controls());
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
-    } else {
-      game.drawnRoom = watchRoom;
+    } else if (game.drawnRoom !== watchRoom) {
+      game.showRoom(watchRoom);
     }
     display.present(game.render(), game.scene.screenPalette.toRgba());
     const v = views[current];
@@ -158,7 +158,7 @@ async function boot(): Promise<void> {
   w.__princeShow = async (level: number, room: number) => {
     await select(views.findIndex((v) => v.kind === 'level' && v.level === level));
     watchRoom = room;
-    if (game) game.drawnRoom = room;
+    if (game) game.showRoom(room);
     frame();
   };
   w.__princeStep = (n: number, c: Partial<Controls> = {}) => {

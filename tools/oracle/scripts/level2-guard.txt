@@ -1,0 +1,21 @@
+# Level 2 starts in room 5, which opens left into room 4 where the first
+# guard of that level stands. Hold Left and capture as the Prince meets him.
+wait 10
+key Return
+wait 8
+key shift+l
+wait 30
+shot g00
+keydown Left
+shot g01
+shot g02
+shot g03
+shot g04
+shot g05
+keyup Left
+wait 2
+shot g06
+wait 3
+shot g07
+wait 4
+shot g08

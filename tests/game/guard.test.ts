@@ -1,0 +1,119 @@
+/**
+ * The guards.
+ *
+ * tests/golden/level2-guard.png is a frame captured from the original with
+ * the Prince and a guard facing each other, swords out. The guard's own
+ * state was recovered from it the same way the Prince's was: render the room
+ * with nobody in it, and search the guard frame table and a window of
+ * positions for the one that makes the leftover vanish. It does, exactly --
+ * which checks the guard's sprite set, the recolouring of his clothes, the
+ * offset between his frame numbers and his table, and the separate placement
+ * of the sword in his hand.
+ */
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { GAME_DIR, goldenFrame, toCaptureSpace } from '../helpers/fixtures.ts';
+import { Assets } from '../../src/render/assets.ts';
+import { Surface } from '../../src/render/surface.ts';
+import { Game } from '../../src/game/game.ts';
+import { NO_DIRECTION, guardFrame, GUARD_TYPE_BY_LEVEL } from '../../src/game/guard.ts';
+import { placeSword } from '../../src/game/character.ts';
+import { toScreenX } from '../../src/game/geometry.ts';
+
+const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+
+/** Where the capture shows the guard of level 2, room 4. */
+const CAPTURED = { frame: 164, direction: 0, x: 102, y: 118 };
+
+describe('guards', () => {
+  it('stands where the level data puts him when the room is entered', async () => {
+    const game = await Game.start(assets, exe, 2);
+    game.showRoom(4);
+    expect(game.guard.room).toBe(4);
+    expect(game.guard.direction).not.toBe(NO_DIRECTION);
+    // Tile 10 is row 1, column 0; the standing position of column 0 is 72.
+    expect(game.guard.currentRow).toBe(1);
+    expect(game.guard.currentColumn).toBe(0);
+    expect(game.guard.x).toBe(72);
+    expect(game.guard.y).toBe(118);
+    expect(game.guard.frame).toBe(166); // standing, sword not yet drawn
+  });
+
+  it('takes his skill, colour and hit points from the level', async () => {
+    const game = await Game.start(assets, exe, 2);
+    game.showRoom(4);
+    expect(game.guard.skill).toBe(1);
+    expect(game.guard.colour).toBe(1);
+    expect(game.guard.hitPoints).toBe(game.guard.maxHitPoints);
+    expect(game.guard.hitPoints).toBeGreaterThan(0);
+  });
+
+  it('is put back into the level when his room is left, and is there on return', async () => {
+    const game = await Game.start(assets, exe, 2);
+    game.showRoom(4);
+    game.guard.x = 120;
+    game.guard.frame = 158;
+    game.showRoom(5);
+    expect(game.guard.direction).toBe(NO_DIRECTION);
+    game.showRoom(4);
+    expect(game.guard.x).toBe(120);
+  });
+
+  it('has no guard in a room that has none', async () => {
+    const game = await Game.start(assets, exe, 2);
+    game.showRoom(5);
+    expect(game.guard.direction).toBe(NO_DIRECTION);
+  });
+
+  it('is drawn exactly as the original draws him, sword and all', async () => {
+    const game = await Game.start(assets, exe, 2);
+    game.showRoom(4);
+    const golden = goldenFrame('level2-guard.png');
+
+    // The room with nobody in it, then the guard put back exactly where the
+    // capture had him.
+    game.kid.room = 0;
+    Object.assign(game.guard, CAPTURED);
+
+    const surface: Surface = game.render();
+    const got = toCaptureSpace(surface.toRgb(game.scene.screenPalette.toRgba()));
+
+    // Only the guard's own area is compared: the Prince is elsewhere in the
+    // frame, and he is checked by his own tests.
+    const frame = guardFrame(game.guard, game.tables)!;
+    const sprite = game.scene.chtabs.guard!.images[frame.image + 1]!;
+    const sword = placeSword(game.guard, frame, game.tables.swordTable, toScreenX);
+    const left = toScreenX((game.guard.x + frame.dx) * 2 - 116) - sprite.width - 2;
+    const right = (sword ? sword.x : left + sprite.width) + 20;
+    const bottom = frame.dy + game.guard.y + 2;
+    const top = bottom - sprite.height - 34;
+
+    let differing = 0;
+    for (let y = Math.max(0, top); y <= Math.min(191, bottom); y++) {
+      for (let x = Math.max(0, left); x <= Math.min(319, right); x++) {
+        const i = (y * 320 + x) * 3;
+        if (got[i] !== golden.rgb[i] || got[i + 1] !== golden.rgb[i + 1]
+          || got[i + 2] !== golden.rgb[i + 2]) differing++;
+      }
+    }
+    expect(differing).toBe(0);
+  });
+
+  it('knows which enemy each level has', () => {
+    // Skeletons on level 3, a fat guard on 6, the shadow on 12, Jaffar on 13.
+    expect(GUARD_TYPE_BY_LEVEL[3]).toBe(2);
+    expect(GUARD_TYPE_BY_LEVEL[6]).toBe(1);
+    expect(GUARD_TYPE_BY_LEVEL[12]).toBe(4);
+    expect(GUARD_TYPE_BY_LEVEL[13]).toBe(3);
+    expect(GUARD_TYPE_BY_LEVEL[14]).toBe(-1);
+  });
+
+  it('loads the enemy sprites each level calls for', async () => {
+    for (const [level, expected] of [[2, true], [3, true], [14, false]] as const) {
+      const game = await Game.start(assets, exe, level);
+      expect(Boolean(game.scene.chtabs.guard), `level ${level}`).toBe(expected);
+    }
+  });
+});

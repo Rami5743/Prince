@@ -45,12 +45,21 @@ export class Assets {
     return d;
   }
 
-  /** Load a sprite group: its header resource plus the images that follow. */
+  /**
+   * Load a sprite group: its header resource plus the images that follow.
+   *
+   * A group's header can live in a different file from its images. The
+   * ordinary guard is the case that needs it: GUARD.DAT holds the sprites
+   * and no header at all, while GUARD1.DAT and GUARD2.DAT hold nothing but
+   * the header, one for the palace and one for the dungeon.
+   */
   async group(
     file: string, header: number, paletteBase = 0, withOptional = false,
+    headerFile = file,
   ): Promise<SpriteSet> {
     const d = await this.dat(file);
-    const palette = parsePalette(d.get(header));
+    const h = headerFile === file ? d : await this.dat(headerFile);
+    const palette = parsePalette(h.get(header));
     const images: (DecodedImage | null)[] = [null];
     for (let i = 1; i <= palette.imageCount; i++) {
       const id = header + i;

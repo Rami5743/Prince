@@ -95,3 +95,33 @@ export function placeCharacter(
 
 /** The frame a character stands still in. */
 export const FRAME_STAND = 15;
+
+/**
+ * The sword in a character's hand, if the frame shows one.
+ *
+ * Unlike the character itself, the sword is positioned in screen pixels: the
+ * original converts the character's x first and then applies the sword's own
+ * offset, so the sword does not get stretched along with everything else.
+ */
+export function placeSword(
+  state: CharacterState,
+  frame: Frame,
+  swordTable: readonly { id: number; x: number; y: number }[],
+  toScreenX: (x: number) => number,
+): CharacterDraw | null {
+  const index = frame.sword & 0x3f;
+  if (!index) return null;
+  const placement = swordTable[index];
+  if (!placement || placement.id === 255) return null;
+  const base = placeCharacter(state, frame);
+  if (!base) return null;
+  const dx = state.direction < 0 ? -placement.x : placement.x;
+  return {
+    chtab: 'sword',
+    image: placement.id + 1,
+    x: toScreenX(base.x) + dx,
+    y: base.y + placement.y,
+    direction: state.direction,
+    alreadyScreenX: true,
+  };
+}

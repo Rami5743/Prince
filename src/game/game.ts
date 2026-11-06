@@ -6,12 +6,17 @@ import { Surface } from '../render/surface.ts';
 import { RoomRenderer, type CharacterDraw } from '../render/room.ts';
 import { buildLevelScene, type LevelScene } from './scene.ts';
 import { readExeTables, type ExeTables } from './exe-tables.ts';
-import { newCharacter, placeCharacter, type CharacterState } from './character.ts';
+import { newCharacter, placeCharacter, placeSword, type CharacterState } from './character.ts';
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
 import type { World } from './physics.ts';
 import { TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
+import { toScreenX } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
+import {
+  newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
+  guardFrame, NO_DIRECTION, type GuardState, type GuardsData,
+} from './guard.ts';
 
 export interface GameOptions {
   /** Which video mode's artwork to use; the port draws the VGA set. */
@@ -30,10 +35,17 @@ export class Game {
   maxHitPoints: number;
   readonly traps: Traps;
   readonly prng = new Prng();
+  readonly guard: GuardState = newGuard();
+  readonly guards: GuardsData;
   private readonly renderer: RoomRenderer;
   private readonly ctx: KidContext;
 
-  private constructor(scene: LevelScene, tables: ExeTables, effects: TrapEffects = {}) {
+  readonly levelNumber: number;
+
+  private constructor(
+    scene: LevelScene, tables: ExeTables, levelNumber: number, effects: TrapEffects = {},
+  ) {
+    this.levelNumber = levelNumber;
     this.scene = scene;
     this.tables = tables;
     this.kid = newCharacter();
@@ -67,7 +79,9 @@ export class Game {
     );
     this.drawnRoom = this.kid.room;
     this.traps.drawnRoom = this.drawnRoom;
-    this.startRoomTiles(this.drawnRoom);
+    this.guards = guardsFromLevel(scene.level.guards);
+    positionGuards(scene.state, this.guards);
+    this.enterRoom(this.drawnRoom);
     this.renderer = new RoomRenderer(scene.chtabs, scene.tiles, scene.options);
   }
 
@@ -75,7 +89,7 @@ export class Game {
     assets: Assets, exe: Uint8Array, levelNumber: number, options: GameOptions = {},
   ): Promise<Game> {
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? 'V');
-    return new Game(scene, readExeTables(exe), options.effects);
+    return new Game(scene, readExeTables(exe), levelNumber, options.effects);
   }
 
   /**
@@ -83,6 +97,7 @@ export class Game {
    * moves, which is the order the original uses.
    */
   step(controls: Controls): void {
+    const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;
     this.traps.kidRow = this.kid.currentRow;
@@ -90,6 +105,55 @@ export class Game {
     this.traps.step();
     stepKid(this.kid, controls, this.ctx);
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
+    if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+  }
+
+  /** Show a different room without playing: for looking around. */
+  showRoom(room: number): void {
+    if (room === this.drawnRoom) return;
+    this.drawnRoom = room;
+    this.enterRoom(room);
+  }
+
+  /**
+   * Show a different room: the guard of the room being left goes back into
+   * the level, the guard of the room being entered comes out of it, and the
+   * new room's torches and exit door start up.
+   */
+  private enterRoom(room: number): void {
+    leaveGuard(this.guard, this.guards);
+    enterGuard(this.guard, room, this.guards, {
+      tables: this.tables,
+      guardType: this.scene.guardType,
+      levelGuardHitPoints: this.scene.constants.guardHitPoints[this.levelNumber] ?? 0,
+    });
+    this.applyGuardColour();
+    this.traps.drawnRoom = room;
+    this.startRoomTiles(room);
+  }
+
+  /**
+   * A guard's clothes are recoloured per room, from the seven palettes the
+   * game keeps in PRINCE.DAT. Colour 0 leaves the sprite's own colours alone.
+   */
+  private applyGuardColour(): void {
+    const set = this.scene.chtabs.guard;
+    const palettes = this.scene.guardPalettes;
+    if (!set) return;
+    if (!palettes || this.guard.colour === 0) {
+      this.scene.screenPalette.loadBlock(set.paletteBase, set.palette.vga);
+      return;
+    }
+    const at = (this.guard.colour - 1) * 0x30;
+    const colours = [];
+    for (let i = 0; i < 16; i++) {
+      colours.push({
+        r: palettes[at + i * 3] ?? 0,
+        g: palettes[at + i * 3 + 1] ?? 0,
+        b: palettes[at + i * 3 + 2] ?? 0,
+      });
+    }
+    this.scene.screenPalette.loadBlock(set.paletteBase, colours);
   }
 
   /**
@@ -130,8 +194,28 @@ export class Game {
 
   render(): Surface {
     this.surface.clear();
-    const draw = this.kidDraw();
-    this.renderer.render(this.surface, this.drawnRoom, draw ? [draw] : []);
+    const characters: CharacterDraw[] = [];
+
+    if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
+      const draw = guardDraw(this.guard, this.tables);
+      if (draw) characters.push(draw);
+      const frame = guardFrame(this.guard, this.tables);
+      // A living guard always has his sword out.
+      if (frame && this.guard.alive < 0) {
+        const sword = placeSword(this.guard, frame, this.tables.swordTable, toScreenX);
+        if (sword) characters.push(sword);
+      }
+    }
+
+    const kid = this.kidDraw();
+    if (kid) characters.push(kid);
+    const kidFrame = this.tables.frameTableKid[this.kid.frame];
+    if (kid && kidFrame && this.kid.sword !== 0) {
+      const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);
+      if (sword) characters.push(sword);
+    }
+
+    this.renderer.render(this.surface, this.drawnRoom, characters);
     this.drawStatusBar();
     return this.surface;
   }
@@ -151,6 +235,16 @@ export class Game {
     }
     for (let i = 0; i < this.hitPoints; i++) {
       if (full) this.surface.blitOpaque(full, i * 7, HP_TOP_Y, kid.paletteBase);
+    }
+    // The guard's own hit points count down from the right.
+    const guardSet = this.scene.chtabs.guard;
+    const marker = guardSet?.images[1];
+    if (!marker || this.guard.direction === NO_DIRECTION) return;
+    for (let i = this.guard.hitPoints; i < this.guard.maxHitPoints; i++) {
+      this.surface.blitMono(marker, 314 - i * 7, HP_TOP_Y, 0);
+    }
+    for (let i = 0; i < this.guard.hitPoints; i++) {
+      this.surface.blitOpaque(marker, 314 - i * 7, HP_TOP_Y, guardSet.paletteBase);
     }
   }
 }
