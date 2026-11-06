@@ -720,6 +720,7 @@ function alterModifiers(fg, bg, roomLinks, roomCount) {
 
 // src/game/geometry.ts
 var TILE_SIZE_X = 14;
+var TILE_MID_X = 7;
 var FIRST_ONSCREEN_COLUMN = 5;
 var X_BUMP = [
   -12,
@@ -746,12 +747,6 @@ var X_BUMP = [
 var Y_LAND = [-8, 55, 118, 181, 244];
 function toScreenX(logicalX) {
   return Math.trunc(logicalX * 320 / 280);
-}
-function standX(column) {
-  return X_BUMP[column + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
-}
-function standY(row) {
-  return Y_LAND[row + 1];
 }
 
 // src/render/room.ts
@@ -1879,7 +1874,7 @@ function readExeConstants(exe) {
   checkExe(exe);
   const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
   const u16 = (o) => dv.getUint16(o, true);
-  const u8 = (o) => exe[o];
+  const u82 = (o) => exe[o];
   const vgaPalette = [];
   for (let i = 0; i < 16; i++) {
     const o = OFF.vgaPalette + i * 3;
@@ -1891,31 +1886,31 @@ function readExeConstants(exe) {
     startHitPoints: u16(OFF.startHitPoints),
     firstLevel: u16(OFF.firstLevel),
     maxHitPointsAllowed: u16(OFF.maxHitPointsAllowed),
-    savingAllowedFirstLevel: u8(OFF.savingAllowedFirstLevel) + 1,
-    savingAllowedLastLevel: u8(OFF.savingAllowedLastLevel) - 1,
+    savingAllowedFirstLevel: u82(OFF.savingAllowedFirstLevel) + 1,
+    savingAllowedLastLevel: u82(OFF.savingAllowedLastLevel) - 1,
     copyProtectionLevel: u16(OFF.copyProtectionLevel),
-    drawnTileTopLevelEdge: u8(OFF.drawnTileTopLevelEdge),
-    drawnTileLeftLevelEdge: u8(OFF.drawnTileLeftLevelEdge),
-    levelEdgeHitTile: u8(OFF.levelEdgeHitTile),
+    drawnTileTopLevelEdge: u82(OFF.drawnTileTopLevelEdge),
+    drawnTileLeftLevelEdge: u82(OFF.drawnTileLeftLevelEdge),
+    levelEdgeHitTile: u82(OFF.levelEdgeHitTile),
     levelType: exe.slice(OFF.levelType, OFF.levelType + 16),
     guardHitPoints: exe.slice(OFF.guardHitPoints, OFF.guardHitPoints + 16),
-    demoHitPoints: u8(OFF.demoHitPoints),
-    demoEndRoom: u8(OFF.demoEndRoom),
-    introMusicLevel: u8(OFF.introMusicLevel),
-    checkpointLevel: u8(OFF.checkpointLevel),
-    checkpointRespawnDir: u8(OFF.checkpointRespawnDir) << 24 >> 24,
-    checkpointRespawnRoom: u8(OFF.checkpointRespawnRoom),
-    checkpointRespawnTilePos: u8(OFF.checkpointRespawnTilePos),
-    skeletonLevel: u8(OFF.skeletonLevel),
-    skeletonRoom: u8(OFF.skeletonRoom),
-    skeletonColumn: u8(OFF.skeletonColumn),
-    skeletonRow: u8(OFF.skeletonRow),
-    mirrorLevel: u8(OFF.mirrorLevel),
-    mirrorRoom: u8(OFF.mirrorRoom),
+    demoHitPoints: u82(OFF.demoHitPoints),
+    demoEndRoom: u82(OFF.demoEndRoom),
+    introMusicLevel: u82(OFF.introMusicLevel),
+    checkpointLevel: u82(OFF.checkpointLevel),
+    checkpointRespawnDir: u82(OFF.checkpointRespawnDir) << 24 >> 24,
+    checkpointRespawnRoom: u82(OFF.checkpointRespawnRoom),
+    checkpointRespawnTilePos: u82(OFF.checkpointRespawnTilePos),
+    skeletonLevel: u82(OFF.skeletonLevel),
+    skeletonRoom: u82(OFF.skeletonRoom),
+    skeletonColumn: u82(OFF.skeletonColumn),
+    skeletonRow: u82(OFF.skeletonRow),
+    mirrorLevel: u82(OFF.mirrorLevel),
+    mirrorRoom: u82(OFF.mirrorRoom),
     vgaPalette,
     // The original compares against 116; anything else means the "wall
     // decoration algorithm" was enabled for palace levels too.
-    enableWdaInPalace: u8(OFF.enableWdaInPalace) !== 116
+    enableWdaInPalace: u82(OFF.enableWdaInPalace) !== 116
   };
 }
 
@@ -1981,6 +1976,12 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
 }
 
 // src/game/exe-tables.ts
+var FRAME_FLAG = {
+  weightX: 31,
+  thin: 32,
+  needsFloor: 64,
+  evenOddPixel: 128
+};
 var OFF2 = {
   frameTableKid: 113061,
   frameTableGuard: 114267,
@@ -1993,9 +1994,10 @@ var COUNT = {
   frameTableGuard: 41,
   frameTableCutscene: 86,
   /** Sequence ids are 1-based; index 0 is unused. */
-  sequences: 112,
+  sequences: 114,
   sequenceBytes: 2282
 };
+var SEQUENCE_BASE = 6510;
 function readFrames(exe, offset, count) {
   const out = [];
   for (let i = 0; i < count; i++) {
@@ -2027,6 +2029,39 @@ function readExeTables(exe) {
 }
 
 // src/game/character.ts
+var DIRECTION = {
+  right: 0,
+  left: -1
+};
+var CHAR_ID = {
+  kid: 0,
+  shadow: 1,
+  guard: 2,
+  skeleton: 4,
+  princess: 5,
+  vizier: 6,
+  mouse: 24
+};
+function newCharacter(partial = {}) {
+  return {
+    x: 0,
+    y: 0,
+    direction: DIRECTION.left,
+    frame: 0,
+    room: 1,
+    currentColumn: 0,
+    currentRow: 0,
+    charId: CHAR_ID.kid,
+    currentSequence: 0,
+    action: 0,
+    fallX: 0,
+    fallY: 0,
+    alive: -1,
+    sword: 0,
+    repeat: 0,
+    ...partial
+  };
+}
 function forwardX(state, deltaX) {
   return state.x + (state.direction < 0 ? -deltaX : deltaX);
 }
@@ -2042,10 +2077,602 @@ function placeCharacter(state, frame, chtab = "kid") {
     direction: state.direction
   };
 }
-var FRAME_STAND = 15;
+
+// src/game/sequence.ts
+var SEQ_OP = {
+  dx: 251,
+  dy: 250,
+  flip: 254,
+  jumpIfFeather: 247,
+  jump: 255,
+  up: 253,
+  down: 252,
+  action: 249,
+  setFall: 248,
+  knockUp: 245,
+  knockDown: 244,
+  sound: 242,
+  endLevel: 241,
+  getItem: 243,
+  die: 246
+};
+var ACTION = {
+  stand: 0,
+  runJump: 1,
+  hangClimb: 2,
+  inMidair: 3,
+  inFreefall: 4,
+  bumped: 5,
+  hangStraight: 6,
+  turning: 7
+};
+var u8 = (v) => v & 255;
+var i82 = (v) => v << 24 >> 24;
+function startSequence(state, id, tables) {
+  state.currentSequence = tables.sequenceOffsets[id];
+}
+function playSequence(state, ctx) {
+  const code = ctx.tables.sequences;
+  const read = () => {
+    const at = state.currentSequence - SEQUENCE_BASE;
+    state.currentSequence = state.currentSequence + 1 & 65535;
+    return at >= 0 && at < code.length ? code[at] : 255;
+  };
+  for (let guard = 0; guard < 1e3; guard++) {
+    const at = state.currentSequence - SEQUENCE_BASE;
+    if (at < 0 || at >= code.length) return false;
+    const command = read();
+    switch (command) {
+      case SEQ_OP.dx:
+        state.x = u8(forwardX(state, i82(read())));
+        break;
+      case SEQ_OP.dy:
+        state.y = u8(state.y + i82(read()));
+        break;
+      case SEQ_OP.flip:
+        state.direction = ~state.direction;
+        break;
+      case SEQ_OP.jumpIfFeather:
+        if (!ctx.isFeatherFall) {
+          read();
+          read();
+          break;
+        }
+      // fallthrough: a feather fall takes the jump
+      case SEQ_OP.jump: {
+        const lo = read();
+        const hi = read();
+        state.currentSequence = lo | hi << 8;
+        break;
+      }
+      case SEQ_OP.up:
+        state.currentRow -= 1;
+        ctx.effects?.rowChanged?.(-1);
+        break;
+      case SEQ_OP.down:
+        state.currentRow += 1;
+        ctx.effects?.rowChanged?.(1);
+        break;
+      case SEQ_OP.action:
+        state.action = read();
+        break;
+      case SEQ_OP.setFall:
+        state.fallX = i82(read());
+        state.fallY = i82(read());
+        break;
+      case SEQ_OP.knockUp:
+        ctx.effects?.knock?.(1);
+        break;
+      case SEQ_OP.knockDown:
+        ctx.effects?.knock?.(-1);
+        break;
+      case SEQ_OP.sound:
+        ctx.effects?.sound?.(read());
+        break;
+      case SEQ_OP.endLevel:
+        ctx.effects?.endLevel?.();
+        break;
+      case SEQ_OP.getItem:
+        ctx.effects?.getItem?.(read());
+        break;
+      case SEQ_OP.die:
+        ctx.effects?.die?.();
+        break;
+      default:
+        state.frame = command;
+        return true;
+    }
+  }
+  throw new Error("sequence did not reach a frame");
+}
+
+// src/game/physics.ts
+var SCREENSPACE_X = 58;
+var TILE_RIGHT_X = 13;
+var TILE_SIZE_Y = 63;
+var FALLING_SPEED_MAX = 33;
+var FALLING_SPEED_ACCEL = 3;
+var DIR_FRONT = [-1, 1];
+var EDGE_TYPE = {
+  floor: 0,
+  wall: 1,
+  /** A tile the character must stop short of: a button, a sword, a potion. */
+  closer: 2
+};
+var WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0];
+var WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0];
+function wallType(tileType) {
+  switch (tileType) {
+    case TILE.gate:
+    case TILE.doortopWithFloor:
+    case TILE.doortop:
+      return 1;
+    // wall on the right
+    case TILE.mirror:
+      return 2;
+    // wall on the left
+    case TILE.chomper:
+      return 3;
+    // chomper on the left
+    case TILE.wall:
+      return 4;
+    // wall on both sides
+    default:
+      return 0;
+  }
+}
+function getTile(world, room, column, row) {
+  let r = room;
+  let col = column;
+  let line = row;
+  while (col < 0 && r) {
+    r = world.linkOf(r, 0);
+    col += 10;
+  }
+  while (col > 9 && r) {
+    r = world.linkOf(r, 1);
+    col -= 10;
+  }
+  while (line < 0 && r) {
+    r = world.linkOf(r, 2);
+    line += 3;
+  }
+  while (line > 2 && r) {
+    r = world.linkOf(r, 3);
+    line -= 3;
+  }
+  if (!r || col < 0 || col > 9 || line < 0 || line > 2) {
+    return { type: world.levelEdgeHitTile, room: 0, column: col, row: line };
+  }
+  return { type: world.tileAt(r, col, line) & TILE_TYPE_MASK, room: r, column: col, row: line };
+}
+function tileDivMod(xpos) {
+  const x = xpos - SCREENSPACE_X;
+  let column = Math.trunc(x / TILE_SIZE_X);
+  let offset = x % TILE_SIZE_X;
+  if (offset < 0) {
+    column -= 1;
+    offset += TILE_SIZE_X;
+  }
+  return { column, offset };
+}
+function tileDivModM7(xpos) {
+  return tileDivMod(xpos - TILE_MID_X);
+}
+function weightX(state, frame) {
+  return forwardX(state, frame.dx - (frame.flags & FRAME_FLAG.weightX));
+}
+function determineColumn(state, frame) {
+  return tileDivModM7(weightX(state, frame)).column;
+}
+function distanceToEdge(state, xpos) {
+  const { offset } = tileDivModM7(xpos);
+  return state.direction === 0 ? TILE_RIGHT_X - offset : offset;
+}
+function distanceToEdgeWeight(state, frame) {
+  return distanceToEdge(state, weightX(state, frame));
+}
+function charCollision(state, frame, objX, spriteWidth) {
+  const halfWidth = Math.trunc((spriteWidth + 1) / 2);
+  let xLeft = Math.trunc(objX / 2) + SCREENSPACE_X;
+  if (state.direction >= 0) xLeft -= halfWidth;
+  const xRight = xLeft + halfWidth;
+  let xLeftColl = xLeft;
+  let xRightColl = xRight;
+  if (frame.flags & FRAME_FLAG.thin) {
+    xLeftColl += 4;
+    xRightColl -= 4;
+  }
+  return { xLeft, xRight, xLeftColl, xRightColl };
+}
+function distanceFromWallForward(state, tileType, tileColumn, coll) {
+  const type = wallType(tileType);
+  if (type === 0) return -1;
+  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (state.direction < 0) {
+    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
+  }
+  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
+}
+function getEdgeDistance(world, state, frame, objX, spriteWidth) {
+  const coll = charCollision(state, frame, objX, spriteWidth);
+  const here = getTile(world, state.room, state.currentColumn, state.currentRow);
+  const classify = (distance) => distance <= TILE_RIGHT_X ? { distance, edgeType: EDGE_TYPE.wall } : { distance: 11, edgeType: EDGE_TYPE.floor };
+  if (wallType(here.type) !== 0) {
+    const d = distanceFromWallForward(state, here.type, state.currentColumn, coll);
+    if (d >= 0) return classify(d);
+  }
+  const frontColumn = DIR_FRONT[state.direction + 1] + state.currentColumn;
+  const front = getTile(world, state.room, frontColumn, state.currentRow);
+  if (front.type === TILE.doortop && state.direction >= 0) {
+    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
+  }
+  if (wallType(front.type) !== 0) {
+    const d = distanceFromWallForward(state, front.type, frontColumn, coll);
+    if (d >= 0) return classify(d);
+  }
+  if (front.type === TILE.loose) {
+    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
+  }
+  if (front.type === TILE.closer || front.type === TILE.sword || front.type === TILE.potion) {
+    const d = distanceToEdgeWeight(state, frame);
+    return { distance: d, edgeType: d !== 0 ? EDGE_TYPE.closer : EDGE_TYPE.floor };
+  }
+  if (!tileIsFloor(front.type)) {
+    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.floor };
+  }
+  return { distance: 11, edgeType: EDGE_TYPE.floor };
+}
+function floorHeightOfRow(row) {
+  return Y_LAND[row + 1];
+}
+
+// src/game/kid.ts
+var KID_SEQ = {
+  startRun: 1,
+  stand: 2,
+  turn: 5,
+  runTurn: 6,
+  fall: 7,
+  runStop: 13,
+  softLand: 17,
+  mediumLand: 20,
+  /** 29..42: step forward by 1..14 units, to stop exactly at an edge. */
+  stepBase: 28,
+  startRunAfterTurn: 43,
+  stepOnEdge: 44,
+  unsafeStep: 39
+};
+var FRAME = {
+  startRunFirst: 1,
+  runLast: 14,
+  stand: 15,
+  turnFirst: 45,
+  turnMid: 48,
+  turnEnd: 50,
+  turnLast: 52,
+  run1: 7,
+  run2: 11,
+  run9: 9,
+  run13: 13
+};
+function frameOf(tables, state) {
+  return tables.frameTableKid[state.frame] ?? tables.frameTableKid[0];
+}
+function objectX(state, frame) {
+  let x = (forwardX(state, frame.dx) << 1) - 116;
+  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
+  return x;
+}
+function forwardHeld(state, controls) {
+  if (controls.x === 0) return false;
+  return state.direction < 0 ? controls.x < 0 : controls.x > 0;
+}
+function backwardHeld(state, controls) {
+  if (controls.x === 0) return false;
+  return state.direction < 0 ? controls.x > 0 : controls.x < 0;
+}
+function control(state, controls, ctx) {
+  if (state.alive >= 0) return;
+  const f = state.frame;
+  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) return;
+  if (f === FRAME.stand || f >= FRAME.turnEnd && f < 53) {
+    controlStanding(state, controls, ctx);
+  } else if (f === FRAME.turnMid) {
+    controlTurning(state, controls, ctx);
+  } else if (f < 4) {
+    controlStartRun(state, controls, ctx);
+  } else if (f < 15) {
+    controlRunning(state, controls, ctx);
+  }
+}
+function controlStanding(state, controls, ctx) {
+  if (controls.shift) {
+    if (backwardHeld(state, controls)) {
+      startSequence(state, KID_SEQ.turn, ctx.tables);
+    } else if (forwardHeld(state, controls)) {
+      safeStep(state, ctx);
+    }
+    return;
+  }
+  if (forwardHeld(state, controls)) {
+    forwardPressed(state, ctx);
+  } else if (backwardHeld(state, controls)) {
+    startSequence(state, KID_SEQ.turn, ctx.tables);
+  }
+}
+function controlTurning(state, controls, ctx) {
+  if (!controls.shift && forwardHeld(state, controls) && controls.y >= 0) {
+    startSequence(state, KID_SEQ.startRunAfterTurn, ctx.tables);
+  }
+}
+function controlStartRun(state, controls, ctx) {
+  if (backwardHeld(state, controls)) {
+    startSequence(state, KID_SEQ.turn, ctx.tables);
+  }
+}
+function controlRunning(state, controls, ctx) {
+  if (controls.x === 0 && (state.frame === FRAME.run1 || state.frame === FRAME.run2)) {
+    startSequence(state, KID_SEQ.runStop, ctx.tables);
+  } else if (backwardHeld(state, controls)) {
+    startSequence(state, KID_SEQ.runTurn, ctx.tables);
+  }
+}
+function forwardPressed(state, ctx) {
+  const frame = frameOf(ctx.tables, state);
+  const objX = objectX(state, frame);
+  const { distance, edgeType } = getEdgeDistance(
+    ctx.world,
+    state,
+    frame,
+    objX,
+    ctx.spriteWidth(frame.image)
+  );
+  const front = getTile(
+    ctx.world,
+    state.room,
+    DIR_FRONT[state.direction + 1] + state.currentColumn,
+    state.currentRow
+  );
+  if (edgeType === EDGE_TYPE.wall && front.type !== TILE.chomper && distance < 8) {
+    safeStep(state, ctx);
+  } else {
+    startSequence(state, KID_SEQ.startRun, ctx.tables);
+  }
+}
+function safeStep(state, ctx) {
+  const frame = frameOf(ctx.tables, state);
+  const objX = objectX(state, frame);
+  const { distance, edgeType } = getEdgeDistance(
+    ctx.world,
+    state,
+    frame,
+    objX,
+    ctx.spriteWidth(frame.image)
+  );
+  if (distance) {
+    state.repeat = 1;
+    startSequence(state, KID_SEQ.stepBase + Math.min(distance, 14), ctx.tables);
+  } else if (edgeType !== EDGE_TYPE.wall && state.repeat !== 0) {
+    state.repeat = 0;
+    startSequence(state, KID_SEQ.stepOnEdge, ctx.tables);
+  } else {
+    startSequence(state, KID_SEQ.unsafeStep, ctx.tables);
+  }
+}
+function startFall(state, ctx) {
+  state.sword = 0;
+  state.currentRow += 1;
+  startSequence(state, KID_SEQ.fall, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  const frame = frameOf(ctx.tables, state);
+  state.currentColumn = determineColumn(state, frame);
+}
+function land(state, ctx) {
+  state.y = floorHeightOfRow(state.currentRow);
+  const frame = frameOf(ctx.tables, state);
+  const front = getTile(
+    ctx.world,
+    state.room,
+    DIR_FRONT[state.direction + 1] + state.currentColumn,
+    state.currentRow
+  );
+  if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
+    state.x = forwardX(state, -3) & 255;
+  }
+  startSequence(state, state.fallY < 22 ? KID_SEQ.softLand : KID_SEQ.mediumLand, ctx.tables);
+  state.fallY = 0;
+  state.fallX = 0;
+}
+function doFall(state, ctx) {
+  if (floorHeightOfRow(state.currentRow) > state.y) return;
+  if (hasFloorAt(state, ctx)) land(state, ctx);
+  else state.currentRow += 1;
+}
+function hasFloorAt(state, ctx) {
+  const t = getTile(ctx.world, state.room, state.currentColumn, state.currentRow);
+  return tileIsFloor(t.type);
+}
+function checkOnFloor(state, ctx) {
+  const frame = frameOf(ctx.tables, state);
+  if (!(frame.flags & 64)) return;
+  if (!hasFloorAt(state, ctx)) startFall(state, ctx);
+}
+function checkAction(state, ctx) {
+  const action = state.action;
+  if (action === ACTION.hangStraight || action === ACTION.bumped) {
+    if (state.frame === 109) checkOnFloor(state, ctx);
+  } else if (action === ACTION.inFreefall) {
+    doFall(state, ctx);
+  } else if (action === ACTION.inMidair) {
+  } else if (action !== ACTION.hangClimb) {
+    checkOnFloor(state, ctx);
+  }
+}
+function stepKid(state, controls, ctx) {
+  control(state, controls, ctx);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  if (state.action === ACTION.inFreefall) {
+    state.fallY = Math.min(state.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
+  }
+  state.y = state.y + state.fallY & 255;
+  if (state.action === ACTION.inFreefall) {
+    state.x = forwardX(state, state.fallX) & 255;
+  }
+  const frame = frameOf(ctx.tables, state);
+  state.currentColumn = determineColumn(state, frame);
+  checkAction(state, ctx);
+  const leave = leaveDirection(state, ctx);
+  if (leave >= 0) {
+    gotoOtherRoom(state, leave, ctx);
+    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  }
+  if (state.room === 0 && state.alive < 0) {
+    state.alive = 0;
+  }
+}
+function yToRow(y) {
+  return Math.trunc((y + 60) / TILE_SIZE_Y) % 4 - 1;
+}
+function leaveDirection(state, ctx) {
+  const y = state.y;
+  const sy = y << 24 >> 24;
+  const f = state.frame;
+  if (state.action !== ACTION.bumped && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair && sy < 10 && sy > -16) {
+    return 2;
+  }
+  if (y >= 211) return 3;
+  if (f >= 135 && f < 150 || f >= 110 && f < 120 || f >= 150 && f < 163 || f >= 166 && f < 169 || state.action === ACTION.turning) {
+    return -1;
+  }
+  const frame = frameOf(ctx.tables, state);
+  const objX = objectX(state, frame);
+  const coll = charCollision(state, frame, objX, ctx.spriteWidth(frame.image));
+  if (state.direction !== 0) {
+    if (coll.xLeft <= 54) return 0;
+    if (coll.xLeft >= 198) return 1;
+    return -1;
+  }
+  const edge = getTile(ctx.world, state.room, 9, state.currentRow);
+  if (edge.type !== TILE.doortopWithFloor && edge.type !== TILE.doortop && coll.xRight >= 201) {
+    return 1;
+  }
+  if (coll.xRight <= 57) return 0;
+  return -1;
+}
+function gotoOtherRoom(state, direction, ctx) {
+  state.room = ctx.world.linkOf(state.room, direction);
+  if (direction === 0) state.x = state.x + 140 & 255;
+  else if (direction === 1) state.x = state.x - 140 & 255;
+  else if (direction === 2) {
+    state.y = state.y + 189 & 255;
+    state.currentRow = yToRow(state.y);
+  } else {
+    state.y = state.y - 189 & 255;
+    state.currentRow = yToRow(state.y);
+  }
+}
+function enterLevel(state, startRoom, startPos, startDir, ctx) {
+  state.room = startRoom;
+  state.currentColumn = startPos % 10;
+  state.currentRow = Math.floor(startPos / 10);
+  state.x = X_BUMP_START(state.currentColumn) & 255;
+  state.y = floorHeightOfRow(state.currentRow);
+  state.direction = ~startDir;
+  state.alive = -1;
+  state.fallX = 0;
+  state.fallY = 0;
+  startSequence(state, KID_SEQ.turn, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+}
+function X_BUMP_START(column) {
+  const X_BUMP2 = [
+    -12,
+    2,
+    16,
+    30,
+    44,
+    58,
+    72,
+    86,
+    100,
+    114,
+    128,
+    142,
+    156,
+    170,
+    184,
+    198,
+    212,
+    226,
+    240,
+    254
+  ];
+  return X_BUMP2[column + 5] + 14;
+}
+
+// src/game/game.ts
+var Game = class _Game {
+  scene;
+  tables;
+  kid;
+  surface = new Surface();
+  /** The room the view is showing. */
+  drawnRoom;
+  renderer;
+  ctx;
+  constructor(scene, tables) {
+    this.scene = scene;
+    this.tables = tables;
+    this.kid = newCharacter();
+    const world = {
+      tileAt: (room, column, row) => scene.tiles.typeAt(room, column, row) & TILE_TYPE_MASK,
+      modifierAt: (room, column, row) => scene.tiles.modifierAt(room, column, row),
+      linkOf: (room, dir) => scene.tiles.linkOf(room, dir),
+      levelEdgeHitTile: scene.constants.levelEdgeHitTile
+    };
+    this.ctx = {
+      tables,
+      world,
+      spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0
+    };
+    enterLevel(
+      this.kid,
+      scene.level.startRoom,
+      scene.level.startPos,
+      scene.level.startDir,
+      this.ctx
+    );
+    this.drawnRoom = this.kid.room;
+    this.renderer = new RoomRenderer(scene.chtabs, scene.tiles, scene.options);
+  }
+  static async start(assets, exe, levelNumber, options = {}) {
+    const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? "V");
+    return new _Game(scene, readExeTables(exe));
+  }
+  /** Advance one frame of the game. */
+  step(controls) {
+    stepKid(this.kid, controls, this.ctx);
+    if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
+  }
+  /** What to draw for the Prince, if he is in the room being shown. */
+  kidDraw() {
+    if (this.kid.room !== this.drawnRoom) return null;
+    const frame = this.tables.frameTableKid[this.kid.frame];
+    if (!frame) return null;
+    return placeCharacter(this.kid, frame);
+  }
+  render() {
+    this.surface.clear();
+    const draw = this.kidDraw();
+    this.renderer.render(this.surface, this.drawnRoom, draw ? [draw] : []);
+    return this.surface;
+  }
+};
 
 // web/main.ts
 var DATA_URL = "../original/prince1";
+var FRAMES_PER_SECOND = 12;
 async function boot() {
   const canvas = document.getElementById("screen");
   const sceneSel = document.getElementById("scene");
@@ -2053,127 +2680,118 @@ async function boot() {
   const aspectSel = document.getElementById("aspect");
   const status = document.getElementById("status");
   const display = new Display(canvas);
-  const surface = new Surface();
   const assets = new Assets(browserFetcher(DATA_URL));
-  const exe = await assets.dat("UNCRKD.EXE").then(
-    () => void 0,
-    () => void 0
-  ).then(async () => new Uint8Array(
-    await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer()
-  ));
-  const tables = readExeTables(exe);
+  const exe = new Uint8Array(await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer());
   const titlePalette = new ScreenPalette();
+  const titleSurface = new Surface();
   const title = await assets.group("TITLE.DAT", 50);
   const opening = await assets.group("TITLE.DAT", 40);
-  const scenes = /* @__PURE__ */ new Map();
-  async function level(n) {
-    let s = scenes.get(`L${n}`);
-    if (!s) {
-      s = await buildLevelScene(assets, exe, n);
-      scenes.set(`L${n}`, s);
-    }
-    return s;
-  }
-  const views = [
-    { kind: "image", label: "title screen", group: title, index: 1 },
-    { kind: "image", label: "opening screen", group: opening, index: 1 }
-  ];
-  for (let n = 1; n <= 14; n++) {
-    views.push({ kind: "room", label: `level ${n}`, level: n });
-  }
+  const views = [{ kind: "title" }, { kind: "opening" }];
+  for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
+  const label = (v) => v.kind === "level" ? `level ${v.level}` : `${v.kind} screen`;
   for (const [i, v] of views.entries()) {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = v.label;
+    o.textContent = label(v);
     sceneSel.append(o);
   }
-  let current = 0;
-  let room = 1;
-  async function render() {
-    const v = views[current];
-    surface.clear();
-    if (v.kind === "image") {
-      roomSel.disabled = true;
-      titlePalette.loadBlock(0, v.group.palette.vga);
-      surface.blitOpaque(v.group.images[v.index], 0, 0);
-      display.present(surface, titlePalette.toRgba());
-      status.textContent = `${v.label} \u2014 320x200, drawn from the original data files`;
-    } else {
-      roomSel.disabled = false;
-      const scene = await level(v.level);
-      if (roomSel.options.length !== 24) {
-        roomSel.replaceChildren();
-        for (let r = 1; r <= 24; r++) {
-          const o = document.createElement("option");
-          o.value = String(r);
-          o.textContent = `room ${r}`;
-          roomSel.append(o);
-        }
-      }
-      roomSel.value = String(room);
-      const chars = [];
-      if (room === scene.level.startRoom) {
-        const col = scene.level.startPos % 10;
-        const row = Math.floor(scene.level.startPos / 10);
-        const dir = scene.level.startDir;
-        const draw = placeCharacter({
-          x: standX(col) + (dir < 0 ? -7 : 7),
-          y: standY(row),
-          direction: dir,
-          frame: FRAME_STAND,
-          room,
-          currentColumn: col,
-          currentRow: row,
-          charId: 0
-        }, tables.frameTableKid[FRAME_STAND]);
-        if (draw) chars.push(draw);
-      }
-      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room, chars);
-      display.present(surface, scene.screenPalette.toRgba());
-      const type = scene.options.levelType ? "palace" : "dungeon";
-      status.textContent = `${v.label} (${type}), room ${room} \u2014 drawn from the original data and tables`;
-    }
+  for (let r = 1; r <= 24; r++) {
+    const o = document.createElement("option");
+    o.value = String(r);
+    o.textContent = `room ${r}`;
+    roomSel.append(o);
   }
-  sceneSel.addEventListener("change", () => {
-    current = Number(sceneSel.value);
-    const v = views[current];
-    if (v.kind === "room") {
-      void level(v.level).then((s) => {
-        room = s.level.startRoom;
-        void render();
-      });
-    } else {
-      void render();
-    }
+  let current = 0;
+  let game = null;
+  let watchRoom = null;
+  const held = /* @__PURE__ */ new Set();
+  const controls = () => ({
+    x: (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0),
+    y: (held.has("ArrowDown") ? 1 : 0) - (held.has("ArrowUp") ? 1 : 0),
+    shift: held.has("Shift")
   });
+  function drawTitle(group) {
+    titleSurface.clear();
+    titlePalette.loadBlock(0, group.palette.vga);
+    titleSurface.blitOpaque(group.images[1], 0, 0);
+    display.present(titleSurface, titlePalette.toRgba());
+  }
+  async function select(index) {
+    current = index;
+    sceneSel.value = String(current);
+    const v = views[current];
+    if (v.kind !== "level") {
+      game = null;
+      roomSel.disabled = true;
+      drawTitle(v.kind === "title" ? title : opening);
+      status.textContent = `${label(v)} \u2014 320x200, drawn from the original data files`;
+      return;
+    }
+    roomSel.disabled = false;
+    game = await Game.start(assets, exe, v.level);
+    watchRoom = null;
+    roomSel.value = String(game.drawnRoom);
+  }
+  function frame() {
+    if (!game) return;
+    if (watchRoom === null) {
+      game.step(controls());
+      if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
+    } else {
+      game.drawnRoom = watchRoom;
+    }
+    display.present(game.render(), game.scene.screenPalette.toRgba());
+    const v = views[current];
+    const type = game.scene.options.levelType ? "palace" : "dungeon";
+    status.textContent = watchRoom === null ? `${label(v)} (${type}) \u2014 arrow keys to move, shift to step` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
+  }
+  sceneSel.addEventListener("change", () => void select(Number(sceneSel.value)));
   roomSel.addEventListener("change", () => {
-    room = Number(roomSel.value);
-    void render();
+    watchRoom = Number(roomSel.value);
   });
   aspectSel.addEventListener("change", () => {
     display.setAspect(aspectSel.value);
   });
-  await render();
-  window.__princeFrame = async (id) => {
-    if (id === "title-background") {
-      surface.clear();
-      titlePalette.loadBlock(0, title.palette.vga);
-      surface.blitOpaque(title.images[1], 0, 0);
-      return Array.from(surface.toRgb(titlePalette.toRgba()));
+  const KEYS = /* @__PURE__ */ new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Shift"]);
+  window.addEventListener("keydown", (e) => {
+    if (!KEYS.has(e.key)) return;
+    e.preventDefault();
+    held.add(e.key);
+    if (watchRoom !== null && game) {
+      watchRoom = null;
+      game.drawnRoom = game.kid.room;
     }
-    await render();
-    const v = views[current];
-    const pal = v.kind === "image" ? titlePalette : (await level(v.level)).screenPalette;
-    return Array.from(surface.toRgb(pal.toRgba()));
+  });
+  window.addEventListener("keyup", (e) => {
+    if (KEYS.has(e.key)) held.delete(e.key);
+  });
+  window.addEventListener("blur", () => held.clear());
+  await select(0);
+  setInterval(frame, 1e3 / FRAMES_PER_SECOND);
+  const w = window;
+  w.__princeFrame = (id) => {
+    if (id === "title-background") {
+      drawTitle(title);
+      return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
+    }
+    if (!game) return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
+    return Array.from(game.render().toRgb(game.scene.screenPalette.toRgba()));
   };
-  window.__princeShow = async (lvl, rm) => {
-    current = views.findIndex((v) => v.kind === "room" && v.level === lvl);
-    room = rm;
-    sceneSel.value = String(current);
-    await render();
+  w.__princeShow = async (level, room) => {
+    await select(views.findIndex((v) => v.kind === "level" && v.level === level));
+    watchRoom = room;
+    if (game) game.drawnRoom = room;
+    frame();
   };
-  window.__princeReady = true;
-  void parsePalette;
+  w.__princeStep = (n, c = {}) => {
+    if (!game) return null;
+    watchRoom = null;
+    for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
+    display.present(game.render(), game.scene.screenPalette.toRgba());
+    return { ...game.kid };
+  };
+  w.__princeReady = true;
+  void RoomRenderer;
 }
 boot().catch((err) => {
   const status = document.getElementById("status");

@@ -107,7 +107,21 @@ node --experimental-strip-types tools/dev/render-room.ts 4 1 \
     tests/golden/level04-start.png /tmp/out
 ```
 
-## 4. The port, in a real browser
+## 4. Movement
+
+`tests/game/sequence.test.ts` and `tests/game/kid.test.ts` check the moving
+parts. The level entry is the one piece of movement the captures pin down
+exactly -- every level but the first faces the Prince the wrong way and plays
+a turn -- so both run that and require the position and facing the captures
+show, once through the interpreter alone and once through the whole game
+object.
+
+The rest states the properties the original's moves have: a run goes forward
+and keeps going, a turn reverses the facing, standing still holds the
+standing frame forever, and walking about never leaves the floor heights the
+level defines or a room that is not linked.
+
+## 5. The port, in a real browser
 
 `tests/browser/render.test.ts` serves the repository, opens the page in
 headless Chromium, and reads back the exact 320x200 frame the page drew

@@ -53,16 +53,16 @@ export const SEQ = {
   fall: 7,
 } as const;
 
-/** What the running character is doing, as the sequences label it. */
+/** What the running character is doing, with the original's numbering. */
 export const ACTION = {
-  standing: 0,
-  running: 1,
-  inMidair: 2,
-  inFreefall: 3,
-  bumped: 4,
-  hangingStraight: 5,
-  turning: 6,
-  hanging: 7,
+  stand: 0,
+  runJump: 1,
+  hangClimb: 2,
+  inMidair: 3,
+  inFreefall: 4,
+  bumped: 5,
+  hangStraight: 6,
+  turning: 7,
 } as const;
 
 export const SOUND = {

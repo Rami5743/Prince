@@ -1,18 +1,17 @@
 /**
  * Browser entry point. Loads the original `.DAT` files and the original
- * executable, and draws with them.
+ * executable, and plays with them.
  */
 import { Assets, browserFetcher } from '../src/render/assets.ts';
 import { Display } from '../src/render/display.ts';
 import { Surface, ScreenPalette } from '../src/render/surface.ts';
 import { RoomRenderer } from '../src/render/room.ts';
-import { buildLevelScene, type LevelScene } from '../src/game/scene.ts';
-import { readExeTables } from '../src/game/exe-tables.ts';
-import { placeCharacter, FRAME_STAND } from '../src/game/character.ts';
-import { standX, standY } from '../src/game/geometry.ts';
-import { parsePalette } from '../src/dat/palette.ts';
+import { Game } from '../src/game/game.ts';
+import type { Controls } from '../src/game/kid.ts';
 
 const DATA_URL = '../original/prince1';
+/** The original ran its game loop at this rate. */
+const FRAMES_PER_SECOND = 12;
 
 async function boot(): Promise<void> {
   const canvas = document.getElementById('screen') as HTMLCanvasElement;
@@ -22,135 +21,136 @@ async function boot(): Promise<void> {
   const status = document.getElementById('status') as HTMLElement;
 
   const display = new Display(canvas);
-  const surface = new Surface();
   const assets = new Assets(browserFetcher(DATA_URL));
-  const exe = await assets.dat('UNCRKD.EXE').then(
-    () => undefined,
-    () => undefined,
-  ).then(async () => new Uint8Array(
-    await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer(),
-  ));
+  const exe = new Uint8Array(await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer());
 
-  const tables = readExeTables(exe);
   const titlePalette = new ScreenPalette();
+  const titleSurface = new Surface();
   const title = await assets.group('TITLE.DAT', 50);
   const opening = await assets.group('TITLE.DAT', 40);
 
-  const scenes = new Map<string, LevelScene>();
-  async function level(n: number): Promise<LevelScene> {
-    let s = scenes.get(`L${n}`);
-    if (!s) {
-      s = await buildLevelScene(assets, exe, n);
-      scenes.set(`L${n}`, s);
-    }
-    return s;
-  }
-
-  type View =
-    | { kind: 'image'; label: string; group: typeof title; index: number }
-    | { kind: 'room'; label: string; level: number };
-
-  const views: View[] = [
-    { kind: 'image', label: 'title screen', group: title, index: 1 },
-    { kind: 'image', label: 'opening screen', group: opening, index: 1 },
-  ];
-  for (let n = 1; n <= 14; n++) {
-    views.push({ kind: 'room', label: `level ${n}`, level: n });
-  }
+  type View = { kind: 'title' | 'opening' } | { kind: 'level'; level: number };
+  const views: View[] = [{ kind: 'title' }, { kind: 'opening' }];
+  for (let n = 1; n <= 14; n++) views.push({ kind: 'level', level: n });
+  const label = (v: View): string =>
+    v.kind === 'level' ? `level ${v.level}` : `${v.kind} screen`;
 
   for (const [i, v] of views.entries()) {
     const o = document.createElement('option');
     o.value = String(i);
-    o.textContent = v.label;
+    o.textContent = label(v);
     sceneSel.append(o);
+  }
+  for (let r = 1; r <= 24; r++) {
+    const o = document.createElement('option');
+    o.value = String(r);
+    o.textContent = `room ${r}`;
+    roomSel.append(o);
   }
 
   let current = 0;
-  let room = 1;
+  let game: Game | null = null;
+  /** Set when the player wants to look at a room rather than play. */
+  let watchRoom: number | null = null;
 
-  async function render(): Promise<void> {
-    const v = views[current];
-    surface.clear();
-    if (v.kind === 'image') {
-      roomSel.disabled = true;
-      titlePalette.loadBlock(0, v.group.palette.vga);
-      surface.blitOpaque(v.group.images[v.index]!, 0, 0);
-      display.present(surface, titlePalette.toRgba());
-      status.textContent = `${v.label} — 320x200, drawn from the original data files`;
-    } else {
-      roomSel.disabled = false;
-      const scene = await level(v.level);
-      if (roomSel.options.length !== 24) {
-        roomSel.replaceChildren();
-        for (let r = 1; r <= 24; r++) {
-          const o = document.createElement('option');
-          o.value = String(r);
-          o.textContent = `room ${r}`;
-          roomSel.append(o);
-        }
-      }
-      roomSel.value = String(room);
-      const chars = [];
-      if (room === scene.level.startRoom) {
-        // Where the level says the Prince begins, after the half-tile turn
-        // he performs on entering.
-        const col = scene.level.startPos % 10;
-        const row = Math.floor(scene.level.startPos / 10);
-        const dir = scene.level.startDir;
-        const draw = placeCharacter({
-          x: standX(col) + (dir < 0 ? -7 : 7), y: standY(row),
-          direction: dir, frame: FRAME_STAND,
-          room, currentColumn: col, currentRow: row, charId: 0,
-        }, tables.frameTableKid[FRAME_STAND]);
-        if (draw) chars.push(draw);
-      }
-      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room, chars);
-      display.present(surface, scene.screenPalette.toRgba());
-      const type = scene.options.levelType ? 'palace' : 'dungeon';
-      status.textContent =
-        `${v.label} (${type}), room ${room} — drawn from the original data and tables`;
-    }
+  const held = new Set<string>();
+  const controls = (): Controls => ({
+    x: (held.has('ArrowRight') ? 1 : 0) - (held.has('ArrowLeft') ? 1 : 0),
+    y: (held.has('ArrowDown') ? 1 : 0) - (held.has('ArrowUp') ? 1 : 0),
+    shift: held.has('Shift'),
+  });
+
+  function drawTitle(group: typeof title): void {
+    titleSurface.clear();
+    titlePalette.loadBlock(0, group.palette.vga);
+    titleSurface.blitOpaque(group.images[1]!, 0, 0);
+    display.present(titleSurface, titlePalette.toRgba());
   }
 
-  sceneSel.addEventListener('change', () => {
-    current = Number(sceneSel.value);
+  async function select(index: number): Promise<void> {
+    current = index;
+    sceneSel.value = String(current);
     const v = views[current];
-    if (v.kind === 'room') {
-      void level(v.level).then((s) => { room = s.level.startRoom; void render(); });
-    } else {
-      void render();
+    if (v.kind !== 'level') {
+      game = null;
+      roomSel.disabled = true;
+      drawTitle(v.kind === 'title' ? title : opening);
+      status.textContent = `${label(v)} — 320x200, drawn from the original data files`;
+      return;
     }
+    roomSel.disabled = false;
+    game = await Game.start(assets, exe, v.level);
+    watchRoom = null;
+    roomSel.value = String(game.drawnRoom);
+  }
+
+  function frame(): void {
+    if (!game) return;
+    if (watchRoom === null) {
+      game.step(controls());
+      if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
+    } else {
+      game.drawnRoom = watchRoom;
+    }
+    display.present(game.render(), game.scene.screenPalette.toRgba());
+    const v = views[current];
+    const type = game.scene.options.levelType ? 'palace' : 'dungeon';
+    status.textContent = watchRoom === null
+      ? `${label(v)} (${type}) — arrow keys to move, shift to step`
+      : `${label(v)} (${type}), room ${watchRoom} — looking around; press a key to play`;
+  }
+
+  sceneSel.addEventListener('change', () => void select(Number(sceneSel.value)));
+  roomSel.addEventListener('change', () => {
+    watchRoom = Number(roomSel.value);
   });
-  roomSel.addEventListener('change', () => { room = Number(roomSel.value); void render(); });
   aspectSel.addEventListener('change', () => {
     display.setAspect(aspectSel.value as 'original-4-3' | 'square-pixels');
   });
 
-  await render();
-
-  // Hook for the browser-level comparison tests.
-  (window as unknown as Record<string, unknown>).__princeFrame = async (id?: string) => {
-    if (id === 'title-background') {
-      surface.clear();
-      titlePalette.loadBlock(0, title.palette.vga);
-      surface.blitOpaque(title.images[1]!, 0, 0);
-      return Array.from(surface.toRgb(titlePalette.toRgba()));
+  const KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift']);
+  window.addEventListener('keydown', (e) => {
+    if (!KEYS.has(e.key)) return;
+    e.preventDefault();
+    held.add(e.key);
+    if (watchRoom !== null && game) {
+      watchRoom = null;
+      game.drawnRoom = game.kid.room;
     }
-    await render();
-    const v = views[current];
-    const pal = v.kind === 'image' ? titlePalette : (await level(v.level)).screenPalette;
-    return Array.from(surface.toRgb(pal.toRgba()));
+  });
+  window.addEventListener('keyup', (e) => {
+    if (KEYS.has(e.key)) held.delete(e.key);
+  });
+  window.addEventListener('blur', () => held.clear());
+
+  await select(0);
+  setInterval(frame, 1000 / FRAMES_PER_SECOND);
+
+  // Hooks for the browser-level comparison tests.
+  const w = window as unknown as Record<string, unknown>;
+  w.__princeFrame = (id?: string) => {
+    if (id === 'title-background') {
+      drawTitle(title);
+      return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
+    }
+    if (!game) return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
+    return Array.from(game.render().toRgb(game.scene.screenPalette.toRgba()));
   };
-  (window as unknown as Record<string, unknown>).__princeShow = async (
-    lvl: number, rm: number,
-  ) => {
-    current = views.findIndex((v) => v.kind === 'room' && v.level === lvl);
-    room = rm;
-    sceneSel.value = String(current);
-    await render();
+  w.__princeShow = async (level: number, room: number) => {
+    await select(views.findIndex((v) => v.kind === 'level' && v.level === level));
+    watchRoom = room;
+    if (game) game.drawnRoom = room;
+    frame();
   };
-  (window as unknown as Record<string, unknown>).__princeReady = true;
-  void parsePalette;
+  w.__princeStep = (n: number, c: Partial<Controls> = {}) => {
+    if (!game) return null;
+    watchRoom = null;
+    for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
+    display.present(game.render(), game.scene.screenPalette.toRgba());
+    return { ...game.kid };
+  };
+  w.__princeReady = true;
+  void RoomRenderer;
 }
 
 boot().catch((err: unknown) => {
