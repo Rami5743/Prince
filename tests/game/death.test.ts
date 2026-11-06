@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
-import { Game, RESTART_PROMPT_DELAY } from '../../src/game/game.ts';
+import { Game, RESTART_PROMPT_DELAY, RESTART_DELAY } from '../../src/game/game.ts';
 import { standX, standY } from '../../src/game/geometry.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
@@ -132,6 +132,24 @@ describe('dying', () => {
     expect(game.awaitingButton, 'nor a tick early').toBe(false);
     game.step(none);
     expect(game.awaitingButton, 'but then yes').toBe(true);
+  });
+
+  it('takes six ticks over starting the level again', async () => {
+    const game = await Game.start(assets, exe, 3);
+    const none = { x: 0, y: 0, shift: false };
+    game.damage(100);
+    for (let i = 0; i < RESTART_PROMPT_DELAY; i++) game.step(none);
+    expect(game.awaitingButton).toBe(true);
+    game.pressButton();
+    expect(game.awaitingButton, 'the prompt goes once it is taken').toBe(false);
+    const due: boolean[] = [];
+    for (let i = 0; i < RESTART_DELAY + 2; i++) {
+      game.step(none);
+      due.push(game.restartDue);
+    }
+    // Nothing for the first four, then the one tick it falls due on.
+    expect(due.indexOf(true)).toBe(RESTART_DELAY - 1);
+    expect(due.filter(Boolean)).toHaveLength(1);
   });
 
   it('is not waiting for the button while he is alive', async () => {

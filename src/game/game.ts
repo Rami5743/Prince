@@ -46,6 +46,8 @@ export class Game {
   private blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   private deadTicks = 0;
+  /** Ticks left before the level starts again; -1 when none is coming. */
+  private restartCountdown = -1;
   hitPoints: number;
   maxHitPoints: number;
   /**
@@ -161,6 +163,9 @@ export class Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    // Down to -1, not to 0: `restartDue` is then true for exactly the one
+    // tick the level is to be built on.
+    if (this.restartCountdown >= 0) this.restartCountdown -= 1;
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) {
       this.enterRoom(this.drawnRoom);
@@ -227,7 +232,25 @@ export class Game {
    * over the next ten seconds and nothing happened.
    */
   get awaitingButton(): boolean {
-    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY;
+    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY
+      && this.restartCountdown < 0;
+  }
+
+  /**
+   * The button was pressed under `Press Button to Continue`. The level
+   * does not come back at once: the original takes six ticks over it, the
+   * room still on screen for three and then black for two. Measured off
+   * the grabbed video -- Shift at tick 297, black at 301 and 302, the
+   * level running again at 303.
+   */
+  pressButton(): void {
+    if (!this.awaitingButton) return;
+    this.restartCountdown = RESTART_DELAY;
+  }
+
+  /** True on the tick the level should be built again. */
+  get restartDue(): boolean {
+    return this.restartCountdown === 0;
   }
 
   /**
@@ -327,7 +350,7 @@ export class Game {
     // While the view is changing room the original shows no room -- but it
     // keeps the hit points below it. The captures of those frames are black
     // everywhere except the bottom few rows.
-    if (this.blankFrames > 0) {
+    if (this.blankFrames > 0 || (this.restartCountdown >= 0 && this.restartCountdown <= 1)) {
       this.drawStatusBar();
       return this.surface;
     }
@@ -421,6 +444,13 @@ export const ROOM_CHANGE_BLANK = 1;
  * off the grabbed video: struck down at tick 177, words up at 221.
  */
 export const RESTART_PROMPT_DELAY = 45;
+
+/**
+ * Ticks from the button being pressed to the level running again. Six, of
+ * which the last two are black: Shift at tick 297 of the grabbed video,
+ * black at 301 and 302, the room back at 303.
+ */
+export const RESTART_DELAY = 5;
 
 const TILE_SWORD = TILE.sword;
 const TILE_FLOOR = TILE.floor;

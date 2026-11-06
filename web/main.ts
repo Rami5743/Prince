@@ -224,6 +224,7 @@ async function boot(): Promise<void> {
       pressedSinceStep.clear();
       game.step(c);
       recorder.tick(c, game);
+      if (game.restartDue) { void restart(); return; }
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -231,8 +232,8 @@ async function boot(): Promise<void> {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     const v = views[current];
     const type = game.scene.options.levelType ? 'palace' : 'dungeon';
-    status.textContent = game.isDead
-      ? `${label(v)} — you are dead; press any direction to begin again`
+    status.textContent = game.awaitingButton
+      ? `${label(v)} — you are dead; press Shift to begin again`
       : watchRoom === null
         ? `${label(v)} (${type}) — ${CONTROLS}`
         : `${label(v)} (${type}), room ${watchRoom} — looking around; press a key to play`;
@@ -270,7 +271,7 @@ async function boot(): Promise<void> {
     // Shift is the original's `button`, and nothing but Shift continues
     // after a death -- the player in the recording pressed four
     // directions over ten seconds and the original ignored every one.
-    if (game?.awaitingButton && dirs.includes('shift')) void restart();
+    if (dirs.includes('shift')) game?.pressButton();
   });
   window.addEventListener('keyup', (e) => {
     const dirs = directionsOf(e);
@@ -296,7 +297,7 @@ async function boot(): Promise<void> {
     if (down) { held.add(d); pressedSinceStep.add(d); }
     else held.delete(d);
     recorder.key(down ? 'down' : 'up', key);
-    if (down && game?.awaitingButton && d === 'shift') void restart();
+    if (down && d === 'shift') game?.pressButton();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;

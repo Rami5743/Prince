@@ -32,10 +32,9 @@ for (let t = 0; t < ticks.length; t++) {
   // The page restarts the level when the button -- Shift -- is pressed
   // after a death, and so does the original. Without it a replay stops
   // dead at the first mistake and everything after it is noise.
-  if (game.awaitingButton && ticks[t].shift && !(ticks[t - 1]?.shift)) {
-    game = await game.restart(assets, exe);
-  }
+  if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
   game.step(ticks[t]);
+  if (game.restartDue) game = await game.restart(assets, exe);
   const k = game.kid;
   const c = ticks[t];
   const g = game.guard;

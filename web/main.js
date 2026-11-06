@@ -4227,6 +4227,8 @@ var Game = class _Game {
   blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   deadTicks = 0;
+  /** Ticks left before the level starts again; -1 when none is coming. */
+  restartCountdown = -1;
   hitPoints;
   maxHitPoints;
   /**
@@ -4335,6 +4337,7 @@ var Game = class _Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    if (this.restartCountdown >= 0) this.restartCountdown -= 1;
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) {
       this.enterRoom(this.drawnRoom);
@@ -4390,7 +4393,22 @@ var Game = class _Game {
    * over the next ten seconds and nothing happened.
    */
   get awaitingButton() {
-    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY;
+    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && this.restartCountdown < 0;
+  }
+  /**
+   * The button was pressed under `Press Button to Continue`. The level
+   * does not come back at once: the original takes six ticks over it, the
+   * room still on screen for three and then black for two. Measured off
+   * the grabbed video -- Shift at tick 297, black at 301 and 302, the
+   * level running again at 303.
+   */
+  pressButton() {
+    if (!this.awaitingButton) return;
+    this.restartCountdown = RESTART_DELAY;
+  }
+  /** True on the tick the level should be built again. */
+  get restartDue() {
+    return this.restartCountdown === 0;
   }
   /**
    * Put the level back as it was and the Prince back at its start, which is
@@ -4480,7 +4498,7 @@ var Game = class _Game {
   }
   render() {
     this.surface.clear();
-    if (this.blankFrames > 0) {
+    if (this.blankFrames > 0 || this.restartCountdown >= 0 && this.restartCountdown <= 1) {
       this.drawStatusBar();
       return this.surface;
     }
@@ -4540,6 +4558,7 @@ var Game = class _Game {
 };
 var ROOM_CHANGE_BLANK = 1;
 var RESTART_PROMPT_DELAY = 45;
+var RESTART_DELAY = 5;
 var TILE_SWORD = TILE.sword;
 var TILE_FLOOR = TILE.floor;
 var FULL_HP_IMAGE = 217;
@@ -4718,6 +4737,10 @@ async function boot() {
       pressedSinceStep.clear();
       game.step(c);
       recorder.tick(c, game);
+      if (game.restartDue) {
+        void restart();
+        return;
+      }
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -4725,7 +4748,7 @@ async function boot() {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     const v = views[current];
     const type = game.scene.options.levelType ? "palace" : "dungeon";
-    status.textContent = game.isDead ? `${label(v)} \u2014 you are dead; press any direction to begin again` : watchRoom === null ? `${label(v)} (${type}) \u2014 ${CONTROLS}` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
+    status.textContent = game.awaitingButton ? `${label(v)} \u2014 you are dead; press Shift to begin again` : watchRoom === null ? `${label(v)} (${type}) \u2014 ${CONTROLS}` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
   }
   sceneSel.addEventListener("change", () => {
     sceneSel.blur();
@@ -4754,7 +4777,7 @@ async function boot() {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
-    if (game?.awaitingButton && dirs.includes("shift")) void restart();
+    if (dirs.includes("shift")) game?.pressButton();
   });
   window.addEventListener("keyup", (e) => {
     const dirs = directionsOf(e);
@@ -4785,7 +4808,7 @@ async function boot() {
       pressedSinceStep.add(d);
     } else held.delete(d);
     recorder.key(down ? "down" : "up", key);
-    if (down && game?.awaitingButton && d === "shift") void restart();
+    if (down && d === "shift") game?.pressButton();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
