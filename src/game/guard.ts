@@ -12,7 +12,11 @@ import type { CharacterState } from './character.ts';
 import { newCharacter, CHAR_ID, placeCharacter } from './character.ts';
 import type { CharacterDraw } from '../render/room.ts';
 import type { ExeTables, Frame } from './exe-tables.ts';
-import { startSequence, playSequence } from './sequence.ts';
+import {
+  startSequence, playSequence, ACTION, type SequenceEffects,
+} from './sequence.ts';
+import { forwardX } from './character.ts';
+import { determineColumn, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX } from './physics.ts';
 import type { LevelState } from './level-state.ts';
 import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_SIZE_X, Y_LAND } from './geometry.ts';
 
@@ -197,6 +201,66 @@ export function leaveGuard(guard: GuardState, guards: GuardsData): void {
     guards.seqHi[index] = 0;
   }
   guard.direction = NO_DIRECTION;
+}
+
+export interface GuardStepContext {
+  readonly tables: ExeTables;
+  readonly effects?: SequenceEffects;
+  /** Where the Prince is, which is all a guard reacts to so far. */
+  readonly kidRoom?: number;
+  readonly kidRow?: number;
+}
+
+/** The frame an idle guard holds, from sequence 77. */
+export const GUARD_FRAME_INACTIVE = 166;
+
+/**
+ * A guard that has not noticed the Prince yet stands on sequence 77, which
+ * holds frame 166 for ever. When the Prince turns up in his room, on his
+ * row, he comes on guard: sequence 55 draws the sword and settles into the
+ * en garde stance.
+ *
+ * This is as much as the captures settle. `tests/golden/session-level2-guard`
+ * shows the guard of room 4 doing exactly this and then holding the stance
+ * for twenty captures without advancing a step, with the Prince standing in
+ * the same room the whole time. What it does *not* settle is what makes him
+ * come on guard at that moment rather than when the Prince first walked in
+ * five captures earlier -- distance, or a reaction delay, or something
+ * else. Finding that out needs captures at several distances. Until then a
+ * guard draws his sword a little too eagerly and then, correctly, waits.
+ */
+function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
+  if (guard.alive >= 0 || guard.sword !== 0) return;
+  if (guard.frame !== GUARD_FRAME_INACTIVE) return;
+  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
+  guard.sword = 2;
+  startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
+}
+
+/**
+ * Advance a guard by one frame.
+ *
+ * A guard moves the same way the Prince does: its sequence is a byte-code
+ * program, and running one frame of it is what shifts the character. Until
+ * this existed nothing stepped a guard at all, so every guard in the game
+ * stood in its opening frame for ever -- which is why they are statues even
+ * though their sprites, their colours and their swords are all right.
+ *
+ * Beyond running the sequence, the only decision a guard makes so far is
+ * `comeOnGuard`. Advancing, retreating and striking -- the rest of
+ * `autocontrol_guard` -- are not written yet.
+ */
+export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
+  if (guard.direction === NO_DIRECTION) return;
+  comeOnGuard(guard, ctx);
+  playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
+  if (guard.action === ACTION.inFreefall) {
+    guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
+    guard.x = forwardX(guard, guard.fallX) & 0xff;
+  }
+  guard.y = (guard.y + guard.fallY) & 0xff;
+  const frame = guardFrame(guard, ctx.tables);
+  if (frame) guard.currentColumn = determineColumn(guard, frame);
 }
 
 /**

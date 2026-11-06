@@ -2282,229 +2282,6 @@ function playSequence(state, ctx) {
   throw new Error("sequence did not reach a frame");
 }
 
-// src/game/guard.ts
-var GUARD_SEQ = {
-  standInactive: 77,
-  activeAfterFall: 63,
-  enGarde: 55,
-  advance: 56,
-  retreat: 57,
-  strike: 58,
-  turn: 60,
-  readyBlock: 62,
-  strikeToBlock: 61,
-  blockToStrike: 66,
-  stabbed: 74,
-  dropDead: 71
-};
-var GUARD_TYPE = {
-  guard: 0,
-  fat: 1,
-  skeleton: 2,
-  vizier: 3,
-  shadow: 4,
-  none: -1
-};
-var GUARD_FILES = [
-  "GUARD.DAT",
-  "FAT.DAT",
-  "SKEL.DAT",
-  "VIZIER.DAT",
-  "SHADOW.DAT"
-];
-var GUARD_TYPE_BY_LEVEL = [
-  0,
-  0,
-  0,
-  2,
-  0,
-  0,
-  1,
-  0,
-  0,
-  0,
-  0,
-  0,
-  4,
-  3,
-  -1,
-  -1
-];
-var EXTRA_STRENGTH = [0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3];
-var NUM_GUARD_SKILLS = 12;
-function newGuard() {
-  return {
-    ...newCharacter({ charId: CHAR_ID.guard }),
-    skill: 0,
-    colour: 0,
-    hitPoints: 0,
-    maxHitPoints: 0,
-    // A guard that is not in the room faces nowhere.
-    direction: NO_DIRECTION
-  };
-}
-var NO_DIRECTION = 56;
-function positionGuards(level, guards) {
-  for (let room = 1; room <= 24; room++) {
-    const tile = guards.tile[room - 1];
-    if (tile >= 30) continue;
-    guards.x[room - 1] = X_BUMP[tile % 10 + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
-    guards.seqHi[room - 1] = 0;
-  }
-  void level;
-}
-function guardsFromLevel(specs) {
-  const pick = (f) => Uint8Array.from(specs.map(f));
-  return {
-    tile: pick((s) => s.tile),
-    dir: pick((s) => s.dir),
-    x: pick((s) => s.x),
-    seqLo: pick((s) => s.seqLo),
-    skill: pick((s) => s.skill),
-    seqHi: pick((s) => s.seqHi),
-    colour: pick((s) => s.color)
-  };
-}
-function enterGuard(guard, room, guards, ctx) {
-  const index = room - 1;
-  const tile = guards.tile[index];
-  if (tile >= 30) {
-    guard.direction = NO_DIRECTION;
-    return false;
-  }
-  guard.room = room;
-  guard.currentRow = Math.floor(tile / 10);
-  guard.y = Y_LAND[guard.currentRow + 1];
-  guard.x = guards.x[index];
-  guard.currentColumn = tile % 10;
-  guard.direction = guards.dir[index] << 24 >> 24;
-  guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 15 : 0;
-  guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
-  const seqHi = guards.seqHi[index];
-  if (seqHi === 0) {
-    if (guard.charId === CHAR_ID.skeleton) {
-      guard.sword = 2;
-      startSequence(guard, GUARD_SEQ.activeAfterFall, ctx.tables);
-    } else {
-      guard.sword = 0;
-      startSequence(guard, GUARD_SEQ.standInactive, ctx.tables);
-    }
-  } else {
-    guard.currentSequence = guards.seqLo[index] + (seqHi << 8);
-  }
-  playSequence(guard, { tables: ctx.tables });
-  guard.skill = guards.skill[index];
-  if (guard.skill >= NUM_GUARD_SKILLS) guard.skill = 3;
-  const dead = guard.frame === 185 || guard.frame === 177 || guard.frame === 178;
-  guard.alive = dead ? 1 : -1;
-  guard.hitPoints = dead ? 0 : (EXTRA_STRENGTH[guard.skill] ?? 0) + ctx.levelGuardHitPoints;
-  guard.maxHitPoints = guard.hitPoints;
-  guard.fallY = 0;
-  guard.fallX = 0;
-  guard.action = 1;
-  return true;
-}
-function leaveGuard(guard, guards) {
-  if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
-  const index = guard.room - 1;
-  guards.x[index] = guard.x;
-  guards.dir[index] = guard.direction & 255;
-  guards.skill[index] = guard.skill;
-  guards.colour[index] = guard.colour;
-  if (guard.alive < 0) {
-    guards.seqLo[index] = guard.currentSequence & 255;
-    guards.seqHi[index] = guard.currentSequence >> 8 & 255;
-  } else {
-    guards.seqHi[index] = 0;
-  }
-  guard.direction = NO_DIRECTION;
-}
-function guardFrame(guard, tables) {
-  const frame = guard.frame;
-  if (guard.charId === CHAR_ID.guard || guard.charId === CHAR_ID.skeleton) {
-    let add = 0;
-    if (frame >= 102 && frame < 107) add = 70;
-    const index = frame + add - 149;
-    if (index >= 0 && index < tables.frameTableGuard.length) {
-      return tables.frameTableGuard[index];
-    }
-  }
-  return tables.frameTableKid[frame] ?? null;
-}
-function guardDraw(guard, tables) {
-  if (guard.direction === NO_DIRECTION) return null;
-  const frame = guardFrame(guard, tables);
-  if (!frame) return null;
-  return placeCharacter(guard, frame, "guard");
-}
-
-// src/game/scene.ts
-var PALETTE_BASE = {
-  /** The default VGA colours; mono blits and the status bar use these. */
-  global: 0,
-  sword: 2 * 16,
-  flameSwordPotion: 3 * 16,
-  environment: 5 * 16,
-  environmentWall: 6 * 16,
-  kid: 7 * 16,
-  guard: 8 * 16
-};
-function tilesetFileFor(levelType, prefix = "V") {
-  return `${prefix}${levelType ? "PALACE" : "DUNGEON"}.DAT`;
-}
-async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
-  const constants = readExeConstants(exe);
-  const levelsDat = await assets.dat("LEVELS.DAT");
-  const resourceId = resourceIdOfLevel(levelNumber);
-  const level = parseLevel(levelsDat.get(resourceId), resourceId);
-  const levelType = constants.levelType[levelNumber] ?? 0;
-  const tilesetFile = tilesetFileFor(levelType, prefix);
-  const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
-  const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
-  const flameSwordPotion = await assets.group("PRINCE.DAT", 150, PALETTE_BASE.flameSwordPotion);
-  const kid = await assets.group("KID.DAT", 400, PALETTE_BASE.kid);
-  const sword = await assets.group("PRINCE.DAT", 700, PALETTE_BASE.sword);
-  const guardType = GUARD_TYPE_BY_LEVEL[levelNumber] ?? -1;
-  let guard;
-  let guardPalettes;
-  const guardFile = GUARD_FILES[guardType];
-  if (guardFile) {
-    const headerFile = guardType === 0 ? levelType ? "GUARD1.DAT" : "GUARD2.DAT" : guardFile;
-    guard = await assets.group(guardFile, 750, PALETTE_BASE.guard, false, headerFile);
-    const princeDat = await assets.dat("PRINCE.DAT");
-    guardPalettes = princeDat.get(10);
-  }
-  const screenPalette = new ScreenPalette();
-  screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
-  for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
-    screenPalette.loadBlock(set.paletteBase, set.palette.vga);
-  }
-  if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
-  const state = new LevelState(level);
-  const tiles = {
-    typeAt: (room, column, row) => state.typeAt(room, column, row),
-    modifierAt: (room, column, row) => state.modifierAt(room, column, row),
-    linkOf: (room, dir) => state.linkOf(room, dir)
-  };
-  return {
-    level,
-    state,
-    constants,
-    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword, guard },
-    guardType,
-    guardPalettes,
-    screenPalette,
-    tiles,
-    options: {
-      levelType,
-      topLevelEdgeTile: constants.drawnTileTopLevelEdge,
-      leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
-      enableWdaInPalace: constants.enableWdaInPalace,
-      startRoom: level.startRoom
-    }
-  };
-}
-
 // src/game/physics.ts
 var SCREENSPACE_X = 58;
 var TILE_RIGHT_X = 13;
@@ -2665,6 +2442,249 @@ function getEdgeDistance(world, state, frame, objX, spriteWidth) {
 }
 function floorHeightOfRow(row) {
   return Y_LAND[row + 1];
+}
+
+// src/game/guard.ts
+var GUARD_SEQ = {
+  standInactive: 77,
+  activeAfterFall: 63,
+  enGarde: 55,
+  advance: 56,
+  retreat: 57,
+  strike: 58,
+  turn: 60,
+  readyBlock: 62,
+  strikeToBlock: 61,
+  blockToStrike: 66,
+  stabbed: 74,
+  dropDead: 71
+};
+var GUARD_TYPE = {
+  guard: 0,
+  fat: 1,
+  skeleton: 2,
+  vizier: 3,
+  shadow: 4,
+  none: -1
+};
+var GUARD_FILES = [
+  "GUARD.DAT",
+  "FAT.DAT",
+  "SKEL.DAT",
+  "VIZIER.DAT",
+  "SHADOW.DAT"
+];
+var GUARD_TYPE_BY_LEVEL = [
+  0,
+  0,
+  0,
+  2,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  4,
+  3,
+  -1,
+  -1
+];
+var EXTRA_STRENGTH = [0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3];
+var NUM_GUARD_SKILLS = 12;
+function newGuard() {
+  return {
+    ...newCharacter({ charId: CHAR_ID.guard }),
+    skill: 0,
+    colour: 0,
+    hitPoints: 0,
+    maxHitPoints: 0,
+    // A guard that is not in the room faces nowhere.
+    direction: NO_DIRECTION
+  };
+}
+var NO_DIRECTION = 56;
+function positionGuards(level, guards) {
+  for (let room = 1; room <= 24; room++) {
+    const tile = guards.tile[room - 1];
+    if (tile >= 30) continue;
+    guards.x[room - 1] = X_BUMP[tile % 10 + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
+    guards.seqHi[room - 1] = 0;
+  }
+  void level;
+}
+function guardsFromLevel(specs) {
+  const pick = (f) => Uint8Array.from(specs.map(f));
+  return {
+    tile: pick((s) => s.tile),
+    dir: pick((s) => s.dir),
+    x: pick((s) => s.x),
+    seqLo: pick((s) => s.seqLo),
+    skill: pick((s) => s.skill),
+    seqHi: pick((s) => s.seqHi),
+    colour: pick((s) => s.color)
+  };
+}
+function enterGuard(guard, room, guards, ctx) {
+  const index = room - 1;
+  const tile = guards.tile[index];
+  if (tile >= 30) {
+    guard.direction = NO_DIRECTION;
+    return false;
+  }
+  guard.room = room;
+  guard.currentRow = Math.floor(tile / 10);
+  guard.y = Y_LAND[guard.currentRow + 1];
+  guard.x = guards.x[index];
+  guard.currentColumn = tile % 10;
+  guard.direction = guards.dir[index] << 24 >> 24;
+  guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 15 : 0;
+  guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
+  const seqHi = guards.seqHi[index];
+  if (seqHi === 0) {
+    if (guard.charId === CHAR_ID.skeleton) {
+      guard.sword = 2;
+      startSequence(guard, GUARD_SEQ.activeAfterFall, ctx.tables);
+    } else {
+      guard.sword = 0;
+      startSequence(guard, GUARD_SEQ.standInactive, ctx.tables);
+    }
+  } else {
+    guard.currentSequence = guards.seqLo[index] + (seqHi << 8);
+  }
+  playSequence(guard, { tables: ctx.tables });
+  guard.skill = guards.skill[index];
+  if (guard.skill >= NUM_GUARD_SKILLS) guard.skill = 3;
+  const dead = guard.frame === 185 || guard.frame === 177 || guard.frame === 178;
+  guard.alive = dead ? 1 : -1;
+  guard.hitPoints = dead ? 0 : (EXTRA_STRENGTH[guard.skill] ?? 0) + ctx.levelGuardHitPoints;
+  guard.maxHitPoints = guard.hitPoints;
+  guard.fallY = 0;
+  guard.fallX = 0;
+  guard.action = 1;
+  return true;
+}
+function leaveGuard(guard, guards) {
+  if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
+  const index = guard.room - 1;
+  guards.x[index] = guard.x;
+  guards.dir[index] = guard.direction & 255;
+  guards.skill[index] = guard.skill;
+  guards.colour[index] = guard.colour;
+  if (guard.alive < 0) {
+    guards.seqLo[index] = guard.currentSequence & 255;
+    guards.seqHi[index] = guard.currentSequence >> 8 & 255;
+  } else {
+    guards.seqHi[index] = 0;
+  }
+  guard.direction = NO_DIRECTION;
+}
+var GUARD_FRAME_INACTIVE = 166;
+function comeOnGuard(guard, ctx) {
+  if (guard.alive >= 0 || guard.sword !== 0) return;
+  if (guard.frame !== GUARD_FRAME_INACTIVE) return;
+  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
+  guard.sword = 2;
+  startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
+}
+function stepGuard(guard, ctx) {
+  if (guard.direction === NO_DIRECTION) return;
+  comeOnGuard(guard, ctx);
+  playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
+  if (guard.action === ACTION.inFreefall) {
+    guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
+    guard.x = forwardX(guard, guard.fallX) & 255;
+  }
+  guard.y = guard.y + guard.fallY & 255;
+  const frame = guardFrame(guard, ctx.tables);
+  if (frame) guard.currentColumn = determineColumn(guard, frame);
+}
+function guardFrame(guard, tables) {
+  const frame = guard.frame;
+  if (guard.charId === CHAR_ID.guard || guard.charId === CHAR_ID.skeleton) {
+    let add = 0;
+    if (frame >= 102 && frame < 107) add = 70;
+    const index = frame + add - 149;
+    if (index >= 0 && index < tables.frameTableGuard.length) {
+      return tables.frameTableGuard[index];
+    }
+  }
+  return tables.frameTableKid[frame] ?? null;
+}
+function guardDraw(guard, tables) {
+  if (guard.direction === NO_DIRECTION) return null;
+  const frame = guardFrame(guard, tables);
+  if (!frame) return null;
+  return placeCharacter(guard, frame, "guard");
+}
+
+// src/game/scene.ts
+var PALETTE_BASE = {
+  /** The default VGA colours; mono blits and the status bar use these. */
+  global: 0,
+  sword: 2 * 16,
+  flameSwordPotion: 3 * 16,
+  environment: 5 * 16,
+  environmentWall: 6 * 16,
+  kid: 7 * 16,
+  guard: 8 * 16
+};
+function tilesetFileFor(levelType, prefix = "V") {
+  return `${prefix}${levelType ? "PALACE" : "DUNGEON"}.DAT`;
+}
+async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
+  const constants = readExeConstants(exe);
+  const levelsDat = await assets.dat("LEVELS.DAT");
+  const resourceId = resourceIdOfLevel(levelNumber);
+  const level = parseLevel(levelsDat.get(resourceId), resourceId);
+  const levelType = constants.levelType[levelNumber] ?? 0;
+  const tilesetFile = tilesetFileFor(levelType, prefix);
+  const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
+  const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
+  const flameSwordPotion = await assets.group("PRINCE.DAT", 150, PALETTE_BASE.flameSwordPotion);
+  const kid = await assets.group("KID.DAT", 400, PALETTE_BASE.kid);
+  const sword = await assets.group("PRINCE.DAT", 700, PALETTE_BASE.sword);
+  const guardType = GUARD_TYPE_BY_LEVEL[levelNumber] ?? -1;
+  let guard;
+  let guardPalettes;
+  const guardFile = GUARD_FILES[guardType];
+  if (guardFile) {
+    const headerFile = guardType === 0 ? levelType ? "GUARD1.DAT" : "GUARD2.DAT" : guardFile;
+    guard = await assets.group(guardFile, 750, PALETTE_BASE.guard, false, headerFile);
+    const princeDat = await assets.dat("PRINCE.DAT");
+    guardPalettes = princeDat.get(10);
+  }
+  const screenPalette = new ScreenPalette();
+  screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
+  for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
+    screenPalette.loadBlock(set.paletteBase, set.palette.vga);
+  }
+  if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
+  const state = new LevelState(level);
+  const tiles = {
+    typeAt: (room, column, row) => state.typeAt(room, column, row),
+    modifierAt: (room, column, row) => state.modifierAt(room, column, row),
+    linkOf: (room, dir) => state.linkOf(room, dir)
+  };
+  return {
+    level,
+    state,
+    constants,
+    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword, guard },
+    guardType,
+    guardPalettes,
+    screenPalette,
+    tiles,
+    options: {
+      levelType,
+      topLevelEdgeTile: constants.drawnTileTopLevelEdge,
+      leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
+      enableWdaInPalace: constants.enableWdaInPalace,
+      startRoom: level.startRoom
+    }
+  };
 }
 
 // src/game/control-latch.ts
@@ -4018,6 +4038,12 @@ var Game = class _Game {
     this.traps.kidAlive = this.kid.alive;
     this.traps.step();
     stepKid(this.kid, controls, this.ctx);
+    stepGuard(this.guard, {
+      tables: this.tables,
+      effects: this.effects,
+      kidRoom: this.kid.room,
+      kidRow: this.kid.currentRow
+    });
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
   }

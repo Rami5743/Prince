@@ -86,11 +86,21 @@ one.
 
 ## Known to be unfinished
 
-* **Guard behaviour and sword fighting.** Guards are placed, coloured and
-  drawn, and they hold their swords correctly, but they do not act. In the
-  original this is `autocontrol_guard*` and `control_with_sword` in
-  `seg005.c`/`seg007.c` of the reference implementation. Nothing in
-  `src/game/guard.ts` decides anything yet.
+* **Guard behaviour and sword fighting.** A guard is now stepped every
+  frame -- until recently nothing stepped one at all, which is why they
+  stood in their opening frame for ever -- and he comes on guard when the
+  Prince turns up in his room on his row: sequence 55 draws the sword and
+  settles into the stance, which is what `tests/golden/session-level2-guard`
+  shows the original doing. He does nothing else. He does not advance,
+  retreat, strike or parry, and, most of all, **he does not stop the
+  Prince**: in the capture the original's Prince is still in that room
+  twenty captures after meeting the guard, while the port's runs straight
+  through him and out the far side.
+
+  What the capture does not settle is what makes a guard come on guard at
+  the moment he does -- he waited five captures after the Prince walked in
+  -- so the port draws its sword a little too eagerly. Captures at several
+  distances would settle it.
 * **Sound.** Not started. The sequence interpreter already reads the sound
   numbers out of the byte-code and hands them to `effects.sound`, which
   nothing listens to. `DIGISND*.DAT` / `MIDISND*.DAT` hold the samples and

@@ -16,7 +16,7 @@ import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
-  guardFrame, NO_DIRECTION, type GuardState, type GuardsData,
+  guardFrame, stepGuard, NO_DIRECTION, type GuardState, type GuardsData,
 } from './guard.ts';
 
 export interface GameOptions {
@@ -113,6 +113,12 @@ export class Game {
     this.traps.kidAlive = this.kid.alive;
     this.traps.step();
     stepKid(this.kid, controls, this.ctx);
+    stepGuard(this.guard, {
+      tables: this.tables,
+      effects: this.effects,
+      kidRoom: this.kid.room,
+      kidRow: this.kid.currentRow,
+    });
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
   }

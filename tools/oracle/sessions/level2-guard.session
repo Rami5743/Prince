@@ -1,0 +1,17 @@
+# What a guard does when the Prince walks up to him.
+#
+# Level 2 opens in room 5 facing left, and room 5's left neighbour is room 4,
+# which has a guard standing at its left end facing right. So a run to the
+# left is all it takes to meet one -- no navigation, nothing to drift.
+#
+# The Prince then stands still for a long stretch, twice. That is the point:
+# with no input at all, whatever happens on screen is the guard's own doing,
+# which is what `autocontrol_guard` has to reproduce.
+level 2
+cycles 400
+settle 40
+phase - 3
+phase l 10
+phase - 12
+phase l 4
+phase - 12

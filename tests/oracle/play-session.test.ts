@@ -55,6 +55,14 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // evidence for what docs/testing.md says about what a session can tell
   // you. Do not read it as a score.
   { name: 'level1-down', reproduces: 9 },
+
+  // The Prince walks up to the guard of level 2's room 4. 9 of 41, and the
+  // session is here for what it shows rather than for its count. What it
+  // shows is the one thing still missing: the original's Prince cannot get
+  // past the guard and is still in that room twenty captures later, while
+  // the port's runs straight through him and out the far side. Until a
+  // guard can stop him, nothing after the ninth capture is comparable.
+  { name: 'level2-guard', reproduces: 9 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */
