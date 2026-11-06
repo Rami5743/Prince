@@ -23,6 +23,8 @@ import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import type { Controls } from '../../src/game/kid.ts';
 import { Y_LAND } from '../../src/game/geometry.ts';
+import { TILE, TILE_TYPE_MASK } from '../../src/game/tiles.ts';
+import { FRAME_STAND } from '../../src/game/character.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -74,9 +76,10 @@ const Y_MAX = Y_LAND[Y_LAND.length - 1] + 80;
 /** A fall of three rows is fatal, so nothing legal falls for long. */
 const MAX_AIRBORNE = 60;
 
-const LEVELS = [1, 2, 3, 4, 5];
-const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
-const FRAMES = 600;
+/** Every level the game ships, including the two odd ones at the end. */
+const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const FRAMES = 900;
 
 describe('played badly, the Prince stays inside the world', () => {
   for (const level of LEVELS) {
@@ -108,6 +111,22 @@ describe('played badly, the Prince stays inside the world', () => {
           const falling = game.kid.fallY > 0;
           airborne = falling ? airborne + 1 : 0;
           expect(airborne, `${where(t)}: still falling`).toBeLessThan(MAX_AIRBORNE);
+
+          // Standing still, he cannot be inside a wall. This is the shape
+          // the first bug took -- walked through the wall at the end of a
+          // room -- stated as something that must not happen rather than as
+          // the one place it was noticed. Only the standing frame counts:
+          // a character hanging from a ledge is held at the floor height of
+          // the row above, and the tile he is hanging into is often a wall.
+          const standing = game.kid.frame === FRAME_STAND
+            && game.kid.fallY === 0
+            && game.kid.y === Y_LAND[game.kid.currentRow + 1];
+          if (standing && game.kid.currentColumn >= 0 && game.kid.currentColumn <= 9) {
+            const here = game.scene.tiles.typeAt(
+              game.kid.room, game.kid.currentColumn, game.kid.currentRow,
+            ) & TILE_TYPE_MASK;
+            expect(here, `${where(t)}: standing inside a wall`).not.toBe(TILE.wall);
+          }
         }
       }
     }, 120000);
