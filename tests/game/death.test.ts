@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
-import { Game } from '../../src/game/game.ts';
+import { Game, RESTART_PROMPT_DELAY } from '../../src/game/game.ts';
 import { standX, standY } from '../../src/game/geometry.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
@@ -113,5 +113,33 @@ describe('dying', () => {
     expect(game.hitPoints).toBe(0);
     game.damage(100);
     expect(game.hitPoints).toBe(0);
+  });
+
+  /**
+   * Dying does not at once offer the level again. The original waits and
+   * then puts `Press Button to Continue` up, and until it does, nothing
+   * starts the level over: in the grabbed video the Prince is struck down
+   * at tick 177, the words appear at 221, and the player's four direction
+   * presses in between do nothing at all.
+   */
+  it('waits before it will take the button', async () => {
+    const game = await Game.start(assets, exe, 3);
+    const none = { x: 0, y: 0, shift: false };
+    game.damage(100);
+    expect(game.isDead).toBe(true);
+    expect(game.awaitingButton, 'not straight away').toBe(false);
+    for (let i = 0; i < RESTART_PROMPT_DELAY - 1; i++) game.step(none);
+    expect(game.awaitingButton, 'nor a tick early').toBe(false);
+    game.step(none);
+    expect(game.awaitingButton, 'but then yes').toBe(true);
+  });
+
+  it('is not waiting for the button while he is alive', async () => {
+    const game = await Game.start(assets, exe, 3);
+    for (let i = 0; i < RESTART_PROMPT_DELAY * 2; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+    }
+    expect(game.isDead).toBe(false);
+    expect(game.awaitingButton).toBe(false);
   });
 });

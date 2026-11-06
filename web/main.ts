@@ -267,7 +267,10 @@ async function boot(): Promise<void> {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
-    if (game?.isDead) void restart();
+    // Shift is the original's `button`, and nothing but Shift continues
+    // after a death -- the player in the recording pressed four
+    // directions over ten seconds and the original ignored every one.
+    if (game?.awaitingButton && dirs.includes('shift')) void restart();
   });
   window.addEventListener('keyup', (e) => {
     const dirs = directionsOf(e);
@@ -293,7 +296,7 @@ async function boot(): Promise<void> {
     if (down) { held.add(d); pressedSinceStep.add(d); }
     else held.delete(d);
     recorder.key(down ? 'down' : 'up', key);
-    if (down && game?.isDead) void restart();
+    if (down && game?.awaitingButton && d === 'shift') void restart();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;

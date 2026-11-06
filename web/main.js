@@ -4225,6 +4225,8 @@ var Game = class _Game {
    * unreproduced.
    */
   blankFrames = 0;
+  /** Ticks since the Prince died, for the prompt that follows. */
+  deadTicks = 0;
   hitPoints;
   maxHitPoints;
   /**
@@ -4332,6 +4334,7 @@ var Game = class _Game {
       kidArmed: this.hasSword
     });
     this.resolveSwordplay();
+    if (this.isDead) this.deadTicks += 1;
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) {
       this.enterRoom(this.drawnRoom);
@@ -4376,6 +4379,18 @@ var Game = class _Game {
   /** True once the Prince is dead and the level is waiting to be restarted. */
   get isDead() {
     return this.hitPoints === 0 || this.kid.alive >= 0;
+  }
+  /**
+   * True once the original would be showing `Press Button to Continue`.
+   *
+   * It does not come up with the death: a grabbed video of the original
+   * has the Prince struck down at tick 177 and the words appear at 221,
+   * forty-five ticks later. Until they are up nothing restarts the level,
+   * which is why the player in that recording pressed four directions
+   * over the next ten seconds and nothing happened.
+   */
+  get awaitingButton() {
+    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY;
   }
   /**
    * Put the level back as it was and the Prince back at its start, which is
@@ -4524,6 +4539,7 @@ var Game = class _Game {
   }
 };
 var ROOM_CHANGE_BLANK = 1;
+var RESTART_PROMPT_DELAY = 45;
 var TILE_SWORD = TILE.sword;
 var TILE_FLOOR = TILE.floor;
 var FULL_HP_IMAGE = 217;
@@ -4738,7 +4754,7 @@ async function boot() {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
-    if (game?.isDead) void restart();
+    if (game?.awaitingButton && dirs.includes("shift")) void restart();
   });
   window.addEventListener("keyup", (e) => {
     const dirs = directionsOf(e);
@@ -4769,7 +4785,7 @@ async function boot() {
       pressedSinceStep.add(d);
     } else held.delete(d);
     recorder.key(down ? "down" : "up", key);
-    if (down && game?.isDead) void restart();
+    if (down && game?.awaitingButton && d === "shift") void restart();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;

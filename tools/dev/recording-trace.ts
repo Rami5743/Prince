@@ -25,10 +25,16 @@ const rec = parseRecording(readFileSync(path, 'utf8'));
 const ticks = decodeTimeline(rec.timeline);
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
-const game = await Game.start(assets, exe, rec.level);
+let game = await Game.start(assets, exe, rec.level);
 
 let prev = '';
 for (let t = 0; t < ticks.length; t++) {
+  // The page restarts the level when the button -- Shift -- is pressed
+  // after a death, and so does the original. Without it a replay stops
+  // dead at the first mistake and everything after it is noise.
+  if (game.awaitingButton && ticks[t].shift && !(ticks[t - 1]?.shift)) {
+    game = await game.restart(assets, exe);
+  }
   game.step(ticks[t]);
   const k = game.kid;
   const c = ticks[t];

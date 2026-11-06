@@ -44,6 +44,8 @@ export class Game {
    * unreproduced.
    */
   private blankFrames = 0;
+  /** Ticks since the Prince died, for the prompt that follows. */
+  private deadTicks = 0;
   hitPoints: number;
   maxHitPoints: number;
   /**
@@ -158,6 +160,7 @@ export class Game {
       kidArmed: this.hasSword,
     });
     this.resolveSwordplay();
+    if (this.isDead) this.deadTicks += 1;
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) {
       this.enterRoom(this.drawnRoom);
@@ -212,6 +215,19 @@ export class Game {
   /** True once the Prince is dead and the level is waiting to be restarted. */
   get isDead(): boolean {
     return this.hitPoints === 0 || this.kid.alive >= 0;
+  }
+
+  /**
+   * True once the original would be showing `Press Button to Continue`.
+   *
+   * It does not come up with the death: a grabbed video of the original
+   * has the Prince struck down at tick 177 and the words appear at 221,
+   * forty-five ticks later. Until they are up nothing restarts the level,
+   * which is why the player in that recording pressed four directions
+   * over the next ten seconds and nothing happened.
+   */
+  get awaitingButton(): boolean {
+    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY;
   }
 
   /**
@@ -399,6 +415,12 @@ export class Game {
  * settles it the other way.
  */
 export const ROOM_CHANGE_BLANK = 1;
+
+/**
+ * Ticks between the Prince dying and `Press Button to Continue`. Counted
+ * off the grabbed video: struck down at tick 177, words up at 221.
+ */
+export const RESTART_PROMPT_DELAY = 45;
 
 const TILE_SWORD = TILE.sword;
 const TILE_FLOOR = TILE.floor;
