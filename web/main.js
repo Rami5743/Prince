@@ -2972,7 +2972,7 @@ var EMPTY_HP_IMAGE = 218;
 var HP_TOP_Y = 194;
 
 // web/main.ts
-var DATA_URL = "../original/prince1";
+var DATA_URL = window.__princeDataUrl ?? "../original/prince1";
 var FRAMES_PER_SECOND = 12;
 async function boot() {
   const canvas = document.getElementById("screen");
@@ -2981,8 +2981,10 @@ async function boot() {
   const aspectSel = document.getElementById("aspect");
   const status = document.getElementById("status");
   const display = new Display(canvas);
-  const assets = new Assets(browserFetcher(DATA_URL));
-  const exe = new Uint8Array(await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer());
+  const custom = window.__princeFetcher;
+  const fetchFile = custom ?? browserFetcher(DATA_URL);
+  const assets = new Assets(fetchFile);
+  const exe = await fetchFile("UNCRKD.EXE");
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
   const title = await assets.group("TITLE.DAT", 50);
@@ -3067,6 +3069,15 @@ async function boot() {
     if (KEYS.has(e.key)) held.delete(e.key);
   });
   window.addEventListener("blur", () => held.clear());
+  const w0 = window;
+  w0.__princeHold = (key, down) => {
+    if (down) held.add(key);
+    else held.delete(key);
+    if (down && watchRoom !== null && game) {
+      watchRoom = null;
+      game.drawnRoom = game.kid.room;
+    }
+  };
   await select(0);
   setInterval(frame, 1e3 / FRAMES_PER_SECOND);
   const w = window;
@@ -3091,6 +3102,7 @@ async function boot() {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     return { ...game.kid };
   };
+  w.__princeLevel = () => views[current].kind === "level" ? views[current].level : 0;
   w.__princeReady = true;
   void RoomRenderer;
 }

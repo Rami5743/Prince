@@ -9,7 +9,9 @@ import { RoomRenderer } from '../src/render/room.ts';
 import { Game } from '../src/game/game.ts';
 import type { Controls } from '../src/game/kid.ts';
 
-const DATA_URL = '../original/prince1';
+const DATA_URL =
+  (window as unknown as { __princeDataUrl?: string }).__princeDataUrl
+  ?? '../original/prince1';
 /** The original ran its game loop at this rate. */
 const FRAMES_PER_SECOND = 12;
 
@@ -21,8 +23,14 @@ async function boot(): Promise<void> {
   const status = document.getElementById('status') as HTMLElement;
 
   const display = new Display(canvas);
-  const assets = new Assets(browserFetcher(DATA_URL));
-  const exe = new Uint8Array(await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer());
+  // A host that cannot serve the game's own file types can supply the files
+  // another way; the page provides a fetcher and this uses it.
+  const custom = (window as unknown as {
+    __princeFetcher?: (name: string) => Promise<Uint8Array>;
+  }).__princeFetcher;
+  const fetchFile = custom ?? browserFetcher(DATA_URL);
+  const assets = new Assets(fetchFile);
+  const exe = await fetchFile('UNCRKD.EXE');
 
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
@@ -123,6 +131,17 @@ async function boot(): Promise<void> {
   });
   window.addEventListener('blur', () => held.clear());
 
+  // Touch controls, for playing without a keyboard.
+  const w0 = window as unknown as Record<string, unknown>;
+  w0.__princeHold = (key: string, down: boolean): void => {
+    if (down) held.add(key);
+    else held.delete(key);
+    if (down && watchRoom !== null && game) {
+      watchRoom = null;
+      game.drawnRoom = game.kid.room;
+    }
+  };
+
   await select(0);
   setInterval(frame, 1000 / FRAMES_PER_SECOND);
 
@@ -149,6 +168,8 @@ async function boot(): Promise<void> {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     return { ...game.kid };
   };
+  w.__princeLevel = () => (views[current].kind === 'level'
+    ? (views[current] as { level: number }).level : 0);
   w.__princeReady = true;
   void RoomRenderer;
 }
