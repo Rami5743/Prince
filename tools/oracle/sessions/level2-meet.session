@@ -1,0 +1,17 @@
+# Does a guard stop the Prince, and what happens when he reaches one?
+#
+# The same room as level2-guard, but the run left is not interrupted: the
+# two loose floors at columns 7 and 8 are crossed at speed instead of being
+# stood on, so the Prince carries on to the guard at the far end rather than
+# dropping through the floor half way.
+#
+# Then a long stand, to see what the two of them do with no input at all,
+# and a second push left into the guard.
+level 2
+cycles 400
+settle 40
+phase - 3
+phase l 20
+phase - 12
+phase l 8
+phase - 12

@@ -209,7 +209,16 @@ export interface GuardStepContext {
   /** Where the Prince is, which is all a guard reacts to so far. */
   readonly kidRoom?: number;
   readonly kidRow?: number;
+  readonly kidX?: number;
 }
+
+/**
+ * How close a guard means to get. Beyond this he walks in; within it he
+ * holds his stance. Read off `tests/golden/session-level2-meet`, where the
+ * guard leaves his corner and closes to about a tile and a half of the
+ * Prince before stopping.
+ */
+export const GUARD_REACH = 21;
 
 /** The frame an idle guard holds, from sequence 77. */
 export const GUARD_FRAME_INACTIVE = 166;
@@ -237,6 +246,37 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
 
+/** The frames of the en garde stance, which a guard holds between moves. */
+const EN_GARDE_FIRST = 170;
+const EN_GARDE_LAST = 171;
+
+/**
+ * A guard who is on guard walks in on the Prince.
+ *
+ * `session-level2-meet` shows it plainly: the Prince stops a few tiles
+ * away, the guard draws his sword and then closes the distance a step at a
+ * time until the two are within a sword's length of each other, and holds
+ * there. Sequence 56 is the step, and it ends back on the stance, so one
+ * call per step is all this needs.
+ *
+ * What is still missing from the capture is everything after the two of
+ * them meet -- the striking, the blocking and the damage. The guard here
+ * therefore walks up and waits.
+ */
+function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
+  if (guard.alive >= 0 || guard.sword !== 2) return;
+  if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
+  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
+  if (ctx.kidX === undefined) return;
+  const gap = ctx.kidX - guard.x;
+  if (Math.abs(gap) <= GUARD_REACH) return;
+  // Only forwards. Turning to face the other way is its own sequence and
+  // the captures have not pinned when a guard decides to use it.
+  const towards = gap > 0 ? 0 : -1;
+  if (guard.direction !== towards) return;
+  startSequence(guard, GUARD_SEQ.advance, ctx.tables);
+}
+
 /**
  * Advance a guard by one frame.
  *
@@ -253,6 +293,7 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
 export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.direction === NO_DIRECTION) return;
   comeOnGuard(guard, ctx);
+  advanceOnKid(guard, ctx);
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
   if (guard.action === ACTION.inFreefall) {
     guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);

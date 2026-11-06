@@ -118,6 +118,7 @@ export class Game {
       effects: this.effects,
       kidRoom: this.kid.room,
       kidRow: this.kid.currentRow,
+      kidX: this.kid.x,
     });
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);

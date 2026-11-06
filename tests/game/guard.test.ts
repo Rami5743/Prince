@@ -17,9 +17,11 @@ import { GAME_DIR, goldenFrame, toCaptureSpace } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { Surface } from '../../src/render/surface.ts';
 import { Game } from '../../src/game/game.ts';
-import { NO_DIRECTION, guardFrame, GUARD_TYPE_BY_LEVEL } from '../../src/game/guard.ts';
+import {
+  NO_DIRECTION, guardFrame, GUARD_TYPE_BY_LEVEL, GUARD_REACH,
+} from '../../src/game/guard.ts';
 import { placeSword } from '../../src/game/character.ts';
-import { toScreenX } from '../../src/game/geometry.ts';
+import { toScreenX, standX, standY } from '../../src/game/geometry.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -115,5 +117,72 @@ describe('guards', () => {
       const game = await Game.start(assets, exe, level);
       expect(Boolean(game.scene.chtabs.guard), `level ${level}`).toBe(expected);
     }
+  });
+});
+
+/**
+ * What a guard does on his own.
+ *
+ * `tests/golden/session-level2-meet` is a capture of the Prince walking up
+ * to the guard of level 2's room 4. It shows him idle, then coming on
+ * guard, then leaving his corner and closing the distance a step at a time
+ * until the two are within a sword's length, and holding there. These pin
+ * the shape of that. The fight that follows it in the capture -- the
+ * striking, the blocking, the hit that costs the Prince a point -- is not
+ * written yet.
+ */
+describe('a guard left to himself', () => {
+  async function inRoomFour(): Promise<Game> {
+    const game = await Game.start(assets, exe, 2);
+    game.showRoom(4);
+    return game;
+  }
+
+  it('stands idle until the Prince turns up on his row', async () => {
+    const game = await inRoomFour();
+    expect(game.guard.sword).toBe(0);
+    // The Prince is still in room 5; the guard has no reason to stir.
+    for (let i = 0; i < 20; i++) game.step({ x: 0, y: 0, shift: false });
+    expect(game.guard.sword).toBe(0);
+    expect(game.guard.frame).toBe(166);
+  });
+
+  it('comes on guard when the Prince is in his room on his row', async () => {
+    const game = await inRoomFour();
+    game.kid.room = 4;
+    game.kid.currentRow = game.guard.currentRow;
+    const frames: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+      frames.push(game.guard.frame);
+    }
+    expect(game.guard.sword).toBe(2);
+    // 207..210 draw the sword; the stance that follows is 170/171.
+    expect(frames.filter((f) => f >= 207 && f <= 210).length).toBeGreaterThan(0);
+    expect(frames[frames.length - 1]).toBeGreaterThanOrEqual(170);
+    expect(frames[frames.length - 1]).toBeLessThanOrEqual(171);
+  });
+
+  it('closes the distance and then holds', async () => {
+    const game = await inRoomFour();
+    // Column 6 of that row is plain floor. Columns 7 and 8 are loose, and
+    // a Prince parked on one of those drops through it, which ends the
+    // test for a reason that has nothing to do with guards.
+    const STAND = standX(6);
+    const hold = (): void => {
+      game.kid.room = 4;
+      game.kid.currentRow = game.guard.currentRow;
+      game.kid.x = STAND;
+      game.kid.y = standY(game.guard.currentRow);
+      game.kid.fallY = 0;
+    };
+    hold();
+    const startX = game.guard.x;
+    for (let i = 0; i < 80; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+      hold(); // this test is about the guard; keep the Prince put
+    }
+    expect(game.guard.x).toBeGreaterThan(startX);
+    expect(Math.abs(STAND - game.guard.x)).toBeLessThanOrEqual(GUARD_REACH);
   });
 });

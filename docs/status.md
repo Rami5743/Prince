@@ -92,8 +92,21 @@ one.
   Prince turns up in his room on his row: sequence 55 draws the sword and
   settles into the stance, which is what `tests/golden/session-level2-guard`
   shows the original doing. He does nothing else. He does not advance,
-  retreat, strike or parry, and nothing stops the Prince walking through
-  him.
+  strike or parry, and nothing stops the Prince walking through him. He
+  does now walk in: `session-level2-meet` shows the original's guard
+  leaving his corner once he is on guard and closing to about a sword's
+  length, and the port does the same. He will not turn round, so a Prince
+  who gets behind him is ignored; the capture has not pinned when a guard
+  decides to turn.
+
+  The fight itself is the next piece and the capture has it in full: the
+  guard closes, strikes, the Prince is hit -- the red star, and a hit point
+  gone -- and gives ground. Writing it needs the striking, the blocking and
+  the damage, and none of it is there. Be careful about the order it is
+  done in: a guard who can stop the Prince but cannot be beaten makes every
+  level after the first unfinishable, which is worse to play than a guard
+  who can be walked through. Either do the whole fight or leave him
+  passable.
 
   Be careful reading `session-level2-guard` on that last point: it does
   *not* show the original stopping the Prince at the guard. I claimed it

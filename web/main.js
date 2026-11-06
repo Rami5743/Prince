@@ -2581,6 +2581,7 @@ function leaveGuard(guard, guards) {
   }
   guard.direction = NO_DIRECTION;
 }
+var GUARD_REACH = 21;
 var GUARD_FRAME_INACTIVE = 166;
 function comeOnGuard(guard, ctx) {
   if (guard.alive >= 0 || guard.sword !== 0) return;
@@ -2589,9 +2590,23 @@ function comeOnGuard(guard, ctx) {
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
+var EN_GARDE_FIRST = 170;
+var EN_GARDE_LAST = 171;
+function advanceOnKid(guard, ctx) {
+  if (guard.alive >= 0 || guard.sword !== 2) return;
+  if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
+  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
+  if (ctx.kidX === void 0) return;
+  const gap = ctx.kidX - guard.x;
+  if (Math.abs(gap) <= GUARD_REACH) return;
+  const towards = gap > 0 ? 0 : -1;
+  if (guard.direction !== towards) return;
+  startSequence(guard, GUARD_SEQ.advance, ctx.tables);
+}
 function stepGuard(guard, ctx) {
   if (guard.direction === NO_DIRECTION) return;
   comeOnGuard(guard, ctx);
+  advanceOnKid(guard, ctx);
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
   if (guard.action === ACTION.inFreefall) {
     guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
@@ -4042,7 +4057,8 @@ var Game = class _Game {
       tables: this.tables,
       effects: this.effects,
       kidRoom: this.kid.room,
-      kidRow: this.kid.currentRow
+      kidRow: this.kid.currentRow,
+      kidX: this.kid.x
     });
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);

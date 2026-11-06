@@ -68,6 +68,15 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // The two also part company at the ninth capture, where the original
   // blanks the screen to change room and the port does not.
   { name: 'level2-guard', reproduces: 9 },
+
+  // The same room, with the run left not interrupted, so the Prince
+  // crosses the loose floors at speed and reaches the guard. 9 of 55 --
+  // the two part at the room change, as above -- and like the other guard
+  // session it is here for what it shows: the guard leaves his corner,
+  // closes on the Prince and then fights him, with the Prince taking a hit
+  // and giving ground. The closing is now reproduced; the fight is not
+  // written at all. 9 of 55.
+  { name: 'level2-meet', reproduces: 9 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */
