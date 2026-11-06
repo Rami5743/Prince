@@ -4089,6 +4089,14 @@ var Game = class _Game {
   surface = new Surface();
   /** The room the view is showing. */
   drawnRoom;
+  /**
+   * Frames left of the blank the original shows while it changes room.
+   * Three of the four capture sets have two or three solid black frames in
+   * them at exactly the moment the view moves; the port used to draw the
+   * new room straight away, which is why those captures were recorded as
+   * unreproduced.
+   */
+  blankFrames = 0;
   hitPoints;
   maxHitPoints;
   traps;
@@ -4175,7 +4183,12 @@ var Game = class _Game {
     });
     this.resolveSwordplay();
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
-    if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+    if (this.drawnRoom !== wasDrawing) {
+      this.enterRoom(this.drawnRoom);
+      this.blankFrames = ROOM_CHANGE_BLANK;
+    } else if (this.blankFrames > 0) {
+      this.blankFrames -= 1;
+    }
   }
   /**
    * A lunge that reaches an opponent who is not blocking costs him a hit
@@ -4302,6 +4315,10 @@ var Game = class _Game {
   }
   render() {
     this.surface.clear();
+    if (this.blankFrames > 0) {
+      this.drawStatusBar();
+      return this.surface;
+    }
     const characters = [];
     if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
       const draw = guardDraw(this.guard, this.tables);
@@ -4350,6 +4367,7 @@ var Game = class _Game {
     }
   }
 };
+var ROOM_CHANGE_BLANK = 1;
 var FULL_HP_IMAGE = 217;
 var EMPTY_HP_IMAGE = 218;
 var HP_TOP_Y = 194;

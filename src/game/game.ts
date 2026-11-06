@@ -36,6 +36,14 @@ export class Game {
   readonly surface = new Surface();
   /** The room the view is showing. */
   drawnRoom: number;
+  /**
+   * Frames left of the blank the original shows while it changes room.
+   * Three of the four capture sets have two or three solid black frames in
+   * them at exactly the moment the view moves; the port used to draw the
+   * new room straight away, which is why those captures were recorded as
+   * unreproduced.
+   */
+  private blankFrames = 0;
   hitPoints: number;
   maxHitPoints: number;
   readonly traps: Traps;
@@ -128,7 +136,12 @@ export class Game {
     });
     this.resolveSwordplay();
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
-    if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+    if (this.drawnRoom !== wasDrawing) {
+      this.enterRoom(this.drawnRoom);
+      this.blankFrames = ROOM_CHANGE_BLANK;
+    } else if (this.blankFrames > 0) {
+      this.blankFrames -= 1;
+    }
   }
 
   /**
@@ -266,6 +279,13 @@ export class Game {
 
   render(): Surface {
     this.surface.clear();
+    // While the view is changing room the original shows no room -- but it
+    // keeps the hit points below it. The captures of those frames are black
+    // everywhere except the bottom few rows.
+    if (this.blankFrames > 0) {
+      this.drawStatusBar();
+      return this.surface;
+    }
     const characters: CharacterDraw[] = [];
 
     if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
@@ -320,6 +340,13 @@ export class Game {
     }
   }
 }
+
+/**
+ * How many frames the screen stays blank when the view changes room. Read
+ * off the captures, which hold two or three black frames at that moment --
+ * at the speed they were taken that is a couple of ticks either way.
+ */
+export const ROOM_CHANGE_BLANK = 1;
 
 /** Sprite ids of the full and empty hit point markers in the Prince's group. */
 const FULL_HP_IMAGE = 217;

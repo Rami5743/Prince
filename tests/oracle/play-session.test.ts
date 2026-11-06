@@ -33,13 +33,12 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   //              Unexplained, and recorded rather than excused.
   //  s025        the tick the bump lands on. The port bumps a tick away from
   //              where the original does; the frames either side of it match.
-  //  s035..s038  the original blanks the screen while it changes room, and
-  //              the port does not: two of these captures are black and one
-  //              caught the palette part way through. Known, and listed in
-  //              docs/status.md.
+  //  s035, s038  the room change. s036 and s037 are the blank, which the
+  //              port now shows too; s038 caught the palette part way
+  //              through the change and is not reproducible.
   //  s039..s050  after that room change. Five to seven hundred pixels out,
   //              not yet looked into.
-  { name: 'level1-open', reproduces: 32 },
+  { name: 'level1-open', reproduces: 34 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
   // 34 of 54. All three careful steps are reproduced exactly, and so is the

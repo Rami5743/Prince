@@ -107,9 +107,11 @@ function matchingStep(file: string): Step | null {
  * Which simulated frame reproduces each capture. Pinned, so that a change to
  * the engine that shifts the timing shows up here.
  *
- * jump05, jump06 and jump07 are black: the original blanks the screen while
- * it changes room, and the port does not. Left unexplained rather than
- * excused.
+ * jump05, jump06 and jump07 are the blank the original shows while it
+ * changes room -- black everywhere but the hit points along the bottom.
+ * All three fall inside one tick of the port's clock, which is why they
+ * reproduce on the same frame: at the speed these were captured, three
+ * captures can land inside a single tick.
  */
 const EXPECTED: Record<string, number | null> = {
   'jump00.png': 7,
@@ -117,9 +119,9 @@ const EXPECTED: Record<string, number | null> = {
   'jump02.png': 18,
   'jump03.png': 21,
   'jump04.png': 24,
-  'jump05.png': null,
-  'jump06.png': null,
-  'jump07.png': null,
+  'jump05.png': 27,
+  'jump06.png': 27,
+  'jump07.png': 27,
   'jump08.png': 28,
   'jump09.png': 31,
   'jump10.png': 35,
@@ -138,8 +140,12 @@ describe('the running jump, against the original', () => {
   });
 
   it('the frames of the jump are reproduced in the order they were captured', () => {
-    const order = ['jump02.png', 'jump03.png', 'jump04.png', 'jump08.png', 'jump09.png']
-      .map((f) => matchingStep(f)?.step ?? -1);
+    // The three blank frames share a tick, so they are compared as a group
+    // rather than against each other.
+    const order = [
+      'jump02.png', 'jump03.png', 'jump04.png', 'jump05.png', 'jump08.png',
+      'jump09.png',
+    ].map((f) => matchingStep(f)?.step ?? -1);
     for (let i = 1; i < order.length; i++) {
       expect(order[i]).toBeGreaterThan(order[i - 1]);
     }
