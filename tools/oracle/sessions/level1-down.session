@@ -1,0 +1,23 @@
+# Down, which nothing covers yet: crouching, and climbing down over an edge.
+#
+# The same three careful steps as level1-grab put the Prince at the edge of
+# the middle row of level 1, with the floor dropping away in front of him.
+# Down there should crouch or take him over the edge; Down with Shift is the
+# original's careful way down. Then Shift on its own, to see what he does
+# hanging from what he has climbed down on to.
+level 1
+cycles 400
+settle 40
+phase - 3
+phase rs 3
+phase - 2
+phase rs 3
+phase - 2
+phase rs 3
+phase - 3
+phase d 6
+phase - 3
+phase ds 8
+phase - 4
+phase s 4
+phase - 4

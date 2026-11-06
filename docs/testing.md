@@ -196,6 +196,31 @@ node tools/oracle/make_session_script.mjs tools/oracle/sessions/level1-open.sess
 That prints the capture command to run. The captures are committed under
 `tests/golden/session-<name>/`.
 
+### What a session can and cannot tell you
+
+Two capture runs of the same session do not agree frame for frame. The
+emulator is driven by wall-clock key events, so a `keydown` lands on
+whichever game tick it happens to land on, and a move that begins a tick
+earlier ends somewhere else. `tests/golden/session-level1-grab` and
+`tests/golden/session-level1-down` open with exactly the same input, and
+their captures agree -- torch flames aside -- only as far as the eighth.
+After that the second careful step of one run starts from a different place
+than the other's and they part company by a couple of thousand pixels.
+
+So a session's count is a lower bound and a regression guard, not a score.
+What it is good for is *categorical* differences: the Prince fell through
+the floor where the original stood still, he never climbed where the
+original climbed. Those were all four of the bugs the sessions have found,
+and none of them is sensitive to a tick either way. A difference of a few
+pixels in one capture, on the other hand, usually means the two runs were a
+tick apart, and chasing it is a waste of a day.
+
+Two things follow for writing a session. Let each phase settle -- end it
+with the Prince standing still -- so the next one starts from the same
+place in both. And press the modifier before the direction, which the
+generator does: if a bare arrow key reaches the game even for one tick, the
+Prince runs where the session asked him to step.
+
 ### How the two clocks are lined up
 
 The original runs in real time under the emulator and the port runs tick by

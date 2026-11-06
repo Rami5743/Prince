@@ -13,10 +13,10 @@ file.
 ## The short version
 
 The game is playable in a browser from the original's own files. Standing,
-turning, running, stepping carefully, every jump, grabbing a ledge, hanging,
-climbing, falling, landing and dying are in, and so are the traps and the
-guards as figures in the rooms. **Guard behaviour, sword fighting and sound
-are not written yet** — those are the next pieces.
+turning, running, stepping carefully, every jump, walking into a wall,
+grabbing a ledge, hanging, climbing, falling, landing and dying are in, and
+so are the traps and the guards as figures in the rooms. **Guard behaviour,
+sword fighting and sound are not written yet** — those are the next pieces.
 
 Play it at <https://rami5743.github.io/Prince/>.
 
@@ -41,6 +41,7 @@ equal — see [docs/testing.md](testing.md).
 | Walking into a wall | `tests/game/run.test.ts`, `tests/oracle/play-session.test.ts` |
 | Taking hold of a ledge and climbing it | `tests/oracle/play-session.test.ts` |
 | Two whole play sessions on level 1 | `tests/oracle/play-session.test.ts` |
+| A held Up climbing and carrying on | `tests/game/hang.test.ts` |
 | Nothing leaves the world, however badly it is played | `tests/game/fuzz.test.ts` |
 
 `npm test` runs all of it; `npm run typecheck` is separate. Both should be
@@ -57,7 +58,18 @@ capture it cannot reproduce and carries on, so one run names every place the
 port and the original part company. See [docs/testing.md](testing.md) §5.
 
 Level 1's opening reproduces 32 of its 51 captures and the climbing session
-26 of its 54; the test lists what the rest are. Both found real bugs.
+34 of its 54; the test lists what the rest are. Between them they found
+four real bugs, every one of them reachable in the first ten seconds of
+play and none of them visible to the move-by-move comparisons:
+
+* the Prince walked through the wall at the end of a room and fell into the
+  room below -- nothing in the port ever set `ACTION.bumped`;
+* once that was stopped, the bump fired in mid-air too and pushed a falling
+  Prince sideways through the floor;
+* a smashed floor left no rubble where it landed;
+* Up on its own would not take hold of a ledge, so climbing was impossible
+  unless the player knew to hold Shift -- and even then it stopped dead at
+  the top instead of carrying on while the key was down.
 
 A session's key order matters: the generator presses Shift before the
 direction and releases it after, because if a bare arrow key reaches the

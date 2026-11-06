@@ -45,6 +45,16 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // 34 of 54. All three careful steps are reproduced exactly, and so is the
   // climb and the jumping that follows it while the key stays down.
   { name: 'level1-grab', reproduces: 34 },
+
+  // The same opening as level1-grab, then Down and Down with Shift. 9 of
+  // 48, and that number is mostly about the capture rather than the port:
+  // this run's second careful step began a tick from where the other run's
+  // did, so from its ninth capture it is in a different place and stays
+  // there. It is kept as a deterministic regression guard -- the captures
+  // are fixed, so the count only moves if the port does -- and as the
+  // evidence for what docs/testing.md says about what a session can tell
+  // you. Do not read it as a score.
+  { name: 'level1-down', reproduces: 9 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */
