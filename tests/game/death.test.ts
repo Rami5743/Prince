@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { Game, RESTART_PROMPT_DELAY, RESTART_DELAY } from '../../src/game/game.ts';
+import { TILE } from '../../src/game/tiles.ts';
 import { standX, standY } from '../../src/game/geometry.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
@@ -150,6 +151,28 @@ describe('dying', () => {
     // Nothing for the first four, then the one tick it falls due on.
     expect(due.indexOf(true)).toBe(RESTART_DELAY - 1);
     expect(due.filter(Boolean)).toHaveLength(1);
+  });
+
+  /**
+   * Blades that are out kill whoever is standing in them. The rule used to
+   * be the other way round -- a runner, and only while they were on their
+   * way up -- so the Prince could stand in a full set of them for ever. A
+   * grabbed video of the recorded play has the original killing him on the
+   * spot in this very room while the port had him standing there unhurt.
+   */
+  it('standing in spikes that are out is fatal', async () => {
+    const game = await Game.start(assets, exe, 1);
+    const none = { x: 0, y: 0, shift: false };
+    // Level 1, room 6: column 3 of the bottom row is a spike.
+    expect(game.scene.state.typeAt(6, 3, 2)).toBe(TILE.spike);
+    game.showRoom(6);
+    const kid = game.kid;
+    kid.room = 6; kid.currentRow = 2; kid.currentColumn = 3;
+    kid.x = standX(3); kid.y = standY(2);
+    kid.direction = 0; kid.frame = 15; kid.action = 0;
+    kid.fallX = 0; kid.fallY = 0;
+    for (let i = 0; i < 20 && !game.isDead; i++) game.step(none);
+    expect(game.isDead, 'the spikes come out and he is on them').toBe(true);
   });
 
   it('is not waiting for the button while he is alive', async () => {

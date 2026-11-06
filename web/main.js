@@ -3523,11 +3523,15 @@ function checkSpiked(state, ctx) {
   const t = tileHere(state, ctx);
   if (t.type !== TILE.spike || !t.room) return;
   const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
+  if (harm === 0) return;
   const f = state.frame;
-  const running = f >= 7 && f < 15 || f >= 34 && f < 40;
-  if (harm >= 2 && running || (f === 43 || f === 26) && harm !== 0) {
+  if (f === 43 || f === 26) {
     state.alive = 0;
+    return;
   }
+  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
+  const running = f >= 7 && f < 15 || f >= 34 && f < 40;
+  if (harm >= 2 || !running) state.alive = 0;
 }
 function checkPickUpSword(state, ctx) {
   if (state.alive >= 0 || !ctx.hasSword || ctx.hasSword()) return;

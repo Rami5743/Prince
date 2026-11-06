@@ -767,17 +767,37 @@ function checkSpikeBelow(state: CharacterState, ctx: KidContext): void {
   }
 }
 
-/** Running onto spikes that are out is fatal. */
+/**
+ * Spikes that are out kill whoever is standing in them.
+ *
+ * This used to be the other way round -- only a *runner* was killed, and
+ * only by spikes on their way up -- which let the Prince stand in a full
+ * set of blades indefinitely. A grabbed video of the recorded play shows
+ * what the original does with that: he walks into the spikes of level 1's
+ * room 6, is killed on the spot, and the words come up. The port had him
+ * standing in them for forty ticks, unhurt, and the two runs had nothing
+ * to do with each other from there on.
+ *
+ * What is safe is running across. That is the trick the original is known
+ * for and `spikeHarm` is built around it: 1 means the blades are out and
+ * a runner clears them, 2 means they are coming up and catch even him.
+ * Clearing them in the air is safe too, except on the two frames that
+ * land in them.
+ */
 function checkSpiked(state: CharacterState, ctx: KidContext): void {
   if (!ctx.traps) return;
   const t = tileHere(state, ctx);
   if (t.type !== TILE.spike || !t.room) return;
   const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
+  if (harm === 0) return;
   const f = state.frame;
-  const running = (f >= 7 && f < 15) || (f >= 34 && f < 40);
-  if ((harm >= 2 && running) || ((f === 43 || f === 26) && harm !== 0)) {
+  if (f === 43 || f === 26) { // coming down into them
     state.alive = 0;
+    return;
   }
+  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
+  const running = (f >= 7 && f < 15) || (f >= 34 && f < 40);
+  if (harm >= 2 || !running) state.alive = 0;
 }
 
 /**
