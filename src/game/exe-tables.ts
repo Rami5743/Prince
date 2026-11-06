@@ -53,26 +53,66 @@ const COUNT = {
 } as const;
 
 /**
+ * The sequence byte-code is stored with its long holds squeezed out.
+ *
+ * Where a frame is held for many ticks in a row, the table carries a block
+ * of seven bytes in place of the repeats: a 16-bit tally of the plain bytes
+ * since the end of the previous block, then 0xB2, the frame, how many times
+ * to show it, 0x00, and 0xB0. There are four of them, and the first is in
+ * the landing that costs a hit point, where the Prince holds his crouch for
+ * 29 ticks.
+ *
+ * Read as plain byte-code a block gives seven wrong frames -- one of them
+ * invisible, so the Prince disappears for a tick -- and leaves every address
+ * after it short of where the offsets table says it is. Expanding it puts
+ * both right: the offsets are written for the expanded table, which is how
+ * the blocks can be found at all. The tally is checked before a block is
+ * believed, so an ordinary stretch of byte-code cannot be taken for one.
+ *
+ * @param packed the bytes as the executable stores them
+ * @param before how many bytes of the enclosing block come before these;
+ *   the first tally counts from there rather than from the byte-code
+ */
+function expandSequenceRuns(packed: Uint8Array, before: number): Uint8Array {
+  const out: number[] = [];
+  let plain = before;
+  for (let i = 0; i < packed.length; i++) {
+    const block = i + 6 < packed.length
+      && packed[i + 2] === 0xb2 && packed[i + 5] === 0x00 && packed[i + 6] === 0xb0
+      && (packed[i] | (packed[i + 1] << 8)) === plain;
+    if (block) {
+      for (let k = packed[i + 4]; k > 0; k--) out.push(packed[i + 3]);
+      i += 6;
+      plain = 0;
+      continue;
+    }
+    out.push(packed[i]);
+    plain += 1;
+  }
+  return Uint8Array.from(out);
+}
+
+/**
  * Jump destinations inside the sequence table are addresses in the original's
  * data segment; this is where the table itself sat.
  */
 export const SEQUENCE_BASE = 0x196e;
 
 /**
- * Two entries of the offsets table point past the end of the byte-code
- * altogether, at data that does not decode as a sequence.
+ * Once the packed holds are expanded, every entry of the offsets table
+ * points inside the byte-code. Kept as a record: before the holds were
+ * understood, entries 101 and 107 pointed past the end of it.
  */
-export const SEQUENCES_WITH_BAD_OFFSET: readonly number[] = [101, 107];
+export const SEQUENCES_WITH_BAD_OFFSET: readonly number[] = [];
 
 /**
- * Sequences that run off the end of the byte-code into the table that
- * follows it. They are the mouse's and the princess's -- the characters of
- * the cut-scenes, which this release never animates in a level -- so nothing
- * in play reaches them. Extending the extracted range does not help: what
- * follows really is another table. Recorded rather than patched over; if the
- * cut-scene characters are ever implemented, this is where to start.
+ * Sequences that run off the end of the byte-code. There are none: every one
+ * of the 114 decodes and ends in a jump. Kept as a record -- while the
+ * packed holds were being read as plain byte-code, six of them (the mouse's
+ * and the princess's, among others) ran past the end, which is what first
+ * showed that the table was not being read as the original reads it.
  */
-export const SEQUENCES_THAT_RUN_OFF: readonly number[] = [101, 106, 107, 111, 112, 114];
+export const SEQUENCES_THAT_RUN_OFF: readonly number[] = [];
 
 /** Where a drawn sword sits relative to the hand holding it. */
 export interface SwordPlacement {
@@ -130,7 +170,10 @@ export function readExeTables(exe: Uint8Array): ExeTables {
     frameTableKid: readFrames(exe, OFF.frameTableKid, COUNT.frameTableKid),
     frameTableGuard: readFrames(exe, OFF.frameTableGuard, COUNT.frameTableGuard),
     frameTableCutscene: readFrames(exe, OFF.frameTableCutscene, COUNT.frameTableCutscene),
-    sequences: exe.slice(OFF.sequences, OFF.sequences + COUNT.sequenceBytes),
+    sequences: expandSequenceRuns(
+      exe.slice(OFF.sequences, OFF.sequences + COUNT.sequenceBytes),
+      OFF.sequences - OFF.sequenceOffsets,
+    ),
     sequenceOffsets,
   };
 }

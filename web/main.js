@@ -2110,6 +2110,22 @@ var COUNT = {
   sequences: 114,
   sequenceBytes: 2282
 };
+function expandSequenceRuns(packed, before) {
+  const out = [];
+  let plain = before;
+  for (let i = 0; i < packed.length; i++) {
+    const block = i + 6 < packed.length && packed[i + 2] === 178 && packed[i + 5] === 0 && packed[i + 6] === 176 && (packed[i] | packed[i + 1] << 8) === plain;
+    if (block) {
+      for (let k = packed[i + 4]; k > 0; k--) out.push(packed[i + 3]);
+      i += 6;
+      plain = 0;
+      continue;
+    }
+    out.push(packed[i]);
+    plain += 1;
+  }
+  return Uint8Array.from(out);
+}
 var SEQUENCE_BASE = 6510;
 function readFrames(exe, offset, count) {
   const out = [];
@@ -2146,7 +2162,10 @@ function readExeTables(exe) {
     frameTableKid: readFrames(exe, OFF2.frameTableKid, COUNT.frameTableKid),
     frameTableGuard: readFrames(exe, OFF2.frameTableGuard, COUNT.frameTableGuard),
     frameTableCutscene: readFrames(exe, OFF2.frameTableCutscene, COUNT.frameTableCutscene),
-    sequences: exe.slice(OFF2.sequences, OFF2.sequences + COUNT.sequenceBytes),
+    sequences: expandSequenceRuns(
+      exe.slice(OFF2.sequences, OFF2.sequences + COUNT.sequenceBytes),
+      OFF2.sequences - OFF2.sequenceOffsets
+    ),
     sequenceOffsets
   };
 }

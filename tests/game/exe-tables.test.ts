@@ -38,8 +38,9 @@ describe('animation tables read from the original executable', () => {
       .toEqual({ image: 14, sword: 9, dx: 0, dy: 0, flags: 67 });
   });
 
-  it('holds 114 sequences, all but two starting inside the byte-code', () => {
-    // Two offsets point outside; three more decode off the end once run.
+  it('holds 114 sequences, every one of them starting inside the byte-code', () => {
+    // True only once the packed holds are expanded: before that, two of the
+    // offsets pointed past the end.
     expect(tables.sequenceOffsets.length - 1).toBe(114);
     const outside: number[] = [];
     for (let i = 1; i <= 114; i++) {
@@ -47,6 +48,27 @@ describe('animation tables read from the original executable', () => {
       if (at < 0 || at >= tables.sequences.length) outside.push(i);
     }
     expect(outside).toEqual([...SEQUENCES_WITH_BAD_OFFSET]);
+  });
+
+  /**
+   * The byte-code is stored with its long holds squeezed out: a seven-byte
+   * block stands in for a frame repeated many times. Expanding them is what
+   * makes every offset land inside the table, and it is what the landing
+   * that costs a hit point needs -- without it the Prince flickers through
+   * seven wrong frames, one of which has no sprite at all.
+   */
+  it('expands the packed holds, so the painful landing is a long crouch', () => {
+    const start = tables.sequenceOffsets[20] - SEQUENCE_BASE;
+    const code = [...tables.sequences.subarray(start, start + 40)];
+    // act 5, knock down, dy -2, dx 1, dx 2, then frame 108.
+    expect(code.slice(0, 10)).toEqual([0xf9, 0x05, 0xf4, 0xfa, 0xfe, 0xfb, 0x01, 0xfb, 0x02, 108]);
+    // Then the crouch, held for 29 ticks, and no stray frames at all.
+    expect(code.slice(10, 39)).toEqual(Array<number>(29).fill(109));
+    expect(code[39]).toBe(0xfb); // dx, as he starts to stand up
+  });
+
+  it('is 28 bytes longer expanded than the executable stores it', () => {
+    expect(tables.sequences.length).toBe(2282 + 28);
   });
 
   it('the first sequence is the one the original lists first', () => {
