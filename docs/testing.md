@@ -55,6 +55,14 @@ is captured that way, and `tests/game/run-jump.test.ts` requires ten of its
 thirteen frames to be reproduced exactly. The other three are black: the
 original blanks the screen while it changes room, and the port does not.
 
+`tools/oracle/scripts/level1-step.txt` is captured the same way, at
+`--cycles 300`. It holds Right and Shift once the level has settled, and
+`tests/game/careful-step.test.ts` requires seventeen of its eighteen frames
+exactly. It is what pins two things at once: that a held key gives one
+careful step rather than one a frame, and that level 1 opens its gate as the
+Prince drops in. The eighteenth frame is three pixels out at (164..166,126)
+and is recorded as unexplained.
+
 `tests/oracle/title-screen.test.ts` is the first of these: decoding
 `TITLE.DAT` resource 51 with palette 50 must reproduce the captured title
 screen with **zero** differing pixels out of 64 000. Passing it means the

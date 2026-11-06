@@ -23,6 +23,10 @@ import {
   tileDivModM7, weightX, distanceToEdge,
 } from './physics.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
+import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
+
+/** The original's 16-bit unsigned view of a value. */
+const u16 = (v: number): number => v & 0xffff;
 
 /** Sequence ids this module uses, in the original's numbering. */
 export const KID_SEQ = {
@@ -33,6 +37,8 @@ export const KID_SEQ = {
   turn: 5,
   runTurn: 6,
   fall: 7,
+  /** The run a level that opens at a run starts with. */
+  runEntry: 84,
   jumpUpAndGrabStraight: 8,
   hang: 9,
   climbUp: 10,
@@ -79,13 +85,7 @@ export const FRAME = {
 } as const;
 
 /** What the player is asking for this frame. */
-export interface Controls {
-  /** -1 left, 0 none, 1 right. */
-  x: number;
-  /** -1 up, 0 none, 1 down. */
-  y: number;
-  shift: boolean;
-}
+export type { Controls };
 
 /** What the Prince can set off in the room around him. */
 export interface TrapHooks {
@@ -105,6 +105,8 @@ export interface KidContext {
   readonly effects?: SequenceEffects;
   /** What the player is pressing this frame; some checks need it mid-frame. */
   controls: Controls;
+  /** Which of those presses have not been acted on yet. */
+  readonly latch: ControlLatch;
   readonly traps?: TrapHooks;
   /** Take hit points off the Prince. Returns true if that killed him. */
   damage?(amount: number): boolean;
@@ -199,10 +201,14 @@ function modifierOf(ctx: KidContext, t: { room: number; column: number; row: num
 }
 
 function controlJumpUp(state: CharacterState, controls: Controls, ctx: KidContext): void {
-  if (forwardHeld(state, controls)) standingJump(state, ctx);
+  if (forwardHeld(state, controls) || ctx.latch.forward === CONTROL.held) {
+    standingJump(state, ctx);
+  }
 }
 
 function standingJump(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.up = CONTROL.ignore;
+  ctx.latch.forward = CONTROL.ignore;
   startSequence(state, KID_SEQ.standingJump, ctx.tables);
 }
 
@@ -216,6 +222,7 @@ function upPressed(state: CharacterState, controls: Controls, ctx: KidContext): 
 }
 
 function checkJumpUp(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.up = ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   const frontAbove = tileFrontAbove(state, ctx);
   if (canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
@@ -261,6 +268,7 @@ function grabUpWithFloorBehind(state: CharacterState, ctx: KidContext): void {
 }
 
 function jumpUp(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.up = ctx.latch.releaseArrows();
   const frame = frameOf(ctx.tables, state);
   const edge = getEdgeDistance(
     ctx.world, state, frame, objectX(state, frame), ctx.spriteWidth(frame.image),
@@ -279,6 +287,7 @@ function jumpUp(state: CharacterState, ctx: KidContext): void {
 
 /** Down: climb down over an edge behind, or crouch. */
 function downPressed(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.down = CONTROL.ignore;
   const frame = frameOf(ctx.tables, state);
   const front = getTile(ctx.world, state.room,
     DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
@@ -295,6 +304,7 @@ function downPressed(state: CharacterState, ctx: KidContext): void {
     startSequence(state, KID_SEQ.climbDown, ctx.tables);
   } else {
     startSequence(state, KID_SEQ.crouch, ctx.tables);
+    ctx.latch.down = ctx.latch.releaseArrows();
   }
 }
 
@@ -307,7 +317,7 @@ function controlHanging(state: CharacterState, controls: Controls, ctx: KidConte
     hangFall(state, ctx);
     return;
   }
-  if (state.grabTimer === 0 && controls.y < 0) {
+  if (state.grabTimer === 0 && ctx.latch.up === CONTROL.held) {
     canClimbUp(state, ctx);
     return;
   }
@@ -327,6 +337,8 @@ function controlHanging(state: CharacterState, controls: Controls, ctx: KidConte
 }
 
 function canClimbUp(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.shift2 = CONTROL.ignore;
+  ctx.latch.up = ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq: number = KID_SEQ.climbUp;
   if (((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0)
@@ -338,6 +350,7 @@ function canClimbUp(state: CharacterState, ctx: KidContext): void {
 }
 
 function hangFall(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.down = ctx.latch.releaseArrows();
   const behind = tileBehind(state, ctx);
   const here = tileHere(state, ctx);
   if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
@@ -357,14 +370,16 @@ function hangFall(state: CharacterState, ctx: KidContext): void {
  * fall is not yet too fast.
  */
 function checkGrab(state: CharacterState, controls: Controls, ctx: KidContext): void {
+  if (process.env.GRABDEBUG) console.error('checkGrab f', state.frame, 'shift', controls.shift, 'fallY', state.fallY, 'y', state.y, 'row', state.currentRow, 'floor', floorHeightOfRow(state.currentRow));
   if (!controls.shift || state.fallY >= 32 || state.alive >= 0) return;
-  if (floorHeightOfRow(state.currentRow) > state.y + 25) return;
+  if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y + 25)) return;
   const frame = frameOf(ctx.tables, state);
   const oldX = state.x;
   state.x = forwardX(state, -8) & 0xff;
   state.currentColumn = determineColumn(state, frame);
   const above = tileAbove(state, ctx);
   const frontAbove = tileFrontAbove(state, ctx);
+  if (process.env.GRABDEBUG) console.error('   reach: above', above.type, 'frontAbove', frontAbove.type, 'col', state.currentColumn, 'dir', state.direction);
   if (!canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
     state.x = oldX;
     state.currentColumn = determineColumn(state, frame);
@@ -379,28 +394,40 @@ function checkGrab(state: CharacterState, controls: Controls, ctx: KidContext): 
 }
 
 function controlStanding(state: CharacterState, controls: Controls, ctx: KidContext): void {
+  const latch = ctx.latch;
   if (controls.shift) {
-    if (backwardHeld(state, controls)) {
-      startSequence(state, KID_SEQ.turn, ctx.tables);
-    } else if (controls.y < 0) {
+    if (latch.backward === CONTROL.held) {
+      backPressed(state, ctx);
+    } else if (latch.up === CONTROL.held) {
       upPressed(state, controls, ctx);
-    } else if (controls.y > 0) {
+    } else if (latch.down === CONTROL.held) {
       downPressed(state, ctx);
-    } else if (forwardHeld(state, controls)) {
+    } else if (forwardHeld(state, controls) && latch.forward === CONTROL.held) {
+      // One careful step for each press of the key, not one a frame.
       safeStep(state, ctx);
     }
     return;
   }
-  if (forwardHeld(state, controls)) {
-    if (controls.y < 0) standingJump(state, ctx);
+  if (latch.forward === CONTROL.held) {
+    if (latch.up === CONTROL.held) standingJump(state, ctx);
     else forwardPressed(state, ctx);
-  } else if (backwardHeld(state, controls)) {
-    startSequence(state, KID_SEQ.turn, ctx.tables);
-  } else if (controls.y < 0) {
-    upPressed(state, controls, ctx);
-  } else if (controls.y > 0) {
+  } else if (latch.backward === CONTROL.held) {
+    backPressed(state, ctx);
+  } else if (latch.up === CONTROL.held) {
+    if (latch.forward === CONTROL.held) standingJump(state, ctx);
+    else upPressed(state, controls, ctx);
+  } else if (latch.down === CONTROL.held) {
     downPressed(state, ctx);
+  } else if (forwardHeld(state, controls)) {
+    // Holding the key does keep him walking, even once the latch is spent.
+    forwardPressed(state, ctx);
   }
+}
+
+/** Backward: turn round. */
+function backPressed(state: CharacterState, ctx: KidContext): void {
+  startSequence(state, KID_SEQ.turn, ctx.tables);
+  ctx.latch.backward = ctx.latch.releaseArrows();
 }
 
 function controlTurning(state: CharacterState, controls: Controls, ctx: KidContext): void {
@@ -412,21 +439,21 @@ function controlTurning(state: CharacterState, controls: Controls, ctx: KidConte
 }
 
 function controlStartRun(state: CharacterState, controls: Controls, ctx: KidContext): void {
-  if (controls.y < 0 && forwardHeld(state, controls)) {
-    standingJump(state, ctx);
-  } else if (backwardHeld(state, controls)) {
-    startSequence(state, KID_SEQ.turn, ctx.tables);
-  }
+  if (controls.y < 0 && forwardHeld(state, controls)) standingJump(state, ctx);
 }
 
 function controlRunning(state: CharacterState, controls: Controls, ctx: KidContext): void {
+  const latch = ctx.latch;
   if (controls.x === 0 && (state.frame === FRAME.run1 || state.frame === FRAME.run2)) {
+    latch.forward = latch.releaseArrows();
     startSequence(state, KID_SEQ.runStop, ctx.tables);
   } else if (backwardHeld(state, controls)) {
+    latch.backward = latch.releaseArrows();
     startSequence(state, KID_SEQ.runTurn, ctx.tables);
-  } else if (controls.y < 0) {
+  } else if (controls.y < 0 && latch.up === CONTROL.held) {
     runJump(state, ctx);
-  } else if (controls.y > 0) {
+  } else if (latch.down === CONTROL.held) {
+    latch.down = CONTROL.ignore;
     startSequence(state, KID_SEQ.crouchWhileRunning, ctx.tables);
   }
 }
@@ -455,6 +482,7 @@ function runJump(state: CharacterState, ctx: KidContext): void {
     state.x = forwardX(state, adjust + 4) & 0xff;
     break;
   }
+  ctx.latch.up = ctx.latch.releaseArrows();
   startSequence(state, KID_SEQ.runJump, ctx.tables);
 }
 
@@ -467,7 +495,8 @@ function forwardPressed(state: CharacterState, ctx: KidContext): void {
   const front = getTile(ctx.world, state.room,
     DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
   if (edgeType === EDGE_TYPE.wall && front.type !== TILE.chomper && distance < 8) {
-    // Too close to a wall to break into a run; take a step instead.
+    // Too close to a wall to break into a run; take a step instead -- and
+    // only one, however long the key is held.
     safeStep(state, ctx);
   } else {
     startSequence(state, KID_SEQ.startRun, ctx.tables);
@@ -476,6 +505,8 @@ function forwardPressed(state: CharacterState, ctx: KidContext): void {
 
 /** Step forward exactly as far as the edge allows. */
 function safeStep(state: CharacterState, ctx: KidContext): void {
+  ctx.latch.shift2 = CONTROL.ignore;
+  ctx.latch.forward = CONTROL.ignore;
   const frame = frameOf(ctx.tables, state);
   const objX = objectX(state, frame);
   const { distance, edgeType } = getEdgeDistance(
@@ -534,7 +565,14 @@ function land(state: CharacterState, ctx: KidContext): void {
 }
 
 function doFall(state: CharacterState, ctx: KidContext): void {
-  if (floorHeightOfRow(state.currentRow) > state.y) return; // still in the air
+  // The original compares these as unsigned words, which matters above the
+  // top row, whose floor height is -8: as a word that is larger than any y,
+  // so a character up there counts as still in the air.
+  if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y)) {
+    // Still in the air, and so still able to take hold of a ledge.
+    checkGrab(state, ctx.controls, ctx);
+    return;
+  }
   if (hasFloorAt(state, ctx)) land(state, ctx);
   else state.currentRow += 1;
 }
@@ -642,6 +680,7 @@ function checkSpiked(state: CharacterState, ctx: KidContext): void {
 export function stepKid(state: CharacterState, controls: Controls, ctx: KidContext): void {
   ctx.controls = controls;
   if (state.grabTimer > 0) state.grabTimer -= 1;
+  ctx.latch.read(controls, state.direction);
   control(state, controls, ctx);
 
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
@@ -735,7 +774,7 @@ function gotoOtherRoom(state: CharacterState, direction: number, ctx: KidContext
 /** Put the Prince where a level says he starts, and face him the right way. */
 export function enterLevel(
   state: CharacterState, startRoom: number, startPos: number, startDir: number,
-  ctx: KidContext,
+  ctx: KidContext, level = 0,
 ): void {
   state.room = startRoom;
   state.currentColumn = startPos % 10;
@@ -747,9 +786,26 @@ export function enterLevel(
   state.alive = -1;
   state.fallX = 0;
   state.fallY = 0;
-  startSequence(state, KID_SEQ.turn, ctx.tables);
+  // Two levels open differently. Level 1 drops the Prince in, and the gate
+  // behind him is opened by a button pressed on his behalf as he arrives;
+  // level 13 has him come in at a run.
+  let entry: number = KID_SEQ.turn;
+  if (level === ENTRY_FALL_LEVEL) {
+    entry = KID_SEQ.fall;
+    ctx.traps?.pressButton(ENTRY_BUTTON_ROOM, ENTRY_BUTTON_TILEPOS);
+  } else if (level === ENTRY_RUN_LEVEL) {
+    entry = KID_SEQ.runEntry;
+  }
+  startSequence(state, entry, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
+
+/** The level that begins with a fall, and the button its arrival presses. */
+const ENTRY_FALL_LEVEL = 1;
+const ENTRY_BUTTON_ROOM = 5;
+const ENTRY_BUTTON_TILEPOS = 2; // column 2 of row 0
+/** The level that begins at a run. */
+const ENTRY_RUN_LEVEL = 13;
 
 function X_BUMP_START(column: number): number {
   // standX, inlined to avoid a cycle with geometry's screen helpers.

@@ -1,0 +1,30 @@
+# Level 1: let the entry fall finish and the level banner clear, then hold
+# Right and Shift. The Prince steps carefully to the edge, steps off it, and
+# takes hold of the ledge -- and steps there for as long as Shift is held.
+# Releasing Shift makes him let go. Nothing here depends on hitting a
+# particular tick, so the capture is reproducible.
+# Run at --cycles 300 so that consecutive captures are a tick or two apart.
+wait 25
+key Return
+wait 40
+keydown Right
+keydown shift
+shot step00
+shot step01
+shot step02
+shot step03
+shot step04
+shot step05
+shot step06
+shot step07
+shot step08
+shot step09
+shot step10
+shot step11
+shot step12
+shot step13
+keyup shift
+shot step14
+shot step15
+shot step16
+shot step17

@@ -1,0 +1,36 @@
+# Level 2: let the entry turn finish, hold Left until the Prince runs off the
+# ledge, then release Left and hold Shift -- which takes hold of the ledge he
+# is falling past. Captured at --cycles 400 so that consecutive frames are
+# only a tick or two apart.
+wait 20
+key Return
+wait 12
+key shift+l
+wait 45
+keydown Left
+shot hang00
+shot hang01
+shot hang02
+shot hang03
+shot hang04
+shot hang05
+shot hang06
+shot hang07
+shot hang08
+shot hang09
+shot hang10
+shot hang11
+keyup Left
+keydown shift
+shot hang12
+shot hang13
+shot hang14
+shot hang15
+shot hang16
+shot hang17
+shot hang18
+shot hang19
+shot hang20
+shot hang21
+keyup shift
+shot hang22

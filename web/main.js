@@ -159,7 +159,7 @@ function rleColumnMajor(dest, src, destLength, stride, height) {
   let rem = i16(destLength);
   let remHeight = i16(height);
   const back = destLength - 1;
-  const step = stride - 1;
+  const step2 = stride - 1;
   while (rem !== 0) {
     let count = i8(src[sp++]);
     const literal = count >= 0;
@@ -171,7 +171,7 @@ function rleColumnMajor(dest, src, destLength, stride, height) {
     }
     do {
       dest[dp++] = literal ? src[sp++] : value;
-      dp += step;
+      dp += step2;
       remHeight = i16(remHeight - 1);
       if (remHeight === 0) {
         dp -= back;
@@ -1977,7 +1977,7 @@ function checkExe(exe) {
 function readExeConstants(exe) {
   checkExe(exe);
   const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
-  const u16 = (o) => dv.getUint16(o, true);
+  const u162 = (o) => dv.getUint16(o, true);
   const u82 = (o) => exe[o];
   const vgaPalette = [];
   for (let i = 0; i < 16; i++) {
@@ -1985,14 +1985,14 @@ function readExeConstants(exe) {
     vgaPalette.push({ r: exe[o], g: exe[o + 1], b: exe[o + 2] });
   }
   return {
-    startMinutesLeft: u16(OFF.startMinutesLeft),
-    startTicksLeft: u16(OFF.startTicksLeft),
-    startHitPoints: u16(OFF.startHitPoints),
-    firstLevel: u16(OFF.firstLevel),
-    maxHitPointsAllowed: u16(OFF.maxHitPointsAllowed),
+    startMinutesLeft: u162(OFF.startMinutesLeft),
+    startTicksLeft: u162(OFF.startTicksLeft),
+    startHitPoints: u162(OFF.startHitPoints),
+    firstLevel: u162(OFF.firstLevel),
+    maxHitPointsAllowed: u162(OFF.maxHitPointsAllowed),
     savingAllowedFirstLevel: u82(OFF.savingAllowedFirstLevel) + 1,
     savingAllowedLastLevel: u82(OFF.savingAllowedLastLevel) - 1,
-    copyProtectionLevel: u16(OFF.copyProtectionLevel),
+    copyProtectionLevel: u162(OFF.copyProtectionLevel),
     drawnTileTopLevelEdge: u82(OFF.drawnTileTopLevelEdge),
     drawnTileLeftLevelEdge: u82(OFF.drawnTileLeftLevelEdge),
     levelEdgeHitTile: u82(OFF.levelEdgeHitTile),
@@ -2628,7 +2628,60 @@ function floorHeightOfRow(row) {
   return Y_LAND[row + 1];
 }
 
+// src/game/control-latch.ts
+var CONTROL = {
+  /** Pressed, and nothing has acted on it yet. */
+  held: -1,
+  released: 0,
+  /** Pressed, but already acted on: wait for the key to go up. */
+  ignore: 1
+};
+var ControlLatch = class {
+  forward = CONTROL.released;
+  backward = CONTROL.released;
+  up = CONTROL.released;
+  down = CONTROL.released;
+  /** The latch over the shift key; the raw key is read separately. */
+  shift2 = CONTROL.released;
+  /**
+   * Take in the keys that are down now. A latch that is already held is left
+   * alone -- only the move that acts on it clears it -- and one that is
+   * ignored stays ignored until its key goes up.
+   */
+  read(controls, direction) {
+    const forward = direction < 0 ? controls.x < 0 : controls.x > 0;
+    const backward = controls.x !== 0 && !forward;
+    this.forward = step(this.forward, forward);
+    this.backward = step(this.backward, backward);
+    this.up = step(this.up, controls.y < 0);
+    this.down = step(this.down, controls.y > 0);
+    this.shift2 = step(this.shift2, controls.shift);
+  }
+  /**
+   * The original's `release_arrows`: forget every direction, and hand back
+   * the ignored state for the caller to put on the one it has just used.
+   */
+  releaseArrows() {
+    this.forward = CONTROL.released;
+    this.backward = CONTROL.released;
+    this.up = CONTROL.released;
+    this.down = CONTROL.released;
+    return CONTROL.ignore;
+  }
+  /** Forget everything, as the game does when a level starts. */
+  clear() {
+    this.releaseArrows();
+    this.shift2 = CONTROL.released;
+  }
+};
+function step(latch, down) {
+  if (latch < CONTROL.released) return latch;
+  if (!down) return CONTROL.released;
+  return latch === CONTROL.released ? CONTROL.held : latch;
+}
+
 // src/game/kid.ts
+var u16 = (v) => v & 65535;
 var KID_SEQ = {
   startRun: 1,
   stand: 2,
@@ -2637,6 +2690,8 @@ var KID_SEQ = {
   turn: 5,
   runTurn: 6,
   fall: 7,
+  /** The run a level that opens at a run starts with. */
+  runEntry: 84,
   jumpUpAndGrabStraight: 8,
   hang: 9,
   climbUp: 10,
@@ -2759,9 +2814,13 @@ function modifierOf(ctx, t) {
   return t.room ? ctx.world.modifierAt(t.room, t.column, t.row) : 0;
 }
 function controlJumpUp(state, controls, ctx) {
-  if (forwardHeld(state, controls)) standingJump(state, ctx);
+  if (forwardHeld(state, controls) || ctx.latch.forward === CONTROL.held) {
+    standingJump(state, ctx);
+  }
 }
 function standingJump(state, ctx) {
+  ctx.latch.up = CONTROL.ignore;
+  ctx.latch.forward = CONTROL.ignore;
   startSequence(state, KID_SEQ.standingJump, ctx.tables);
 }
 function upPressed(state, controls, ctx) {
@@ -2772,6 +2831,7 @@ function upPressed(state, controls, ctx) {
   checkJumpUp(state, ctx);
 }
 function checkJumpUp(state, ctx) {
+  ctx.latch.up = ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   const frontAbove = tileFrontAbove(state, ctx);
   if (canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
@@ -2818,6 +2878,7 @@ function grabUpWithFloorBehind(state, ctx) {
   }
 }
 function jumpUp(state, ctx) {
+  ctx.latch.up = ctx.latch.releaseArrows();
   const frame = frameOf(ctx.tables, state);
   const edge = getEdgeDistance(
     ctx.world,
@@ -2838,6 +2899,7 @@ function jumpUp(state, ctx) {
   }
 }
 function downPressed(state, ctx) {
+  ctx.latch.down = CONTROL.ignore;
   const frame = frameOf(ctx.tables, state);
   const front = getTile(
     ctx.world,
@@ -2857,6 +2919,7 @@ function downPressed(state, ctx) {
     startSequence(state, KID_SEQ.climbDown, ctx.tables);
   } else {
     startSequence(state, KID_SEQ.crouch, ctx.tables);
+    ctx.latch.down = ctx.latch.releaseArrows();
   }
 }
 function controlCrouched(state, controls, ctx) {
@@ -2867,7 +2930,7 @@ function controlHanging(state, controls, ctx) {
     hangFall(state, ctx);
     return;
   }
-  if (state.grabTimer === 0 && controls.y < 0) {
+  if (state.grabTimer === 0 && ctx.latch.up === CONTROL.held) {
     canClimbUp(state, ctx);
     return;
   }
@@ -2884,6 +2947,8 @@ function controlHanging(state, controls, ctx) {
   hangFall(state, ctx);
 }
 function canClimbUp(state, ctx) {
+  ctx.latch.shift2 = CONTROL.ignore;
+  ctx.latch.up = ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq = KID_SEQ.climbUp;
   if ((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0 || above.type === TILE.gate && state.direction !== 0 && modifierOf(ctx, above) >> 2 < 6) {
@@ -2892,6 +2957,7 @@ function canClimbUp(state, ctx) {
   startSequence(state, seq, ctx.tables);
 }
 function hangFall(state, ctx) {
+  ctx.latch.down = ctx.latch.releaseArrows();
   const behind = tileBehind(state, ctx);
   const here = tileHere(state, ctx);
   if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
@@ -2904,14 +2970,16 @@ function hangFall(state, ctx) {
   startSequence(state, KID_SEQ.releaseLedgeAndLand, ctx.tables);
 }
 function checkGrab(state, controls, ctx) {
+  if (process.env.GRABDEBUG) console.error("checkGrab f", state.frame, "shift", controls.shift, "fallY", state.fallY, "y", state.y, "row", state.currentRow, "floor", floorHeightOfRow(state.currentRow));
   if (!controls.shift || state.fallY >= 32 || state.alive >= 0) return;
-  if (floorHeightOfRow(state.currentRow) > state.y + 25) return;
+  if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y + 25)) return;
   const frame = frameOf(ctx.tables, state);
   const oldX = state.x;
   state.x = forwardX(state, -8) & 255;
   state.currentColumn = determineColumn(state, frame);
   const above = tileAbove(state, ctx);
   const frontAbove = tileFrontAbove(state, ctx);
+  if (process.env.GRABDEBUG) console.error("   reach: above", above.type, "frontAbove", frontAbove.type, "col", state.currentColumn, "dir", state.direction);
   if (!canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
     state.x = oldX;
     state.currentColumn = determineColumn(state, frame);
@@ -2925,28 +2993,36 @@ function checkGrab(state, controls, ctx) {
   state.grabTimer = 12;
 }
 function controlStanding(state, controls, ctx) {
+  const latch = ctx.latch;
   if (controls.shift) {
-    if (backwardHeld(state, controls)) {
-      startSequence(state, KID_SEQ.turn, ctx.tables);
-    } else if (controls.y < 0) {
+    if (latch.backward === CONTROL.held) {
+      backPressed(state, ctx);
+    } else if (latch.up === CONTROL.held) {
       upPressed(state, controls, ctx);
-    } else if (controls.y > 0) {
+    } else if (latch.down === CONTROL.held) {
       downPressed(state, ctx);
-    } else if (forwardHeld(state, controls)) {
+    } else if (forwardHeld(state, controls) && latch.forward === CONTROL.held) {
       safeStep(state, ctx);
     }
     return;
   }
-  if (forwardHeld(state, controls)) {
-    if (controls.y < 0) standingJump(state, ctx);
+  if (latch.forward === CONTROL.held) {
+    if (latch.up === CONTROL.held) standingJump(state, ctx);
     else forwardPressed(state, ctx);
-  } else if (backwardHeld(state, controls)) {
-    startSequence(state, KID_SEQ.turn, ctx.tables);
-  } else if (controls.y < 0) {
-    upPressed(state, controls, ctx);
-  } else if (controls.y > 0) {
+  } else if (latch.backward === CONTROL.held) {
+    backPressed(state, ctx);
+  } else if (latch.up === CONTROL.held) {
+    if (latch.forward === CONTROL.held) standingJump(state, ctx);
+    else upPressed(state, controls, ctx);
+  } else if (latch.down === CONTROL.held) {
     downPressed(state, ctx);
+  } else if (forwardHeld(state, controls)) {
+    forwardPressed(state, ctx);
   }
+}
+function backPressed(state, ctx) {
+  startSequence(state, KID_SEQ.turn, ctx.tables);
+  ctx.latch.backward = ctx.latch.releaseArrows();
 }
 function controlTurning(state, controls, ctx) {
   if (!controls.shift && forwardHeld(state, controls) && controls.y >= 0) {
@@ -2954,20 +3030,20 @@ function controlTurning(state, controls, ctx) {
   }
 }
 function controlStartRun(state, controls, ctx) {
-  if (controls.y < 0 && forwardHeld(state, controls)) {
-    standingJump(state, ctx);
-  } else if (backwardHeld(state, controls)) {
-    startSequence(state, KID_SEQ.turn, ctx.tables);
-  }
+  if (controls.y < 0 && forwardHeld(state, controls)) standingJump(state, ctx);
 }
 function controlRunning(state, controls, ctx) {
+  const latch = ctx.latch;
   if (controls.x === 0 && (state.frame === FRAME.run1 || state.frame === FRAME.run2)) {
+    latch.forward = latch.releaseArrows();
     startSequence(state, KID_SEQ.runStop, ctx.tables);
   } else if (backwardHeld(state, controls)) {
+    latch.backward = latch.releaseArrows();
     startSequence(state, KID_SEQ.runTurn, ctx.tables);
-  } else if (controls.y < 0) {
+  } else if (controls.y < 0 && latch.up === CONTROL.held) {
     runJump(state, ctx);
-  } else if (controls.y > 0) {
+  } else if (latch.down === CONTROL.held) {
+    latch.down = CONTROL.ignore;
     startSequence(state, KID_SEQ.crouchWhileRunning, ctx.tables);
   }
 }
@@ -2987,6 +3063,7 @@ function runJump(state, ctx) {
     state.x = forwardX(state, adjust + 4) & 255;
     break;
   }
+  ctx.latch.up = ctx.latch.releaseArrows();
   startSequence(state, KID_SEQ.runJump, ctx.tables);
 }
 function forwardPressed(state, ctx) {
@@ -3012,6 +3089,8 @@ function forwardPressed(state, ctx) {
   }
 }
 function safeStep(state, ctx) {
+  ctx.latch.shift2 = CONTROL.ignore;
+  ctx.latch.forward = CONTROL.ignore;
   const frame = frameOf(ctx.tables, state);
   const objX = objectX(state, frame);
   const { distance, edgeType } = getEdgeDistance(
@@ -3071,7 +3150,10 @@ function land(state, ctx) {
   state.fallX = 0;
 }
 function doFall(state, ctx) {
-  if (floorHeightOfRow(state.currentRow) > state.y) return;
+  if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y)) {
+    checkGrab(state, ctx.controls, ctx);
+    return;
+  }
   if (hasFloorAt(state, ctx)) land(state, ctx);
   else state.currentRow += 1;
 }
@@ -3155,6 +3237,7 @@ function checkSpiked(state, ctx) {
 function stepKid(state, controls, ctx) {
   ctx.controls = controls;
   if (state.grabTimer > 0) state.grabTimer -= 1;
+  ctx.latch.read(controls, state.direction);
   control(state, controls, ctx);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   if (state.action === ACTION.inFreefall) {
@@ -3221,7 +3304,7 @@ function gotoOtherRoom(state, direction, ctx) {
     state.currentRow = yToRow(state.y);
   }
 }
-function enterLevel(state, startRoom, startPos, startDir, ctx) {
+function enterLevel(state, startRoom, startPos, startDir, ctx, level = 0) {
   state.room = startRoom;
   state.currentColumn = startPos % 10;
   state.currentRow = Math.floor(startPos / 10);
@@ -3231,9 +3314,20 @@ function enterLevel(state, startRoom, startPos, startDir, ctx) {
   state.alive = -1;
   state.fallX = 0;
   state.fallY = 0;
-  startSequence(state, KID_SEQ.turn, ctx.tables);
+  let entry = KID_SEQ.turn;
+  if (level === ENTRY_FALL_LEVEL) {
+    entry = KID_SEQ.fall;
+    ctx.traps?.pressButton(ENTRY_BUTTON_ROOM, ENTRY_BUTTON_TILEPOS);
+  } else if (level === ENTRY_RUN_LEVEL) {
+    entry = KID_SEQ.runEntry;
+  }
+  startSequence(state, entry, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
+var ENTRY_FALL_LEVEL = 1;
+var ENTRY_BUTTON_ROOM = 5;
+var ENTRY_BUTTON_TILEPOS = 2;
+var ENTRY_RUN_LEVEL = 13;
 function X_BUMP_START(column) {
   const X_BUMP2 = [
     -12,
@@ -3774,6 +3868,7 @@ var Game = class _Game {
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
       controls: { x: 0, y: 0, shift: false },
       traps: trapHooks,
+      latch: new ControlLatch(),
       damage: (amount) => this.damage(amount)
     };
     enterLevel(
@@ -3781,7 +3876,8 @@ var Game = class _Game {
       scene.level.startRoom,
       scene.level.startPos,
       scene.level.startDir,
-      this.ctx
+      this.ctx,
+      levelNumber
     );
     this.drawnRoom = this.kid.room;
     this.traps.drawnRoom = this.drawnRoom;

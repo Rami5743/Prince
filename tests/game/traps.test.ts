@@ -144,8 +144,10 @@ describe('traps', () => {
     expect(state.doorLinkTimer(link)).toBe(5);
   });
 
+  // Level 2 rather than level 1: level 1 presses a button of its own as the
+  // Prince drops in, which would already have opened the gate under test.
   it('standing on a button opens the gate it is wired to', async () => {
-    const game = await Game.start(assets, exe, 1);
+    const game = await Game.start(assets, exe, 2);
     const state = game.scene.state;
     const button = findTile(state, TILE.opener);
     if (!button) return;

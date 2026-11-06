@@ -9,6 +9,7 @@ import { readExeTables, type ExeTables } from './exe-tables.ts';
 import { newCharacter, placeCharacter, placeSword, type CharacterState } from './character.ts';
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
 import type { World } from './physics.ts';
+import { ControlLatch } from './control-latch.ts';
 import { TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
 import { toScreenX } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
@@ -76,10 +77,12 @@ export class Game {
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
       controls: { x: 0, y: 0, shift: false },
       traps: trapHooks,
+      latch: new ControlLatch(),
       damage: (amount) => this.damage(amount),
     };
     enterLevel(
-      this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir, this.ctx,
+      this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir,
+      this.ctx, levelNumber,
     );
     this.drawnRoom = this.kid.room;
     this.traps.drawnRoom = this.drawnRoom;
