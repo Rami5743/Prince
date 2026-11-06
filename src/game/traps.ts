@@ -369,6 +369,7 @@ export class Traps {
       this.knock(mob.room, mob.row);
       mob.y = Y_SOMETHING[mob.row + 1];
       mob.speed = -2;
+      this.leaveRubble(mob.room, column, mob.row);
       this.effects.floorCrashed?.(mob.room, mob.row);
     }
   }
@@ -380,6 +381,19 @@ export class Traps {
       mob.y -= 189;
       mob.room = this.level.linkOf(mob.room, 3);
     }
+  }
+
+  /**
+   * A floor that has smashed leaves its rubble where it landed. The tile set
+   * is built for it: 14 is a floor with rubble on it and 30 is a torch with
+   * rubble on it, which is the pair the original turns 1 and 19 into. Level
+   * 1 ships with a tile 14 under its first loose floor, from a fall that
+   * happened before the player arrives.
+   */
+  private leaveRubble(room: number, column: number, row: number): void {
+    const type = this.level.typeAt(room, column, row);
+    if (type === TILE.floor) this.level.setType(room, column, row, TILE.debris);
+    else if (type === TILE.torch) this.level.setType(room, column, row, TILE.torchWithDebris);
   }
 
   /** A crash shakes every loose floor on the row. */
