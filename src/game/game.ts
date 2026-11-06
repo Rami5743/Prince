@@ -337,7 +337,7 @@ export class Game {
     }
 
     const mobs: MobDraw[] = this.traps.mobs.map((m) => ({
-      room: m.room, column: m.xh >> 2, y: m.y,
+      room: m.room, column: m.xh >> 2, y: m.y, row: m.row,
     }));
     this.renderer.render(this.surface, this.drawnRoom, characters, mobs);
     this.drawStatusBar();

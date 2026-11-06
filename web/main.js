@@ -801,6 +801,8 @@ var CHTAB = {
   /** The tile set's group 360. */
   environmentWall: "environmentWall"
 };
+var ROW_ABOVE_ORDER = -1;
+var PAINT_ORDERS = [ROW_ABOVE_ORDER + 1, 2, 1, 0, ROW_ABOVE_ORDER];
 var COL_X = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288];
 var WALL_RES = {
   divider1: 11,
@@ -889,6 +891,8 @@ var RoomRenderer = class {
   /** Which list draw_tile_base / draw_tile_bottom append to. */
   addTo = "back";
   drawnRoom = 0;
+  /** Which pass of the room drawing is running; stamped on every piece. */
+  paintOrder = ROW_ABOVE_ORDER + 1;
   drawnRow = 0;
   drawnCol = 0;
   drawX = 0;
@@ -927,6 +931,7 @@ var RoomRenderer = class {
     this.fore = [];
     this.wipes = [];
     this.addTo = "back";
+    this.paintOrder = ROW_ABOVE_ORDER + 1;
     this.drawnRoom = room;
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
@@ -951,7 +956,7 @@ var RoomRenderer = class {
   push(list, chtab, id, x, yBottom, blit) {
     if (id === 0) return false;
     if (!this.image(chtab, id)) return false;
-    list.push({ chtab, id, x, yBottom, blit });
+    list.push({ chtab, id, x, yBottom, blit, order: this.paintOrder });
     return true;
   }
   addWipe(layer, left, bottom, height, width, color) {
@@ -1051,6 +1056,7 @@ var RoomRenderer = class {
   drawRoom() {
     this.loadLeftRoom();
     for (this.drawnRow = 2; this.drawnRow >= 0; this.drawnRow--) {
+      this.paintOrder = this.drawnRow;
       this.loadRowBelow();
       this.drawBottomY = 63 * this.drawnRow + 65;
       this.drawMainY = this.drawBottomY - 3;
@@ -1060,6 +1066,7 @@ var RoomRenderer = class {
       }
     }
     const saved = this.drawnRoom;
+    this.paintOrder = ROW_ABOVE_ORDER;
     this.drawnRoom = this.roomA;
     this.loadRoomLinks();
     this.loadLeftRoom();
@@ -1718,19 +1725,22 @@ var RoomRenderer = class {
     const x = COL_X[col];
     const main = m.y - 3;
     const floor = TILE_TABLE[TILE.floor];
+    const order = m.row;
     this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_BOTTOM[0],
       x,
       yBottom: m.y,
-      blit: BLIT.opaque
+      blit: BLIT.opaque,
+      order
     });
     this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_LEFT[0],
       x,
       yBottom: floor.baseY + main,
-      blit: BLIT.transparent
+      blit: BLIT.transparent,
+      order
     });
     if (col + 1 < COL_X.length) {
       this.mid.push({
@@ -1738,7 +1748,8 @@ var RoomRenderer = class {
         id: LOOSE_FRAM_RIGHT[0],
         x: COL_X[col + 1],
         yBottom: floor.rightY + main,
-        blit: BLIT.transparent
+        blit: BLIT.transparent,
+        order
       });
     }
   }
@@ -1755,13 +1766,28 @@ var RoomRenderer = class {
       blit: BLIT.transparent,
       character: true,
       flip: c.direction === 0,
-      screenX: c.alreadyScreenX === true
+      screenX: c.alreadyScreenX === true,
+      order: c.row ?? 0
     });
   }
+  /**
+   * Row by row, bottom first, the room's own pieces and then whoever is
+   * standing in that row.
+   *
+   * This is what decides whether a character is in front of a ledge or
+   * behind it. The original draws the bottom row first and works up, and
+   * puts each character in with his own row, so the row above -- drawn
+   * afterwards -- covers him. Painting every character after every tile
+   * instead put the Prince in front of the ledge he was climbing: his
+   * whole torso lay over the sloping front of it where the original shows
+   * only the hand that is over the top.
+   */
   paint(surface) {
     this.paintWipes(surface, 0);
-    for (const p of this.back) this.paintPiece(surface, p);
-    for (const p of this.mid) this.paintPiece(surface, p);
+    for (const order of PAINT_ORDERS) {
+      for (const p of this.back) if (p.order === order) this.paintPiece(surface, p);
+      for (const p of this.mid) if (p.order === order) this.paintPiece(surface, p);
+    }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
   }
@@ -1858,7 +1884,8 @@ function placeCharacter(state, frame, chtab = "kid") {
     image: frame.image + 1,
     x,
     y: frame.dy + state.y,
-    direction: state.direction
+    direction: state.direction,
+    row: state.currentRow
   };
 }
 function placeSword(state, frame, swordTable, toScreenX2) {
@@ -1875,6 +1902,7 @@ function placeSword(state, frame, swordTable, toScreenX2) {
     x: toScreenX2(base.x) + dx,
     y: base.y + placement.y,
     direction: state.direction,
+    row: state.currentRow,
     alreadyScreenX: true
   };
 }
@@ -4462,7 +4490,8 @@ var Game = class _Game {
     const mobs = this.traps.mobs.map((m) => ({
       room: m.room,
       column: m.xh >> 2,
-      y: m.y
+      y: m.y,
+      row: m.row
     }));
     this.renderer.render(this.surface, this.drawnRoom, characters, mobs);
     this.drawStatusBar();

@@ -90,6 +90,7 @@ export function placeCharacter(
     x,
     y: frame.dy + state.y,
     direction: state.direction,
+    row: state.currentRow,
   };
 }
 
@@ -122,6 +123,7 @@ export function placeSword(
     x: toScreenX(base.x) + dx,
     y: base.y + placement.y,
     direction: state.direction,
+    row: state.currentRow,
     alreadyScreenX: true,
   };
 }

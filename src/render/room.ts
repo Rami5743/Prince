@@ -93,6 +93,8 @@ export interface MobDraw {
   column: number;
   /** Where its underside has got to, in the same units a tile's bottom is. */
   y: number;
+  /** Which row it is passing through; it decides what is drawn over it. */
+  row: number;
 }
 
 export interface CharacterDraw {
@@ -105,9 +107,21 @@ export interface CharacterDraw {
   readonly y: number;
   /** 0 facing right, -1 facing left. Sprites are stored facing left. */
   readonly direction: number;
+  /** Which row of the room he is in; it decides what is drawn over him. */
+  readonly row?: number;
   /** A sword's x is already in screen pixels and must not be stretched. */
   readonly alreadyScreenX?: boolean;
 }
+
+/** The strip of the room above, drawn after every row of this one. */
+const ROW_ABOVE_ORDER = -1;
+
+/**
+ * The passes, in the order they are painted. Anything emitted outside the
+ * row loop comes first, then the rows from the bottom up, then the strip of
+ * the room above.
+ */
+const PAINT_ORDERS = [ROW_ABOVE_ORDER + 1, 2, 1, 0, ROW_ABOVE_ORDER] as const;
 
 interface Piece {
   chtab: ChtabId;
@@ -121,6 +135,12 @@ interface Piece {
   flip?: boolean;
   /** Set when x is already in screen pixels, as a sword's is. */
   screenX?: boolean;
+  /**
+   * Which pass of the room drawing put this here. The room is drawn from
+   * the bottom row up, so a smaller number is painted later and therefore
+   * over the top. See `PAINT_ORDERS`.
+   */
+  order: number;
 }
 
 interface Wipe {
@@ -270,6 +290,8 @@ export class RoomRenderer {
   private addTo: 'back' | 'fore' = 'back';
 
   private drawnRoom = 0;
+  /** Which pass of the room drawing is running; stamped on every piece. */
+  private paintOrder = ROW_ABOVE_ORDER + 1;
   private drawnRow = 0;
   private drawnCol = 0;
   private drawX = 0;
@@ -318,6 +340,7 @@ export class RoomRenderer {
     this.fore = [];
     this.wipes = [];
     this.addTo = 'back';
+    this.paintOrder = ROW_ABOVE_ORDER + 1;
     this.drawnRoom = room;
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
@@ -352,7 +375,7 @@ export class RoomRenderer {
   ): boolean {
     if (id === 0) return false;
     if (!this.image(chtab, id)) return false;
-    list.push({ chtab, id, x, yBottom, blit });
+    list.push({ chtab, id, x, yBottom, blit, order: this.paintOrder });
     return true;
   }
 
@@ -465,6 +488,7 @@ export class RoomRenderer {
   private drawRoom(): void {
     this.loadLeftRoom();
     for (this.drawnRow = 2; this.drawnRow >= 0; this.drawnRow--) {
+      this.paintOrder = this.drawnRow;
       this.loadRowBelow();
       this.drawBottomY = 63 * this.drawnRow + 65;
       this.drawMainY = this.drawBottomY - 3;
@@ -475,6 +499,7 @@ export class RoomRenderer {
     }
     // The bottom row of the room above pokes into the top of this one.
     const saved = this.drawnRoom;
+    this.paintOrder = ROW_ABOVE_ORDER;
     this.drawnRoom = this.roomA;
     this.loadRoomLinks();
     this.loadLeftRoom();
@@ -1074,18 +1099,19 @@ export class RoomRenderer {
     const x = COL_X[col];
     const main = m.y - 3;
     const floor = TILE_TABLE[TILE.floor];
+    const order = m.row;
     this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[0], x, yBottom: m.y,
-      blit: BLIT.opaque,
+      blit: BLIT.opaque, order,
     });
     this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[0], x,
-      yBottom: floor.baseY + main, blit: BLIT.transparent,
+      yBottom: floor.baseY + main, blit: BLIT.transparent, order,
     });
     if (col + 1 < COL_X.length) {
       this.mid.push({
         chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[0], x: COL_X[col + 1],
-        yBottom: floor.rightY + main, blit: BLIT.transparent,
+        yBottom: floor.rightY + main, blit: BLIT.transparent, order,
       });
     }
   }
@@ -1104,13 +1130,28 @@ export class RoomRenderer {
       character: true,
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
+      order: c.row ?? 0,
     });
   }
 
+  /**
+   * Row by row, bottom first, the room's own pieces and then whoever is
+   * standing in that row.
+   *
+   * This is what decides whether a character is in front of a ledge or
+   * behind it. The original draws the bottom row first and works up, and
+   * puts each character in with his own row, so the row above -- drawn
+   * afterwards -- covers him. Painting every character after every tile
+   * instead put the Prince in front of the ledge he was climbing: his
+   * whole torso lay over the sloping front of it where the original shows
+   * only the hand that is over the top.
+   */
   private paint(surface: Surface): void {
     this.paintWipes(surface, 0);
-    for (const p of this.back) this.paintPiece(surface, p);
-    for (const p of this.mid) this.paintPiece(surface, p);
+    for (const order of PAINT_ORDERS) {
+      for (const p of this.back) if (p.order === order) this.paintPiece(surface, p);
+      for (const p of this.mid) if (p.order === order) this.paintPiece(surface, p);
+    }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
   }
