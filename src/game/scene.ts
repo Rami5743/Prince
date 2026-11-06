@@ -57,10 +57,12 @@ export async function buildLevelScene(
   const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
   const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
   const flameSwordPotion = await assets.group('PRINCE.DAT', 150, PALETTE_BASE.flameSwordPotion);
+  const kid = await assets.group('KID.DAT', 400, PALETTE_BASE.kid);
+  const sword = await assets.group('PRINCE.DAT', 700, PALETTE_BASE.sword);
 
   const screenPalette = new ScreenPalette();
   screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
-  for (const set of [environment, environmentWall, flameSwordPotion]) {
+  for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
     screenPalette.loadBlock(set.paletteBase, set.palette.vga);
   }
 
@@ -84,7 +86,7 @@ export async function buildLevelScene(
   return {
     level,
     constants,
-    chtabs: { environment, environmentWall, flameSwordPotion },
+    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword },
     screenPalette,
     tiles,
     options: {

@@ -19,6 +19,25 @@ import {
   TILE, TILE_TABLE, TILE_TYPE_MASK, tileIsFloor,
   ROOM_COLUMNS, WALL_SWS, WALL_SWW, WALL_WWS, WALL_WWW,
 } from '../game/tiles.ts';
+import { toScreenX } from '../game/geometry.ts';
+
+const flipCache = new WeakMap<object, { width: number; height: number; pixels: Uint8Array }>();
+
+function flipHorizontally(
+  img: { width: number; height: number; pixels: Uint8Array },
+): { width: number; height: number; pixels: Uint8Array } {
+  const cached = flipCache.get(img);
+  if (cached) return cached;
+  const pixels = new Uint8Array(img.width * img.height);
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      pixels[y * img.width + (img.width - 1 - x)] = img.pixels[y * img.width + x];
+    }
+  }
+  const out = { width: img.width, height: img.height, pixels };
+  flipCache.set(img, out);
+  return out;
+}
 
 /** Blit modes, with the numbering the original used. */
 export const BLIT = {
@@ -38,8 +57,12 @@ export const BLIT = {
 } as const;
 
 export const CHTAB = {
+  /** PRINCE.DAT group 700: the sword in the Prince's hand. */
+  sword: 'sword',
   /** PRINCE.DAT group 150: torch flames, loose sword, potions, bubbles. */
   flameSwordPotion: 'flameSwordPotion',
+  /** KID.DAT group 400: the Prince. */
+  kid: 'kid',
   /** The tile set's group 200. */
   environment: 'environment',
   /** The tile set's group 360. */
@@ -51,6 +74,25 @@ export interface Chtabs {
   readonly flameSwordPotion: SpriteSet;
   readonly environment: SpriteSet;
   readonly environmentWall: SpriteSet;
+  readonly kid?: SpriteSet;
+  readonly sword?: SpriteSet;
+}
+
+/**
+ * A character ready to be drawn. The original keeps characters in a separate
+ * list that is sorted and then merged into the middle draw list, so that they
+ * pass behind the front edge of a floor and in front of its back.
+ */
+export interface CharacterDraw {
+  readonly chtab: ChtabId;
+  /** 1-based sprite id within the group. */
+  readonly image: number;
+  /** Horizontal position in internal units, before the 280-to-320 stretch. */
+  readonly x: number;
+  /** Bottom row of the sprite, in screen pixels. */
+  readonly y: number;
+  /** 0 facing right, -1 facing left. Sprites are stored facing left. */
+  readonly direction: number;
 }
 
 interface Piece {
@@ -60,6 +102,9 @@ interface Piece {
   x: number;
   yBottom: number;
   blit: number;
+  /** Characters have their x stretched from internal units and may be flipped. */
+  character?: boolean;
+  flip?: boolean;
 }
 
 interface Wipe {
@@ -248,7 +293,7 @@ export class RoomRenderer {
   }
 
   /** Build the draw lists for a room and paint them onto `surface`. */
-  render(surface: Surface, room: number): void {
+  render(surface: Surface, room: number, characters: readonly CharacterDraw[] = []): void {
     this.back = [];
     this.mid = [];
     this.fore = [];
@@ -258,6 +303,7 @@ export class RoomRenderer {
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
     this.drawRoom();
+    for (const c of characters) this.addCharacter(c);
     this.paint(surface);
   }
 
@@ -297,7 +343,7 @@ export class RoomRenderer {
   }
 
   private image(chtab: ChtabId, id: number) {
-    return this.chtabs[chtab].images[id] ?? null;
+    return this.chtabs[chtab]?.images[id] ?? null;
   }
 
   // ------------------------------------------------------------ room setup
@@ -985,6 +1031,28 @@ export class RoomRenderer {
 
   // ---------------------------------------------------------------- paint
 
+  /**
+   * Characters are flipped rather than mirrored in the data: the sprites face
+   * left, and the original flips them when the character faces right. Their
+   * horizontal position is in internal units and is stretched to pixels only
+   * here, at the last moment, exactly as the original does.
+   */
+  private addCharacter(c: CharacterDraw): void {
+    const set = this.chtabs[c.chtab];
+    if (!set) return;
+    const img = set.images[c.image];
+    if (!img) return;
+    this.mid.push({
+      chtab: c.chtab,
+      id: c.image,
+      x: c.x,
+      yBottom: c.y,
+      blit: BLIT.transparent,
+      character: true,
+      flip: c.direction === 0,
+    });
+  }
+
   private paint(surface: Surface): void {
     this.paintWipes(surface, 0);
     for (const p of this.back) this.paintPiece(surface, p);
@@ -1011,8 +1079,20 @@ export class RoomRenderer {
   private paintPiece(surface: Surface, p: Piece): void {
     const img = this.image(p.chtab, p.id);
     if (!img) return;
+    const set = this.chtabs[p.chtab];
+    if (!set) return;
     const y = p.yBottom - img.height + 1;
-    const base = this.chtabs[p.chtab].paletteBase;
+    const base = set.paletteBase;
+    if (p.character) {
+      let x = toScreenX(p.x);
+      let sprite: { width: number; height: number; pixels: Uint8Array } = img;
+      if (p.flip) {
+        x -= img.width;
+        sprite = flipHorizontally(img);
+      }
+      surface.blitTransparent(sprite, x, y, base);
+      return;
+    }
     const blit = p.blit;
     if (blit === BLIT.opaque) {
       surface.blitOpaque(img, p.x, y, base);

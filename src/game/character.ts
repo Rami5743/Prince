@@ -1,0 +1,74 @@
+/**
+ * A character's state, and how it becomes something to draw.
+ *
+ * The original keeps a character as a position in internal units, a facing
+ * direction and a frame number. The frame table turns that number into a
+ * sprite and a pair of offsets; the offsets are applied in the direction the
+ * character faces, which is why a single table serves both ways round.
+ */
+import type { Frame } from './exe-tables.ts';
+import type { CharacterDraw, ChtabId } from '../render/room.ts';
+
+export const DIRECTION = {
+  right: 0,
+  left: -1,
+} as const;
+
+export const CHAR_ID = {
+  kid: 0,
+  shadow: 1,
+  guard: 2,
+  skeleton: 4,
+  princess: 5,
+  vizier: 6,
+  mouse: 24,
+} as const;
+
+export interface CharacterState {
+  /** Internal x; 14 units to a tile, doubled when it reaches the screen. */
+  x: number;
+  /** Internal y; the floor heights are in `Y_LAND`. */
+  y: number;
+  /** 0 facing right, -1 facing left. */
+  direction: number;
+  /** Index into the character's frame table. */
+  frame: number;
+  room: number;
+  currentColumn: number;
+  currentRow: number;
+  charId: number;
+}
+
+/** Apply a frame's forward offset in the direction the character faces. */
+export function forwardX(state: CharacterState, deltaX: number): number {
+  return state.x + (state.direction < 0 ? -deltaX : deltaX);
+}
+
+/**
+ * Turn a character and its frame into a draw request.
+ *
+ * `x` ends up doubled and shifted by 116: a character's own coordinates
+ * count half-tiles from the left of a five-room span, while the renderer
+ * works in the 280 units that stretch across the screen.
+ */
+export function placeCharacter(
+  state: CharacterState,
+  frame: Frame,
+  chtab: ChtabId = 'kid',
+): CharacterDraw | null {
+  if (frame.image === 255) return null;
+  let x = (forwardX(state, frame.dx) << 1) - 116;
+  // The low bit selects which of the two pixel columns the sprite starts on,
+  // and it depends on the facing as well as on the frame.
+  if ((((frame.flags ^ state.direction) << 24) >> 24) >= 0) x += 1;
+  return {
+    chtab,
+    image: frame.image + 1,
+    x,
+    y: frame.dy + state.y,
+    direction: state.direction,
+  };
+}
+
+/** The frame a character stands still in. */
+export const FRAME_STAND = 15;

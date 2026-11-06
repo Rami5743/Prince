@@ -7,6 +7,9 @@ import { Display } from '../src/render/display.ts';
 import { Surface, ScreenPalette } from '../src/render/surface.ts';
 import { RoomRenderer } from '../src/render/room.ts';
 import { buildLevelScene, type LevelScene } from '../src/game/scene.ts';
+import { readExeTables } from '../src/game/exe-tables.ts';
+import { placeCharacter, FRAME_STAND } from '../src/game/character.ts';
+import { standX, standY } from '../src/game/geometry.ts';
 import { parsePalette } from '../src/dat/palette.ts';
 
 const DATA_URL = '../original/prince1';
@@ -28,6 +31,7 @@ async function boot(): Promise<void> {
     await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer(),
   ));
 
+  const tables = readExeTables(exe);
   const titlePalette = new ScreenPalette();
   const title = await assets.group('TITLE.DAT', 50);
   const opening = await assets.group('TITLE.DAT', 40);
@@ -86,11 +90,25 @@ async function boot(): Promise<void> {
         }
       }
       roomSel.value = String(room);
-      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room);
+      const chars = [];
+      if (room === scene.level.startRoom) {
+        // Where the level says the Prince begins, after the half-tile turn
+        // he performs on entering.
+        const col = scene.level.startPos % 10;
+        const row = Math.floor(scene.level.startPos / 10);
+        const dir = scene.level.startDir;
+        const draw = placeCharacter({
+          x: standX(col) + (dir < 0 ? -7 : 7), y: standY(row),
+          direction: dir, frame: FRAME_STAND,
+          room, currentColumn: col, currentRow: row, charId: 0,
+        }, tables.frameTableKid[FRAME_STAND]);
+        if (draw) chars.push(draw);
+      }
+      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room, chars);
       display.present(surface, scene.screenPalette.toRgba());
       const type = scene.options.levelType ? 'palace' : 'dungeon';
       status.textContent =
-        `${v.label} (${type}), room ${room} — the Prince and the guards are not drawn yet`;
+        `${v.label} (${type}), room ${room} — drawn from the original data and tables`;
     }
   }
 

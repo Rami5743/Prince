@@ -75,11 +75,11 @@ test suite then verifies against the original game's own output.
 ## 3. Rooms, compared tile for tile
 
 `tests/render/rooms.test.ts` draws six rooms -- three dungeon, three palace --
-and requires each to equal a capture of the same room, pixel for pixel, except
-in regions the test names explicitly. Today the only such region is the Prince
-himself, who is not drawn yet: the test pins his exact bounding box and pixel
-count, so the exception cannot quietly grow, and it disappears when characters
-are implemented.
+and requires each to equal a capture of the same room, pixel for pixel. Five
+of the six match with nothing left over at all. The sixth is three pixels of
+a potion's rising bubble, whose shape and position are right and whose colour
+is still unexplained; the test pins those three pixels, so the exception
+cannot quietly grow.
 
 Some tiles look different from one moment to the next. Torch flames pick a
 random frame and mostly advance by one per tick, so two torches side by side
@@ -89,8 +89,18 @@ test is given the state the capture was in -- found once by searching each
 tile's own small range of states against the capture, then pinned in the test
 with the rest of the case.
 
-`tools/dev/render-room.ts` is the tool that does that search, and writes our
-frame, theirs, and a difference map side by side:
+The Prince is drawn too, from his own state. That state was recovered the
+same way: the room renders exactly without him, so whatever is left over is
+him, and `tools/dev/find-prince.ts` searches the frame table and a window of
+positions for the one combination that makes the leftover vanish. The answers
+turned out to agree with the level data -- every capture is frame 15, the
+standing frame, half a tile from where the level says the Prince starts,
+facing the way it says, except on level 1 where he has fallen a row because
+that level drops him in. Once the game logic runs, it will have to produce
+those same numbers.
+
+`tools/dev/render-room.ts` is the tool that does the first search, and writes
+our frame, theirs, and a difference map side by side:
 
 ```bash
 node --experimental-strip-types tools/dev/render-room.ts 4 1 \

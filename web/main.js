@@ -718,7 +718,57 @@ function alterModifiers(fg, bg, roomLinks, roomCount) {
   return mod;
 }
 
+// src/game/geometry.ts
+var TILE_SIZE_X = 14;
+var FIRST_ONSCREEN_COLUMN = 5;
+var X_BUMP = [
+  -12,
+  2,
+  16,
+  30,
+  44,
+  58,
+  72,
+  86,
+  100,
+  114,
+  128,
+  142,
+  156,
+  170,
+  184,
+  198,
+  212,
+  226,
+  240,
+  254
+];
+var Y_LAND = [-8, 55, 118, 181, 244];
+function toScreenX(logicalX) {
+  return Math.trunc(logicalX * 320 / 280);
+}
+function standX(column) {
+  return X_BUMP[column + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
+}
+function standY(row) {
+  return Y_LAND[row + 1];
+}
+
 // src/render/room.ts
+var flipCache = /* @__PURE__ */ new WeakMap();
+function flipHorizontally(img) {
+  const cached = flipCache.get(img);
+  if (cached) return cached;
+  const pixels = new Uint8Array(img.width * img.height);
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      pixels[y * img.width + (img.width - 1 - x)] = img.pixels[y * img.width + x];
+    }
+  }
+  const out = { width: img.width, height: img.height, pixels };
+  flipCache.set(img, out);
+  return out;
+}
 var BLIT = {
   opaque: 0,
   or: 2,
@@ -735,8 +785,12 @@ var BLIT = {
   palaceDecal: 4110
 };
 var CHTAB = {
+  /** PRINCE.DAT group 700: the sword in the Prince's hand. */
+  sword: "sword",
   /** PRINCE.DAT group 150: torch flames, loose sword, potions, bubbles. */
   flameSwordPotion: "flameSwordPotion",
+  /** KID.DAT group 400: the Prince. */
+  kid: "kid",
   /** The tile set's group 200. */
   environment: "environment",
   /** The tile set's group 360. */
@@ -862,7 +916,7 @@ var RoomRenderer = class {
     return this.opt.levelType !== 0;
   }
   /** Build the draw lists for a room and paint them onto `surface`. */
-  render(surface, room) {
+  render(surface, room, characters = []) {
     this.back = [];
     this.mid = [];
     this.fore = [];
@@ -872,6 +926,7 @@ var RoomRenderer = class {
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
     this.drawRoom();
+    for (const c of characters) this.addCharacter(c);
     this.paint(surface);
   }
   // ---------------------------------------------------------------- lists
@@ -897,7 +952,7 @@ var RoomRenderer = class {
     this.wipes.push({ layer, left, bottom, height, width, color });
   }
   image(chtab, id) {
-    return this.chtabs[chtab].images[id] ?? null;
+    return this.chtabs[chtab]?.images[id] ?? null;
   }
   // ------------------------------------------------------------ room setup
   loadRoomLinks() {
@@ -1634,6 +1689,27 @@ var RoomRenderer = class {
     );
   }
   // ---------------------------------------------------------------- paint
+  /**
+   * Characters are flipped rather than mirrored in the data: the sprites face
+   * left, and the original flips them when the character faces right. Their
+   * horizontal position is in internal units and is stretched to pixels only
+   * here, at the last moment, exactly as the original does.
+   */
+  addCharacter(c) {
+    const set = this.chtabs[c.chtab];
+    if (!set) return;
+    const img = set.images[c.image];
+    if (!img) return;
+    this.mid.push({
+      chtab: c.chtab,
+      id: c.image,
+      x: c.x,
+      yBottom: c.y,
+      blit: BLIT.transparent,
+      character: true,
+      flip: c.direction === 0
+    });
+  }
   paint(surface) {
     this.paintWipes(surface, 0);
     for (const p of this.back) this.paintPiece(surface, p);
@@ -1656,8 +1732,20 @@ var RoomRenderer = class {
   paintPiece(surface, p) {
     const img = this.image(p.chtab, p.id);
     if (!img) return;
+    const set = this.chtabs[p.chtab];
+    if (!set) return;
     const y = p.yBottom - img.height + 1;
-    const base = this.chtabs[p.chtab].paletteBase;
+    const base = set.paletteBase;
+    if (p.character) {
+      let x = toScreenX(p.x);
+      let sprite = img;
+      if (p.flip) {
+        x -= img.width;
+        sprite = flipHorizontally(img);
+      }
+      surface.blitTransparent(sprite, x, y, base);
+      return;
+    }
     const blit = p.blit;
     if (blit === BLIT.opaque) {
       surface.blitOpaque(img, p.x, y, base);
@@ -1855,9 +1943,11 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
   const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
   const flameSwordPotion = await assets.group("PRINCE.DAT", 150, PALETTE_BASE.flameSwordPotion);
+  const kid = await assets.group("KID.DAT", 400, PALETTE_BASE.kid);
+  const sword = await assets.group("PRINCE.DAT", 700, PALETTE_BASE.sword);
   const screenPalette = new ScreenPalette();
   screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
-  for (const set of [environment, environmentWall, flameSwordPotion]) {
+  for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
     screenPalette.loadBlock(set.paletteBase, set.palette.vga);
   }
   const modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
@@ -1878,7 +1968,7 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   return {
     level,
     constants,
-    chtabs: { environment, environmentWall, flameSwordPotion },
+    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword },
     screenPalette,
     tiles,
     options: {
@@ -1889,6 +1979,70 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
     }
   };
 }
+
+// src/game/exe-tables.ts
+var OFF2 = {
+  frameTableKid: 113061,
+  frameTableGuard: 114267,
+  frameTableCutscene: 114473,
+  sequenceOffsets: 115063,
+  sequences: 115291
+};
+var COUNT = {
+  frameTableKid: 241,
+  frameTableGuard: 41,
+  frameTableCutscene: 86,
+  /** Sequence ids are 1-based; index 0 is unused. */
+  sequences: 112,
+  sequenceBytes: 2282
+};
+function readFrames(exe, offset, count) {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const o = offset + i * 5;
+    out.push({
+      image: exe[o],
+      sword: exe[o + 1],
+      dx: exe[o + 2] << 24 >> 24,
+      dy: exe[o + 3] << 24 >> 24,
+      flags: exe[o + 4]
+    });
+  }
+  return out;
+}
+function readExeTables(exe) {
+  checkExe(exe);
+  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  const sequenceOffsets = new Uint16Array(COUNT.sequences + 1);
+  for (let i = 1; i <= COUNT.sequences; i++) {
+    sequenceOffsets[i] = dv.getUint16(OFF2.sequenceOffsets + (i - 1) * 2, true);
+  }
+  return {
+    frameTableKid: readFrames(exe, OFF2.frameTableKid, COUNT.frameTableKid),
+    frameTableGuard: readFrames(exe, OFF2.frameTableGuard, COUNT.frameTableGuard),
+    frameTableCutscene: readFrames(exe, OFF2.frameTableCutscene, COUNT.frameTableCutscene),
+    sequences: exe.slice(OFF2.sequences, OFF2.sequences + COUNT.sequenceBytes),
+    sequenceOffsets
+  };
+}
+
+// src/game/character.ts
+function forwardX(state, deltaX) {
+  return state.x + (state.direction < 0 ? -deltaX : deltaX);
+}
+function placeCharacter(state, frame, chtab = "kid") {
+  if (frame.image === 255) return null;
+  let x = (forwardX(state, frame.dx) << 1) - 116;
+  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
+  return {
+    chtab,
+    image: frame.image + 1,
+    x,
+    y: frame.dy + state.y,
+    direction: state.direction
+  };
+}
+var FRAME_STAND = 15;
 
 // web/main.ts
 var DATA_URL = "../original/prince1";
@@ -1907,6 +2061,7 @@ async function boot() {
   ).then(async () => new Uint8Array(
     await (await fetch(`${DATA_URL}/UNCRKD.EXE`)).arrayBuffer()
   ));
+  const tables = readExeTables(exe);
   const titlePalette = new ScreenPalette();
   const title = await assets.group("TITLE.DAT", 50);
   const opening = await assets.group("TITLE.DAT", 40);
@@ -1956,10 +2111,27 @@ async function boot() {
         }
       }
       roomSel.value = String(room);
-      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room);
+      const chars = [];
+      if (room === scene.level.startRoom) {
+        const col = scene.level.startPos % 10;
+        const row = Math.floor(scene.level.startPos / 10);
+        const dir = scene.level.startDir;
+        const draw = placeCharacter({
+          x: standX(col) + (dir < 0 ? -7 : 7),
+          y: standY(row),
+          direction: dir,
+          frame: FRAME_STAND,
+          room,
+          currentColumn: col,
+          currentRow: row,
+          charId: 0
+        }, tables.frameTableKid[FRAME_STAND]);
+        if (draw) chars.push(draw);
+      }
+      new RoomRenderer(scene.chtabs, scene.tiles, scene.options).render(surface, room, chars);
       display.present(surface, scene.screenPalette.toRgba());
       const type = scene.options.levelType ? "palace" : "dungeon";
-      status.textContent = `${v.label} (${type}), room ${room} \u2014 the Prince and the guards are not drawn yet`;
+      status.textContent = `${v.label} (${type}), room ${room} \u2014 drawn from the original data and tables`;
     }
   }
   sceneSel.addEventListener("change", () => {
