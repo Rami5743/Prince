@@ -105,7 +105,8 @@ one.
   Up lunges, Down blocks, forward and back step in and out, and a lunge
   that reaches someone who is not blocking costs a hit point. A guard that
   runs out of them drops; so does the Prince. It can be won and it can be
-  lost.
+  lost, and a guard can no longer be walked past -- stepping in stops at
+  the point of the blade, so the only way through is to win.
 
   **Its timing is not the original's and is not claimed to be.** How long a
   guard waits between lunges, how its skill changes that, and exactly when

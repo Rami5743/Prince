@@ -73,3 +73,18 @@ describe('sword fighting', () => {
       expect(game.kid.sword).toBe(0);
     });
 });
+
+describe('a guard in the way', () => {
+  it('cannot be walked past', async () => {
+    const game = await Game.start(assets, exe, 2);
+    for (let i = 0; i < 8; i++) game.step(NOTHING);
+    let leftTheRoom = false;
+    for (let i = 0; i < 140 && !game.isDead; i++) {
+      game.step(LEFT);
+      if (game.kid.room !== 4 && game.kid.room !== 5) leftTheRoom = true;
+    }
+    // Holding forward into him is not a way through: either he is still
+    // there, or the Prince is dead for having tried it.
+    expect(leftTheRoom).toBe(false);
+  }, 30000);
+});

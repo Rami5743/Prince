@@ -24,7 +24,7 @@ import {
 } from './physics.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
 import {
-  SWORD_SEQ, SWORD_DRAWN, SWORD_RANGE, isReady, facingOf,
+  SWORD_SEQ, SWORD_DRAWN, SWORD_RANGE, isReady, facingOf, withinReach,
 } from './sword.ts';
 import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
 
@@ -228,7 +228,10 @@ function controlSwordPlay(
   } else if (state.direction !== facingOf(state, foe)) {
     startSequence(state, SWORD_SEQ.turn, ctx.tables);
   } else if (forwardHeld(state, controls)) {
-    startSequence(state, SWORD_SEQ.advance, ctx.tables);
+    // Only up to the point of the blade. Stepping in past that would walk
+    // him through the guard, which is how a guard used to be got past:
+    // hold forward, take a couple of hits, carry on.
+    if (!withinReach(state, foe)) startSequence(state, SWORD_SEQ.advance, ctx.tables);
   } else if (backwardHeld(state, controls)) {
     startSequence(state, SWORD_SEQ.retreat, ctx.tables);
   }

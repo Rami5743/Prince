@@ -2952,7 +2952,7 @@ function controlSwordPlay(state, controls, ctx) {
   } else if (state.direction !== facingOf(state, foe)) {
     startSequence(state, SWORD_SEQ.turn, ctx.tables);
   } else if (forwardHeld(state, controls)) {
-    startSequence(state, SWORD_SEQ.advance, ctx.tables);
+    if (!withinReach(state, foe)) startSequence(state, SWORD_SEQ.advance, ctx.tables);
   } else if (backwardHeld(state, controls)) {
     startSequence(state, SWORD_SEQ.retreat, ctx.tables);
   }
