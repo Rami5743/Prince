@@ -121,6 +121,27 @@ describe('the keyboard, in a real browser', () => {
     expect(after).toBe(before);
   });
 
+  /**
+   * A browser has no `process`, so anything that reaches for it throws where
+   * Node would not. This plays the moves that are easy to leave untested --
+   * falling, taking hold of a ledge, jumping -- and then insists the console
+   * stayed clean.
+   */
+  it('plays falling, grabbing and jumping without touching anything Node-only', async () => {
+    const before = consoleErrors.length;
+    await page.evaluate(() => {
+      const step = (window as unknown as {
+        __princeStep(n: number, c: Record<string, unknown>): unknown;
+      }).__princeStep;
+      step(22, {});
+      step(20, { x: 1, shift: true }); // careful steps, then over the edge
+      step(20, { x: 1 }); // run and fall
+      step(20, { x: 1, y: -1 }); // jump
+      step(20, { x: -1, y: 1 }); // turn, crouch
+    });
+    expect(consoleErrors.slice(before)).toEqual([]);
+  });
+
   it('steps the game on its own, without a key being held', async () => {
     await playLevel(3);
     await page.keyboard.down('Numpad6');

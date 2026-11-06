@@ -2970,7 +2970,6 @@ function hangFall(state, ctx) {
   startSequence(state, KID_SEQ.releaseLedgeAndLand, ctx.tables);
 }
 function checkGrab(state, controls, ctx) {
-  if (process.env.GRABDEBUG) console.error("checkGrab f", state.frame, "shift", controls.shift, "fallY", state.fallY, "y", state.y, "row", state.currentRow, "floor", floorHeightOfRow(state.currentRow));
   if (!controls.shift || state.fallY >= 32 || state.alive >= 0) return;
   if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y + 25)) return;
   const frame = frameOf(ctx.tables, state);
@@ -2979,7 +2978,6 @@ function checkGrab(state, controls, ctx) {
   state.currentColumn = determineColumn(state, frame);
   const above = tileAbove(state, ctx);
   const frontAbove = tileFrontAbove(state, ctx);
-  if (process.env.GRABDEBUG) console.error("   reach: above", above.type, "frontAbove", frontAbove.type, "col", state.currentColumn, "dir", state.direction);
   if (!canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
     state.x = oldX;
     state.currentColumn = determineColumn(state, frame);
