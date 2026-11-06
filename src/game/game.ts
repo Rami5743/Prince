@@ -23,6 +23,8 @@ export class Game {
   readonly surface = new Surface();
   /** The room the view is showing. */
   drawnRoom: number;
+  hitPoints: number;
+  maxHitPoints: number;
   private readonly renderer: RoomRenderer;
   private readonly ctx: KidContext;
 
@@ -30,6 +32,8 @@ export class Game {
     this.scene = scene;
     this.tables = tables;
     this.kid = newCharacter();
+    this.hitPoints = scene.constants.startHitPoints;
+    this.maxHitPoints = scene.constants.startHitPoints;
 
     const world: World = {
       tileAt: (room, column, row) => scene.tiles.typeAt(room, column, row) & TILE_TYPE_MASK,
@@ -74,8 +78,32 @@ export class Game {
     this.surface.clear();
     const draw = this.kidDraw();
     this.renderer.render(this.surface, this.drawnRoom, draw ? [draw] : []);
+    this.drawStatusBar();
     return this.surface;
   }
+
+  /**
+   * The strip below the room. The original draws the Prince's hit points
+   * there as small sprites from his own group: a full one for each point he
+   * has, an empty one for each he has lost.
+   */
+  private drawStatusBar(): void {
+    const kid = this.scene.chtabs.kid;
+    if (!kid) return;
+    const full = kid.images[FULL_HP_IMAGE];
+    const empty = kid.images[EMPTY_HP_IMAGE];
+    for (let i = this.hitPoints; i < this.maxHitPoints; i++) {
+      if (empty) this.surface.blitOpaque(empty, i * 7, HP_TOP_Y, kid.paletteBase);
+    }
+    for (let i = 0; i < this.hitPoints; i++) {
+      if (full) this.surface.blitOpaque(full, i * 7, HP_TOP_Y, kid.paletteBase);
+    }
+  }
 }
+
+/** Sprite ids of the full and empty hit point markers in the Prince's group. */
+const FULL_HP_IMAGE = 217;
+const EMPTY_HP_IMAGE = 218;
+const HP_TOP_Y = 194;
 
 export { ROOM_COLUMNS };

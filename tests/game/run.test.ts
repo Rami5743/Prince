@@ -4,7 +4,8 @@
  * tests/golden/level3-run holds eleven frames captured from PRINCE.EXE while
  * the Right key was held on level 3. The port is given the same input and
  * every simulated frame is rendered; each capture then has to be reproduced
- * by one of them, pixel for pixel.
+ * by one of them, pixel for pixel -- the whole 320x200 screen, the hit point
+ * markers below the room included.
  *
  * The one allowance is torch flames. The original picks each flame's phase
  * at random when a room is entered and mostly advances it by one per tick,
@@ -64,7 +65,7 @@ beforeAll(async () => {
     const full = toCaptureSpace(game.render().toRgb(game.scene.screenPalette.toRgba()));
     timeline.push({
       step,
-      rgb: full.slice(0, 320 * 192 * 3),
+      rgb: full.slice(0, 320 * 200 * 3),
       room: game.drawnRoom,
       state: `frame ${game.kid.frame} room ${game.kid.room} x ${game.kid.x}`,
     });
@@ -73,8 +74,8 @@ beforeAll(async () => {
 
 function captureRgb(file: string): Uint8Array {
   const png = PNG.sync.read(readFileSync(join(RUN_DIR, file)));
-  const rgb = new Uint8Array(320 * 192 * 3);
-  for (let i = 0; i < 320 * 192; i++) {
+  const rgb = new Uint8Array(320 * 200 * 3);
+  for (let i = 0; i < 320 * 200; i++) {
     rgb[i * 3] = png.data[i * 4];
     rgb[i * 3 + 1] = png.data[i * 4 + 1];
     rgb[i * 3 + 2] = png.data[i * 4 + 2];
@@ -87,7 +88,7 @@ function matchingStep(file: string): Step | null {
   const want = captureRgb(file);
   for (const t of timeline) {
     const boxes = flameBoxesOf(t.room);
-    const outside = diffClusters(t.rgb, want, 320, 192)
+    const outside = diffClusters(t.rgb, want, 320, 200)
       .filter((c) => !boxes.some(
         (b) => c.x0 >= b.x0 && c.x1 <= b.x1 && c.y0 >= b.y0 && c.y1 <= b.y1,
       ))
