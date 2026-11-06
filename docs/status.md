@@ -43,6 +43,7 @@ equal — see [docs/testing.md](testing.md).
 | Two whole play sessions on level 1 | `tests/oracle/play-session.test.ts` |
 | A held Up climbing and carrying on | `tests/game/hang.test.ts` |
 | Nothing leaves the world, however badly it is played | `tests/game/fuzz.test.ts` |
+| Climbing, in a real browser with real key events | `tests/browser/play.test.ts` |
 
 `npm test` runs all of it; `npm run typecheck` is separate. Both should be
 clean before anything is pushed.
