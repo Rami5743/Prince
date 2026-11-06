@@ -102,10 +102,10 @@ function matchingStep(file: string): Step | null {
  * Which simulated frame reproduces each capture. Pinned, so that a change to
  * the engine that shifts the timing shows up here.
  *
- * The last two of the burst are not reproduced. By then the original has
- * taken the Prince out of the room on show and the view has not followed; no
- * frame of a simulation that simply holds Right lands in that state. Left
- * unexplained rather than excused.
+ * All eleven are reproduced. The last three used to be put down to the view
+ * not following the Prince out of the room; they were in fact the missing
+ * bump -- the original stops him at the wall at the far end of room 12 and
+ * the port ran him through it. See `checkBumped` in src/game/kid.ts.
  */
 const EXPECTED: Record<string, number | null> = {
   'run00.png': 7,
@@ -116,9 +116,9 @@ const EXPECTED: Record<string, number | null> = {
   'run05.png': 35,
   'run06.png': 41,
   'run07.png': 48,
-  'run08.png': null,
-  'run09.png': null,
-  'run10.png': 54,
+  'run08.png': 55,
+  'run09.png': 61,
+  'run10.png': 62,
 };
 
 describe('running, against the original', () => {
@@ -133,8 +133,10 @@ describe('running, against the original', () => {
   });
 
   it('the frames of the run are reproduced in the order they were captured', () => {
-    const order = ['run02.png', 'run03.png', 'run04.png', 'run05.png', 'run06.png', 'run07.png']
-      .map((f) => matchingStep(f)?.step ?? -1);
+    const order = [
+      'run02.png', 'run03.png', 'run04.png', 'run05.png', 'run06.png',
+      'run07.png', 'run08.png', 'run09.png', 'run10.png',
+    ].map((f) => matchingStep(f)?.step ?? -1);
     for (let i = 1; i < order.length; i++) {
       expect(order[i]).toBeGreaterThan(order[i - 1]);
     }

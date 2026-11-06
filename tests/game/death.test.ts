@@ -3,8 +3,16 @@
  *
  * The original kills the Prince outright when he falls out of the bottom of
  * the level, and takes a hit point off a fall of more than about a tile. The
- * port has to do the same: without it a Prince who runs off the edge falls
- * for ever, and the player is left holding keys that do nothing.
+ * port has to do the same: without it a Prince who falls out of the world
+ * falls for ever, and the player is left holding keys that do nothing.
+ *
+ * No level lets the Prince simply walk out of the world -- the bottom row of
+ * every room is walled, and he is stopped at a wall before he reaches the
+ * edge. These tests therefore put him somewhere he will fall out of, rather
+ * than walking him there. An earlier version of this file held Right on
+ * level 3 and waited for a death; that only ever worked because the Prince
+ * walked straight through the wall at the end of room 12, which he no longer
+ * does -- see `checkBumped` in src/game/kid.ts.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -19,23 +27,38 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 const FORWARD = { x: 1, y: 0, shift: false };
 
 describe('dying', () => {
-  it('running off the edge of level 3 ends in a death, not an endless fall', async () => {
-    const game = await Game.start(assets, exe, 3);
-    let died = -1;
-    for (let step = 0; step < 200 && died < 0; step++) {
-      game.step(FORWARD);
-      if (game.isDead) died = step;
-    }
-    expect(died).toBeGreaterThan(0);
-    expect(game.hitPoints).toBe(0);
-    expect(game.kid.room).toBe(0); // out of the level altogether
-  });
+  /**
+   * Room 8 of level 3 has no room below it and nothing to stand on along
+   * most of its bottom row, so a Prince put there falls out of the world.
+   */
+  function dropOutOfTheWorld(game: Game): void {
+    const kid = game.kid;
+    kid.room = 8; kid.currentRow = 2; kid.currentColumn = 5;
+    kid.x = standX(5); kid.y = standY(2);
+    kid.direction = 0; kid.frame = 15; kid.action = 0; kid.fallX = 0; kid.fallY = 0;
+    game.drawnRoom = 8;
+  }
+
+  it('falling out of the bottom of the level ends in a death, not an endless fall',
+    async () => {
+      const game = await Game.start(assets, exe, 3);
+      dropOutOfTheWorld(game);
+      let died = -1;
+      for (let step = 0; step < 200 && died < 0; step++) {
+        game.step(FORWARD);
+        if (game.isDead) died = step;
+      }
+      expect(died).toBeGreaterThan(0);
+      expect(game.hitPoints).toBe(0);
+      expect(game.kid.room).toBe(0); // out of the level altogether
+    });
 
   it('a level started again has the Prince back at its start, unhurt', async () => {
     const game = await Game.start(assets, exe, 3);
     const startRoom = game.kid.room;
     const startX = game.kid.x;
     const full = game.hitPoints;
+    dropOutOfTheWorld(game);
     for (let step = 0; step < 200 && !game.isDead; step++) game.step(FORWARD);
     expect(game.isDead).toBe(true);
 
@@ -54,12 +77,15 @@ describe('dying', () => {
    * vanished for a tick on every such landing.
    */
   it('a two-storey fall costs a hit point and ends in a long crouch', async () => {
-    const game = await Game.start(assets, exe, 1);
+    // Room 16 of level 3: floor along the top row up to column 6, nothing at
+    // column 7 or below it until the bottom row. Walking right off column 6
+    // is a genuine two-storey drop onto a plain floor.
+    const game = await Game.start(assets, exe, 3);
     const kid = game.kid;
-    kid.room = 1; kid.currentRow = 0; kid.currentColumn = 4;
-    kid.x = standX(4); kid.y = standY(0);
+    kid.room = 16; kid.currentRow = 0; kid.currentColumn = 6;
+    kid.x = standX(6); kid.y = standY(0);
     kid.direction = 0; kid.frame = 15; kid.action = 0; kid.fallX = 0; kid.fallY = 0;
-    game.drawnRoom = 1;
+    game.drawnRoom = 16;
 
     const frames: number[] = [];
     for (let i = 0; i < 70; i++) {
@@ -75,8 +101,10 @@ describe('dying', () => {
     expect(land).toBeGreaterThan(0);
     expect(frames.slice(land + 1, land + 30)).toEqual(Array<number>(29).fill(109));
     expect(frames.slice(land + 30, land + 33)).toEqual([110, 110, 110]);
-    // Every frame after the landing is one of the landing frames.
-    for (const f of frames.slice(land)) expect(f).toBeGreaterThanOrEqual(108);
+    // Through the landing and the stand-up, nothing but landing frames gets
+    // a look in -- this is what the flicker showed up as. After that he is
+    // on his feet and free to run on, so the window stops there.
+    for (const f of frames.slice(land, land + 33)) expect(f).toBeGreaterThanOrEqual(108);
   });
 
   it('the hit points shown never go below none', async () => {

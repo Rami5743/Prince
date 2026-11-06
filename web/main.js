@@ -2736,7 +2736,9 @@ var KID_SEQ = {
   climbUpToClosedGate: 73,
   /** The landing that kills: a fall of three rows or more. */
   crushed: 52,
-  unsafeStep: 39
+  unsafeStep: 39,
+  /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
+  bump: 47
 };
 var FRAME = {
   startRunFirst: 1,
@@ -3266,6 +3268,7 @@ function stepKid(state, controls, ctx) {
   }
   const frame = frameOf(ctx.tables, state);
   state.currentColumn = determineColumn(state, frame);
+  checkBumped(state, ctx);
   checkAction(state, ctx);
   const leave = leaveDirection(state, ctx);
   if (leave >= 0) {
@@ -3279,6 +3282,26 @@ function stepKid(state, controls, ctx) {
     ctx.damage?.(100);
     state.alive = 0;
   }
+}
+function checkBumped(state, ctx) {
+  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight || state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
+    return;
+  }
+  const frame = frameOf(ctx.tables, state);
+  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
+  const penetration = (column) => {
+    const tile = getTile(ctx.world, state.room, column, state.currentRow);
+    if (tile.room === 0 || wallType(tile.type) === 0) return 0;
+    const d = distanceFromWallForward(state, tile.type, column, coll);
+    return d < 0 ? d : 0;
+  };
+  const here = penetration(state.currentColumn);
+  const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
+  const push = Math.min(here, front);
+  if (push === 0) return;
+  state.x = forwardX(state, push) & 255;
+  state.currentColumn = determineColumn(state, frame);
+  startSequence(state, KID_SEQ.bump, ctx.tables);
 }
 function yToRow(y) {
   return Math.trunc((y + 60) / TILE_SIZE_Y) % 4 - 1;

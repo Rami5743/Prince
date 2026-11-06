@@ -165,6 +165,57 @@ python3 tools/oracle/dosbox_oracle.py \
 node --experimental-strip-types tools/dev/match-run.ts 3 /tmp/run
 ```
 
+## 5. A whole play session
+
+The comparisons above each pin one move. They pass even when the game is
+plainly wrong to play, because a bug that only appears after a few moves --
+once a fall, a turn and a landing have each left their state behind -- is
+never reached by a capture of one move from a fresh level.
+
+A *session* closes that gap. It is a level played the way a person plays it,
+written down once in `tools/oracle/sessions/*.session` and used for both
+sides:
+
+```
+level 1
+cycles 400
+settle 40
+phase - 4
+phase r 10
+phase - 4
+```
+
+Each `phase` names the keys held -- `l r u d`, `s` for Shift, `-` for none --
+and how many frames to capture while they are held. `tools/oracle/session.mjs`
+turns that into an emulator script, so the two sides cannot drift apart:
+
+```bash
+node tools/oracle/make_session_script.mjs tools/oracle/sessions/level1-open.session
+```
+
+That prints the capture command to run. The captures are committed under
+`tests/golden/session-<name>/`.
+
+### How the two clocks are lined up
+
+The original runs in real time under the emulator and the port runs tick by
+tick, so there is no shared clock. What they do share is *order*: the session
+fixes the order of the captures and which keys were held for each. For each
+capture in turn, `tests/helpers/session.ts` steps the port forward -- with
+that capture's keys held -- until a rendered frame equals it, up to a budget
+of ticks. Equality is every pixel of the 320x200 screen, with the usual torch
+flame allowance and nothing else.
+
+So the test reports the first capture the port could not reproduce, not just
+a pass or a fail. That index says which move the two parted company on, and
+`/tmp/session-<name>-failure/` gets three pictures -- ours, theirs, and a map
+of where they differ.
+
+`tests/oracle/play-session.test.ts` pins, per session, how many leading
+captures the port reproduces. A regression makes that number smaller and a
+fix makes it larger; either way the test says so rather than quietly
+changing.
+
 ## 5. The port, in a real browser
 
 `tests/browser/render.test.ts` serves the repository, opens the page in

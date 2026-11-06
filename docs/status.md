@@ -38,9 +38,29 @@ equal — see [docs/testing.md](testing.md).
 | A guard standing in a room, with his sword | `tests/game/guard.test.ts` |
 | The traps: gates, buttons, loose floors, spikes, chompers | `tests/game/traps.test.ts` |
 | Hanging, dying, the painful landing | `tests/game/hang.test.ts`, `tests/game/death.test.ts` |
+| Walking into a wall | `tests/game/run.test.ts`, `tests/oracle/play-session.test.ts` |
+| A whole play session on level 1 | `tests/oracle/play-session.test.ts` |
 
 `npm test` runs all of it; `npm run typecheck` is separate. Both should be
 clean before anything is pushed.
+
+## The play-session comparison
+
+The move-by-move comparisons above all passed while the game was plainly
+wrong to play, because each of them starts from a fresh level and pins a
+single move. `tests/oracle/play-session.test.ts` plays a level the way a
+person plays it -- several moves in a row, each inheriting what the last one
+left behind -- and that is what found the bug below. It reports the first
+capture it cannot reproduce and carries on, so one run names every place the
+port and the original part company. See [docs/testing.md](testing.md) §5.
+
+Level 1 currently reproduces 32 of its 51 captures; the test lists what the
+other nineteen are.
+
+Adding a session is cheap -- a short file under `tools/oracle/sessions/`, a
+capture, and an entry in the test -- and is the best way to spend an hour on
+this port. Levels 2 and 3, hanging and climbing, and the traps all deserve
+one.
 
 ## Known to be unfinished
 
@@ -58,12 +78,19 @@ clean before anything is pushed.
   never animated.
 * **The screen does not blank on a room change.** The original blanks it for
   a few frames; the port does not. This is why a handful of captured frames
-  in the jump and run tests are recorded as unreproduced.
+  in the jump and session tests are recorded as unreproduced.
+* **Bumping is only half there.** `checkBumped` in `src/game/kid.ts` stops
+  the Prince at a wall he walks into, which is sequence 47. The original also
+  has sequences 45 and 46 -- bumping while in the air, which knocks him down
+  -- and neither is wired up. A gate's state is not consulted either: the
+  bump treats any tile with a side to it as solid, so a gate that is open may
+  stop him when it should not. No capture has caught that yet.
 
 ## Known oddities, recorded rather than smoothed over
 
 * One capture in `tests/game/careful-step.test.ts` is three pixels out at
-  (164..166, 126) and is pinned as unexplained.
+  (164..166, 126) and is pinned as unexplained. The session comparison sees
+  what looks like the same thing during a fall, at (160..163, 126..128).
 * Level 5's potion bubble leaves a three-pixel residual whose colour is in
   no game file.
 * Torch flames are the one thing the comparisons ignore: the original picks
@@ -119,7 +146,13 @@ tools/dev/          tools for working out what the original did
 
 ## A good next step
 
-Guard behaviour, in this order:
+Either of these:
+
+**More sessions.** Each one is an hour's work and the first one found a bug
+that eleven move-by-move comparisons had missed. Climbing and the traps have
+no session yet.
+
+**Guard behaviour**, in this order:
 
 1. `autocontrol_guard` — how a guard notices the Prince and decides to
    advance, retreat or wait. It reads `can_guard_see_kid`, which is in

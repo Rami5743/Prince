@@ -20,7 +20,7 @@ import {
   type World, EDGE_TYPE, getEdgeDistance, getTile, determineColumn,
   distanceToEdgeWeight, floorHeightOfRow, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX,
   DIR_FRONT, DIR_BEHIND, TILE_RIGHT_X, TILE_SIZE_Y, charCollision,
-  tileDivModM7, weightX, distanceToEdge,
+  tileDivModM7, weightX, distanceToEdge, wallType, distanceFromWallForward,
 } from './physics.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
 import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
@@ -65,6 +65,8 @@ export const KID_SEQ = {
   /** The landing that kills: a fall of three rows or more. */
   crushed: 52,
   unsafeStep: 39,
+  /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
+  bump: 47,
 } as const;
 
 export const FRAME = {
@@ -696,6 +698,10 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   const frame = frameOf(ctx.tables, state);
   state.currentColumn = determineColumn(state, frame);
 
+  // Before the floor is tested, not after: a character that has walked into
+  // a wall has also walked off the floor, and the original pushes it back
+  // first, so the floor test sees where it really ends up.
+  checkBumped(state, ctx);
   checkAction(state, ctx);
 
   const leave = leaveDirection(state, ctx);
@@ -713,6 +719,54 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
     ctx.damage?.(100);
     state.alive = 0;
   }
+}
+
+/**
+ * Walking into a wall.
+ *
+ * `distanceFromWallForward` measures how far the character still has to go
+ * before the wall it is walking towards; once the body has crossed the
+ * wall's face the measurement comes out negative, which is the original's
+ * signal that the character is inside the wall. It is then pushed back out
+ * by exactly that much and sequence 47 is started -- the original's own bump,
+ * whose byte-code opens `action 5`, `dx -4`, frames 50, 51, 52.
+ *
+ * Without this the Prince walks straight through the wall at the edge of a
+ * room, and since there is no floor out there, falls: on level 1 he runs off
+ * the right of the bottom room and drops into the room below.
+ *
+ * Climbing and hanging are left alone, as is a character already bumped --
+ * the original does not interrupt those -- and so is the edge of the level,
+ * which is not a wall to walk into but a way out of the world.
+ */
+function checkBumped(state: CharacterState, ctx: KidContext): void {
+  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight
+    || state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
+    return;
+  }
+  const frame = frameOf(ctx.tables, state);
+  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
+
+  const penetration = (column: number): number => {
+    const tile = getTile(ctx.world, state.room, column, state.currentRow);
+    // Only a wall the level actually has. Off the edge of the level
+    // `getTile` reports a wall too, but the original does not stop the
+    // Prince there -- he runs out of the level and dies.
+    if (tile.room === 0 || wallType(tile.type) === 0) return 0;
+    const d = distanceFromWallForward(state, tile.type, column, coll);
+    return d < 0 ? d : 0;
+  };
+
+  // The wall may be the tile the character counts as standing on, or the one
+  // it is walking towards.
+  const here = penetration(state.currentColumn);
+  const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
+  const push = Math.min(here, front);
+  if (push === 0) return;
+
+  state.x = forwardX(state, push) & 0xff;
+  state.currentColumn = determineColumn(state, frame);
+  startSequence(state, KID_SEQ.bump, ctx.tables);
 }
 
 /** Row a given height falls in, counting the row above the room as -1. */
