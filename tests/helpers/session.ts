@@ -161,6 +161,7 @@ export async function alignSession(
         index: i, name: names[i], phase: session.phases[phaseOf[i]].spec,
         tick: null, bestDiff: Number.MAX_SAFE_INTEGER, bestTick: tick, state: '',
       };
+      const startTick = tick;
       const limit = i === 0 ? firstBudget : budget;
       let bestRgb: Uint8Array | null = null;
       for (let k = 0; k <= limit; k++) {
@@ -181,8 +182,12 @@ export async function alignSession(
       matches[i] = match;
       if (match.tick === null) {
         // Take the closest frame as the alignment point and start again, so
-        // the rest of the session is still played and still compared.
-        chosen[i] = match.bestTick;
+        // the rest of the session is still played and still compared. The
+        // point has to move forward by at least a tick: the closest frame is
+        // often the one the search started on, and settling for that would
+        // leave the port standing on the same tick for the whole rest of the
+        // session, comparing every later capture against one frozen frame.
+        chosen[i] = Math.max(match.bestTick, startTick + 1);
         if (options.artifacts && bestRgb) {
           writeArtifacts(options.artifacts, names[i], bestRgb, want);
         }

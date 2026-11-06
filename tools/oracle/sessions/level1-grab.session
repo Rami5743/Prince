@@ -1,0 +1,28 @@
+# Does the original need Shift to hold on to a ledge?
+#
+# Level 1's middle row is open above at columns 0..2 and floored from column
+# 3, so a Prince standing at column 2 facing right has empty above him and a
+# ledge above and in front. Careful steps are used to get there because they
+# do not drift: one press gives one step however long the key is held, so the
+# emulator's speed cannot carry him further than the port.
+#
+# Then Up is held on its own, and only afterwards Up with Shift. If the
+# original ends up on the floor above during the first of those, Up alone is
+# enough to hang and climb; if it only gets up there during the second, the
+# grip needs Shift. The port currently needs Shift.
+level 1
+cycles 400
+settle 40
+phase - 3
+phase rs 3
+phase - 2
+phase rs 3
+phase - 2
+phase rs 3
+phase - 3
+phase u 10
+phase - 3
+phase us 10
+phase s 3
+phase us 6
+phase - 3
