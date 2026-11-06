@@ -39,7 +39,9 @@ equal — see [docs/testing.md](testing.md).
 | The traps: gates, buttons, loose floors, spikes, chompers | `tests/game/traps.test.ts` |
 | Hanging, dying, the painful landing | `tests/game/hang.test.ts`, `tests/game/death.test.ts` |
 | Walking into a wall | `tests/game/run.test.ts`, `tests/oracle/play-session.test.ts` |
-| A whole play session on level 1 | `tests/oracle/play-session.test.ts` |
+| Taking hold of a ledge and climbing it | `tests/oracle/play-session.test.ts` |
+| Two whole play sessions on level 1 | `tests/oracle/play-session.test.ts` |
+| Nothing leaves the world, however badly it is played | `tests/game/fuzz.test.ts` |
 
 `npm test` runs all of it; `npm run typecheck` is separate. Both should be
 clean before anything is pushed.
@@ -54,8 +56,13 @@ left behind -- and that is what found the bug below. It reports the first
 capture it cannot reproduce and carries on, so one run names every place the
 port and the original part company. See [docs/testing.md](testing.md) §5.
 
-Level 1 currently reproduces 32 of its 51 captures; the test lists what the
-other nineteen are.
+Level 1's opening reproduces 32 of its 51 captures and the climbing session
+26 of its 54; the test lists what the rest are. Both found real bugs.
+
+A session's key order matters: the generator presses Shift before the
+direction and releases it after, because if a bare arrow key reaches the
+game first, even for one tick, the Prince runs instead of stepping and the
+whole session goes somewhere else. That one detail was worth nine captures.
 
 Adding a session is cheap -- a short file under `tools/oracle/sessions/`, a
 capture, and an entry in the test -- and is the best way to spend an hour on
@@ -79,6 +86,9 @@ one.
 * **The screen does not blank on a room change.** The original blanks it for
   a few frames; the port does not. This is why a handful of captured frames
   in the jump and session tests are recorded as unreproduced.
+* **After a climb the Prince stands still** where the original walks on
+  along the floor he has just reached. The last twenty captures of the
+  climbing session follow from that one difference.
 * **Bumping is only half there.** `checkBumped` in `src/game/kid.ts` stops
   the Prince at a wall he walks into, which is sequence 47. The original also
   has sequences 45 and 46 -- bumping while in the air, which knocks him down

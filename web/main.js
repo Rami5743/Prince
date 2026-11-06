@@ -2951,7 +2951,7 @@ function controlHanging(state, controls, ctx) {
     hangFall(state, ctx);
     return;
   }
-  if (state.grabTimer === 0 && ctx.latch.up === CONTROL.held) {
+  if (state.grabTimer === 0 && controls.y < 0) {
     canClimbUp(state, ctx);
     return;
   }

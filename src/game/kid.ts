@@ -319,7 +319,14 @@ function controlHanging(state: CharacterState, controls: Controls, ctx: KidConte
     hangFall(state, ctx);
     return;
   }
-  if (state.grabTimer === 0 && ctx.latch.up === CONTROL.held) {
+  // Up itself, not the latch. The latch was spent by the jump that got him
+  // here -- `checkJumpUp` releases it -- so a player who presses Up at a
+  // ledge and keeps it down would never climb, which is what the original
+  // plainly does: with Up held and no Shift at all it takes hold and pulls
+  // him up. The grab timer is what keeps the two ways of reaching a ledge
+  // apart: a ledge caught while falling sets it, and until it runs down the
+  // grip is Shift's to keep, which is what the careful-step captures pin.
+  if (state.grabTimer === 0 && controls.y < 0) {
     canClimbUp(state, ctx);
     return;
   }

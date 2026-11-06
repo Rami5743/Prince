@@ -41,20 +41,13 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   //              not yet looked into.
   { name: 'level1-open', reproduces: 32 },
 
-  // A short run, a stop, and Up held twice. 12 of 37. The port stops a tile
-  // short of where the original's run carries it, so it is standing under
-  // the ledge while the original has already gone over the edge; everything
-  // after that compares two different situations. What it does pin is the
-  // opening and the run.
-  { name: 'level1-climb', reproduces: 12 },
-
-  // Careful steps, then Up alone, then Up with Shift. 18 of 54. The first
-  // two careful steps are reproduced exactly, which is the useful part; the
-  // third is not -- the original steps off the edge and takes hold of the
-  // ledge below, and the port stays on the floor. That is the next thing to
-  // look at: tests/game/careful-step.test.ts pins the move itself, so what
-  // differs is what a second and third press of the pair do.
-  { name: 'level1-grab', reproduces: 18 },
+  // Careful steps up to a ledge, then Up on its own, then Up with Shift.
+  // 26 of 54. All three careful steps are reproduced exactly, and so is the
+  // climb: the captures that show the Prince arriving on the floor above
+  // are matched pixel for pixel. What is not reproduced is what he does
+  // after it -- the original walks on along the top floor and the port
+  // stands still -- and the last stretch follows from that.
+  { name: 'level1-grab', reproduces: 26 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */

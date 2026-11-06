@@ -34,6 +34,10 @@ function parseKeys(spec) {
     else if (ch === 's') { shift = true; keys.push('shift'); }
     else throw new Error(`unknown key ${JSON.stringify(ch)} in phase ${JSON.stringify(spec)}`);
   }
+  // Shift first. A player presses the modifier and then the direction; if
+  // the direction lands a tick earlier the game sees a bare arrow key and
+  // starts a run, and the careful step that was meant never happens.
+  keys.sort((a, b) => (a === 'shift' ? -1 : b === 'shift' ? 1 : 0));
   return { x, y, shift, keys };
 }
 
@@ -98,7 +102,10 @@ export function toDosboxScript(session) {
   let held = [];
   let i = 0;
   for (const phase of session.phases) {
-    for (const k of held) if (!phase.keys.includes(k)) out.push(`keyup ${k}`);
+    // Let the direction keys go before the modifier, for the same reason.
+    for (const k of [...held].reverse()) {
+      if (!phase.keys.includes(k)) out.push(`keyup ${k}`);
+    }
     for (const k of phase.keys) if (!held.includes(k)) out.push(`keydown ${k}`);
     held = phase.keys;
     for (let k = 0; k < phase.shots; k++) {
