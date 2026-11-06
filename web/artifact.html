@@ -172,26 +172,14 @@
   <p><strong>Arrow keys</strong> to move, <strong>shift</strong> to step carefully,
      and hold <strong>up</strong> to jump. Pick a level from the menu; pick a room
      to look around without playing.</p>
-  <p>Standing, turning, running, jumping, climbing, hanging and falling are in.
-     Guards, traps and sound are not yet. Every room here has been compared
-     against the real game running under emulation, and matches it pixel for
-     pixel.</p>
+  <p>Standing, turning, running, jumping, climbing, hanging and falling are in,
+     and so are the traps: gates and the buttons that work them, loose floors,
+     spikes and chompers. Guards and sound are not yet. Every room here has
+     been compared against the real game running under emulation, and matches
+     it pixel for pixel.</p>
 </footer>
 
-<script type="module">
-  // The game's own files travel as base64 in one JSON file, because this host
-  // serves only a fixed set of file types and `.DAT` is not one of them.
-  let pack = null;
-  window.__princeFetcher = async (name) => {
-    pack ??= await (await fetch('./data.json')).json();
-    const b64 = pack[name];
-    if (!b64) throw new Error(`no data for ${name}`);
-    const binary = atob(b64);
-    const out = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-    return out;
-  };
-</script>
+<!--DATA-SOURCE-->
 <script type="module" src="./game.js"></script>
 <script type="module">
   const pad = document.getElementById('pad');

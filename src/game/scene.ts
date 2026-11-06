@@ -7,11 +7,13 @@ import type { Assets } from '../render/assets.ts';
 import type { Chtabs, RoomTiles, RoomRenderOptions } from '../render/room.ts';
 import { ScreenPalette } from '../render/surface.ts';
 import { parseLevel, resourceIdOfLevel, type Level } from '../dat/level.ts';
-import { alterModifiers, TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
+import { LevelState } from './level-state.ts';
 import { readExeConstants, type ExeConstants } from './exe-constants.ts';
 
 export interface LevelScene {
   readonly level: Level;
+  /** The level as it is now, which the traps and the renderer both read. */
+  readonly state: LevelState;
   readonly constants: ExeConstants;
   readonly chtabs: Chtabs;
   /** The 256-colour hardware palette, with each group's block loaded. */
@@ -66,25 +68,16 @@ export async function buildLevelScene(
     screenPalette.loadBlock(set.paletteBase, set.palette.vga);
   }
 
-  const modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
-
+  const state = new LevelState(level);
   const tiles: RoomTiles = {
-    typeAt(room, column, row) {
-      if (room < 1 || room > 24) return 0;
-      return level.fg[(room - 1) * 30 + row * ROOM_COLUMNS + column] & TILE_TYPE_MASK;
-    },
-    modifierAt(room, column, row) {
-      if (room < 1 || room > 24) return 0;
-      return modifiers[(room - 1) * 30 + row * ROOM_COLUMNS + column];
-    },
-    linkOf(room, dir) {
-      if (room < 1 || room > 24) return 0;
-      return level.roomLinks[(room - 1) * 4 + dir];
-    },
+    typeAt: (room, column, row) => state.typeAt(room, column, row),
+    modifierAt: (room, column, row) => state.modifierAt(room, column, row),
+    linkOf: (room, dir) => state.linkOf(room, dir),
   };
 
   return {
     level,
+    state,
     constants,
     chtabs: { environment, environmentWall, flameSwordPotion, kid, sword },
     screenPalette,
@@ -94,6 +87,7 @@ export async function buildLevelScene(
       topLevelEdgeTile: constants.drawnTileTopLevelEdge,
       leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
       enableWdaInPalace: constants.enableWdaInPalace,
+      startRoom: level.startRoom,
     },
   };
 }

@@ -4,6 +4,8 @@ A reimplementation of the 1990 DOS game that reads the original's own files —
 its data, its artwork, and the tables inside `PRINCE.EXE` — and is checked,
 pixel for pixel, against the original running under emulation.
 
+Play it at **https://rami5743.github.io/Prince/**, or run it locally:
+
 ```bash
 npm install
 npm run build
@@ -13,7 +15,7 @@ npm run serve     # then open http://localhost:8099/web/
 Arrow keys to move, shift to step carefully.
 
 ```bash
-npm test          # 249 tests
+npm test          # 258 tests
 npm run typecheck
 ```
 
@@ -33,8 +35,10 @@ npm run typecheck
 | Grab a ledge, hang, climb up and down | ✅ |
 | Crouch | ✅ |
 | Status bar: hit points | ✅ matches the original exactly |
+| Gates, buttons and their wiring | ✅ |
+| Loose floors: shake, give way, fall, crash | ✅ |
+| Spikes and chompers | ✅ |
 | Guards and sword fighting | ❌ not yet |
-| Traps: spikes, choppers, loose floors | partly drawn, not yet active |
 | Sound | ❌ not yet |
 | Status bar: the clock | ❌ not yet |
 
@@ -73,7 +77,7 @@ irregularity exactly rather than loosening the check.
 original/prince1/   the game as it shipped, untouched
 src/dat/            readers for the .DAT archive, palettes, images, levels
 src/game/           constants and tables from PRINCE.EXE, tiles, physics,
-                    the animation interpreter, the Prince
+                    the animation interpreter, the Prince, the traps
 src/render/         indexed 320x200 surface, room renderer, canvas
 web/                the page
 tools/oracle/       runs the original under DOSBox and captures frames

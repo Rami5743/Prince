@@ -31,7 +31,24 @@ execFileSync('npx', [
   '--minify', `--outfile=${join(out, 'game.js')}`,
 ], { stdio: 'inherit' });
 
-writeFileSync(join(out, 'index.html'), readFileSync('web/artifact.html'));
+// This host serves only a fixed set of file types and `.DAT` is not one of
+// them, so the game's files travel as base64 inside one JSON file.
+const dataSource = `<script type="module">
+  let pack = null;
+  window.__princeFetcher = async (name) => {
+    pack ??= await (await fetch('./data.json')).json();
+    const b64 = pack[name];
+    if (!b64) throw new Error(\`no data for \${name}\`);
+    const binary = atob(b64);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  };
+<\/script>`;
+writeFileSync(
+  join(out, 'index.html'),
+  readFileSync('web/artifact.html', 'utf8').replace('<!--DATA-SOURCE-->', dataSource),
+);
 const bundle = readFileSync(join(out, 'game.js'), 'utf8');
 console.log(`bundle ${(bundle.length / 1024).toFixed(0)} kB,`
   + ` data ${(readFileSync(join(out, 'data.json')).length / 1024).toFixed(0)} kB`);

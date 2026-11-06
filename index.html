@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="icon" href="data:,">
+<title>Prince of Persia, Reconstructed</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: the emulated screen is the page; everything else is a thin brass
+     frame around it. Colours are lifted from the game's own title screen. */
+  :root {
+    --ink: #0d0b14;
+    --vault: #15121f;
+    --brass: #d9a441;
+    --ember: #c0392b;
+    --sand: #e8dcc0;
+    --dim: #8b7f6a;
+    --rule: #2a2436;
+    color-scheme: dark;
+    --display: 'Amiri', 'Iowan Old Style', Georgia, serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--sand);
+    font-family: var(--mono);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-block: 18px 22px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  header { text-align: center; max-width: 60ch; }
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(22px, 5vw, 34px);
+    letter-spacing: 0.01em;
+    margin: 0;
+    color: var(--brass);
+    text-wrap: balance;
+  }
+  header p {
+    margin: 8px 0 0;
+    font-family: var(--display);
+    font-size: clamp(15px, 2.2vw, 17px);
+    color: var(--dim);
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+
+  .screen-frame {
+    width: min(100%, 1080px);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 6px;
+    background: linear-gradient(180deg, var(--vault), var(--ink));
+    box-shadow: 0 0 0 1px rgba(217, 164, 65, 0.12) inset;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    background: #000;
+  }
+
+  .bar {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  label { color: var(--dim); display: inline-flex; gap: 6px; align-items: center; }
+  select {
+    font: inherit;
+    font-family: var(--mono);
+    background: var(--vault);
+    color: var(--sand);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 3px 8px;
+  }
+  select:focus-visible, .pad button:focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
+  }
+
+  #status {
+    color: var(--dim);
+    min-height: 1.4em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(4, 56px);
+    gap: 8px;
+    justify-content: center;
+  }
+  .pad button {
+    font: inherit;
+    font-family: var(--mono);
+    height: 48px;
+    background: var(--vault);
+    color: var(--sand);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    touch-action: none;
+    user-select: none;
+  }
+  .pad button[data-down="1"] { background: var(--brass); color: var(--ink); }
+
+  footer {
+    max-width: 62ch;
+    font-family: var(--display);
+    font-size: 16px;
+    color: var(--dim);
+    line-height: 1.6;
+    text-align: center;
+    text-wrap: pretty;
+  }
+  footer p { margin: 0 0 10px; }
+  footer p:last-child { margin-bottom: 0; }
+  footer strong { color: var(--sand); font-weight: 700; }
+
+  @media (max-width: 640px) { body { gap: 10px; } }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+</head>
+<body>
+<header>
+  <h1>Prince of Persia, Reconstructed</h1>
+  <p>The 1990 DOS game, rebuilt to run here — reading the original's own data
+     files and the tables inside its executable.</p>
+</header>
+
+<div class="screen-frame">
+  <canvas id="screen" width="320" height="200" aria-label="The game screen"></canvas>
+</div>
+
+<div class="bar">
+  <label>scene <select id="scene"></select></label>
+  <label>room <select id="room" disabled></select></label>
+  <label>pixels
+    <select id="aspect">
+      <option value="original-4-3">4:3 (as on a CRT)</option>
+      <option value="square-pixels">square</option>
+    </select>
+  </label>
+</div>
+
+<div id="status">loading the game's data files…</div>
+
+<div class="pad" id="pad">
+  <button data-key="Shift" aria-label="Step carefully">shift</button>
+  <button data-key="ArrowLeft" aria-label="Left">◀</button>
+  <button data-key="ArrowUp" aria-label="Up">▲</button>
+  <button data-key="ArrowRight" aria-label="Right">▶</button>
+  <button data-key="ArrowDown" aria-label="Down" style="grid-column: 3">▼</button>
+</div>
+
+<footer>
+  <p><strong>Arrow keys</strong> to move, <strong>shift</strong> to step carefully,
+     and hold <strong>up</strong> to jump. Pick a level from the menu; pick a room
+     to look around without playing.</p>
+  <p>Standing, turning, running, jumping, climbing, hanging and falling are in,
+     and so are the traps: gates and the buttons that work them, loose floors,
+     spikes and chompers. Guards and sound are not yet. Every room here has
+     been compared against the real game running under emulation, and matches
+     it pixel for pixel.</p>
+</footer>
+
+<script type="module">
+  window.__princeDataUrl = './original/prince1';
+</script>
+<script type="module" src="./game.js"></script>
+<script type="module">
+  const pad = document.getElementById('pad');
+  const press = (button, down) => {
+    button.dataset.down = down ? '1' : '0';
+    window.__princeHold?.(button.dataset.key, down);
+  };
+  for (const button of pad.querySelectorAll('button')) {
+    const down = (e) => { e.preventDefault(); press(button, true); };
+    const up = (e) => { e.preventDefault(); press(button, false); };
+    button.addEventListener('pointerdown', down);
+    button.addEventListener('pointerup', up);
+    button.addEventListener('pointercancel', up);
+    button.addEventListener('pointerleave', up);
+  }
+
+  // Keep the chosen level across a republish.
+  const hot = window.claude?.hot;
+  const start = (saved) => {
+    if (!saved?.level) return;
+    const restore = () => {
+      if (!window.__princeReady) return void setTimeout(restore, 120);
+      const scene = document.getElementById('scene');
+      const option = [...scene.options].find((o) => o.textContent === `level ${saved.level}`);
+      if (option) { scene.value = option.value; scene.dispatchEvent(new Event('change')); }
+    };
+    restore();
+  };
+  hot?.snapshot?.(() => ({ level: window.__princeLevel?.() ?? 0 }));
+  if (hot?.ready) hot.ready(start); else start(hot?.data ?? {});
+</script>
+
+</body>
+</html>

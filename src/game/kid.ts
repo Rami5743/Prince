@@ -85,6 +85,16 @@ export interface Controls {
   shift: boolean;
 }
 
+/** What the Prince can set off in the room around him. */
+export interface TrapHooks {
+  pressButton(room: number, tilePos: number): void;
+  makeLooseFall(room: number, tilePos: number): void;
+  startChompers(room: number, row: number): void;
+  startSpike(room: number, tilePos: number): void;
+  /** 0 harmless, 1 out and deadly, 2 coming out and deadly to a runner. */
+  spikeHarm(room: number, tilePos: number): number;
+}
+
 export interface KidContext {
   readonly tables: ExeTables;
   readonly world: World;
@@ -93,6 +103,7 @@ export interface KidContext {
   readonly effects?: SequenceEffects;
   /** What the player is pressing this frame; some checks need it mid-frame. */
   controls: Controls;
+  readonly traps?: TrapHooks;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -479,6 +490,7 @@ function safeStep(state: CharacterState, ctx: KidContext): void {
 export function startFall(state: CharacterState, ctx: KidContext): void {
   state.sword = 0;
   state.currentRow += 1;
+  ctx.traps?.startChompers(state.room, state.currentRow);
   startSequence(state, KID_SEQ.fall, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   const frame = frameOf(ctx.tables, state);
@@ -487,6 +499,7 @@ export function startFall(state: CharacterState, ctx: KidContext): void {
 
 function land(state: CharacterState, ctx: KidContext): void {
   state.y = floorHeightOfRow(state.currentRow);
+  ctx.traps?.startChompers(state.room, state.currentRow);
   const frame = frameOf(ctx.tables, state);
   const front = getTile(ctx.world, state.room,
     DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
@@ -534,6 +547,76 @@ function checkAction(state: CharacterState, ctx: KidContext): void {
   }
 }
 
+/**
+ * Whatever the Prince is standing on, hanging from, or has just jumped into
+ * gets a chance to react: buttons go down, loose floors start to give.
+ */
+function checkPress(state: CharacterState, ctx: KidContext): void {
+  if (!ctx.traps) return;
+  const frame = frameOf(ctx.tables, state);
+  const f = state.frame;
+  let tile: { type: number; room: number; column: number; row: number };
+  if ((f >= FRAME.hangingFirst && f < 100) || (f >= 135 && f < 141)) {
+    // What he is hanging from is what he presses.
+    tile = tileAbove(state, ctx);
+  } else if (state.action === ACTION.turning || state.action === ACTION.bumped
+    || state.action < ACTION.hangClimb) {
+    if (f === 79 && tileAbove(state, ctx).type === TILE.loose) {
+      const above = tileAbove(state, ctx);
+      ctx.traps.makeLooseFall(above.room, above.row * 10 + above.column);
+      return;
+    }
+    if (!(frame.flags & 0x40)) return;
+    tile = tileHere(state, ctx);
+  } else {
+    return;
+  }
+  if (!tile.room) return;
+  const tilePos = tile.row * 10 + tile.column;
+  if (tile.type === TILE.opener || tile.type === TILE.closer) {
+    ctx.traps.pressButton(tile.room, tilePos);
+  } else if (tile.type === TILE.loose) {
+    ctx.traps.makeLooseFall(tile.room, tilePos);
+  }
+}
+
+/**
+ * Spikes under the Prince come out. The original walks down from his row
+ * through empty tiles, so spikes a floor or two below still wake up.
+ */
+function checkSpikeBelow(state: CharacterState, ctx: KidContext): void {
+  if (!ctx.traps) return;
+  const frame = frameOf(ctx.tables, state);
+  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
+  const rightColumn = tileDivModM7(coll.xRight).column;
+  if (rightColumn < 0) return;
+  for (let column = tileDivModM7(coll.xLeft).column; column <= rightColumn; column++) {
+    let row = state.currentRow;
+    for (let guard = 0; guard < 4; guard++) {
+      const t = getTile(ctx.world, state.room, column, row);
+      if (t.type === TILE.spike) {
+        ctx.traps.startSpike(t.room, t.row * 10 + t.column);
+        break;
+      }
+      if (tileIsFloor(t.type) || t.room === 0 || row > 2) break;
+      row += 1;
+    }
+  }
+}
+
+/** Running onto spikes that are out is fatal. */
+function checkSpiked(state: CharacterState, ctx: KidContext): void {
+  if (!ctx.traps) return;
+  const t = tileHere(state, ctx);
+  if (t.type !== TILE.spike || !t.room) return;
+  const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
+  const f = state.frame;
+  const running = (f >= 7 && f < 15) || (f >= 34 && f < 40);
+  if ((harm >= 2 && running) || ((f === 43 || f === 26) && harm !== 0)) {
+    state.alive = 0;
+  }
+}
+
 /** Advance the Prince by one frame of the game. */
 export function stepKid(state: CharacterState, controls: Controls, ctx: KidContext): void {
   ctx.controls = controls;
@@ -562,6 +645,10 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
     gotoOtherRoom(state, leave, ctx);
     state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
   }
+
+  checkPress(state, ctx);
+  checkSpikeBelow(state, ctx);
+  checkSpiked(state, ctx);
 
   // Falling out of the level is fatal, as it is in the original.
   if (state.room === 0 && state.alive < 0) {
