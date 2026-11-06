@@ -6,6 +6,7 @@ import { Assets, browserFetcher } from '../src/render/assets.ts';
 import { Display } from '../src/render/display.ts';
 import { Surface, ScreenPalette } from '../src/render/surface.ts';
 import { RoomRenderer } from '../src/render/room.ts';
+import { NO_DIRECTION as NO_GUARD } from '../src/game/guard.ts';
 import { Game } from '../src/game/game.ts';
 import type { Controls } from '../src/game/kid.ts';
 
@@ -264,6 +265,11 @@ async function boot(): Promise<void> {
   w.__princeState = () => (game ? {
     frame: game.kid.frame, room: game.kid.room, x: game.kid.x, y: game.kid.y,
     hitPoints: game.hitPoints, dead: game.isDead, held: [...held].sort(),
+    sword: game.kid.sword,
+    guard: game.guard.direction === NO_GUARD ? null : {
+      frame: game.guard.frame, x: game.guard.x,
+      hitPoints: game.guard.hitPoints, alive: game.guard.alive,
+    },
   } : null);
   w.__princeLevel = () => (views[current].kind === 'level'
     ? (views[current] as { level: number }).level : 0);

@@ -26,7 +26,8 @@ const consoleErrors: string[] = [];
 
 interface PageState {
   frame: number; room: number; x: number; y: number;
-  hitPoints: number; dead: boolean; held: string[];
+  hitPoints: number; dead: boolean; held: string[]; sword: number;
+  guard: { frame: number; x: number; hitPoints: number; alive: number } | null;
 }
 
 beforeAll(async () => {
@@ -90,4 +91,40 @@ describe('played in the browser', () => {
       expect(after?.y, 'he should be standing on the row above').toBe(Y_LAND[1]);
       expect(consoleErrors).toEqual([]);
     }, 120000);
+
+  /**
+   * A whole fight through the page: the approach is driven through the
+   * step hook so it does not depend on the clock, and the fight itself is
+   * real key presses, because the point is that Up reaches the game as a
+   * lunge rather than as a jump.
+   */
+  it('Up fights the guard of level 2 rather than jumping', async () => {
+    await page.evaluate(() => (window as unknown as {
+      __princeShow(level: number, room: number): Promise<void>;
+    }).__princeShow(2, 5));
+    await page.evaluate(() => {
+      const w = window as unknown as { __princeStep(n: number, c: object): unknown };
+      w.__princeStep(8, {});
+      w.__princeStep(40, { x: -1 });
+      w.__princeStep(10, {});
+    });
+
+    const met = await state();
+    expect(met?.room, 'he should have reached the guard\'s room').toBe(4);
+    expect(met?.sword, 'and drawn his sword').toBe(2);
+    expect(met?.guard).not.toBeNull();
+
+    for (let i = 0; i < 30; i++) {
+      await page.keyboard.down('ArrowUp');
+      await page.waitForTimeout(160);
+      await page.keyboard.up('ArrowUp');
+      await page.waitForTimeout(260);
+      const now = await state();
+      if (now?.dead || (now?.guard?.hitPoints ?? 1) === 0) break;
+    }
+    const after = await state();
+    expect(after?.dead ?? true).toBe(false);
+    expect(after?.guard?.hitPoints ?? -1).toBe(0);
+    expect(consoleErrors).toEqual([]);
+  }, 180000);
 });

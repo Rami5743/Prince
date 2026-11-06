@@ -1769,164 +1769,73 @@ var RoomRenderer = class {
   }
 };
 
-// src/dat/level.ts
-var ROOM_COUNT = 24;
-var ROOM_WIDTH = 10;
-var ROOM_HEIGHT = 3;
-var TILES_PER_ROOM = ROOM_WIDTH * ROOM_HEIGHT;
-var LEVEL_TILE_COUNT = ROOM_COUNT * TILES_PER_ROOM;
-var LEVEL_PAYLOAD_SIZE = 2305;
-var FIRST_LEVEL_RESOURCE = 2e3;
-var OFF_FG = 0;
-var OFF_BG = 720;
-var OFF_DOORLINKS1 = 1440;
-var OFF_DOORLINKS2 = 1696;
-var OFF_ROOMLINKS = 1952;
-var OFF_USED_ROOMS = 2048;
-var OFF_ROOM_XS = 2049;
-var OFF_ROOM_YS = 2073;
-var OFF_START_ROOM = 2112;
-var OFF_START_POS = 2113;
-var OFF_START_DIR = 2114;
-var OFF_GUARDS = 2119;
-function normalise(payload) {
-  if (payload.length >= LEVEL_PAYLOAD_SIZE) return payload;
-  const out = new Uint8Array(LEVEL_PAYLOAD_SIZE);
-  out.fill(255);
-  out.set(payload);
-  return out;
-}
-function parseLevel(payload, resourceId) {
-  if (payload.length < LEVEL_PAYLOAD_SIZE - 1) {
-    throw new Error(
-      `level payload is ${payload.length} bytes, expected ${LEVEL_PAYLOAD_SIZE}`
-    );
-  }
-  const d = normalise(payload);
-  const guards = [];
-  for (let i = 0; i < ROOM_COUNT; i++) {
-    guards.push({
-      tile: d[OFF_GUARDS + i],
-      dir: d[OFF_GUARDS + 24 + i],
-      x: d[OFF_GUARDS + 48 + i],
-      seqLo: d[OFF_GUARDS + 72 + i],
-      skill: d[OFF_GUARDS + 96 + i],
-      seqHi: d[OFF_GUARDS + 120 + i],
-      color: d[OFF_GUARDS + 144 + i]
-    });
-  }
+// src/game/character.ts
+var DIRECTION = {
+  right: 0,
+  left: -1
+};
+var CHAR_ID = {
+  kid: 0,
+  shadow: 1,
+  guard: 2,
+  skeleton: 4,
+  princess: 5,
+  vizier: 6,
+  mouse: 24
+};
+function newCharacter(partial = {}) {
   return {
-    resourceId,
-    fg: d.slice(OFF_FG, OFF_FG + LEVEL_TILE_COUNT),
-    bg: d.slice(OFF_BG, OFF_BG + LEVEL_TILE_COUNT),
-    doorLinks1: d.slice(OFF_DOORLINKS1, OFF_DOORLINKS1 + 256),
-    doorLinks2: d.slice(OFF_DOORLINKS2, OFF_DOORLINKS2 + 256),
-    roomLinks: d.slice(OFF_ROOMLINKS, OFF_ROOMLINKS + 96),
-    usedRooms: d[OFF_USED_ROOMS],
-    roomXs: d.slice(OFF_ROOM_XS, OFF_ROOM_XS + ROOM_COUNT),
-    roomYs: d.slice(OFF_ROOM_YS, OFF_ROOM_YS + ROOM_COUNT),
-    startRoom: d[OFF_START_ROOM],
-    startPos: d[OFF_START_POS],
-    startDir: d[OFF_START_DIR] << 24 >> 24,
-    guards
+    x: 0,
+    y: 0,
+    direction: DIRECTION.left,
+    frame: 0,
+    room: 1,
+    currentColumn: 0,
+    currentRow: 0,
+    charId: CHAR_ID.kid,
+    currentSequence: 0,
+    action: 0,
+    fallX: 0,
+    fallY: 0,
+    alive: -1,
+    sword: 0,
+    repeat: 0,
+    grabTimer: 0,
+    ...partial
   };
 }
-function resourceIdOfLevel(levelNumber) {
-  return FIRST_LEVEL_RESOURCE + levelNumber;
+function forwardX(state, deltaX) {
+  return state.x + (state.direction < 0 ? -deltaX : deltaX);
 }
-
-// src/game/level-state.ts
-var LevelState = class {
-  /** Tile codes, room-major, as the level data lays them out. */
-  fg;
-  /** Modifier bytes, rewritten on load the way the original rewrites them. */
-  modifiers;
-  roomLinks;
-  doorLinks1;
-  doorLinks2;
-  startRoom;
-  startPos;
-  startDir;
-  constructor(level) {
-    this.fg = level.fg.slice();
-    this.modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
-    this.roomLinks = level.roomLinks.slice();
-    this.doorLinks1 = level.doorLinks1.slice();
-    this.doorLinks2 = level.doorLinks2.slice();
-    this.startRoom = level.startRoom;
-    this.startPos = level.startPos;
-    this.startDir = level.startDir;
-  }
-  index(room, column, row) {
-    return (room - 1) * 30 + row * ROOM_COLUMNS + column;
-  }
-  inRoom(room, column, row) {
-    return room >= 1 && room <= 24 && column >= 0 && column < ROOM_COLUMNS && row >= 0 && row < 3;
-  }
-  /** The tile's type, with the modifier bits masked off. */
-  typeAt(room, column, row) {
-    if (!this.inRoom(room, column, row)) return 0;
-    return this.fg[this.index(room, column, row)] & TILE_TYPE_MASK;
-  }
-  /** The raw tile byte, type and flags together. */
-  rawAt(room, column, row) {
-    if (!this.inRoom(room, column, row)) return 0;
-    return this.fg[this.index(room, column, row)];
-  }
-  setType(room, column, row, type) {
-    if (!this.inRoom(room, column, row)) return;
-    this.fg[this.index(room, column, row)] = type;
-  }
-  modifierAt(room, column, row) {
-    if (!this.inRoom(room, column, row)) return 0;
-    return this.modifiers[this.index(room, column, row)];
-  }
-  setModifier(room, column, row, value) {
-    if (!this.inRoom(room, column, row)) return;
-    this.modifiers[this.index(room, column, row)] = value & 255;
-  }
-  /** By tile position within a room: 0..29, counting across then down. */
-  typeAtPos(room, tilePos) {
-    return this.typeAt(room, tilePos % 10, Math.floor(tilePos / 10));
-  }
-  rawAtPos(room, tilePos) {
-    return this.rawAt(room, tilePos % 10, Math.floor(tilePos / 10));
-  }
-  setTypeAtPos(room, tilePos, type) {
-    this.setType(room, tilePos % 10, Math.floor(tilePos / 10), type);
-  }
-  modifierAtPos(room, tilePos) {
-    return this.modifierAt(room, tilePos % 10, Math.floor(tilePos / 10));
-  }
-  setModifierAtPos(room, tilePos, value) {
-    this.setModifier(room, tilePos % 10, Math.floor(tilePos / 10), value);
-  }
-  linkOf(room, dir) {
-    if (room < 1 || room > 24) return 0;
-    return this.roomLinks[(room - 1) * 4 + dir];
-  }
-  /**
-   * A door link entry: which tile in which room a button is wired to, and
-   * whether another entry follows. The room number is split across the two
-   * arrays, which is why it is assembled rather than read.
-   */
-  doorLink(index) {
-    const a = this.doorLinks1[index] ?? 0;
-    const b = this.doorLinks2[index] ?? 0;
-    return {
-      room: ((a & 96) >> 5) + ((b & 224) >> 3),
-      tilePos: a & 31,
-      hasNext: (a & 128) === 0
-    };
-  }
-  doorLinkTimer(index) {
-    return (this.doorLinks2[index] ?? 0) & 31;
-  }
-  setDoorLinkTimer(index, value) {
-    if (index < 0 || index >= this.doorLinks2.length) return;
-    this.doorLinks2[index] = this.doorLinks2[index] & 224 | value & 31;
-  }
-};
+function placeCharacter(state, frame, chtab = "kid") {
+  if (frame.image === 255) return null;
+  let x = (forwardX(state, frame.dx) << 1) - 116;
+  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
+  return {
+    chtab,
+    image: frame.image + 1,
+    x,
+    y: frame.dy + state.y,
+    direction: state.direction
+  };
+}
+function placeSword(state, frame, swordTable, toScreenX2) {
+  const index = frame.sword & 63;
+  if (!index) return null;
+  const placement = swordTable[index];
+  if (!placement || placement.id === 255) return null;
+  const base = placeCharacter(state, frame);
+  if (!base) return null;
+  const dx = state.direction < 0 ? -placement.x : placement.x;
+  return {
+    chtab: "sword",
+    image: placement.id + 1,
+    x: toScreenX2(base.x) + dx,
+    y: base.y + placement.y,
+    direction: state.direction,
+    alreadyScreenX: true
+  };
+}
 
 // src/game/exe-constants.ts
 var OFF = {
@@ -2015,74 +1924,6 @@ function readExeConstants(exe) {
     // The original compares against 116; anything else means the "wall
     // decoration algorithm" was enabled for palace levels too.
     enableWdaInPalace: u82(OFF.enableWdaInPalace) !== 116
-  };
-}
-
-// src/game/character.ts
-var DIRECTION = {
-  right: 0,
-  left: -1
-};
-var CHAR_ID = {
-  kid: 0,
-  shadow: 1,
-  guard: 2,
-  skeleton: 4,
-  princess: 5,
-  vizier: 6,
-  mouse: 24
-};
-function newCharacter(partial = {}) {
-  return {
-    x: 0,
-    y: 0,
-    direction: DIRECTION.left,
-    frame: 0,
-    room: 1,
-    currentColumn: 0,
-    currentRow: 0,
-    charId: CHAR_ID.kid,
-    currentSequence: 0,
-    action: 0,
-    fallX: 0,
-    fallY: 0,
-    alive: -1,
-    sword: 0,
-    repeat: 0,
-    grabTimer: 0,
-    ...partial
-  };
-}
-function forwardX(state, deltaX) {
-  return state.x + (state.direction < 0 ? -deltaX : deltaX);
-}
-function placeCharacter(state, frame, chtab = "kid") {
-  if (frame.image === 255) return null;
-  let x = (forwardX(state, frame.dx) << 1) - 116;
-  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
-  return {
-    chtab,
-    image: frame.image + 1,
-    x,
-    y: frame.dy + state.y,
-    direction: state.direction
-  };
-}
-function placeSword(state, frame, swordTable, toScreenX2) {
-  const index = frame.sword & 63;
-  if (!index) return null;
-  const placement = swordTable[index];
-  if (!placement || placement.id === 255) return null;
-  const base = placeCharacter(state, frame);
-  if (!base) return null;
-  const dx = state.direction < 0 ? -placement.x : placement.x;
-  return {
-    chtab: "sword",
-    image: placement.id + 1,
-    x: toScreenX2(base.x) + dx,
-    y: base.y + placement.y,
-    direction: state.direction,
-    alreadyScreenX: true
   };
 }
 
@@ -2710,6 +2551,165 @@ function guardDraw(guard, tables) {
   if (!frame) return null;
   return placeCharacter(guard, frame, "guard");
 }
+
+// src/dat/level.ts
+var ROOM_COUNT = 24;
+var ROOM_WIDTH = 10;
+var ROOM_HEIGHT = 3;
+var TILES_PER_ROOM = ROOM_WIDTH * ROOM_HEIGHT;
+var LEVEL_TILE_COUNT = ROOM_COUNT * TILES_PER_ROOM;
+var LEVEL_PAYLOAD_SIZE = 2305;
+var FIRST_LEVEL_RESOURCE = 2e3;
+var OFF_FG = 0;
+var OFF_BG = 720;
+var OFF_DOORLINKS1 = 1440;
+var OFF_DOORLINKS2 = 1696;
+var OFF_ROOMLINKS = 1952;
+var OFF_USED_ROOMS = 2048;
+var OFF_ROOM_XS = 2049;
+var OFF_ROOM_YS = 2073;
+var OFF_START_ROOM = 2112;
+var OFF_START_POS = 2113;
+var OFF_START_DIR = 2114;
+var OFF_GUARDS = 2119;
+function normalise(payload) {
+  if (payload.length >= LEVEL_PAYLOAD_SIZE) return payload;
+  const out = new Uint8Array(LEVEL_PAYLOAD_SIZE);
+  out.fill(255);
+  out.set(payload);
+  return out;
+}
+function parseLevel(payload, resourceId) {
+  if (payload.length < LEVEL_PAYLOAD_SIZE - 1) {
+    throw new Error(
+      `level payload is ${payload.length} bytes, expected ${LEVEL_PAYLOAD_SIZE}`
+    );
+  }
+  const d = normalise(payload);
+  const guards = [];
+  for (let i = 0; i < ROOM_COUNT; i++) {
+    guards.push({
+      tile: d[OFF_GUARDS + i],
+      dir: d[OFF_GUARDS + 24 + i],
+      x: d[OFF_GUARDS + 48 + i],
+      seqLo: d[OFF_GUARDS + 72 + i],
+      skill: d[OFF_GUARDS + 96 + i],
+      seqHi: d[OFF_GUARDS + 120 + i],
+      color: d[OFF_GUARDS + 144 + i]
+    });
+  }
+  return {
+    resourceId,
+    fg: d.slice(OFF_FG, OFF_FG + LEVEL_TILE_COUNT),
+    bg: d.slice(OFF_BG, OFF_BG + LEVEL_TILE_COUNT),
+    doorLinks1: d.slice(OFF_DOORLINKS1, OFF_DOORLINKS1 + 256),
+    doorLinks2: d.slice(OFF_DOORLINKS2, OFF_DOORLINKS2 + 256),
+    roomLinks: d.slice(OFF_ROOMLINKS, OFF_ROOMLINKS + 96),
+    usedRooms: d[OFF_USED_ROOMS],
+    roomXs: d.slice(OFF_ROOM_XS, OFF_ROOM_XS + ROOM_COUNT),
+    roomYs: d.slice(OFF_ROOM_YS, OFF_ROOM_YS + ROOM_COUNT),
+    startRoom: d[OFF_START_ROOM],
+    startPos: d[OFF_START_POS],
+    startDir: d[OFF_START_DIR] << 24 >> 24,
+    guards
+  };
+}
+function resourceIdOfLevel(levelNumber) {
+  return FIRST_LEVEL_RESOURCE + levelNumber;
+}
+
+// src/game/level-state.ts
+var LevelState = class {
+  /** Tile codes, room-major, as the level data lays them out. */
+  fg;
+  /** Modifier bytes, rewritten on load the way the original rewrites them. */
+  modifiers;
+  roomLinks;
+  doorLinks1;
+  doorLinks2;
+  startRoom;
+  startPos;
+  startDir;
+  constructor(level) {
+    this.fg = level.fg.slice();
+    this.modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
+    this.roomLinks = level.roomLinks.slice();
+    this.doorLinks1 = level.doorLinks1.slice();
+    this.doorLinks2 = level.doorLinks2.slice();
+    this.startRoom = level.startRoom;
+    this.startPos = level.startPos;
+    this.startDir = level.startDir;
+  }
+  index(room, column, row) {
+    return (room - 1) * 30 + row * ROOM_COLUMNS + column;
+  }
+  inRoom(room, column, row) {
+    return room >= 1 && room <= 24 && column >= 0 && column < ROOM_COLUMNS && row >= 0 && row < 3;
+  }
+  /** The tile's type, with the modifier bits masked off. */
+  typeAt(room, column, row) {
+    if (!this.inRoom(room, column, row)) return 0;
+    return this.fg[this.index(room, column, row)] & TILE_TYPE_MASK;
+  }
+  /** The raw tile byte, type and flags together. */
+  rawAt(room, column, row) {
+    if (!this.inRoom(room, column, row)) return 0;
+    return this.fg[this.index(room, column, row)];
+  }
+  setType(room, column, row, type) {
+    if (!this.inRoom(room, column, row)) return;
+    this.fg[this.index(room, column, row)] = type;
+  }
+  modifierAt(room, column, row) {
+    if (!this.inRoom(room, column, row)) return 0;
+    return this.modifiers[this.index(room, column, row)];
+  }
+  setModifier(room, column, row, value) {
+    if (!this.inRoom(room, column, row)) return;
+    this.modifiers[this.index(room, column, row)] = value & 255;
+  }
+  /** By tile position within a room: 0..29, counting across then down. */
+  typeAtPos(room, tilePos) {
+    return this.typeAt(room, tilePos % 10, Math.floor(tilePos / 10));
+  }
+  rawAtPos(room, tilePos) {
+    return this.rawAt(room, tilePos % 10, Math.floor(tilePos / 10));
+  }
+  setTypeAtPos(room, tilePos, type) {
+    this.setType(room, tilePos % 10, Math.floor(tilePos / 10), type);
+  }
+  modifierAtPos(room, tilePos) {
+    return this.modifierAt(room, tilePos % 10, Math.floor(tilePos / 10));
+  }
+  setModifierAtPos(room, tilePos, value) {
+    this.setModifier(room, tilePos % 10, Math.floor(tilePos / 10), value);
+  }
+  linkOf(room, dir) {
+    if (room < 1 || room > 24) return 0;
+    return this.roomLinks[(room - 1) * 4 + dir];
+  }
+  /**
+   * A door link entry: which tile in which room a button is wired to, and
+   * whether another entry follows. The room number is split across the two
+   * arrays, which is why it is assembled rather than read.
+   */
+  doorLink(index) {
+    const a = this.doorLinks1[index] ?? 0;
+    const b = this.doorLinks2[index] ?? 0;
+    return {
+      room: ((a & 96) >> 5) + ((b & 224) >> 3),
+      tilePos: a & 31,
+      hasNext: (a & 128) === 0
+    };
+  }
+  doorLinkTimer(index) {
+    return (this.doorLinks2[index] ?? 0) & 31;
+  }
+  setDoorLinkTimer(index, value) {
+    if (index < 0 || index >= this.doorLinks2.length) return;
+    this.doorLinks2[index] = this.doorLinks2[index] & 224 | value & 31;
+  }
+};
 
 // src/game/scene.ts
 var PALETTE_BASE = {
@@ -4573,7 +4573,14 @@ async function boot() {
     y: game.kid.y,
     hitPoints: game.hitPoints,
     dead: game.isDead,
-    held: [...held].sort()
+    held: [...held].sort(),
+    sword: game.kid.sword,
+    guard: game.guard.direction === NO_DIRECTION ? null : {
+      frame: game.guard.frame,
+      x: game.guard.x,
+      hitPoints: game.guard.hitPoints,
+      alive: game.guard.alive
+    }
   } : null;
   w.__princeLevel = () => views[current].kind === "level" ? views[current].level : 0;
   w.__princeReady = true;
