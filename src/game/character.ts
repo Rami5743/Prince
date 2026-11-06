@@ -37,6 +37,27 @@ export interface CharacterState {
   currentColumn: number;
   currentRow: number;
   charId: number;
+  /** Address of the next byte-code instruction, in the original's numbering. */
+  currentSequence: number;
+  /** What the character is doing, as the sequences label it. */
+  action: number;
+  fallX: number;
+  fallY: number;
+  /** -1 alive, 0 or more while dying. */
+  alive: number;
+  sword: number;
+  repeat: number;
+}
+
+/** A character standing still at a given spot, before any sequence runs. */
+export function newCharacter(partial: Partial<CharacterState> = {}): CharacterState {
+  return {
+    x: 0, y: 0, direction: DIRECTION.left, frame: 0,
+    room: 1, currentColumn: 0, currentRow: 0, charId: CHAR_ID.kid,
+    currentSequence: 0, action: 0, fallX: 0, fallY: 0,
+    alive: -1, sword: 0, repeat: 0,
+    ...partial,
+  };
 }
 
 /** Apply a frame's forward offset in the direction the character faces. */

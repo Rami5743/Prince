@@ -57,11 +57,20 @@ const COUNT = {
 export const SEQUENCE_BASE = 0x196e;
 
 /**
- * Two entries of the offsets table point past the end of the byte-code, at
- * data that does not decode as a sequence. They are dead entries in the
- * original, and nothing in the game reaches them.
+ * Two entries of the offsets table point past the end of the byte-code
+ * altogether, at data that does not decode as a sequence.
  */
-export const DEAD_SEQUENCES: readonly number[] = [101, 107];
+export const SEQUENCES_WITH_BAD_OFFSET: readonly number[] = [101, 107];
+
+/**
+ * Sequences that run off the end of the byte-code into the table that
+ * follows it. They are the mouse's and the princess's -- the characters of
+ * the cut-scenes, which this release never animates in a level -- so nothing
+ * in play reaches them. Extending the extracted range does not help: what
+ * follows really is another table. Recorded rather than patched over; if the
+ * cut-scene characters are ever implemented, this is where to start.
+ */
+export const SEQUENCES_THAT_RUN_OFF: readonly number[] = [101, 106, 107, 111, 112, 114];
 
 export interface ExeTables {
   readonly frameTableKid: readonly Frame[];

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR } from '../helpers/fixtures.ts';
-import { readExeTables, SEQUENCE_BASE, DEAD_SEQUENCES } from '../../src/game/exe-tables.ts';
+import {
+  readExeTables, SEQUENCE_BASE, SEQUENCES_WITH_BAD_OFFSET,
+} from '../../src/game/exe-tables.ts';
 import { FRAME_STAND } from '../../src/game/character.ts';
 
 const tables = readExeTables(new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE'))));
@@ -37,13 +39,14 @@ describe('animation tables read from the original executable', () => {
   });
 
   it('holds 114 sequences, all but two starting inside the byte-code', () => {
+    // Two offsets point outside; three more decode off the end once run.
     expect(tables.sequenceOffsets.length - 1).toBe(114);
     const outside: number[] = [];
     for (let i = 1; i <= 114; i++) {
       const at = tables.sequenceOffsets[i] - SEQUENCE_BASE;
       if (at < 0 || at >= tables.sequences.length) outside.push(i);
     }
-    expect(outside).toEqual([...DEAD_SEQUENCES]);
+    expect(outside).toEqual([...SEQUENCES_WITH_BAD_OFFSET]);
   });
 
   it('the first sequence is the one the original lists first', () => {

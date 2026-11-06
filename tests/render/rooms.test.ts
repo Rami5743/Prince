@@ -23,7 +23,7 @@ import { Surface } from '../../src/render/surface.ts';
 import { RoomRenderer, type RoomTiles } from '../../src/render/room.ts';
 import { buildLevelScene } from '../../src/game/scene.ts';
 import { readExeTables } from '../../src/game/exe-tables.ts';
-import { placeCharacter, FRAME_STAND, type CharacterState } from '../../src/game/character.ts';
+import { placeCharacter, FRAME_STAND, newCharacter } from '../../src/game/character.ts';
 
 const ROOM_AREA_HEIGHT = 192; // below this is the status bar, drawn separately
 
@@ -111,10 +111,10 @@ async function renderCase(c: Case): Promise<{ got: Uint8Array; want: Uint8Array 
     linkOf: (r, d) => scene.tiles.linkOf(r, d),
   };
   const tables = readExeTables(exe);
-  const state: CharacterState = {
-    x: c.prince.x, y: c.prince.y, direction: c.prince.direction, frame: c.prince.frame,
-    room: c.room, currentColumn: 0, currentRow: 0, charId: 0,
-  };
+  const state = newCharacter({
+    x: c.prince.x, y: c.prince.y, direction: c.prince.direction,
+    frame: c.prince.frame, room: c.room,
+  });
   const draw = placeCharacter(state, tables.frameTableKid[state.frame]);
   const surface = new Surface();
   new RoomRenderer(scene.chtabs, tiles, scene.options)
