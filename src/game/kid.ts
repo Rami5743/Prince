@@ -20,7 +20,7 @@ import {
   type World, EDGE_TYPE, getEdgeDistance, getTile, determineColumn,
   distanceToEdgeWeight, floorHeightOfRow, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX,
   DIR_FRONT, DIR_BEHIND, TILE_RIGHT_X, TILE_SIZE_Y, charCollision,
-  tileDivModM7, weightX, distanceToEdge, wallType, distanceFromWallForward,
+  tileDivModM7, weightX, distanceToEdge, wallTypeAt, distanceFromWallForward,
 } from './physics.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
 import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
@@ -783,8 +783,10 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
     // Only a wall the level actually has. Off the edge of the level
     // `getTile` reports a wall too, but the original does not stop the
     // Prince there -- he runs out of the level and dies.
-    if (tile.room === 0 || wallType(tile.type) === 0) return 0;
-    const d = distanceFromWallForward(state, tile.type, column, coll);
+    if (tile.room === 0) return 0;
+    const wall = wallTypeAt(ctx.world, tile);
+    if (wall === 0) return 0;
+    const d = distanceFromWallForward(state, tile.type, column, coll, wall);
     return d < 0 ? d : 0;
   };
 

@@ -35,7 +35,37 @@ export const EDGE_TYPE = {
 const WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0] as const;
 const WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0] as const;
 
-/** Which side of a tile is solid. */
+/**
+ * How far a gate has to have risen before a character can pass under it.
+ *
+ * The modifier counts up to 188 as the gate opens and the game works in
+ * quarters of it, 0 to 47. The same threshold decides whether a gate
+ * overhead is something to climb past rather than onto -- see `canClimbUp`
+ * in kid.ts -- so a gate is "open" here in the same sense it is open there.
+ */
+export const GATE_OPEN_ENOUGH = 6;
+
+/** Is this gate still low enough to walk into? */
+export function gateBlocks(modifier: number): boolean {
+  return (modifier >> 2) < GATE_OPEN_ENOUGH;
+}
+
+/**
+ * `wallType`, for a tile that has been looked up, so that a gate can be
+ * asked how far open it is. A gate that has risen is not a wall, and
+ * treating it as one leaves the player standing in front of a door they
+ * have just opened.
+ */
+export function wallTypeAt(world: World, tile: TileQuery): number {
+  if (tile.type === TILE.gate) {
+    if (tile.room === 0) return 0;
+    const modifier = world.modifierAt(tile.room, tile.column, tile.row);
+    if (!gateBlocks(modifier)) return 0;
+  }
+  return wallType(tile.type);
+}
+
+/** Which side of a tile is solid, from its type alone. */
 export function wallType(tileType: number): number {
   switch (tileType) {
     case TILE.gate:
@@ -157,8 +187,9 @@ export function charCollision(
 /** Distance from the wall the character is walking towards, or -1. */
 export function distanceFromWallForward(
   state: CharacterState, tileType: number, tileColumn: number, coll: Collision,
+  knownType?: number,
 ): number {
-  const type = wallType(tileType);
+  const type = knownType ?? wallType(tileType);
   if (type === 0) return -1;
   const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
   if (state.direction < 0) {
@@ -187,8 +218,11 @@ export function getEdgeDistance(
       ? { distance, edgeType: EDGE_TYPE.wall }
       : { distance: 11, edgeType: EDGE_TYPE.floor };
 
-  if (wallType(here.type) !== 0) {
-    const d = distanceFromWallForward(state, here.type, state.currentColumn, coll);
+  const hereWall = wallTypeAt(world, here);
+  if (hereWall !== 0) {
+    const d = distanceFromWallForward(
+      state, here.type, state.currentColumn, coll, hereWall,
+    );
     if (d >= 0) return classify(d);
   }
 
@@ -198,8 +232,9 @@ export function getEdgeDistance(
   if (front.type === TILE.doortop && state.direction >= 0) {
     return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
   }
-  if (wallType(front.type) !== 0) {
-    const d = distanceFromWallForward(state, front.type, frontColumn, coll);
+  const frontWall = wallTypeAt(world, front);
+  if (frontWall !== 0) {
+    const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
     if (d >= 0) return classify(d);
   }
   if (front.type === TILE.loose) {

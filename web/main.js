@@ -2521,6 +2521,18 @@ var EDGE_TYPE = {
 };
 var WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0];
 var WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0];
+var GATE_OPEN_ENOUGH = 6;
+function gateBlocks(modifier) {
+  return modifier >> 2 < GATE_OPEN_ENOUGH;
+}
+function wallTypeAt(world, tile) {
+  if (tile.type === TILE.gate) {
+    if (tile.room === 0) return 0;
+    const modifier = world.modifierAt(tile.room, tile.column, tile.row);
+    if (!gateBlocks(modifier)) return 0;
+  }
+  return wallType(tile.type);
+}
 function wallType(tileType) {
   switch (tileType) {
     case TILE.gate:
@@ -2605,8 +2617,8 @@ function charCollision(state, frame, objX, spriteWidth) {
   }
   return { xLeft, xRight, xLeftColl, xRightColl };
 }
-function distanceFromWallForward(state, tileType, tileColumn, coll) {
-  const type = wallType(tileType);
+function distanceFromWallForward(state, tileType, tileColumn, coll, knownType) {
+  const type = knownType ?? wallType(tileType);
   if (type === 0) return -1;
   const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
   if (state.direction < 0) {
@@ -2618,8 +2630,15 @@ function getEdgeDistance(world, state, frame, objX, spriteWidth) {
   const coll = charCollision(state, frame, objX, spriteWidth);
   const here = getTile(world, state.room, state.currentColumn, state.currentRow);
   const classify = (distance) => distance <= TILE_RIGHT_X ? { distance, edgeType: EDGE_TYPE.wall } : { distance: 11, edgeType: EDGE_TYPE.floor };
-  if (wallType(here.type) !== 0) {
-    const d = distanceFromWallForward(state, here.type, state.currentColumn, coll);
+  const hereWall = wallTypeAt(world, here);
+  if (hereWall !== 0) {
+    const d = distanceFromWallForward(
+      state,
+      here.type,
+      state.currentColumn,
+      coll,
+      hereWall
+    );
     if (d >= 0) return classify(d);
   }
   const frontColumn = DIR_FRONT[state.direction + 1] + state.currentColumn;
@@ -2627,8 +2646,9 @@ function getEdgeDistance(world, state, frame, objX, spriteWidth) {
   if (front.type === TILE.doortop && state.direction >= 0) {
     return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
   }
-  if (wallType(front.type) !== 0) {
-    const d = distanceFromWallForward(state, front.type, frontColumn, coll);
+  const frontWall = wallTypeAt(world, front);
+  if (frontWall !== 0) {
+    const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
     if (d >= 0) return classify(d);
   }
   if (front.type === TILE.loose) {
@@ -3296,8 +3316,10 @@ function checkBumped(state, ctx) {
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
   const penetration = (column) => {
     const tile = getTile(ctx.world, state.room, column, state.currentRow);
-    if (tile.room === 0 || wallType(tile.type) === 0) return 0;
-    const d = distanceFromWallForward(state, tile.type, column, coll);
+    if (tile.room === 0) return 0;
+    const wall = wallTypeAt(ctx.world, tile);
+    if (wall === 0) return 0;
+    const d = distanceFromWallForward(state, tile.type, column, coll, wall);
     return d < 0 ? d : 0;
   };
   const here = penetration(state.currentColumn);

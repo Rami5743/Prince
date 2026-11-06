@@ -102,6 +102,12 @@ one.
 * **After a climb the Prince stands still** where the original walks on
   along the floor he has just reached. The last twenty captures of the
   climbing session follow from that one difference.
+* **A shut gate does not stop him.** He bumps into it, is pushed back the
+  few units the bump is worth, and the next stride carries him past its
+  face in one frame -- after which his column is the far side of it and
+  nothing checks the tile behind him. Doing it properly means refusing the
+  move rather than correcting it afterwards. `tests/game/gate.test.ts`
+  records it.
 * **Bumping is only half there.** `checkBumped` in `src/game/kid.ts` stops
   the Prince at a wall he walks into, which is sequence 47. The original also
   has sequences 45 and 46 -- bumping while in the air, which knocks him down
