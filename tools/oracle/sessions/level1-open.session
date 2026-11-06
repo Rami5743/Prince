@@ -1,0 +1,18 @@
+# Level 1, played the way a person plays it: stand, run right off the ledge
+# and fall a row, run on over the loose floor, come back left, and press Up
+# against the ledge. It covers standing, running, an unplanned fall, the
+# landing, turning, a loose floor and a climb -- in one unbroken session,
+# which is the point: the bugs being hunted appear after a few moves, not in
+# the first one.
+level 1
+cycles 400
+settle 40
+phase - 4
+phase r 10
+phase - 4
+phase r 8
+phase - 4
+phase l 6
+phase - 3
+phase u 8
+phase - 4
