@@ -165,6 +165,31 @@ python3 tools/oracle/dosbox_oracle.py \
 node --experimental-strip-types tools/dev/match-run.ts 3 /tmp/run
 ```
 
+## 4a. Recordings from the browser
+
+The page can record a session. **record keys** starts the level again and
+then writes down every key, tick by tick; **save recording** downloads it
+as a JSON file.
+
+The game is deterministic, so the level and the input are enough to replay
+a session exactly. The file also carries what the engine did on each tick,
+so a replay can be checked against what the player actually saw, and the
+raw key events with the tick each landed on, which is how you tell a press
+that was acted on late from one that was dropped.
+
+```bash
+node --experimental-strip-types tools/dev/replay.ts recording.json
+```
+
+That prints the first tick where the replay disagrees with the recording,
+and how long each press waited for the next step.
+
+Dropping the file in `tests/recordings/` is all it takes to turn it into a
+test: `tests/game/recording.test.ts` replays everything it finds there and
+requires the states to match tick for tick. A recording of a session that
+went wrong is therefore the shortest path from "it does this when I play
+it" to a failing test.
+
 ## 5. A whole play session
 
 The comparisons above each pin one move. They pass even when the game is

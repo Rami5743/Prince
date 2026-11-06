@@ -2552,6 +2552,31 @@ function guardDraw(guard, tables) {
   return placeCharacter(guard, frame, "guard");
 }
 
+// src/game/recording.ts
+var RECORDING_FORMAT = "prince-input-recording";
+var RECORDING_VERSION = 1;
+function tokenOf(c) {
+  const s = (c.x < 0 ? "l" : c.x > 0 ? "r" : "") + (c.y < 0 ? "u" : c.y > 0 ? "d" : "") + (c.shift ? "s" : "");
+  return s === "" ? "." : s;
+}
+function encodeTimeline(ticks) {
+  const out = [];
+  let token = "";
+  let count = 0;
+  for (const c of ticks) {
+    const t = tokenOf(c);
+    if (t === token) {
+      count++;
+      continue;
+    }
+    if (count) out.push(`${count}${token}`);
+    token = t;
+    count = 1;
+  }
+  if (count) out.push(`${count}${token}`);
+  return out.join(",");
+}
+
 // src/dat/level.ts
 var ROOM_COUNT = 24;
 var ROOM_WIDTH = 10;
@@ -4409,11 +4434,15 @@ async function boot() {
   let game = null;
   let watchRoom = null;
   const held = /* @__PURE__ */ new Set();
-  const controls = () => ({
-    x: (held.has("right") ? 1 : 0) - (held.has("left") ? 1 : 0),
-    y: (held.has("down") ? 1 : 0) - (held.has("up") ? 1 : 0),
-    shift: held.has("shift")
-  });
+  const pressedSinceStep = /* @__PURE__ */ new Set();
+  const controls = () => {
+    const down = (d) => held.has(d) || pressedSinceStep.has(d);
+    return {
+      x: (down("right") ? 1 : 0) - (down("left") ? 1 : 0),
+      y: (down("down") ? 1 : 0) - (down("up") ? 1 : 0),
+      shift: down("shift")
+    };
+  };
   const CONTROLS = "arrow keys or the numeric keypad to move, up to jump; hold shift to step carefully and to keep hold of a ledge, then up again to climb it";
   function directionsOf(e) {
     switch (e.code) {
@@ -4472,10 +4501,74 @@ async function boot() {
     watchRoom = null;
     roomSel.value = String(game.drawnRoom);
   }
+  const recordBtn = document.getElementById("record");
+  const saveBtn = document.getElementById("save");
+  const recorder = {
+    on: false,
+    started: 0,
+    ticks: [],
+    events: [],
+    states: [],
+    level: 0,
+    start() {
+      this.on = true;
+      this.started = performance.now();
+      this.ticks = [];
+      this.events = [];
+      this.states = [];
+      this.level = w0Level();
+    },
+    stop() {
+      this.on = false;
+    },
+    key(type, code) {
+      if (!this.on || this.events.length >= MAX_RECORDED_EVENTS) return;
+      this.events.push({
+        ms: Math.round((performance.now() - this.started) * 10) / 10,
+        tick: this.ticks.length,
+        type,
+        key: code
+      });
+    },
+    tick(c, g) {
+      if (!this.on || this.ticks.length >= MAX_RECORDED_TICKS) return;
+      this.ticks.push({ ...c });
+      this.states.push({
+        tick: this.ticks.length - 1,
+        frame: g.kid.frame,
+        room: g.kid.room,
+        x: g.kid.x,
+        y: g.kid.y,
+        hitPoints: g.hitPoints
+      });
+    },
+    toJson() {
+      const out = {
+        format: RECORDING_FORMAT,
+        version: RECORDING_VERSION,
+        recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        level: this.level,
+        ticksPerSecond: FRAMES_PER_SECOND,
+        timeline: encodeTimeline(this.ticks),
+        events: this.events,
+        states: this.states
+      };
+      return JSON.stringify(out);
+    }
+  };
+  const MAX_RECORDED_TICKS = 12 * 60 * 20;
+  const MAX_RECORDED_EVENTS = 2e4;
+  const w0Level = () => {
+    const v = views[current];
+    return v.kind === "level" ? v.level : 0;
+  };
   function frame() {
     if (!game) return;
     if (watchRoom === null) {
-      game.step(controls());
+      const c = controls();
+      pressedSinceStep.clear();
+      game.step(c);
+      recorder.tick(c, game);
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -4503,7 +4596,11 @@ async function boot() {
     e.preventDefault();
     document.activeElement?.blur?.();
     if (dirs.length === 0) held.clear();
-    for (const d of dirs) held.add(d);
+    for (const d of dirs) {
+      held.add(d);
+      pressedSinceStep.add(d);
+    }
+    recorder.key("down", e.code);
     if (watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
@@ -4515,8 +4612,12 @@ async function boot() {
     if (dirs === null) return;
     e.preventDefault();
     for (const d of dirs) held.delete(d);
+    recorder.key("up", e.code);
   });
-  window.addEventListener("blur", () => held.clear());
+  window.addEventListener("blur", () => {
+    held.clear();
+    pressedSinceStep.clear();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) held.clear();
   });
@@ -4530,8 +4631,11 @@ async function boot() {
   };
   w0.__princeHold = (key, down) => {
     const d = PAD_DIRECTION[key] ?? key;
-    if (down) held.add(d);
-    else held.delete(d);
+    if (down) {
+      held.add(d);
+      pressedSinceStep.add(d);
+    } else held.delete(d);
+    recorder.key(down ? "down" : "up", key);
     if (down && game?.isDead) void restart();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
@@ -4544,6 +4648,39 @@ async function boot() {
     game = await game.restart(assets, exe);
     watchRoom = null;
   }
+  recordBtn?.addEventListener("click", () => {
+    void (async () => {
+      recordBtn.blur();
+      if (recorder.on) {
+        recorder.stop();
+        recordBtn.textContent = "record keys";
+        if (saveBtn) saveBtn.disabled = recorder.ticks.length === 0;
+        return;
+      }
+      if (!game) return;
+      await restart();
+      recorder.start();
+      recordBtn.textContent = "stop recording";
+      if (saveBtn) saveBtn.disabled = true;
+    })();
+  });
+  saveBtn?.addEventListener("click", () => {
+    saveBtn.blur();
+    if (!recorder.ticks.length) return;
+    const blob = new Blob([recorder.toJson()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const when = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = `prince-keys-level${recorder.level}-${when}.json`;
+    a.style.display = "none";
+    document.body.append(a);
+    a.click();
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 1e4);
+  });
   await select(0);
   const STEP_MS = 1e3 / FRAMES_PER_SECOND;
   let owed = 0;

@@ -7,6 +7,10 @@ import { Display } from '../src/render/display.ts';
 import { Surface, ScreenPalette } from '../src/render/surface.ts';
 import { RoomRenderer } from '../src/render/room.ts';
 import { NO_DIRECTION as NO_GUARD } from '../src/game/guard.ts';
+import {
+  RECORDING_FORMAT, RECORDING_VERSION, encodeTimeline,
+  type Recording, type RecordedEvent, type RecordedState,
+} from '../src/game/recording.ts';
 import { Game } from '../src/game/game.ts';
 import type { Controls } from '../src/game/kid.ts';
 
@@ -68,11 +72,24 @@ async function boot(): Promise<void> {
    * means a diagonal, so both the arrows and the keypad feed the same set.
    */
   const held = new Set<string>();
-  const controls = (): Controls => ({
-    x: (held.has('right') ? 1 : 0) - (held.has('left') ? 1 : 0),
-    y: (held.has('down') ? 1 : 0) - (held.has('up') ? 1 : 0),
-    shift: held.has('shift'),
-  });
+  /**
+   * Directions pressed since the last step, whether or not they are still
+   * down. The game is stepped twelve times a second, so a key that goes
+   * down and up between two steps was never there at all as far as a plain
+   * reading of `held` is concerned -- a quick tap did nothing, and every
+   * press waited for the next step before it counted. The original's
+   * keyboard handler latches a press the moment it happens, so this does
+   * too, and the latch is cleared once the step has seen it.
+   */
+  const pressedSinceStep = new Set<string>();
+  const controls = (): Controls => {
+    const down = (d: string): boolean => held.has(d) || pressedSinceStep.has(d);
+    return {
+      x: (down('right') ? 1 : 0) - (down('left') ? 1 : 0),
+      y: (down('down') ? 1 : 0) - (down('up') ? 1 : 0),
+      shift: down('shift'),
+    };
+  };
 
   /**
    * What the keys do. Shift is the one worth spelling out: it is not only
@@ -129,10 +146,84 @@ async function boot(): Promise<void> {
     roomSel.value = String(game.drawnRoom);
   }
 
+  /**
+   * Recording what was pressed, so a session in a real browser can be
+   * replayed in a test. The game is deterministic, so the input and the
+   * level are enough to reproduce a session exactly; the states are kept
+   * alongside so a replay can be checked against what the player saw, and
+   * the raw key events so that a press acted on late can be found.
+   */
+  // Both pages have these, but a page without them should still run.
+  const recordBtn = document.getElementById('record') as HTMLButtonElement | null;
+  const saveBtn = document.getElementById('save') as HTMLButtonElement | null;
+
+  const recorder = {
+    on: false,
+    started: 0,
+    ticks: [] as Controls[],
+    events: [] as RecordedEvent[],
+    states: [] as RecordedState[],
+    level: 0,
+
+    start(): void {
+      this.on = true;
+      this.started = performance.now();
+      this.ticks = [];
+      this.events = [];
+      this.states = [];
+      this.level = w0Level();
+    },
+    stop(): void { this.on = false; },
+
+    key(type: 'down' | 'up', code: string): void {
+      if (!this.on || this.events.length >= MAX_RECORDED_EVENTS) return;
+      this.events.push({
+        ms: Math.round((performance.now() - this.started) * 10) / 10,
+        tick: this.ticks.length, type, key: code,
+      });
+    },
+
+    tick(c: Controls, g: Game): void {
+      if (!this.on || this.ticks.length >= MAX_RECORDED_TICKS) return;
+      this.ticks.push({ ...c });
+      this.states.push({
+        tick: this.ticks.length - 1,
+        frame: g.kid.frame, room: g.kid.room, x: g.kid.x, y: g.kid.y,
+        hitPoints: g.hitPoints,
+      });
+    },
+
+    toJson(): string {
+      const out: Recording = {
+        format: RECORDING_FORMAT,
+        version: RECORDING_VERSION,
+        recordedAt: new Date().toISOString(),
+        level: this.level,
+        ticksPerSecond: FRAMES_PER_SECOND,
+        timeline: encodeTimeline(this.ticks),
+        events: this.events,
+        states: this.states,
+      };
+      return JSON.stringify(out);
+    },
+  };
+
+  /** Caps, so a recording left running does not eat the tab's memory. */
+  const MAX_RECORDED_TICKS = 12 * 60 * 20; // twenty minutes of play
+  const MAX_RECORDED_EVENTS = 20000;
+
+  const w0Level = (): number => {
+    const v = views[current];
+    return v.kind === 'level' ? (v as { level: number }).level : 0;
+  };
+
   function frame(): void {
     if (!game) return;
     if (watchRoom === null) {
-      game.step(controls());
+      const c = controls();
+      pressedSinceStep.clear();
+      game.step(c);
+      recorder.tick(c, game);
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -170,7 +261,8 @@ async function boot(): Promise<void> {
     e.preventDefault();
     (document.activeElement as HTMLElement | null)?.blur?.();
     if (dirs.length === 0) held.clear();
-    for (const d of dirs) held.add(d);
+    for (const d of dirs) { held.add(d); pressedSinceStep.add(d); }
+    recorder.key('down', e.code);
     if (watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
@@ -182,8 +274,9 @@ async function boot(): Promise<void> {
     if (dirs === null) return;
     e.preventDefault();
     for (const d of dirs) held.delete(d);
+    recorder.key('up', e.code);
   });
-  window.addEventListener('blur', () => held.clear());
+  window.addEventListener('blur', () => { held.clear(); pressedSinceStep.clear(); });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) held.clear();
   });
@@ -197,8 +290,9 @@ async function boot(): Promise<void> {
   };
   w0.__princeHold = (key: string, down: boolean): void => {
     const d = PAD_DIRECTION[key] ?? key;
-    if (down) held.add(d);
+    if (down) { held.add(d); pressedSinceStep.add(d); }
     else held.delete(d);
+    recorder.key(down ? 'down' : 'up', key);
     if (down && game?.isDead) void restart();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
@@ -213,6 +307,43 @@ async function boot(): Promise<void> {
     game = await game.restart(assets, exe);
     watchRoom = null;
   }
+
+  // Recording: the level is started again first, so that a recording always
+  // begins where the level does and a replay of it lines up exactly.
+  recordBtn?.addEventListener('click', () => {
+    void (async (): Promise<void> => {
+      recordBtn.blur();
+      if (recorder.on) {
+        recorder.stop();
+        recordBtn.textContent = 'record keys';
+        if (saveBtn) saveBtn.disabled = recorder.ticks.length === 0;
+        return;
+      }
+      if (!game) return;
+      await restart();
+      recorder.start();
+      recordBtn.textContent = 'stop recording';
+      if (saveBtn) saveBtn.disabled = true;
+    })();
+  });
+
+  saveBtn?.addEventListener('click', () => {
+    saveBtn.blur();
+    if (!recorder.ticks.length) return;
+    const blob = new Blob([recorder.toJson()], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const when = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = url;
+    a.download = `prince-keys-level${recorder.level}-${when}.json`;
+    // In the document, and the url let go of only afterwards: revoking it
+    // in the same breath as the click cancels the download in some
+    // browsers before it has begun.
+    a.style.display = 'none';
+    document.body.append(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 10000);
+  });
 
   await select(0);
 

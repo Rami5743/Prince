@@ -49,6 +49,8 @@ equal — see [docs/testing.md](testing.md).
 | Nothing leaves the world, however badly it is played | `tests/game/fuzz.test.ts` |
 | Climbing and a sword fight, in a real browser | `tests/browser/play.test.ts` |
 | The blank while the view changes room | `tests/game/run-jump.test.ts` |
+| A tap shorter than a frame still counts | `tests/browser/play.test.ts` |
+| Recordings replay to what they recorded | `tests/game/recording.test.ts` |
 
 `npm test` runs all of it; `npm run typecheck` is separate. Both should be
 clean before anything is pushed.
@@ -86,6 +88,15 @@ Adding a session is cheap -- a short file under `tools/oracle/sessions/`, a
 capture, and an entry in the test -- and is the best way to spend an hour on
 this port. Levels 2 and 3, hanging and climbing, and the traps all deserve
 one.
+
+## Getting a bug out of a browser and into a test
+
+The page has **record keys** and **save recording** on it. The first starts
+the level again and records every key tick by tick; the second downloads
+the lot as a file. Drop that file in `tests/recordings/` and it replays
+itself as a test -- see [docs/testing.md](testing.md) §4a. It is the
+shortest path there is from "it does this when I play it" to something
+that fails.
 
 ## Known to be unfinished
 

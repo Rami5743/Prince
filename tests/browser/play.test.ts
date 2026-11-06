@@ -93,6 +93,34 @@ describe('played in the browser', () => {
     }, 120000);
 
   /**
+   * The game is stepped twelve times a second, and the page used to look
+   * at the keyboard only at those moments: a key that went down and up in
+   * between was never seen at all. A tap of a few milliseconds has to
+   * count, the way it does on the original's keyboard handler.
+   */
+  it('a tap far shorter than a frame still moves him', async () => {
+    await page.evaluate(() => (window as unknown as {
+      __princeShow(level: number, room: number): Promise<void>;
+    }).__princeShow(1, 1));
+    await page.evaluate(() => (window as unknown as {
+      __princeStep(n: number, c: object): unknown;
+    }).__princeStep(19, {}));
+
+    const before = await state();
+    expect(before?.frame, 'he should be standing still').toBe(15);
+
+    // Down and up well inside one frame of the game's clock.
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(8);
+    await page.keyboard.up('ArrowRight');
+    await page.waitForTimeout(500);
+
+    const after = await state();
+    expect(after?.held, 'the key is long since up').not.toContain('right');
+    expect(after?.frame, 'but the tap was acted on').not.toBe(15);
+  }, 60000);
+
+  /**
    * A whole fight through the page: the approach is driven through the
    * step hook so it does not depend on the clock, and the fight itself is
    * real key presses, because the point is that Up reaches the game as a

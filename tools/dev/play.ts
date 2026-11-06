@@ -19,24 +19,12 @@ import { PNG } from 'pngjs';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import type { Controls } from '../../src/game/kid.ts';
+import { decodeTimeline } from '../../src/game/recording.ts';
 
 const GAME_DIR = join(import.meta.dirname, '..', '..', 'original', 'prince1');
 
-export function parseTimeline(spec: string): Controls[] {
-  const out: Controls[] = [];
-  for (const part of spec.split(',')) {
-    const m = /^(\d+)([.lrud]?)(s?)$/.exec(part.trim());
-    if (!m) throw new Error(`bad timeline item ${JSON.stringify(part)}`);
-    const n = Number(m[1]);
-    const c: Controls = {
-      x: m[2] === 'l' ? -1 : m[2] === 'r' ? 1 : 0,
-      y: m[2] === 'u' ? -1 : m[2] === 'd' ? 1 : 0,
-      shift: m[3] === 's',
-    };
-    for (let i = 0; i < n; i++) out.push({ ...c });
-  }
-  return out;
-}
+/** The timeline spelling lives with the recording format now. */
+export const parseTimeline = decodeTimeline;
 
 export interface Tick {
   tick: number;
