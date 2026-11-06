@@ -58,10 +58,18 @@ describe('the Prince', () => {
     for (let i = 0; i < 12; i++) game.step(STILL);
     const dir = game.kid.direction;
     const startX = game.kid.x;
-    for (let i = 0; i < 24; i++) game.step(FORWARD(dir));
-    const moved = dir < 0 ? startX - game.kid.x : game.kid.x - startX;
+    const startRoom = game.kid.room;
+    const startY = game.kid.y;
+    // Far enough to be running, but stopped at the room boundary: x is
+    // measured from the room's own left edge and starts over on the far side.
+    let moved = 0;
+    for (let i = 0; i < 24; i++) {
+      game.step(FORWARD(dir));
+      if (game.kid.room !== startRoom) break;
+      moved = dir < 0 ? startX - game.kid.x : game.kid.x - startX;
+    }
     expect(moved).toBeGreaterThan(20);
-    expect(game.kid.y).toBe(startX === game.kid.x ? game.kid.y : game.kid.y); // stays on its row
+    expect(game.kid.y).toBe(startY); // stays on its row
   });
 
   it('turns round when the player holds the other direction', async () => {

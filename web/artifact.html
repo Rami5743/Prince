@@ -101,7 +101,7 @@
 
   .pad {
     display: grid;
-    grid-template-columns: repeat(4, 56px);
+    grid-template-columns: repeat(3, 56px);
     gap: 8px;
     justify-content: center;
   }
@@ -161,22 +161,26 @@
 <div id="status">loading the game's data files…</div>
 
 <div class="pad" id="pad">
-  <button data-key="Shift" aria-label="Step carefully">shift</button>
-  <button data-key="ArrowLeft" aria-label="Left">◀</button>
-  <button data-key="ArrowUp" aria-label="Up">▲</button>
-  <button data-key="ArrowRight" aria-label="Right">▶</button>
-  <button data-key="ArrowDown" aria-label="Down" style="grid-column: 3">▼</button>
+  <button data-key="left up" aria-label="Jump up and to the left">◤</button>
+  <button data-key="up" aria-label="Up">▲</button>
+  <button data-key="right up" aria-label="Jump up and to the right">◥</button>
+  <button data-key="shift" aria-label="Step carefully">shift</button>
+  <button data-key="left" aria-label="Left">◀</button>
+  <button data-key="down" aria-label="Down">▼</button>
+  <button data-key="right" aria-label="Right">▶</button>
 </div>
 
 <footer>
-  <p><strong>Arrow keys</strong> to move, <strong>shift</strong> to step carefully,
-     and hold <strong>up</strong> to jump. Pick a level from the menu; pick a room
-     to look around without playing.</p>
+  <p><strong>Arrow keys</strong> or the <strong>numeric keypad</strong> to move —
+     a corner key jumps that way, as it does in the original. <strong>Shift</strong>
+     steps carefully; <strong>up</strong> while running is a running jump. Pick a
+     level from the menu; pick a room to look around without playing.</p>
   <p>Standing, turning, running, jumping, climbing, hanging and falling are in,
-     and so are the traps: gates and the buttons that work them, loose floors,
-     spikes and chompers. Guards and sound are not yet. Every room here has
-     been compared against the real game running under emulation, and matches
-     it pixel for pixel.</p>
+     and so are the traps — gates and the buttons that work them, loose floors,
+     spikes and chompers — and the guards, who stand where the level says and
+     are drawn with their own colours. Sword fighting and sound are not yet.
+     Every room here has been compared against the real game running under
+     emulation, and matches it pixel for pixel.</p>
 </footer>
 
 <!--DATA-SOURCE-->
@@ -185,7 +189,8 @@
   const pad = document.getElementById('pad');
   const press = (button, down) => {
     button.dataset.down = down ? '1' : '0';
-    window.__princeHold?.(button.dataset.key, down);
+    // A corner of the keypad is two directions at once, as it is on a real one.
+    for (const key of button.dataset.key.split(' ')) window.__princeHold?.(key, down);
   };
   for (const button of pad.querySelectorAll('button')) {
     const down = (e) => { e.preventDefault(); press(button, true); };

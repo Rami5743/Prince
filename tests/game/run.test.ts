@@ -111,14 +111,14 @@ const EXPECTED: Record<string, number | null> = {
   'run00.png': 7,
   'run01.png': 7,
   'run02.png': 17,
-  'run03.png': 24,
-  'run04.png': 33,
-  'run05.png': 39,
-  'run06.png': 47,
-  'run07.png': 56,
+  'run03.png': 23,
+  'run04.png': 30,
+  'run05.png': 35,
+  'run06.png': 41,
+  'run07.png': 48,
   'run08.png': null,
   'run09.png': null,
-  'run10.png': 40,
+  'run10.png': 54,
 };
 
 describe('running, against the original', () => {

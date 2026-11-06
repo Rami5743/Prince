@@ -56,6 +56,8 @@ export const KID_SEQ = {
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
+  /** The landing that kills: a fall of three rows or more. */
+  crushed: 52,
   unsafeStep: 39,
 } as const;
 
@@ -104,6 +106,8 @@ export interface KidContext {
   /** What the player is pressing this frame; some checks need it mid-frame. */
   controls: Controls;
   readonly traps?: TrapHooks;
+  /** Take hit points off the Prince. Returns true if that killed him. */
+  damage?(amount: number): boolean;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -433,21 +437,23 @@ function controlRunning(state: CharacterState, controls: Controls, ctx: KidConte
  */
 function runJump(state: CharacterState, ctx: KidContext): void {
   if (state.frame < FRAME.run7) return;
-  const frame = frameOf(ctx.tables, state);
   const xpos = forwardX(state, 4);
   let column = tileDivModM7(xpos).column;
   for (let ahead = 0; ahead < 2; ahead++) {
     column += DIR_FRONT[state.direction + 1];
     const t = getTile(ctx.world, state.room, column, state.currentRow);
-    if (t.type === TILE.spike || !tileIsFloor(t.type)) {
-      let adjust = distanceToEdge(state, xpos) + 14 * ahead - 14;
-      if (adjust < -8 || adjust >= 2) {
-        if (adjust < 128 && adjust >= 2) return;
-        adjust = -3;
-      }
-      state.x = forwardX(state, adjust + 4) & 0xff;
-      break;
+    if (t.type !== TILE.spike && tileIsFloor(t.type)) continue;
+    // There is an edge within two tiles: line up with it, or refuse the
+    // jump. The original's test is an unsigned one, which lets through only
+    // an adjustment of -8..-1; anything else either cancels the jump or,
+    // past 127, becomes a fixed step back.
+    let adjust = distanceToEdge(state, xpos) + 14 * ahead - 14;
+    if ((adjust & 0xffff) < 0xfff8 || adjust >= 2) {
+      if (adjust < 128) return; // too far from the edge to jump from here
+      adjust = -3;
     }
+    state.x = forwardX(state, adjust + 4) & 0xff;
+    break;
   }
   startSequence(state, KID_SEQ.runJump, ctx.tables);
 }
@@ -507,7 +513,22 @@ function land(state: CharacterState, ctx: KidContext): void {
     // Landed with his toes over the edge: shuffle back onto the floor.
     state.x = forwardX(state, -3) & 0xff;
   }
-  startSequence(state, state.fallY < 22 ? KID_SEQ.softLand : KID_SEQ.mediumLand, ctx.tables);
+  // How far he fell decides what it costs him: one row is free, two rows
+  // cost a hit point, three or more are fatal.
+  if (state.fallY < 22) {
+    startSequence(state, KID_SEQ.softLand, ctx.tables);
+  } else if (state.fallY < 33) {
+    if (ctx.damage?.(1)) {
+      state.alive = 0;
+      startSequence(state, KID_SEQ.crushed, ctx.tables);
+    } else {
+      startSequence(state, KID_SEQ.mediumLand, ctx.tables);
+    }
+  } else {
+    ctx.damage?.(100);
+    state.alive = 0;
+    startSequence(state, KID_SEQ.crushed, ctx.tables);
+  }
   state.fallY = 0;
   state.fallX = 0;
 }
@@ -652,6 +673,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
 
   // Falling out of the level is fatal, as it is in the original.
   if (state.room === 0 && state.alive < 0) {
+    ctx.damage?.(100);
     state.alive = 0;
   }
 }

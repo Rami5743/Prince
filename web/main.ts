@@ -61,12 +61,38 @@ async function boot(): Promise<void> {
   /** Set when the player wants to look at a room rather than play. */
   let watchRoom: number | null = null;
 
+  /**
+   * What the player is holding, as the directions the game thinks in rather
+   * than as keys. The original is played on a numeric keypad, where one key
+   * means a diagonal, so both the arrows and the keypad feed the same set.
+   */
   const held = new Set<string>();
   const controls = (): Controls => ({
-    x: (held.has('ArrowRight') ? 1 : 0) - (held.has('ArrowLeft') ? 1 : 0),
-    y: (held.has('ArrowDown') ? 1 : 0) - (held.has('ArrowUp') ? 1 : 0),
-    shift: held.has('Shift'),
+    x: (held.has('right') ? 1 : 0) - (held.has('left') ? 1 : 0),
+    y: (held.has('down') ? 1 : 0) - (held.has('up') ? 1 : 0),
+    shift: held.has('shift'),
   });
+
+  /** Which directions a key stands for. */
+  function directionsOf(e: KeyboardEvent): string[] | null {
+    switch (e.code) {
+      case 'Numpad7': return ['left', 'up'];
+      case 'Numpad8': return ['up'];
+      case 'Numpad9': return ['right', 'up'];
+      case 'Numpad4': return ['left'];
+      case 'Numpad5': return [];
+      case 'Numpad6': return ['right'];
+      case 'Numpad1': return ['left', 'down'];
+      case 'Numpad2': return ['down'];
+      case 'Numpad3': return ['right', 'down'];
+      case 'ArrowLeft': return ['left'];
+      case 'ArrowRight': return ['right'];
+      case 'ArrowUp': return ['up'];
+      case 'ArrowDown': return ['down'];
+      case 'ShiftLeft': case 'ShiftRight': return ['shift'];
+      default: return null;
+    }
+  }
 
   function drawTitle(group: typeof title): void {
     titleSurface.clear();
@@ -103,47 +129,104 @@ async function boot(): Promise<void> {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     const v = views[current];
     const type = game.scene.options.levelType ? 'palace' : 'dungeon';
-    status.textContent = watchRoom === null
-      ? `${label(v)} (${type}) — arrow keys to move, shift to step`
-      : `${label(v)} (${type}), room ${watchRoom} — looking around; press a key to play`;
+    status.textContent = game.isDead
+      ? `${label(v)} — you are dead; press any direction to begin again`
+      : watchRoom === null
+        ? `${label(v)} (${type}) — arrow keys or the numeric keypad; shift to step`
+        : `${label(v)} (${type}), room ${watchRoom} — looking around; press a key to play`;
   }
 
-  sceneSel.addEventListener('change', () => void select(Number(sceneSel.value)));
+  // Each menu gives the keyboard back once it has been used, so the next
+  // arrow key goes to the game.
+  sceneSel.addEventListener('change', () => {
+    sceneSel.blur();
+    void select(Number(sceneSel.value));
+  });
   roomSel.addEventListener('change', () => {
+    roomSel.blur();
     watchRoom = Number(roomSel.value);
   });
   aspectSel.addEventListener('change', () => {
+    aspectSel.blur();
     display.setAspect(aspectSel.value as 'original-4-3' | 'square-pixels');
   });
 
-  const KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift']);
   window.addEventListener('keydown', (e) => {
-    if (!KEYS.has(e.key)) return;
+    const dirs = directionsOf(e);
+    if (dirs === null) return;
+    // Taken, so that a key meant for the game never reaches the menus and
+    // changes what is on screen instead.
     e.preventDefault();
-    held.add(e.key);
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    if (dirs.length === 0) held.clear();
+    for (const d of dirs) held.add(d);
     if (watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
+    if (game?.isDead) void restart();
   });
   window.addEventListener('keyup', (e) => {
-    if (KEYS.has(e.key)) held.delete(e.key);
+    const dirs = directionsOf(e);
+    if (dirs === null) return;
+    e.preventDefault();
+    for (const d of dirs) held.delete(d);
   });
   window.addEventListener('blur', () => held.clear());
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) held.clear();
+  });
 
   // Touch controls, for playing without a keyboard.
   const w0 = window as unknown as Record<string, unknown>;
+  /** The on-screen pad names its buttons after keys; translate them. */
+  const PAD_DIRECTION: Record<string, string> = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+    Shift: 'shift',
+  };
   w0.__princeHold = (key: string, down: boolean): void => {
-    if (down) held.add(key);
-    else held.delete(key);
+    const d = PAD_DIRECTION[key] ?? key;
+    if (down) held.add(d);
+    else held.delete(d);
+    if (down && game?.isDead) void restart();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
   };
 
+  /** Start the level again, as the original does after a death. */
+  async function restart(): Promise<void> {
+    if (!game) return;
+    held.clear();
+    game = await game.restart(assets, exe);
+    watchRoom = null;
+  }
+
   await select(0);
-  setInterval(frame, 1000 / FRAMES_PER_SECOND);
+
+  /**
+   * The original steps the game twelve times a second. Driving that from the
+   * display's own refresh, with a running account of the time owed, keeps the
+   * steps evenly spaced; a plain interval drifts and the running stutters.
+   */
+  const STEP_MS = 1000 / FRAMES_PER_SECOND;
+  let owed = 0;
+  let last = performance.now();
+  function tick(now: number): void {
+    requestAnimationFrame(tick);
+    owed += now - last;
+    last = now;
+    if (owed > STEP_MS * 5) owed = STEP_MS; // came back from a pause
+    let stepped = false;
+    while (owed >= STEP_MS) {
+      owed -= STEP_MS;
+      frame();
+      stepped = true;
+    }
+    if (!stepped && game && watchRoom !== null) frame();
+  }
+  requestAnimationFrame(tick);
 
   // Hooks for the browser-level comparison tests.
   const w = window as unknown as Record<string, unknown>;
@@ -168,6 +251,10 @@ async function boot(): Promise<void> {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     return { ...game.kid };
   };
+  w.__princeState = () => (game ? {
+    frame: game.kid.frame, room: game.kid.room, x: game.kid.x, y: game.kid.y,
+    hitPoints: game.hitPoints, dead: game.isDead, held: [...held].sort(),
+  } : null);
   w.__princeLevel = () => (views[current].kind === 'level'
     ? (views[current] as { level: number }).level : 0);
   w.__princeReady = true;

@@ -42,10 +42,13 @@ export class Game {
 
   readonly levelNumber: number;
 
+  private readonly effects: TrapEffects;
+
   private constructor(
     scene: LevelScene, tables: ExeTables, levelNumber: number, effects: TrapEffects = {},
   ) {
     this.levelNumber = levelNumber;
+    this.effects = effects;
     this.scene = scene;
     this.tables = tables;
     this.kid = newCharacter();
@@ -73,6 +76,7 @@ export class Game {
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
       controls: { x: 0, y: 0, shift: false },
       traps: trapHooks,
+      damage: (amount) => this.damage(amount),
     };
     enterLevel(
       this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir, this.ctx,
@@ -106,6 +110,25 @@ export class Game {
     stepKid(this.kid, controls, this.ctx);
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+  }
+
+  /** Hurt the Prince. Returns true if that was the last of his hit points. */
+  damage(amount: number): boolean {
+    this.hitPoints = Math.max(0, this.hitPoints - amount);
+    return this.hitPoints === 0;
+  }
+
+  /** True once the Prince is dead and the level is waiting to be restarted. */
+  get isDead(): boolean {
+    return this.hitPoints === 0 || this.kid.alive >= 0;
+  }
+
+  /**
+   * Put the level back as it was and the Prince back at its start, which is
+   * what the original does after a death.
+   */
+  async restart(assets: Assets, exe: Uint8Array): Promise<Game> {
+    return Game.start(assets, exe, this.levelNumber, { effects: this.effects });
   }
 
   /** Show a different room without playing: for looking around. */

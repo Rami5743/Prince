@@ -46,6 +46,15 @@ frame holds the game's output quantised to 5/6/5 bits. The helper
 change of representation, not a tolerance — the comparison still requires
 every pixel to be equal.
 
+One capture set is taken with the emulator deliberately slowed
+(`--cycles 400`). A running jump lasts about nine game ticks, and a capture
+costs roughly half a second of real time, so at full speed the whole jump
+falls between two captures and is never seen; slowed down, consecutive
+captures are a tick or two apart. `tools/oracle/scripts/level3-runjump.txt`
+is captured that way, and `tests/game/run-jump.test.ts` requires ten of its
+thirteen frames to be reproduced exactly. The other three are black: the
+original blanks the screen while it changes room, and the port does not.
+
 `tests/oracle/title-screen.test.ts` is the first of these: decoding
 `TITLE.DAT` resource 51 with palette 50 must reproduce the captured title
 screen with **zero** differing pixels out of 64 000. Passing it means the

@@ -157,15 +157,22 @@ export function playSequence(state: CharacterState, ctx: SequenceContext): boole
       case SEQ_OP.knockDown:
         ctx.effects?.knock?.(-1);
         break;
-      case SEQ_OP.sound:
-        ctx.effects?.sound?.(read());
+      case SEQ_OP.sound: {
+        // The argument is read whether or not anyone is listening: optional
+        // chaining would skip the call, and with it the read, leaving the
+        // sound number to be taken for the next frame.
+        const sound = read();
+        ctx.effects?.sound?.(sound);
         break;
+      }
       case SEQ_OP.endLevel:
         ctx.effects?.endLevel?.();
         break;
-      case SEQ_OP.getItem:
-        ctx.effects?.getItem?.(read());
+      case SEQ_OP.getItem: {
+        const item = read();
+        ctx.effects?.getItem?.(item);
         break;
+      }
       case SEQ_OP.die:
         ctx.effects?.die?.();
         break;

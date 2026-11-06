@@ -1,0 +1,29 @@
+# Level 3: hold Right until the Prince is running, then press Up while he is
+# still running -- the running jump -- and capture it frame by frame.
+# The emulator is run slowly (--cycles 400) so that consecutive captures are
+# only a game tick or two apart; at full speed a nine-tick jump falls between
+# two captures and is never seen.
+wait 30
+key Return
+wait 20
+key shift+l
+wait 70
+key shift+l
+wait 70
+keydown Right
+shot jump00
+shot jump01
+keydown Up
+shot jump02
+shot jump03
+shot jump04
+keyup Up
+shot jump05
+shot jump06
+shot jump07
+shot jump08
+shot jump09
+shot jump10
+shot jump11
+keyup Right
+shot jump12

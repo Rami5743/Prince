@@ -2239,15 +2239,19 @@ function playSequence(state, ctx) {
       case SEQ_OP.knockDown:
         ctx.effects?.knock?.(-1);
         break;
-      case SEQ_OP.sound:
-        ctx.effects?.sound?.(read());
+      case SEQ_OP.sound: {
+        const sound = read();
+        ctx.effects?.sound?.(sound);
         break;
+      }
       case SEQ_OP.endLevel:
         ctx.effects?.endLevel?.();
         break;
-      case SEQ_OP.getItem:
-        ctx.effects?.getItem?.(read());
+      case SEQ_OP.getItem: {
+        const item = read();
+        ctx.effects?.getItem?.(item);
         break;
+      }
       case SEQ_OP.die:
         ctx.effects?.die?.();
         break;
@@ -2656,6 +2660,8 @@ var KID_SEQ = {
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
+  /** The landing that kills: a fall of three rows or more. */
+  crushed: 52,
   unsafeStep: 39
 };
 var FRAME = {
@@ -2967,21 +2973,19 @@ function controlRunning(state, controls, ctx) {
 }
 function runJump(state, ctx) {
   if (state.frame < FRAME.run7) return;
-  const frame = frameOf(ctx.tables, state);
   const xpos = forwardX(state, 4);
   let column = tileDivModM7(xpos).column;
   for (let ahead = 0; ahead < 2; ahead++) {
     column += DIR_FRONT[state.direction + 1];
     const t = getTile(ctx.world, state.room, column, state.currentRow);
-    if (t.type === TILE.spike || !tileIsFloor(t.type)) {
-      let adjust = distanceToEdge(state, xpos) + 14 * ahead - 14;
-      if (adjust < -8 || adjust >= 2) {
-        if (adjust < 128 && adjust >= 2) return;
-        adjust = -3;
-      }
-      state.x = forwardX(state, adjust + 4) & 255;
-      break;
+    if (t.type !== TILE.spike && tileIsFloor(t.type)) continue;
+    let adjust = distanceToEdge(state, xpos) + 14 * ahead - 14;
+    if ((adjust & 65535) < 65528 || adjust >= 2) {
+      if (adjust < 128) return;
+      adjust = -3;
     }
+    state.x = forwardX(state, adjust + 4) & 255;
+    break;
   }
   startSequence(state, KID_SEQ.runJump, ctx.tables);
 }
@@ -3049,7 +3053,20 @@ function land(state, ctx) {
   if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
     state.x = forwardX(state, -3) & 255;
   }
-  startSequence(state, state.fallY < 22 ? KID_SEQ.softLand : KID_SEQ.mediumLand, ctx.tables);
+  if (state.fallY < 22) {
+    startSequence(state, KID_SEQ.softLand, ctx.tables);
+  } else if (state.fallY < 33) {
+    if (ctx.damage?.(1)) {
+      state.alive = 0;
+      startSequence(state, KID_SEQ.crushed, ctx.tables);
+    } else {
+      startSequence(state, KID_SEQ.mediumLand, ctx.tables);
+    }
+  } else {
+    ctx.damage?.(100);
+    state.alive = 0;
+    startSequence(state, KID_SEQ.crushed, ctx.tables);
+  }
   state.fallY = 0;
   state.fallX = 0;
 }
@@ -3159,6 +3176,7 @@ function stepKid(state, controls, ctx) {
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
   if (state.room === 0 && state.alive < 0) {
+    ctx.damage?.(100);
     state.alive = 0;
   }
 }
@@ -3726,8 +3744,10 @@ var Game = class _Game {
   renderer;
   ctx;
   levelNumber;
+  effects;
   constructor(scene, tables, levelNumber, effects = {}) {
     this.levelNumber = levelNumber;
+    this.effects = effects;
     this.scene = scene;
     this.tables = tables;
     this.kid = newCharacter();
@@ -3753,7 +3773,8 @@ var Game = class _Game {
       world,
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
       controls: { x: 0, y: 0, shift: false },
-      traps: trapHooks
+      traps: trapHooks,
+      damage: (amount) => this.damage(amount)
     };
     enterLevel(
       this.kid,
@@ -3787,6 +3808,22 @@ var Game = class _Game {
     stepKid(this.kid, controls, this.ctx);
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) this.enterRoom(this.drawnRoom);
+  }
+  /** Hurt the Prince. Returns true if that was the last of his hit points. */
+  damage(amount) {
+    this.hitPoints = Math.max(0, this.hitPoints - amount);
+    return this.hitPoints === 0;
+  }
+  /** True once the Prince is dead and the level is waiting to be restarted. */
+  get isDead() {
+    return this.hitPoints === 0 || this.kid.alive >= 0;
+  }
+  /**
+   * Put the level back as it was and the Prince back at its start, which is
+   * what the original does after a death.
+   */
+  async restart(assets, exe) {
+    return _Game.start(assets, exe, this.levelNumber, { effects: this.effects });
   }
   /** Show a different room without playing: for looking around. */
   showRoom(room) {
@@ -3959,10 +3996,45 @@ async function boot() {
   let watchRoom = null;
   const held = /* @__PURE__ */ new Set();
   const controls = () => ({
-    x: (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0),
-    y: (held.has("ArrowDown") ? 1 : 0) - (held.has("ArrowUp") ? 1 : 0),
-    shift: held.has("Shift")
+    x: (held.has("right") ? 1 : 0) - (held.has("left") ? 1 : 0),
+    y: (held.has("down") ? 1 : 0) - (held.has("up") ? 1 : 0),
+    shift: held.has("shift")
   });
+  function directionsOf(e) {
+    switch (e.code) {
+      case "Numpad7":
+        return ["left", "up"];
+      case "Numpad8":
+        return ["up"];
+      case "Numpad9":
+        return ["right", "up"];
+      case "Numpad4":
+        return ["left"];
+      case "Numpad5":
+        return [];
+      case "Numpad6":
+        return ["right"];
+      case "Numpad1":
+        return ["left", "down"];
+      case "Numpad2":
+        return ["down"];
+      case "Numpad3":
+        return ["right", "down"];
+      case "ArrowLeft":
+        return ["left"];
+      case "ArrowRight":
+        return ["right"];
+      case "ArrowUp":
+        return ["up"];
+      case "ArrowDown":
+        return ["down"];
+      case "ShiftLeft":
+      case "ShiftRight":
+        return ["shift"];
+      default:
+        return null;
+    }
+  }
   function drawTitle(group) {
     titleSurface.clear();
     titlePalette.loadBlock(0, group.palette.vga);
@@ -3996,40 +4068,85 @@ async function boot() {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     const v = views[current];
     const type = game.scene.options.levelType ? "palace" : "dungeon";
-    status.textContent = watchRoom === null ? `${label(v)} (${type}) \u2014 arrow keys to move, shift to step` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
+    status.textContent = game.isDead ? `${label(v)} \u2014 you are dead; press any direction to begin again` : watchRoom === null ? `${label(v)} (${type}) \u2014 arrow keys or the numeric keypad; shift to step` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
   }
-  sceneSel.addEventListener("change", () => void select(Number(sceneSel.value)));
+  sceneSel.addEventListener("change", () => {
+    sceneSel.blur();
+    void select(Number(sceneSel.value));
+  });
   roomSel.addEventListener("change", () => {
+    roomSel.blur();
     watchRoom = Number(roomSel.value);
   });
   aspectSel.addEventListener("change", () => {
+    aspectSel.blur();
     display.setAspect(aspectSel.value);
   });
-  const KEYS = /* @__PURE__ */ new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Shift"]);
   window.addEventListener("keydown", (e) => {
-    if (!KEYS.has(e.key)) return;
+    const dirs = directionsOf(e);
+    if (dirs === null) return;
     e.preventDefault();
-    held.add(e.key);
+    document.activeElement?.blur?.();
+    if (dirs.length === 0) held.clear();
+    for (const d of dirs) held.add(d);
     if (watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
+    if (game?.isDead) void restart();
   });
   window.addEventListener("keyup", (e) => {
-    if (KEYS.has(e.key)) held.delete(e.key);
+    const dirs = directionsOf(e);
+    if (dirs === null) return;
+    e.preventDefault();
+    for (const d of dirs) held.delete(d);
   });
   window.addEventListener("blur", () => held.clear());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) held.clear();
+  });
   const w0 = window;
+  const PAD_DIRECTION = {
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    ArrowUp: "up",
+    ArrowDown: "down",
+    Shift: "shift"
+  };
   w0.__princeHold = (key, down) => {
-    if (down) held.add(key);
-    else held.delete(key);
+    const d = PAD_DIRECTION[key] ?? key;
+    if (down) held.add(d);
+    else held.delete(d);
+    if (down && game?.isDead) void restart();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
   };
+  async function restart() {
+    if (!game) return;
+    held.clear();
+    game = await game.restart(assets, exe);
+    watchRoom = null;
+  }
   await select(0);
-  setInterval(frame, 1e3 / FRAMES_PER_SECOND);
+  const STEP_MS = 1e3 / FRAMES_PER_SECOND;
+  let owed = 0;
+  let last = performance.now();
+  function tick(now) {
+    requestAnimationFrame(tick);
+    owed += now - last;
+    last = now;
+    if (owed > STEP_MS * 5) owed = STEP_MS;
+    let stepped = false;
+    while (owed >= STEP_MS) {
+      owed -= STEP_MS;
+      frame();
+      stepped = true;
+    }
+    if (!stepped && game && watchRoom !== null) frame();
+  }
+  requestAnimationFrame(tick);
   const w = window;
   w.__princeFrame = (id) => {
     if (id === "title-background") {
@@ -4052,6 +4169,15 @@ async function boot() {
     display.present(game.render(), game.scene.screenPalette.toRgba());
     return { ...game.kid };
   };
+  w.__princeState = () => game ? {
+    frame: game.kid.frame,
+    room: game.kid.room,
+    x: game.kid.x,
+    y: game.kid.y,
+    hitPoints: game.hitPoints,
+    dead: game.isDead,
+    held: [...held].sort()
+  } : null;
   w.__princeLevel = () => views[current].kind === "level" ? views[current].level : 0;
   w.__princeReady = true;
   void RoomRenderer;

@@ -72,3 +72,62 @@ describe('in a real browser', () => {
     expect(size).toEqual([320, 200]);
   });
 });
+
+/**
+ * The page's own keyboard handling, which the engine tests cannot reach: the
+ * original is played on a numeric keypad, and a key meant for the game must
+ * not reach the menus behind it.
+ */
+describe('the keyboard, in a real browser', () => {
+  async function playLevel(level: number): Promise<void> {
+    await page.evaluate((n) => (window as unknown as {
+      __princeShow(l: number, r: number): Promise<void>;
+    }).__princeShow(n, 1), level);
+    await page.evaluate(() => (window as unknown as {
+      __princeStep(n: number): unknown;
+    }).__princeStep(12));
+  }
+  const state = () => page.evaluate(() => (window as unknown as {
+    __princeState(): { x: number; frame: number; held: string[]; dead: boolean } | null;
+  }).__princeState());
+
+  it('takes the numeric keypad, not only the arrow keys', async () => {
+    await playLevel(3);
+    await page.keyboard.down('Numpad6');
+    expect((await state())?.held).toContain('right');
+    await page.keyboard.up('Numpad6');
+    expect((await state())?.held).toEqual([]);
+  });
+
+  it('reads a corner key of the keypad as two directions at once', async () => {
+    await playLevel(3);
+    await page.keyboard.down('Numpad9');
+    expect((await state())?.held).toEqual(['right', 'up']);
+    await page.keyboard.up('Numpad9');
+    expect((await state())?.held).toEqual([]);
+  });
+
+  it('keeps the keys away from the menus, which would change what is shown', async () => {
+    await playLevel(3);
+    const before = await page.evaluate(() =>
+      (document.getElementById('scene') as HTMLSelectElement).value);
+    await page.focus('#scene');
+    await page.keyboard.down('Numpad9');
+    await page.keyboard.up('Numpad9');
+    await page.keyboard.down('ArrowDown');
+    await page.keyboard.up('ArrowDown');
+    const after = await page.evaluate(() =>
+      (document.getElementById('scene') as HTMLSelectElement).value);
+    expect(after).toBe(before);
+  });
+
+  it('steps the game on its own, without a key being held', async () => {
+    await playLevel(3);
+    await page.keyboard.down('Numpad6');
+    const first = (await state())?.frame;
+    await page.waitForTimeout(500);
+    const later = (await state())?.frame;
+    await page.keyboard.up('Numpad6');
+    expect(later).not.toBe(first);
+  });
+});
