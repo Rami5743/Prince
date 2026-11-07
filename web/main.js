@@ -3837,6 +3837,7 @@ function checkBumped(state, ctx) {
   if (f >= 135 && f < 150 || f >= 110 && f < 120 || f >= 150 && f < 163 || f >= 166 && f < 169 || f >= FRAME.hangingFirst && f < 100) {
     return;
   }
+  if (f >= FRAME.startJumpUp && f <= 76) return;
   const airborne = state.y !== floorHeightOfRow(state.currentRow);
   if (airborne && state.action !== ACTION.runJump) return;
   const frame = frameOf(ctx.tables, state);

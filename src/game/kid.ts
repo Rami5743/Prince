@@ -1071,6 +1071,19 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
     || (f >= 166 && f < 169) || (f >= FRAME.hangingFirst && f < 100)) {
     return;
   }
+  // Nor while he is going straight up. Frames 67 to 76 are the whole of
+  // the rise, and every sequence that uses them -- 8, 14, 16, 24, 28 --
+  // runs them without a single `dx`, so a character on one of them has
+  // not walked into anything and there is nothing to push him out of.
+  //
+  // Asking anyway is worse than useless, because the tile a jump counts
+  // as being in is the tile under his weight, and at the top of the rise
+  // that can be the one next door. Found by the made-up runs in
+  // `tests/game/invariants.test.ts`: standing at x 128 on the rubble of
+  // level 1's room 1 and pressing Up, the Prince counted as being in
+  // column 3, which is wall, was pushed twenty units into it, bumped off
+  // the next wall along and fell out of the bottom of the world.
+  if (f >= FRAME.startJumpUp && f <= 76) return;
   // Either with both feet on the floor of the row he counts as being in,
   // or in the middle of a running jump. The jump is the one thing that
   // carries a character through the air fast enough and far enough to end
