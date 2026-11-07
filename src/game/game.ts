@@ -78,6 +78,13 @@ export class Game {
   font?: Font;
   /** Ticks left before the level starts again; -1 when none is coming. */
   private restartCountdown = -1;
+
+  /**
+   * `justblocked`: four ticks after a blow of the guard's own has been
+   * parried. While it is running he blocks on the harder of the two
+   * tables -- see `guardBlock`.
+   */
+  private justBlocked = 0;
   hitPoints: number;
   maxHitPoints: number;
   /**
@@ -242,6 +249,7 @@ export class Game {
       // to close -- which is why he killed a Prince who stood still in
       // a dozen ticks and the capture's did not.
       random: () => this.prng.next(255),
+      justBlocked: () => this.justBlocked !== 0,
       // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
       // follow the room links: a guard who has come through a door is
       // standing a tile or two outside the room he is walking into, and
@@ -272,6 +280,7 @@ export class Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    if (this.justBlocked > 0) this.justBlocked -= 1;
     this.titleTicks += 1;
     if (this.remainingTicks > 0) this.remainingTicks -= 1;
     // Shift answers `Press Button to Continue`, and nothing else does:
@@ -328,6 +337,9 @@ export class Game {
   private parried(striker: CharacterState, blocker: CharacterState): void {
     blocker.frame = PARRY_FRAME;
     startSequence(striker, SWORD_SEQ.parried, this.tables);
+    // `if (Char.charid != charid_0_kid) justblocked = 4;` -- only the
+    // guard's own blow being stopped counts.
+    if (striker === this.guard) this.justBlocked = 4;
   }
 
   /**

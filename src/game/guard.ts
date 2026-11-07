@@ -241,6 +241,8 @@ export interface GuardStepContext {
    * for the line of sight between a guard and him.
    */
   readonly tileAtKid?: (xpos: number) => { type: number; modifier: number };
+  /** `justblocked`: his own last blow was parried, within four ticks. */
+  readonly justBlocked?: () => boolean;
 }
 
 /** What a guard can see of the Prince. */
@@ -389,6 +391,8 @@ const REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
 const CAN_STRIKE = [157, 158, 165, 170, 171];
 const CAN_STEP = [158, 170, 171];
 const CAN_PARRY = [158, 170, 171, 168, 165];
+/** Frame 167: his blow was blocked and he is open. */
+const GUARD_FRAME_BLOCKED = 167;
 const PARRY_FRAMES = [150, 161];
 
 function moveShift(guard: GuardState, ctx: GuardStepContext): void {
@@ -411,9 +415,30 @@ function moveBackward(guard: GuardState, ctx: GuardStepContext): void {
   }
 }
 
-function moveUp(guard: GuardState, ctx: GuardStepContext): void {
+/**
+ * `parry`. Pressing up is not the same as parrying: the original puts
+ * three more tests between them, and a guard fails most of them.
+ *
+ * From the stance he parries only if the Prince is on frame 152 -- the
+ * second frame of a lunge, and the only one a guard reacts to; from
+ * further off than thirty-two he steps back instead; and out of a blow
+ * of his own that was blocked, frame 167, he goes through sequence 61
+ * rather than 62.
+ */
+function moveUp(
+  guard: GuardState, kid: CharacterState, distance: number, ctx: GuardStepContext,
+): void {
   if (CAN_PARRY.includes(guard.frame)) {
+    if (distance >= 32) {
+      moveBackward(guard, ctx);
+      return;
+    }
+    if (kid.frame !== 152) return;
     startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
+    return;
+  }
+  if (guard.frame === GUARD_FRAME_BLOCKED) {
+    startSequence(guard, GUARD_SEQ.strikeToBlock, ctx.tables);
   }
 }
 
@@ -432,12 +457,21 @@ function guardStrike(guard: GuardState, kid: CharacterState, ctx: GuardStepConte
   if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
 }
 
-function guardBlock(guard: GuardState, kid: CharacterState, ctx: GuardStepContext): void {
-  if (kid.frame === 152 || kid.frame === 153 || kid.frame === 162) {
-    if (chance(ctx, IMP_BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
-  } else if (kid.frame === 150 || kid.frame === 161) {
-    if (chance(ctx, BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
-  }
+/**
+ * `guard_block`. One set of frames to react to -- 152, 153 and 162, the
+ * lunge and the strike out of a block -- and the choice between the two
+ * tables is not which of them the Prince is on but whether the guard's
+ * own last blow was parried: `justblocked`, set to four when it was and
+ * counted down a tick at a time. The port had the two tables chosen by
+ * the frame and two frames in the list that belong to neither, 150 and
+ * 161, which are the Prince parrying and nothing to block at all.
+ */
+function guardBlock(
+  guard: GuardState, kid: CharacterState, distance: number, ctx: GuardStepContext,
+): void {
+  if (kid.frame !== 152 && kid.frame !== 153 && kid.frame !== 162) return;
+  const table = ctx.justBlocked?.() ? IMP_BLOCK_PROB : BLOCK_PROB;
+  if (chance(ctx, table[guard.skill] ?? 0)) moveUp(guard, kid, distance, ctx);
 }
 
 function guardKidArmed(
@@ -447,7 +481,7 @@ function guardKidArmed(
     guardAdvance(guard, ctx);
     return;
   }
-  guardBlock(guard, kid, ctx);
+  guardBlock(guard, kid, distance, ctx);
   if (guard.waitTimer !== 0) return;
   if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
   else guardStrike(guard, kid, ctx);

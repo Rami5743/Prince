@@ -2792,6 +2792,7 @@ var REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
 var CAN_STRIKE = [157, 158, 165, 170, 171];
 var CAN_STEP = [158, 170, 171];
 var CAN_PARRY = [158, 170, 171, 168, 165];
+var GUARD_FRAME_BLOCKED = 167;
 var PARRY_FRAMES = [150, 161];
 function moveShift(guard, ctx) {
   if (CAN_STRIKE.includes(guard.frame)) {
@@ -2810,9 +2811,18 @@ function moveBackward(guard, ctx) {
     startSequence(guard, GUARD_SEQ.retreat, ctx.tables);
   }
 }
-function moveUp(guard, ctx) {
+function moveUp(guard, kid, distance, ctx) {
   if (CAN_PARRY.includes(guard.frame)) {
+    if (distance >= 32) {
+      moveBackward(guard, ctx);
+      return;
+    }
+    if (kid.frame !== 152) return;
     startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
+    return;
+  }
+  if (guard.frame === GUARD_FRAME_BLOCKED) {
+    startSequence(guard, GUARD_SEQ.strikeToBlock, ctx.tables);
   }
 }
 function chance(ctx, probability) {
@@ -2826,19 +2836,17 @@ function guardStrike(guard, kid, ctx) {
   const table = PARRY_FRAMES.includes(guard.frame) ? RESTRIKE_PROB : STRIKE_PROB;
   if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
 }
-function guardBlock(guard, kid, ctx) {
-  if (kid.frame === 152 || kid.frame === 153 || kid.frame === 162) {
-    if (chance(ctx, IMP_BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
-  } else if (kid.frame === 150 || kid.frame === 161) {
-    if (chance(ctx, BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
-  }
+function guardBlock(guard, kid, distance, ctx) {
+  if (kid.frame !== 152 && kid.frame !== 153 && kid.frame !== 162) return;
+  const table = ctx.justBlocked?.() ? IMP_BLOCK_PROB : BLOCK_PROB;
+  if (chance(ctx, table[guard.skill] ?? 0)) moveUp(guard, kid, distance, ctx);
 }
 function guardKidArmed(guard, kid, distance, ctx) {
   if (distance < 10 || distance >= 29) {
     guardAdvance(guard, ctx);
     return;
   }
-  guardBlock(guard, kid, ctx);
+  guardBlock(guard, kid, distance, ctx);
   if (guard.waitTimer !== 0) return;
   if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
   else guardStrike(guard, kid, ctx);
@@ -4853,6 +4861,12 @@ var Game = class _Game {
   font;
   /** Ticks left before the level starts again; -1 when none is coming. */
   restartCountdown = -1;
+  /**
+   * `justblocked`: four ticks after a blow of the guard's own has been
+   * parried. While it is running he blocks on the harder of the two
+   * tables -- see `guardBlock`.
+   */
+  justBlocked = 0;
   hitPoints;
   maxHitPoints;
   /**
@@ -5007,6 +5021,7 @@ var Game = class _Game {
       // to close -- which is why he killed a Prince who stood still in
       // a dozen ticks and the capture's did not.
       random: () => this.prng.next(255),
+      justBlocked: () => this.justBlocked !== 0,
       // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
       // follow the room links: a guard who has come through a door is
       // standing a tile or two outside the room he is walking into, and
@@ -5041,6 +5056,7 @@ var Game = class _Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    if (this.justBlocked > 0) this.justBlocked -= 1;
     this.titleTicks += 1;
     if (this.remainingTicks > 0) this.remainingTicks -= 1;
     if (this.acceptsButton && controls.shift) {
@@ -5076,6 +5092,7 @@ var Game = class _Game {
   parried(striker, blocker) {
     blocker.frame = PARRY_FRAME;
     startSequence(striker, SWORD_SEQ.parried, this.tables);
+    if (striker === this.guard) this.justBlocked = 4;
   }
   /**
    * The original's `hurt_by_sword`. A character caught without his blade
