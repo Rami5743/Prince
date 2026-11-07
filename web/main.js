@@ -1740,7 +1740,7 @@ var RoomRenderer = class {
    */
   addMob(m) {
     if (m.room !== this.drawnRoom) return;
-    const col = m.column + 1;
+    const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
     const main = m.y - 3;

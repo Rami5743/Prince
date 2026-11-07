@@ -1115,7 +1115,11 @@ export class RoomRenderer {
    */
   private addMob(m: MobDraw): void {
     if (m.room !== this.drawnRoom) return;
-    const col = m.column + 1;
+    // The column is the column: `COL_X` is indexed the same way the tile
+    // loop indexes it. The +1 that used to be here put the falling floor
+    // one tile to the right of the hole it came out of, which usually
+    // means inside a wall, so it was never seen at all.
+    const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
     const main = m.y - 3;
