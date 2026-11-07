@@ -125,6 +125,16 @@ The original grabs the ledge, hangs, and lets go -- the same as the
 port, tick for tick. The difference in the recording is the measurement,
 not the game.
 
+The sharpest case of it found so far. The probe `14.,21r,17.,8r,4.,2s,
+2rs,5s,2rs,16s,40.` is the opening of the player's recording `0fbffa60`
+to the tick: the same keys, the same ticks, as far as tick 90, and the
+decision falls on tick 79. Captured, the probe grabs the ledge and the
+recording does not -- same game, same input, two runs. All that differs
+is where the key edges landed inside the game's ticks, and the Prince
+either catches the ledge of room 2 or goes past it. `0fbffa60` is the
+lowest-scoring of the fifteen for exactly that reason: from tick 79 its
+capture is a different run, not a different port.
+
 `replay-frames.ts --stall n` feeds a replay the presses the original was
 reading rather than the ones the port recorded, skipping n of them at
 every room change. It is an instrument for asking whether a difference

@@ -49,9 +49,19 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * How many of the original's ticks each recording agrees on.
  *
  * Where the room they are in is the same throughout, the port is at or
- * near the ceiling. The low ones all have the same two causes: a sword
- * fight, whose random numbers cannot be matched, and a death at a
- * different tick, after which the two runs are not the same run.
+ * near the ceiling. The low ones all have the same causes: a sword
+ * fight, whose random numbers cannot be matched; a death at a different
+ * tick, after which the two runs are not the same run; and a decision
+ * that falls within a tick of a key edge.
+ *
+ * `0fbffa60` is the clearest of the last sort and the lowest of the
+ * fifteen. The probe `14.,21r,17.,8r,4.,2s,2rs,5s,2rs,16s,40.` is its
+ * opening to the tick -- the same keys on the same ticks as far as tick
+ * 90, and the decision falls on 79. Captured, the probe grabs the ledge
+ * of room 2 and the recording does not. Same game, same input, two runs:
+ * all that differs is where the key edges landed inside the ticks. From
+ * tick 79 that capture is a different run, and nothing the port does can
+ * score against it.
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 173,
