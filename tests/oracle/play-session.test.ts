@@ -38,17 +38,19 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   //              through the change and is not reproducible.
   //  s039..s050  after that room change. Five to seven hundred pixels out,
   //              not yet looked into.
-  { name: 'level1-open', reproduces: 35 },
+  { name: 'level1-open', reproduces: 34 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
-  // 36 of 54. All three careful steps are reproduced exactly, and so is the
+  // 34 of 54. All three careful steps are reproduced exactly, and so is the
   // climb and the jumping that follows it while the key stays down.
   //
-  // 34 until the room was painted row by row with the characters in it,
-  // instead of every character after every tile: s023 and s036 are frames
-  // where the ledge has to cover the Prince and did not, and s024 came
-  // down from a hundred pixels out to ten.
-  { name: 'level1-grab', reproduces: 36 },
+  // It was 36 for a while, with the room painted row by row and each
+  // character in with his own row: s023, s024 and s036 are frames where
+  // the ledge has to cover the Prince and did not. That is a real thing
+  // the original does and this does not, but row order is not how it
+  // does it -- see `paint` in src/render/room.ts, where a recorded climb
+  // at a room's edge settles it the other way.
+  { name: 'level1-grab', reproduces: 34 },
 
   // The same opening as level1-grab, then Down and Down with Shift. 9 of
   // 48, and that number is mostly about the capture rather than the port:

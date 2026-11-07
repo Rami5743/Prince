@@ -116,13 +116,6 @@ export interface CharacterDraw {
 /** The strip of the room above, drawn after every row of this one. */
 const ROW_ABOVE_ORDER = -1;
 
-/**
- * The passes, in the order they are painted. Anything emitted outside the
- * row loop comes first, then the rows from the bottom up, then the strip of
- * the room above.
- */
-const PAINT_ORDERS = [ROW_ABOVE_ORDER + 1, 2, 1, 0, ROW_ABOVE_ORDER] as const;
-
 interface Piece {
   chtab: ChtabId;
   /** 1-based image id within the group; 0 means nothing is drawn. */
@@ -1135,23 +1128,24 @@ export class RoomRenderer {
   }
 
   /**
-   * Row by row, bottom first, the room's own pieces and then whoever is
-   * standing in that row.
+   * Every piece of the room, then everyone standing in it, then the few
+   * pieces the original keeps in front of them.
    *
-   * This is what decides whether a character is in front of a ledge or
-   * behind it. The original draws the bottom row first and works up, and
-   * puts each character in with his own row, so the row above -- drawn
-   * afterwards -- covers him. Painting every character after every tile
-   * instead put the Prince in front of the ledge he was climbing: his
-   * whole torso lay over the sloping front of it where the original shows
-   * only the hand that is over the top.
+   * It was worth trying to put each character in with his own row and
+   * paint the rows from the bottom up, because the original does cover a
+   * climbing Prince with the ledge he is taking hold of, and that bought
+   * three captures across the sessions. It is not how the original does
+   * it, and the cost showed at a room's edge: a Prince hanging in the
+   * bottom row was painted over by everything in the row above, so a
+   * climb at the left of a room showed a sliver of him and nothing else.
+   * A recording of that climb, replayed against the original, settles
+   * it -- painted this way the two agree on the exact pixel count of him
+   * for every frame of the climb, and row by row they do not.
    */
   private paint(surface: Surface): void {
     this.paintWipes(surface, 0);
-    for (const order of PAINT_ORDERS) {
-      for (const p of this.back) if (p.order === order) this.paintPiece(surface, p);
-      for (const p of this.mid) if (p.order === order) this.paintPiece(surface, p);
-    }
+    for (const p of this.back) this.paintPiece(surface, p);
+    for (const p of this.mid) this.paintPiece(surface, p);
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
   }
