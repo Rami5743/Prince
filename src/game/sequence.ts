@@ -74,7 +74,33 @@ export const SOUND = {
 } as const;
 
 /** Side effects a sequence can raise, for the game loop to act on. */
+/**
+ * `sound`'s argument is not a sound's number: it is one of five small
+ * codes the original looks up.
+ *
+ * The byte-code gives the opcode a 1 on every frame of a stride -- the
+ * run, the start of a run, the turn, the careful step -- a 3 on the frame
+ * of the drink where the Prince swallows, a 4 in the sequence that ends a
+ * level, and a 0 where it means stop whatever is playing.
+ *
+ * The port took the argument for the sound and played recording 1, which
+ * is the second-long falling whoosh, on every footstep. Overlapping forty
+ * of those is the wail the player heard. The recordings say which is
+ * which plainly enough: 1 swells over a second and dies away, 23 is a
+ * tenth of a second with a click at the front, and 18 is two gulps three
+ * tenths apart.
+ */
+export const SOUND_SILENCE = -1;
+export const SEQUENCE_SOUND: readonly number[] = [
+  SOUND_SILENCE, // 0: stop
+  23, // 1: a footstep
+  8,  // 2: bumping into something
+  18, // 3: drinking
+  19, // 4: the way out of the level
+];
+
 export interface SequenceEffects {
+  /** A sound's own number, or `SOUND_SILENCE` to stop what is playing. */
   sound?(which: number): void;
   rowChanged?(delta: number): void;
   knock?(direction: number): void;
@@ -161,7 +187,7 @@ export function playSequence(state: CharacterState, ctx: SequenceContext): boole
         // The argument is read whether or not anyone is listening: optional
         // chaining would skip the call, and with it the read, leaving the
         // sound number to be taken for the next frame.
-        const sound = read();
+        const sound = SEQUENCE_SOUND[read()] ?? SOUND_SILENCE;
         ctx.effects?.sound?.(sound);
         break;
       }

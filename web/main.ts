@@ -14,6 +14,7 @@ import {
 import { Game } from '../src/game/game.ts';
 import { SoundPlayer } from '../src/render/audio.ts';
 import { SOUND } from '../src/game/traps.ts';
+import { SEQUENCE_SOUND, SOUND_SILENCE } from '../src/game/sequence.ts';
 import type { Controls } from '../src/game/kid.ts';
 
 const DATA_URL =
@@ -54,7 +55,10 @@ async function boot(): Promise<void> {
       const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
-      void sound.preloadAll(Object.values(SOUND));
+      void sound.preloadAll([
+        ...Object.values(SOUND),
+        ...SEQUENCE_SOUND.filter((i) => i !== SOUND_SILENCE),
+      ]);
     }
     void sound.wake();
   };

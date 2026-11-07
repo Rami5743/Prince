@@ -16,6 +16,7 @@ import { loadSound, DIGI_FILES } from '../../src/render/audio.ts';
 import { parseSound, SOUND_RESOURCE_BASE } from '../../src/dat/sound.ts';
 import { DatFile } from '../../src/dat/container.ts';
 import { SOUND } from '../../src/game/traps.ts';
+import { SEQUENCE_SOUND, SOUND_SILENCE } from '../../src/game/sequence.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 
@@ -91,5 +92,39 @@ describe('looking for a sound', () => {
 
   it('gives nothing back for an index no file has', async () => {
     expect(await loadSound(assets, 9999)).toBeNull();
+  });
+});
+
+/**
+ * What the byte-code asks for.
+ *
+ * `sound`'s argument is one of five small codes, not a sound's number,
+ * and the port took it for the number: every frame of every stride
+ * played recording 1, which is the second-long falling whoosh, and forty
+ * of those over each other is the wail the player heard. These pin the
+ * table and the reading of the recordings it rests on.
+ */
+describe('the sounds the sequences ask for', () => {
+  it('maps the five codes to the sounds the recordings fit', () => {
+    expect(SEQUENCE_SOUND[0]).toBe(SOUND_SILENCE);
+    expect(SEQUENCE_SOUND[1]).toBe(SOUND.footstep);
+    expect(SEQUENCE_SOUND[2]).toBe(SOUND.bumped);
+    expect(SEQUENCE_SOUND[3]).toBe(SOUND.drink);
+  });
+
+  it('plays a footstep for every stride, not a falling whoosh', async () => {
+    const step = await loadSound(assets, SEQUENCE_SOUND[1]);
+    const fall = await loadSound(assets, 1);
+    if (step?.kind !== 'digi' || fall?.kind !== 'digi') throw new Error('missing');
+    // A footstep is a tenth of a second; the whoosh is a whole one, and a
+    // stride comes round every few ticks.
+    expect(step.samples.length / step.rate).toBeLessThan(0.2);
+    expect(fall.samples.length / fall.rate).toBeGreaterThan(1);
+  });
+
+  it('plays the drink on the frame the Prince swallows', async () => {
+    const drink = await loadSound(assets, SEQUENCE_SOUND[3]);
+    if (drink?.kind !== 'digi') throw new Error('missing');
+    expect(drink.samples.length / drink.rate).toBeGreaterThan(0.5);
   });
 });

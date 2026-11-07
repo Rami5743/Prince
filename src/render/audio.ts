@@ -21,6 +21,7 @@
  */
 import type { Assets } from './assets.ts';
 import { parseSound, SOUND_RESOURCE_BASE, type Sound } from '../dat/sound.ts';
+import { SOUND_SILENCE } from '../game/sequence.ts';
 
 /** The files that hold the recorded sounds, in the order to look in them. */
 export const DIGI_FILES = ['DIGISND1.DAT', 'DIGISND2.DAT', 'DIGISND3.DAT'] as const;
@@ -63,6 +64,12 @@ export class SoundPlayer {
   private readonly pending = new Set<number>();
   /** Nothing is played until the player has touched the page. */
   private woken = false;
+  /**
+   * What is playing. The original had one channel: a new sound stopped
+   * whatever was in it, which is why the byte-code can ask for silence by
+   * name. Letting them pile up turns a run into a wall of noise.
+   */
+  private playing: AudioBufferSourceNode | null = null;
   muted = false;
 
   constructor(assets: Assets, context: AudioSink) {
@@ -86,13 +93,25 @@ export class SoundPlayer {
    */
   play(index: number): void {
     if (this.muted || !this.woken) return;
+    if (index === SOUND_SILENCE) { this.stop(); return; }
     const buffer = this.buffers.get(index);
     if (buffer === undefined) { void this.preload(index); return; }
     if (buffer === null) return; // no recorded version of this one
+    this.stop();
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(this.context.destination);
+    source.onended = (): void => { if (this.playing === source) this.playing = null; };
     source.start();
+    this.playing = source;
+  }
+
+  /** Empty the one channel, as the original does when a sound starts. */
+  stop(): void {
+    const source = this.playing;
+    this.playing = null;
+    if (!source) return;
+    try { source.stop(); } catch { /* already finished */ }
   }
 
   /** Read a sound and turn it into something playable, once. */

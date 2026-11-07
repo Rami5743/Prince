@@ -2163,6 +2163,19 @@ var ACTION = {
   hangStraight: 6,
   turning: 7
 };
+var SOUND_SILENCE = -1;
+var SEQUENCE_SOUND = [
+  SOUND_SILENCE,
+  // 0: stop
+  23,
+  // 1: a footstep
+  8,
+  // 2: bumping into something
+  18,
+  // 3: drinking
+  19
+  // 4: the way out of the level
+];
 var u8 = (v) => v & 255;
 var i82 = (v) => v << 24 >> 24;
 function startSequence(state, id, tables) {
@@ -2224,7 +2237,7 @@ function playSequence(state, ctx) {
         ctx.effects?.knock?.(-1);
         break;
       case SEQ_OP.sound: {
-        const sound = read();
+        const sound = SEQUENCE_SOUND[read()] ?? SOUND_SILENCE;
         ctx.effects?.sound?.(sound);
         break;
       }
@@ -4842,6 +4855,12 @@ var SoundPlayer = class {
   pending = /* @__PURE__ */ new Set();
   /** Nothing is played until the player has touched the page. */
   woken = false;
+  /**
+   * What is playing. The original had one channel: a new sound stopped
+   * whatever was in it, which is why the byte-code can ask for silence by
+   * name. Letting them pile up turns a run into a wall of noise.
+   */
+  playing = null;
   muted = false;
   constructor(assets, context) {
     this.assets = assets;
@@ -4862,16 +4881,35 @@ var SoundPlayer = class {
    */
   play(index) {
     if (this.muted || !this.woken) return;
+    if (index === SOUND_SILENCE) {
+      this.stop();
+      return;
+    }
     const buffer = this.buffers.get(index);
     if (buffer === void 0) {
       void this.preload(index);
       return;
     }
     if (buffer === null) return;
+    this.stop();
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(this.context.destination);
+    source.onended = () => {
+      if (this.playing === source) this.playing = null;
+    };
     source.start();
+    this.playing = source;
+  }
+  /** Empty the one channel, as the original does when a sound starts. */
+  stop() {
+    const source = this.playing;
+    this.playing = null;
+    if (!source) return;
+    try {
+      source.stop();
+    } catch {
+    }
   }
   /** Read a sound and turn it into something playable, once. */
   async preload(index) {
@@ -4922,7 +4960,10 @@ async function boot() {
       const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
-      void sound.preloadAll(Object.values(SOUND));
+      void sound.preloadAll([
+        ...Object.values(SOUND),
+        ...SEQUENCE_SOUND.filter((i) => i !== SOUND_SILENCE)
+      ]);
     }
     void sound.wake();
   };
