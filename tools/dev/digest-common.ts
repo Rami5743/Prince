@@ -107,6 +107,19 @@ export function agreement(
   // disagreements cost, which buys a drift that persists and not one
   // that jumps about to pick up a tick here and there.
   const SLIP = 2;
+  /**
+   * A room change is free to slip.
+   *
+   * The original spends three ticks on one -- the screen goes black,
+   * nothing changes, the new room appears -- and the port spends two.
+   * That one tick is a property of the redraw and not of the game (see
+   * `ROOM_CHANGE_BLANK`), and paying for it out of the slip budget costs
+   * the twenty ticks after every room change in the run. So the
+   * alignment may move for nothing on a tick where the original
+   * repainted the whole screen.
+   */
+  const wholeScreen = (m: Moved): boolean =>
+    m !== null && m[0] <= 2 && m[1] <= 2 && m[2] >= 317 && m[3] >= 189;
   const offsets: number[] = [];
   for (let o = -range; o <= range; o++) offsets.push(o);
   // Only as far as the two runs both go. A capture runs on for a second
@@ -128,10 +141,11 @@ export function agreement(
     for (let j = 0; j < m; j++) {
       let pick = j;
       let value = best[j];
+      const slip = wholeScreen(dos[i]) ? 0 : SLIP;
       for (const k of [j - 1, j + 1]) {
-        if (k >= 0 && k < m && best[k] + SLIP < value) {
+        if (k >= 0 && k < m && best[k] + slip < value) {
           pick = k;
-          value = best[k] + SLIP;
+          value = best[k] + slip;
         }
       }
       next[j] = value + cost(i, j);

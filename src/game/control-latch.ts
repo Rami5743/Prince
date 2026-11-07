@@ -31,12 +31,47 @@ export const CONTROL = {
 } as const;
 
 export class ControlLatch {
-  forward: number = CONTROL.released;
-  backward: number = CONTROL.released;
+  /**
+   * The two side latches belong to the arrow keys, not to the Prince.
+   *
+   * The original keeps them that way round: `read_user_control` fills
+   * `control_forward` from the left arrow and `control_backward` from
+   * the right one, whatever way he is facing, and `user_control` calls
+   * `flip_control_x` to swap the pair over for the duration of
+   * `control()` when he is facing right -- and swaps them back after.
+   *
+   * It matters when he turns with a key still down. Run right, press
+   * Left: the run-turn takes the left arrow's latch and marks it used.
+   * He comes out of the turn facing left, and that same latch is now his
+   * forward one -- still used, so nothing he does next can be started by
+   * the Left he is still holding until he lets go of it. The port
+   * recomputed forward and backward from the direction on every tick, so
+   * the used latch stayed with `backward` and the key came up fresh as
+   * `forward` the moment he turned.
+   */
+  left: number = CONTROL.released;
+  right: number = CONTROL.released;
   up: number = CONTROL.released;
   down: number = CONTROL.released;
   /** The latch over the shift key; the raw key is read separately. */
   shift2: number = CONTROL.released;
+
+  /** `flip_control_x`: which arrow is forward, fixed for this tick. */
+  private facingRight = false;
+
+  get forward(): number { return this.facingRight ? this.right : this.left; }
+
+  set forward(value: number) {
+    if (this.facingRight) this.right = value;
+    else this.left = value;
+  }
+
+  get backward(): number { return this.facingRight ? this.left : this.right; }
+
+  set backward(value: number) {
+    if (this.facingRight) this.left = value;
+    else this.right = value;
+  }
 
   /**
    * Take in the keys that are down now. A latch that is already held is left
@@ -44,10 +79,9 @@ export class ControlLatch {
    * ignored stays ignored until its key goes up.
    */
   read(controls: Controls, direction: number): void {
-    const forward = direction < 0 ? controls.x < 0 : controls.x > 0;
-    const backward = controls.x !== 0 && !forward;
-    this.forward = step(this.forward, forward);
-    this.backward = step(this.backward, backward);
+    this.facingRight = direction >= 0;
+    this.left = step(this.left, controls.x < 0);
+    this.right = step(this.right, controls.x > 0);
     this.up = step(this.up, controls.y < 0);
     this.down = step(this.down, controls.y > 0);
     this.shift2 = step(this.shift2, controls.shift);
@@ -58,8 +92,8 @@ export class ControlLatch {
    * the ignored state for the caller to put on the one it has just used.
    */
   releaseArrows(): number {
-    this.forward = CONTROL.released;
-    this.backward = CONTROL.released;
+    this.left = CONTROL.released;
+    this.right = CONTROL.released;
     this.up = CONTROL.released;
     this.down = CONTROL.released;
     return CONTROL.ignore;
