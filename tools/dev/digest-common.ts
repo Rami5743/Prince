@@ -91,21 +91,58 @@ export async function digestOfRun(
  * Within a tolerance on each edge of the box, and letting the alignment
  * slip: the emulator loses a little time whenever it redraws a room and
  * the keys go in on the clock rather than on the game's ticks, so a port
- * doing exactly the same thing is routinely a tick or two out. Measured
- * on two captures of the same recording from the original itself, which
- * agree on 1412 of their 1470 ticks this way and on 729 of them if the
- * alignment is not allowed to move at all.
+ * doing exactly the same thing is routinely a tick or two out, and over
+ * a long run several. Measured on two captures of the same recording
+ * from the original itself, which agree on 1412 of their 1470 ticks when
+ * the alignment may slip and on 729 of them when it may not.
  */
 export function agreement(
-  dos: readonly Moved[], port: readonly Moved[], tolerance = 4, slip = 3,
+  dos: readonly Moved[], port: readonly Moved[], tolerance = 4, range = 8,
 ): number {
-  let agreed = 0;
-  for (let i = 0; i < dos.length; i++) {
-    for (let d = -slip; d <= slip; d++) {
-      const j = i + d;
-      if (j < 0 || j >= port.length) continue;
-      if (sameMove(dos[i], port[j], tolerance)) { agreed += 1; break; }
+  // One offset for the whole run will not do and a free window at every
+  // tick will not either: the drift is real and it is slow. Measured on
+  // `13ab6867`, which the port reproduces almost exactly, it goes from
+  // one tick to five over five hundred, a tick at a time. So: the
+  // cheapest walk through the run, paying for a tick of drift what two
+  // disagreements cost, which buys a drift that persists and not one
+  // that jumps about to pick up a tick here and there.
+  const SLIP = 2;
+  const offsets: number[] = [];
+  for (let o = -range; o <= range; o++) offsets.push(o);
+  const n = dos.length;
+  const m = offsets.length;
+  if (n === 0) return 0;
+  const cost = (i: number, j: number): number => {
+    const k = i + offsets[j];
+    if (k < 0 || k >= port.length) return 1;
+    return sameMove(dos[i], port[k], tolerance) ? 0 : 1;
+  };
+  let best = offsets.map((_, j) => cost(0, j));
+  const back: number[][] = [new Array(m).fill(0)];
+  for (let i = 1; i < n; i++) {
+    const next = new Array(m).fill(0);
+    const from = new Array(m).fill(0);
+    for (let j = 0; j < m; j++) {
+      let pick = j;
+      let value = best[j];
+      for (const k of [j - 1, j + 1]) {
+        if (k >= 0 && k < m && best[k] + SLIP < value) {
+          pick = k;
+          value = best[k] + SLIP;
+        }
+      }
+      next[j] = value + cost(i, j);
+      from[j] = pick;
     }
+    best = next;
+    back.push(from);
+  }
+  let j = 0;
+  for (let k = 1; k < m; k++) if (best[k] < best[j]) j = k;
+  let agreed = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    if (cost(i, j) === 0) agreed += 1;
+    j = back[i][j];
   }
   return agreed;
 }

@@ -18,8 +18,8 @@
  *
  * Not "the port is wrong on the rest". The original was captured twice
  * from the same recording and the two runs of `PRINCE.EXE` agree with
- * each other on 1412 of 1470 ticks by this measure -- and on 729 of them
- * if the alignment is not allowed to slip. Ninety-six per cent is the
+ * each other on 1397 of 1473 ticks by this measure -- and on 729 of them
+ * if the alignment is not allowed to slip at all. Ninety-six per cent is the
  * ceiling, not a hundred: the keys go in on the clock rather than on the
  * game's ticks, the emulator loses a little time whenever it redraws a
  * room, and a sword fight is driven by random numbers that are not the
@@ -64,21 +64,21 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * score against it.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 173,
-  '13ab6867': 532,
-  '25c4ebb8': 329,
-  '33e8ace7': 160,
-  '3764b76d': 100,
-  '5920a8c2': 226,
-  '72b3522f': 169,
-  '756b259c': 323,
-  '760c3e74': 831,
-  '848ee3c4': 423,
-  '9b60bf3a': 399,
-  'a356bdd6': 146,
-  'b4ff4672': 366,
-  'e209b01a': 190,
-  'ec99dc5b': 215,
+  '0fbffa60': 249,
+  '13ab6867': 601,
+  '25c4ebb8': 310,
+  '33e8ace7': 208,
+  '3764b76d': 94,
+  '5920a8c2': 189,
+  '72b3522f': 158,
+  '756b259c': 358,
+  '760c3e74': 878,
+  '848ee3c4': 355,
+  '9b60bf3a': 367,
+  'a356bdd6': 142,
+  'b4ff4672': 344,
+  'e209b01a': 187,
+  'ec99dc5b': 209,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
