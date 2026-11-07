@@ -97,11 +97,17 @@ export class Traps {
       this.lastKidRow = this.kidRow;
       if (this.kidRoom) this.startChompers(this.kidRoom, this.kidRow);
     }
+    // The original's own order: `do_mobs` and then `process_trobs`, so a
+    // slab that a trob lets go of this tick is not moved until the next
+    // one and is drawn once in the hole it came out of. The port moved it
+    // the moment it was made, and the first picture of a loose floor
+    // giving way had it three pixels down and a gap under the Prince's
+    // foot where the original still had a floor.
+    this.stepMobs();
     for (const trob of this.trobs) this.animate(trob);
     for (let i = this.trobs.length - 1; i >= 0; i--) {
       if (this.trobs[i].type < 0) this.trobs.splice(i, 1);
     }
-    this.stepMobs();
   }
 
   private animate(trob: Trob): void {
@@ -402,7 +408,11 @@ export class Traps {
     mob.row += 1;
     if (mob.row >= 3) {
       mob.row = 0;
-      mob.y -= 189;
+      // A hundred and ninety-two, not the hundred and eighty-nine a
+      // character's y moves by: `mob_down_a_row`, and the room below it
+      // in `draw_mob` adds the same number back to draw the slab in the
+      // room it came from while it is still in sight through the hole.
+      mob.y -= 192;
       mob.room = this.level.linkOf(mob.room, 3);
     }
   }

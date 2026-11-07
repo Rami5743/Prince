@@ -102,6 +102,37 @@ three tiles further along. `where.py` is what showed it: it prints the
 bounding box of whatever moved in each tick, which tells `the port draws
 him somewhere else` apart from `the port does not draw him at all`.
 
+## What a capture cannot settle
+
+A recording is a list of what was held on each of the port's ticks. The
+original is sent those presses on the clock, because that is the only
+thing a keyboard understands, and the two only stay in step while the
+original's ticks are as long as the port's. At a room change they are
+not: the original stops to blank the screen and draw the new room, and
+the capture shows it two to four ticks behind for a while afterwards.
+
+So a key that goes up within a few ticks of a decision the game is about
+to make is not evidence either way. The first descent of level 1 is one:
+the Prince falls through the loose floor of room 1 with Shift held, and
+whether he catches the ledge of room 2 on the way down turns on whether
+Shift is still down three ticks later. The recorded run has it going up
+on tick 81 and the grab falling due on 78; the original did not grab and
+the port did.
+
+The probe `11.,50r,1.,34s,20.` is the same descent with Shift held
+fifteen ticks longer, which puts the decision well clear of the key.
+The original grabs the ledge, hangs, and lets go -- the same as the
+port, tick for tick. The difference in the recording is the measurement,
+not the game.
+
+`replay-frames.ts --stall n` feeds a replay the presses the original was
+reading rather than the ones the port recorded, skipping n of them at
+every room change. It is an instrument for asking whether a difference
+is this drift, not a fix: fitted across the ten captures the best n is
+nothing like constant, which is itself the answer -- the drift depends
+on what the emulator was doing, and a capture whose key edges fall near
+a decision cannot be made to line up.
+
 ## What each tool does
 
 * `recording_to_script.mjs` -- a recording's raw key events become one

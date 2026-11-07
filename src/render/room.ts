@@ -1187,6 +1187,20 @@ export class RoomRenderer {
     // floor of room 1 comes down into room 2 with him: the original's
     // plank covers screen x 192 to about 225, and the port's covered
     // 192 to 249.
+    //
+    // Put back once, on the strength of `draw_mid_obj`, which does add
+    // all three pieces -- and taken out again: across the ten captures
+    // it cost twenty-four of the ticks the port had exactly right and
+    // gained none.
+    //
+    // `draw_mob` also goes on drawing a slab that has passed into the
+    // room below, through the hole it made, for the first eighteen
+    // pixels of it, and into the room above from a hundred and
+    // seventy-four. That was tried too, and the captures say no: the
+    // ticks after the slab leaves the room are further out with it than
+    // without. Where a reading of the code and a capture disagree the
+    // capture wins, and both of these are read from SDLPoP rather than
+    // from `PRINCE.EXE` itself.
   }
 
   private addCharacter(c: CharacterDraw): void {

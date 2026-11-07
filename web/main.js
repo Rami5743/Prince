@@ -4285,11 +4285,11 @@ var Traps = class {
       this.lastKidRow = this.kidRow;
       if (this.kidRoom) this.startChompers(this.kidRoom, this.kidRow);
     }
+    this.stepMobs();
     for (const trob of this.trobs) this.animate(trob);
     for (let i = this.trobs.length - 1; i >= 0; i--) {
       if (this.trobs[i].type < 0) this.trobs.splice(i, 1);
     }
-    this.stepMobs();
   }
   animate(trob) {
     const type = this.level.typeAtPos(trob.room, trob.tilePos);
@@ -4567,7 +4567,7 @@ var Traps = class {
     mob.row += 1;
     if (mob.row >= 3) {
       mob.row = 0;
-      mob.y -= 189;
+      mob.y -= 192;
       mob.room = this.level.linkOf(mob.room, 3);
     }
   }
