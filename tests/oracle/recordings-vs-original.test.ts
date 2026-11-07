@@ -76,7 +76,7 @@ const EXPECTED: Record<string, number> = {
   '848ee3c4': 673,
   '9b60bf3a': 464,
   'a356bdd6': 143,
-  'b4ff4672': 250,
+  'b4ff4672': 343,
   'e209b01a': 187,
   'ec99dc5b': 209,
 };

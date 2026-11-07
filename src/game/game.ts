@@ -288,7 +288,7 @@ export class Game {
     // never pressed Shift. In the five that do restart -- `756b259c`,
     // `5920a8c2`, `72b3522f`, `9b60bf3a`, `848ee3c4` -- the words go
     // within a few ticks of the first tick Shift is down, and not before.
-    if (this.awaitingButton && controls.shift) {
+    if (this.acceptsButton && controls.shift) {
       this.pressButton();
     }
     // Down to -1, not to 0: `restartDue` is then true for exactly the one
@@ -406,15 +406,28 @@ export class Game {
 
   /**
    * True once the original would be showing `Press Button to Continue`.
-   *
-   * It does not come up with the death: a grabbed video of the original
-   * has the Prince struck down at tick 177 and the words appear at 221,
-   * forty-five ticks later. Until they are up nothing restarts the level,
-   * which is why the player in that recording pressed four directions
-   * over the next ten seconds and nothing happened.
+   * Forty-six ticks after the death: see `RESTART_PROMPT_DELAY`.
    */
   get awaitingButton(): boolean {
     return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY
+      && this.restartCountdown < 0;
+  }
+
+  /**
+   * True once Shift will start the level again, which is seven ticks
+   * after the death and not the forty-six the words take: the original's
+   * test is `Kid.alive > 6`, and `Char.alive` is nought on the tick he
+   * dies. The two are different things and the port had only one of
+   * them, so a player who pressed Shift while the body was still
+   * settling was ignored until the words came up.
+   *
+   * Measured on `b4ff4672`: the Prince goes onto the spikes of room 6 on
+   * tick 282, Shift goes down on 297, and the capture has the level's
+   * title back on the screen by 304 -- twenty-five ticks before the
+   * words would have appeared at all.
+   */
+  get acceptsButton(): boolean {
+    return this.isDead && this.deadTicks > RESTART_BUTTON_DELAY
       && this.restartCountdown < 0;
   }
 
@@ -426,7 +439,7 @@ export class Game {
    * level running again at 303.
    */
   pressButton(): void {
-    if (!this.awaitingButton) return;
+    if (!this.acceptsButton) return;
     this.restartCountdown = RESTART_DELAY;
   }
 
@@ -789,6 +802,12 @@ export const ROOM_CHANGE_BLANK = 1;
  * capture here has the words within forty ticks of a death.
  */
 export const RESTART_PROMPT_DELAY = 46;
+
+/**
+ * Ticks after a death before Shift will start the level again:
+ * `Kid.alive > 6`, and `Char.alive` is nought on the tick of the death.
+ */
+export const RESTART_BUTTON_DELAY = 6;
 
 /**
  * Ticks from the button being pressed to the level running again. Three,

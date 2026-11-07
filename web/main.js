@@ -5043,7 +5043,7 @@ var Game = class _Game {
     if (this.isDead) this.deadTicks += 1;
     this.titleTicks += 1;
     if (this.remainingTicks > 0) this.remainingTicks -= 1;
-    if (this.awaitingButton && controls.shift) {
+    if (this.acceptsButton && controls.shift) {
       this.pressButton();
     }
     if (this.restartCountdown >= 0) this.restartCountdown -= 1;
@@ -5139,15 +5139,26 @@ var Game = class _Game {
   }
   /**
    * True once the original would be showing `Press Button to Continue`.
-   *
-   * It does not come up with the death: a grabbed video of the original
-   * has the Prince struck down at tick 177 and the words appear at 221,
-   * forty-five ticks later. Until they are up nothing restarts the level,
-   * which is why the player in that recording pressed four directions
-   * over the next ten seconds and nothing happened.
+   * Forty-six ticks after the death: see `RESTART_PROMPT_DELAY`.
    */
   get awaitingButton() {
     return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && this.restartCountdown < 0;
+  }
+  /**
+   * True once Shift will start the level again, which is seven ticks
+   * after the death and not the forty-six the words take: the original's
+   * test is `Kid.alive > 6`, and `Char.alive` is nought on the tick he
+   * dies. The two are different things and the port had only one of
+   * them, so a player who pressed Shift while the body was still
+   * settling was ignored until the words came up.
+   *
+   * Measured on `b4ff4672`: the Prince goes onto the spikes of room 6 on
+   * tick 282, Shift goes down on 297, and the capture has the level's
+   * title back on the screen by 304 -- twenty-five ticks before the
+   * words would have appeared at all.
+   */
+  get acceptsButton() {
+    return this.isDead && this.deadTicks > RESTART_BUTTON_DELAY && this.restartCountdown < 0;
   }
   /**
    * The button was pressed under `Press Button to Continue`. The level
@@ -5157,7 +5168,7 @@ var Game = class _Game {
    * level running again at 303.
    */
   pressButton() {
-    if (!this.awaitingButton) return;
+    if (!this.acceptsButton) return;
     this.restartCountdown = RESTART_DELAY;
   }
   /** True on the tick the level should be built again. */
@@ -5422,6 +5433,7 @@ var LEVEL_TITLE_TICKS = 24;
 var MINUTE_TICKS = 720;
 var ROOM_CHANGE_BLANK = 1;
 var RESTART_PROMPT_DELAY = 46;
+var RESTART_BUTTON_DELAY = 6;
 var RESTART_DELAY = 3;
 var TILE_SWORD = TILE.sword;
 var TILE_POTION = TILE.potion;
