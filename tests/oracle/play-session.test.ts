@@ -63,6 +63,18 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // are fixed, so the count only moves if the port does -- and as the
   // evidence for what docs/testing.md says about what a session can tell
   // you. Do not read it as a score.
+  //
+  // It is also where the player's "the descents have the wrong things in
+  // front of them" shows itself, and worth knowing what that is. By the
+  // thirtieth capture the original's Prince has gone behind the pillar in
+  // the middle of room 1 and cannot be seen at all; the port's is four
+  // units further right and his head and shoulder stick out of it. The
+  // drawing is not at fault: rebuilding the room from the port's own
+  // renderer with nobody in it reproduces that capture exactly from the
+  // pillar rightwards, so the pillar covers what the original's covers.
+  // What is wrong is where he is standing, and it is wrong from the ninth
+  // capture, where the original is running (frame 4 at x 88) and the port
+  // is taking a careful step (frame 124 at x 93).
   { name: 'level1-down', reproduces: 9 },
 
   // Level 2's room 4, which has a guard at its left end. 9 of 41. What it
