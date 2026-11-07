@@ -497,7 +497,14 @@ function canClimbUp(state: CharacterState, ctx: KidContext): void {
 }
 
 function hangFall(state: CharacterState, ctx: KidContext): void {
-  ctx.latch.down = ctx.latch.releaseArrows();
+  // The arrows are forgotten, but Down is not marked as used, for the
+  // reason `canClimbUp` gives about Up: the original goes on acting on a
+  // key that is still held once the move it started has finished. A
+  // player who holds Down at the top of a shaft climbs down one ledge
+  // after another; the port climbed down one and then stood there, for
+  // as long as the key was held, because `releaseLedgeAndLand` had
+  // marked Down used and nothing clears that until the key comes up.
+  ctx.latch.releaseArrows();
   const behind = tileBehind(state, ctx);
   const here = tileHere(state, ctx);
   if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
@@ -1125,6 +1132,26 @@ function bumpBack(
   state.x = forwardX(state, push) & 0xff;
   state.currentColumn = determineColumn(state, frame);
   startSequence(state, KID_SEQ.bump, ctx.tables);
+  // And whatever the player is holding counts again afterwards.
+  //
+  // A latch that a move has used stays used until the key comes back up,
+  // which is what stops a held key repeating -- and a move cut short by a
+  // wall had used one without finishing. Running left out of level 1's
+  // room 6 with Right pressed, the Prince starts the run-turn, which
+  // marks Right as used and would have flipped him at the end of it; the
+  // wall stops him three frames in, so the flip never happens and Right
+  // stays used. He then stands facing the wall with Right held and does
+  // nothing at all, which is what the player reported as a jammed
+  // keyboard.
+  //
+  // The original turns and runs. Measured: the probe
+  // `14.,11l,36r,30.` on level 1 -- run left into the left wall of room
+  // 1 and hold Right from before the bump -- has the two runs identical
+  // through tick 32, and from 33 the original turns, is facing right by
+  // 38 and running by 40, while the port stood still until the key came
+  // up on 61. (`tools/oracle/make_probe.mjs` writes that probe; the rest
+  // of the pipeline takes it from there.)
+  ctx.latch.releaseArrows();
 }
 
 /**

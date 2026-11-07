@@ -39,6 +39,41 @@ times they were pressed, and recover the game's ticks from the grab.
 `--start 49` is where to begin looking for the restart flash and depends
 on the waits the generated script opens with.
 
+## Asking the original a question of my own
+
+A browser recording settles an argument about a run the player actually
+had. It is no use for a question of my own -- *what does the original do
+if Right is held while a wall cuts a turn short* -- because the player
+would have to go and do that, and would land somewhere slightly
+different each time.
+
+`make_probe.mjs` writes a recording from a timeline instead, in the same
+format, so everything downstream of it works on it unchanged:
+
+    node --experimental-strip-types tools/oracle/make_probe.mjs \
+        '14.,11l,36r,30.' /tmp/probe.json
+    node tools/oracle/recording_to_script.mjs /tmp/probe.json /tmp/probe.txt --settle 0.04
+    python3 tools/oracle/dosbox_oracle.py --script /tmp/probe.txt --out /tmp/rep \
+        --record /tmp/rep/run.mkv --fps 30
+    python3 tools/oracle/split_ticks.py /tmp/rep/run.mkv /tmp/dos \
+        --crop 640:400:192:184 --scale 320:200 --start 49 --after-blank \
+        --fps 30 --rate 12 --hybrid
+    node --experimental-strip-types tools/dev/replay-frames.ts /tmp/probe.json /tmp/port --stride 1
+    python3 tools/oracle/segments.py /tmp/dos /tmp/port
+
+The timeline is the recording's own run-length form: `12.` is twelve
+ticks of nothing, `30r` thirty of Right, `6us` six of Up and Shift. Give
+a press four ticks at least; a shorter one is a coin toss, for the
+reason at the end of this file.
+
+The probe above is the one that settled the jammed keyboard. It runs the
+Prince left into the left wall of level 1's room 1 and presses Right
+while he is still running, so the run-turn starts and the wall stops it
+three frames in. The two runs are identical to tick 32. From 33 the
+original turns, is facing right by 38 and running by 40; the port stood
+still until the key came up on 61. Lining the whole run up, the port now
+matches the original on 61 of its 91 ticks where it matched 26 before.
+
 ## What each tool does
 
 * `recording_to_script.mjs` -- a recording's raw key events become one

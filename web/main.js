@@ -3424,7 +3424,7 @@ function canClimbUp(state, ctx) {
   startSequence(state, seq, ctx.tables);
 }
 function hangFall(state, ctx) {
-  ctx.latch.down = ctx.latch.releaseArrows();
+  ctx.latch.releaseArrows();
   const behind = tileBehind(state, ctx);
   const here = tileHere(state, ctx);
   if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
@@ -3831,6 +3831,7 @@ function bumpBack(state, ctx, frame, push) {
   state.x = forwardX(state, push) & 255;
   state.currentColumn = determineColumn(state, frame);
   startSequence(state, KID_SEQ.bump, ctx.tables);
+  ctx.latch.releaseArrows();
 }
 var FOE_BODY = 10;
 function checkBumpedIntoFoe(state, ctx) {

@@ -417,6 +417,59 @@ describe('every way of dying', () => {
   });
 });
 
+/**
+ * A key that is still held after the move it started has finished.
+ *
+ * Both of these came from the player, within a few minutes of each
+ * other, and they are the same fault: the latch that stops a held key
+ * repeating was left set by a move that had not finished, and nothing
+ * clears it until the key comes back up. The game stops answering the
+ * keyboard, which is what he called it.
+ */
+describe('a key that is held down', () => {
+  it('turns him round after a wall has cut the turn short', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    // Level 1's room 1, bottom left: run at the wall and press the other
+    // way just before reaching it, so the run-turn is interrupted by the
+    // bump. Measured against the original with the probe
+    // `14.,11l,36r,30.`: it is turning four ticks after the bump and
+    // running six after that, where the port stood still for twenty-nine.
+    const LEFT = { x: -1, y: 0, shift: false };
+    const RIGHT = { x: 1, y: 0, shift: false };
+    for (let i = 0; i < 25; i++) game.step(LEFT);
+    expect(game.kid.direction, 'running left').toBe(-1);
+    let turned = -1;
+    for (let i = 0; i < 25 && turned < 0; i++) {
+      game.step(RIGHT);
+      if (game.kid.direction === 0) turned = i;
+    }
+    expect(turned, 'he turns while the key is still down')
+      .toBeGreaterThanOrEqual(0);
+    // And goes on into a run, rather than standing there.
+    for (let i = 0; i < 12; i++) game.step(RIGHT);
+    expect(game.kid.frame, 'and runs').toBeGreaterThanOrEqual(1);
+    expect(game.kid.frame).toBeLessThan(15);
+  });
+
+  it('goes on down a shaft rather than stopping after one ledge', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    // Level 1's room 15, column 5: three floors one above the other,
+    // which is the shape the player was describing.
+    stand(game, 15, 5, 0, 0);
+    const DOWN = { x: 0, y: 1, shift: false };
+    const rows: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      game.step(DOWN);
+      const where = `${game.kid.room}:${game.kid.currentRow}`;
+      if (rows[rows.length - 1] !== where) rows.push(where);
+    }
+    expect(rows, 'one ledge after another while the key is held')
+      .toEqual(['15:0', '15:1', '15:2']);
+  });
+});
+
 describe('the way out of a level', () => {
   it('opens when the Prince stands on its button, and lets him through', async () => {
     const game = await Game.start(assets, exe, 1);
