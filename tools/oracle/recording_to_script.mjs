@@ -28,6 +28,29 @@
  *
  * `--settle <seconds>` is how long after Ctrl+A the level is running
  * again; see tools/oracle/README for how it was measured.
+ *
+ * ## Why the edges go in the middle of a tick
+ *
+ * The game looks at the keyboard once a tick and nowhere else, so the
+ * only thing that matters about when a key goes down is *which tick it
+ * lands in*. The recorder knows that: every event it keeps carries the
+ * tick that was current when it arrived.
+ *
+ * What the emulator cannot know is where the original's tick boundaries
+ * fall in wall-clock time. Ctrl+A anchors the run, but the phase of the
+ * timer after it is whatever it is. Sending an edge at exactly `tick/12`
+ * seconds therefore puts it within a hair of a boundary and it lands on
+ * either side by luck: measured on `probeE`, every press went in one
+ * tick early and the original ran a tick ahead of the port for the whole
+ * of the rest of the run.
+ *
+ * So each edge goes out at the *middle* of its tick, `(tick + 0.5) / 12`.
+ * Half a tick of phase error either way then changes nothing, and
+ * nothing is lost by it: a press and a release inside one tick is not
+ * something the game can see anyway.
+ *
+ * `--raw-ms` puts the millisecond stamps back, which is what this did
+ * before, and is kept for showing that the difference is real.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -56,6 +79,9 @@ const rec = parseRecording(readFileSync(src, 'utf8'));
 const name = basename(src).replace(/\.json$/, '');
 const out = process.argv[3] ?? `tools/oracle/scripts/replay-${name}.txt`;
 const settle = arg('settle', 1.6);
+const rawMs = process.argv.includes('--raw-ms');
+/** The game reads the keyboard once a tick, and this is the middle of one. */
+const TICK = 1 / (rec.ticksPerSecond || 12);
 /** Nothing is sent closer together than this, so two edges cannot merge. */
 const MIN_GAP = 0.002;
 
@@ -81,7 +107,7 @@ for (const e of rec.events) {
   // held. The emulator needs the edges, not the repeats.
   if (e.type === 'down' && down.has(key)) { dropped++; continue; }
   if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
-  const want = e.ms / 1000;
+  const want = rawMs ? e.ms / 1000 : (e.tick + 0.5) * TICK;
   const wait = Math.max(MIN_GAP, want - at);
   chain.push('sleep', wait.toFixed(3));
   at = Math.max(want, at + MIN_GAP);
@@ -95,6 +121,7 @@ lines.push(`xdo ${chain.join(' ')}`, 'wait 3');
 writeFileSync(out, lines.join('\n') + '\n');
 console.error(`${out}: level ${rec.level}, ${sent} key edges `
   + `(${dropped} auto-repeats and strays dropped), `
-  + `${at.toFixed(1)}s of play, settle ${settle}s`);
+  + `${at.toFixed(1)}s of play, settle ${settle}s`
+  + `${rawMs ? ', raw millisecond stamps' : ', edges centred in their ticks'}`);
 console.log(`python3 tools/oracle/dosbox_oracle.py --script ${out} \\
     --out /tmp/replay-${name} --record /tmp/replay-${name}/run.mkv --fps 30`);

@@ -1893,7 +1893,9 @@ var RoomRenderer = class {
     this.paintWipes(surface, 0);
     for (const p of this.behind) this.paintPiece(surface, p);
     for (const p of this.back) this.paintPiece(surface, p);
-    const characters = [...this.mid].sort((a, b) => b.order - a.order);
+    const characters = [...this.mid].sort(
+      (a, b) => b.order - a.order || a.yBottom - b.yBottom
+    );
     for (const c of characters) {
       this.paintPiece(surface, c);
       for (const p of this.back) {

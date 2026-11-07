@@ -1333,7 +1333,18 @@ export class RoomRenderer {
     for (const p of this.back) this.paintPiece(surface, p);
     // Nearest first, so that a character lower down is painted before the
     // floors that have to cover a character higher up.
-    const characters = [...this.mid].sort((a, b) => b.order - a.order);
+    //
+    // Within one tile the original sorts by y and paints the smaller
+    // first -- `compare_curr_objs` swaps while `y[i] > y[i+1]` -- so
+    // whatever is lower on the screen ends up on top. That is how a
+    // character comes out in front of his own sword: the sword's object
+    // sits twenty-five pixels above his feet, so it is painted first
+    // and his hand covers the pixel of hilt that would otherwise show
+    // through it. Without the rule the port drew one pixel of blade
+    // over the guard's knuckle, every fourth tick of his advance.
+    const characters = [...this.mid].sort(
+      (a, b) => (b.order - a.order) || (a.yBottom - b.yBottom),
+    );
     for (const c of characters) {
       this.paintPiece(surface, c);
       // And then the front of every floor above him, again. They are the
