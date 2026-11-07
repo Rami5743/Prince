@@ -129,6 +129,12 @@ interface Piece {
   /** Set when x is already in screen pixels, as a sword's is. */
   screenX?: boolean;
   /**
+   * The front of a floor: the slab under its walking surface. A character
+   * in the row below passes behind it, which is how the original hides
+   * the body of a Prince pulling himself up onto a ledge.
+   */
+  floorFront?: boolean;
+  /**
    * Which pass of the room drawing put this here. The room is drawn from
    * the bottom row up, so a smaller number is painted later and therefore
    * over the top. See `PAINT_ORDERS`.
@@ -361,6 +367,16 @@ export class RoomRenderer {
 
   private addMid(chtab: ChtabId, id: number, x: number, yBottom: number, blit: number): boolean {
     return this.push(this.mid, chtab, id, x, yBottom, blit);
+  }
+
+  /** `addCurrent`, and mark what it added as the front of a floor. */
+  private addFloorFront(
+    chtab: ChtabId, id: number, x: number, yBottom: number, blit: number,
+  ): boolean {
+    const list = this.addTo === 'back' ? this.back : this.fore;
+    const added = this.addCurrent(chtab, id, x, yBottom, blit);
+    if (added) list[list.length - 1].floorFront = true;
+    return added;
   }
 
   private addCurrent(chtab: ChtabId, id: number, x: number, yBottom: number, blit: number): boolean {
@@ -763,8 +779,12 @@ export class RoomRenderer {
       if (this.currTile === TILE.doortop) blit = BLIT.or;
       id = TILE_TABLE[this.currTile].bottomId;
     }
-    this.addCurrent(chtab, id, this.drawX, this.drawBottomY, blit);
-    if (chtab === CHTAB.environmentWall) this.wallPattern(0, 0);
+    if (chtab === CHTAB.environmentWall) {
+      this.addCurrent(chtab, id, this.drawX, this.drawBottomY, blit);
+      this.wallPattern(0, 0);
+    } else {
+      this.addFloorFront(chtab, id, this.drawX, this.drawBottomY, blit);
+    }
   }
 
   private drawLoose(): void {
@@ -787,7 +807,7 @@ export class RoomRenderer {
     } else {
       id = TILE_TABLE[this.currTile].baseId;
     }
-    this.addCurrent(
+    this.addFloorFront(
       CHTAB.environment, id,
       this.drawX, TILE_TABLE[this.currTile].baseY + yBottom, BLIT.transparent,
     );
@@ -1183,32 +1203,57 @@ export class RoomRenderer {
 
   /**
    * Every piece of the room, then everyone standing in it, then the few
-   * pieces the original keeps in front of them.
+   * pieces the original keeps in front of them -- and, between the last
+   * two, the front of every floor above each character.
    *
-   * It was worth trying to put each character in with his own row and
-   * paint the rows from the bottom up, because the original does cover a
-   * climbing Prince with the ledge he is taking hold of, and that bought
-   * three captures across the sessions -- one on `level1-open` and two on
-   * `level1-grab`. It is not how the original does it, and the cost shows
-   * at a room's edge. Count the pixels of the Prince on the climb up the
-   * left of room 2 in the recorded run `b4ff4672`, ticks 175 to 179:
+   * That last bit is the ledge a climbing Prince disappears behind. It
+   * took two measurements to get right, and they pull in opposite
+   * directions.
    *
+   * The first says the row above does *not* cover him. Count the pixels
+   * of the Prince on the climb up the left of room 2 in the recorded run
+   * `b4ff4672`, ticks 175 to 179:
+   *
+   *     the original          232  271  296  272  220
    *     painted this way      232  271  296  272  220
    *     row by row            215  187  156  121   82
-   *     the original          232  271  296  272  220
    *
-   * -- the row above eats him as he rises into it, and the original does
-   * not. Moving the strip of the room above to the front of the painting
-   * instead of the back changes nothing there and costs one of the three
-   * captures, so it is not that either.
-   * A recording of that climb, replayed against the original, settles
-   * it -- painted this way the two agree on the exact pixel count of him
-   * for every frame of the climb, and row by row they do not.
+   * -- painting the rows bottom-up with each character in with his own
+   * row eats his head as he rises into the row above, and the original
+   * does not.
+   *
+   * The second says a ledge *does* cover him. The probe
+   * `14.,4d,5r,9u,18s,8u,24.` -- level 1, jump up and take hold of the
+   * ledge at the right of room 1's middle row, then climb it -- had the
+   * port drawing his body over the front of that ledge for five ticks
+   * where the original draws only his head and arms above it. That is
+   * what the player meant by seeing the palms of his hands.
+   *
+   * What tells the two apart is not the row but the piece. A floor's
+   * front -- the slab under the surface you walk on, which
+   * `drawTileBase` and `drawTileBottom` lay down -- goes in front of
+   * anyone in the row below it. A wall's back, which is what stands
+   * above him at a room's edge, does not. So those pieces, and only
+   * those, are painted a second time over each character who is below
+   * them, and the two measurements agree: the climb at the edge is
+   * untouched, and the climb onto the ledge is now pixel for pixel the
+   * original's for every frame of it.
    */
   private paint(surface: Surface): void {
     this.paintWipes(surface, 0);
     for (const p of this.back) this.paintPiece(surface, p);
-    for (const p of this.mid) this.paintPiece(surface, p);
+    // Nearest first, so that a character lower down is painted before the
+    // floors that have to cover a character higher up.
+    const characters = [...this.mid].sort((a, b) => b.order - a.order);
+    for (const c of characters) {
+      this.paintPiece(surface, c);
+      // And then the front of every floor above him, again. They are the
+      // same pixels they were the first time, over the character instead
+      // of under him, which is the whole of the difference.
+      for (const p of this.back) {
+        if (p.floorFront && p.order < c.order) this.paintPiece(surface, p);
+      }
+    }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
   }
