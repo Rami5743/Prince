@@ -1804,10 +1804,19 @@ var RoomRenderer = class {
    * It was worth trying to put each character in with his own row and
    * paint the rows from the bottom up, because the original does cover a
    * climbing Prince with the ledge he is taking hold of, and that bought
-   * three captures across the sessions. It is not how the original does
-   * it, and the cost showed at a room's edge: a Prince hanging in the
-   * bottom row was painted over by everything in the row above, so a
-   * climb at the left of a room showed a sliver of him and nothing else.
+   * three captures across the sessions -- one on `level1-open` and two on
+   * `level1-grab`. It is not how the original does it, and the cost shows
+   * at a room's edge. Count the pixels of the Prince on the climb up the
+   * left of room 2 in the recorded run `b4ff4672`, ticks 175 to 179:
+   *
+   *     painted this way      232  271  296  272  220
+   *     row by row            215  187  156  121   82
+   *     the original          232  271  296  272  220
+   *
+   * -- the row above eats him as he rises into it, and the original does
+   * not. Moving the strip of the room above to the front of the painting
+   * instead of the back changes nothing there and costs one of the three
+   * captures, so it is not that either.
    * A recording of that climb, replayed against the original, settles
    * it -- painted this way the two agree on the exact pixel count of him
    * for every frame of the climb, and row by row they do not.
