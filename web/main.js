@@ -2715,7 +2715,7 @@ function enterGuard(guard, room, guards, ctx) {
   guard.currentRow = Math.floor(tile / 10);
   guard.y = Y_LAND[guard.currentRow + 1];
   guard.x = guards.x[index];
-  guard.currentColumn = tile % 10;
+  guard.currentColumn = tileDivModM7(guard.x).column;
   guard.direction = guards.dir[index] << 24 >> 24;
   guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 15 : 0;
   guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
@@ -2746,6 +2746,7 @@ function enterGuard(guard, room, guards, ctx) {
 function leaveGuard(guard, guards) {
   if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
   const index = guard.room - 1;
+  guards.tile[index] = guard.currentRow * 10;
   guards.x[index] = guard.x;
   guards.dir[index] = guard.direction & 255;
   guards.skill[index] = guard.skill;

@@ -16,7 +16,9 @@ import {
   startSequence, playSequence, ACTION, type SequenceEffects,
 } from './sequence.ts';
 import { forwardX } from './character.ts';
-import { determineColumn, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX } from './physics.ts';
+import {
+  determineColumn, tileDivModM7, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX,
+} from './physics.ts';
 import {
   SWORD_SEQ, SWORD_DRAWN, isReady, facingOf, charOppDist, SWORD_REACH,
 } from './sword.ts';
@@ -170,7 +172,9 @@ export function enterGuard(
   guard.currentRow = Math.floor(tile / 10);
   guard.y = Y_LAND[guard.currentRow + 1];
   guard.x = guards.x[index];
-  guard.currentColumn = tile % 10;
+  // `Char.curr_col = get_tile_div_mod_m7(Char.x)`: where he is, not
+  // where the box says, which after a `leave_guard` is column nought.
+  guard.currentColumn = tileDivModM7(guard.x).column;
   guard.direction = (guards.dir[index] << 24) >> 24;
   guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 0x0f : 0;
   guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
@@ -208,6 +212,17 @@ export function enterGuard(
 export function leaveGuard(guard: GuardState, guards: GuardsData): void {
   if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
   const index = guard.room - 1;
+  // `level.guards_tile[room_minus_1] = get_tilepos(0, Guard.curr_row)`.
+  // The port never wrote this back, and it is what keeps a guard in the
+  // level: `follow_guard` empties the boxes of both rooms when a guard
+  // comes after the Prince through a door, and this is what refills the
+  // one he is standing in. Without it a guard who had followed once was
+  // gone from the level for good -- the player's "he is not there when
+  // you come back".
+  //
+  // Only the row is kept. The column is recovered from his x when he
+  // comes back out, which is why the stored column is always nought.
+  guards.tile[index] = guard.currentRow * 10;
   guards.x[index] = guard.x;
   guards.dir[index] = guard.direction & 0xff;
   guards.skill[index] = guard.skill;
