@@ -102,6 +102,24 @@ const EXPECTED: Record<string, number> = {
   // in the room; the port's crosses into room 3. From there they are in
   // different rooms and nothing after it is a measurement of anything.
   'f6874819': 452,
+  // Two probes, not recordings: the same machinery, but with a timeline
+  // written here rather than played by the player. They exist because
+  // `f6874819` stops measuring anything at its tick 128, and both of
+  // them are at the ceiling.
+  //
+  // `probeE` is that recording's own opening, to the tick, through to
+  // the moment the port and the recording's capture part company -- the
+  // right-hand end of room 2. Captured, the original does exactly what
+  // the port does: it crosses into room 3 at tick 134 and its guard
+  // walks left at the port's pace, frame for frame, for the thirty
+  // ticks after it. So the recording's capture is the odd one out
+  // there, not the port.
+  //
+  // `probeC` is the same opening followed by a run to the left wall of
+  // room 2 and a long press of Up: the climb the player called wrong.
+  // It is right.
+  'probeC': 224,
+  'probeE': 158,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

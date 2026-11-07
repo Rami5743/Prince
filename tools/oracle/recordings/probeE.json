@@ -1,0 +1,71 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-07T21:14:48.045Z",
+ "level": 1,
+ "ticksPerSecond": 12,
+ "timeline": "22.,18r,14.,11r,4.,2s,3rs,28s,8.,19r,60.",
+ "events": [
+  {
+   "ms": 1833,
+   "tick": 22,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 3333,
+   "tick": 40,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 4500,
+   "tick": 54,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 5417,
+   "tick": 65,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 5750,
+   "tick": 69,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 5917,
+   "tick": 71,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 6167,
+   "tick": 74,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 8500,
+   "tick": 102,
+   "type": "up",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 9167,
+   "tick": 110,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 10750,
+   "tick": 129,
+   "type": "up",
+   "key": "Numpad6"
+  }
+ ],
+ "states": []
+}
