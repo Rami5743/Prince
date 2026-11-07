@@ -3113,6 +3113,8 @@ var KID_SEQ = {
   pickUpSword: 91,
   /** Drinking a potion; its byte-code raises `getItem 1` as well. */
   drink: 78,
+  /** Walking out of the level; its byte-code raises `endLevel`. */
+  leaveLevel: 70,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47
 };
@@ -3695,6 +3697,16 @@ function checkPickUpSword(state, ctx) {
   if (tile.type !== TILE.sword || !tile.room) return;
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
+var LEVEL_DOOR_OPEN = 43;
+function checkLevelDoor(state, ctx) {
+  if (state.alive >= 0) return;
+  if (state.y !== floorHeightOfRow(state.currentRow)) return;
+  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.levelDoorLeft || !tile.room) return;
+  if (ctx.world.modifierAt(tile.room, tile.column, tile.row) < LEVEL_DOOR_OPEN) return;
+  startSequence(state, KID_SEQ.leaveLevel, ctx.tables);
+}
 function checkDrink(state, ctx) {
   if (state.alive >= 0) return;
   if (state.frame !== FRAME.stand) return;
@@ -3741,6 +3753,7 @@ function stepKid(state, controls, ctx) {
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
   checkDrink(state, ctx);
+  checkLevelDoor(state, ctx);
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
@@ -4441,6 +4454,8 @@ var Game = class _Game {
    * measured about how long it lasts, so it is set and read and no more.
    */
   featherFall = false;
+  /** True once the Prince has walked out of the level. */
+  levelFinished = false;
   /** Ticks since the level was built, for the words under the room. */
   titleTicks = 0;
   /**
@@ -4529,6 +4544,11 @@ var Game = class _Game {
         // sword lifted off the floor, or a potion drunk. Both animations
         // raise it, and the tile becomes plain floor behind him. It used
         // to assume the sword, so every potion in the game did nothing.
+        // The byte-code of sequence 70 raises this as the Prince walks
+        // out of the level door.
+        endLevel: () => {
+          this.levelFinished = true;
+        },
         getItem: (which) => {
           if (which !== 1) return;
           const k = this.kid;
@@ -5231,6 +5251,10 @@ async function boot() {
         void restart();
         return;
       }
+      if (game.levelFinished) {
+        void nextLevel();
+        return;
+      }
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -5306,6 +5330,20 @@ async function boot() {
       game.drawnRoom = game.kid.room;
     }
   };
+  async function nextLevel() {
+    if (!game) return;
+    const v = views[current];
+    const was = v.kind === "level" ? v.level : 1;
+    const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
+    if (next < 0) return;
+    const carried = { ticks: game.remainingTicks, sword: game.hasSword };
+    held.clear();
+    await select(next);
+    if (!game) return;
+    game.remainingTicks = carried.ticks;
+    game.hasSword = carried.sword || game.hasSword;
+    watchRoom = null;
+  }
   async function restart() {
     if (!game) return;
     held.clear();

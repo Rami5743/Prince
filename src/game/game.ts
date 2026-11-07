@@ -53,6 +53,8 @@ export class Game {
    * measured about how long it lasts, so it is set and read and no more.
    */
   featherFall = false;
+  /** True once the Prince has walked out of the level. */
+  levelFinished = false;
   /** Ticks since the level was built, for the words under the room. */
   private titleTicks = 0;
   /**
@@ -147,6 +149,9 @@ export class Game {
         // sword lifted off the floor, or a potion drunk. Both animations
         // raise it, and the tile becomes plain floor behind him. It used
         // to assume the sword, so every potion in the game did nothing.
+        // The byte-code of sequence 70 raises this as the Prince walks
+        // out of the level door.
+        endLevel: () => { this.levelFinished = true; },
         getItem: (which) => {
           if (which !== 1) return;
           const k = this.kid;

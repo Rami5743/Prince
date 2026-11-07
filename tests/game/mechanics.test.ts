@@ -306,3 +306,68 @@ describe('every way of dying', () => {
     await diesAndRecovers(game, 109);
   });
 });
+
+describe('a chomper', () => {
+  it('cuts the Prince down when he stands in it', async () => {
+    const game = await Game.start(assets, exe, 3);
+    game.clearBottomText();
+    // Find one and stand in it.
+    let found: [number, number, number] | null = null;
+    for (let room = 1; room <= 24 && !found; room++) {
+      for (let r = 0; r < 3 && !found; r++) {
+        for (let c = 0; c < 10 && !found; c++) {
+          if (game.scene.state.typeAt(room, c, r) === TILE.chomper) found = [room, c, r];
+        }
+      }
+    }
+    expect(found, 'level 3 has a chomper').not.toBeNull();
+    if (!found) return;
+    const [room, column, row] = found;
+    stand(game, room, column, row);
+    for (let i = 0; i < 60 && !game.isDead; i++) game.step(NOTHING);
+    expect(game.isDead, 'the blade comes down on him').toBe(true);
+  });
+});
+
+describe('the way out of a level', () => {
+  it('opens when the Prince stands on its button, and lets him through', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    // Level 1: the plate in room 9 opens the door in the middle row.
+    expect(game.scene.state.typeAt(9, 0, 0)).toBe(TILE.opener);
+    expect(game.scene.state.typeAt(9, 3, 1)).toBe(TILE.levelDoorLeft);
+    stand(game, 9, 0, 0);
+    for (let i = 0; i < 80; i++) game.step(NOTHING);
+    expect(game.scene.state.modifierAt(9, 3, 1), 'the door is up').toBe(43);
+  });
+
+  it('ends the level when he walks into it', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    // Open the door first, then walk into it along the middle row.
+    game.scene.state.setModifier(9, 3, 1, 43);
+    stand(game, 9, 1, 1);
+    for (let i = 0; i < 80 && !game.levelFinished; i++) {
+      game.step({ x: 1, y: 0, shift: false });
+    }
+    expect(game.levelFinished, 'the level is over').toBe(true);
+  });
+});
+
+describe('a loose floor', () => {
+  it('shakes, comes away and leaves rubble', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    // Level 1, room 1: the loose floor is column 6 of the bottom row.
+    expect(game.scene.state.typeAt(1, 6, 2)).toBe(TILE.loose);
+    stand(game, 1, 6, 2);
+    let fell = -1;
+    for (let i = 0; i < 60 && fell < 0; i++) {
+      game.step(NOTHING);
+      if (game.scene.state.typeAt(1, 6, 2) !== TILE.loose) fell = i;
+    }
+    expect(fell, 'it gives way under him').toBeGreaterThanOrEqual(0);
+    // And what is left is the hole, not a floor he can stand on.
+    expect(game.scene.state.typeAt(1, 6, 2)).not.toBe(TILE.floor);
+  });
+});

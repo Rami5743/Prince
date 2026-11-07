@@ -252,6 +252,7 @@ async function boot(): Promise<void> {
       game.step(c);
       recorder.tick(c, game);
       if (game.restartDue) { void restart(); return; }
+      if (game.levelFinished) { void nextLevel(); return; }
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -332,6 +333,26 @@ async function boot(): Promise<void> {
       game.drawnRoom = game.kid.room;
     }
   };
+
+  /**
+   * Out of the door and on to the next one, carrying what the Prince has
+   * earned: the hour does not start again, and nor does he put the sword
+   * back where he found it.
+   */
+  async function nextLevel(): Promise<void> {
+    if (!game) return;
+    const v = views[current];
+    const was = v.kind === 'level' ? v.level : 1;
+    const next = views.findIndex((x) => x.kind === 'level' && x.level === was + 1);
+    if (next < 0) return;
+    const carried = { ticks: game.remainingTicks, sword: game.hasSword };
+    held.clear();
+    await select(next);
+    if (!game) return;
+    game.remainingTicks = carried.ticks;
+    game.hasSword = carried.sword || game.hasSword;
+    watchRoom = null;
+  }
 
   /** Start the level again, as the original does after a death. */
   async function restart(): Promise<void> {

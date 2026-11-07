@@ -74,6 +74,8 @@ export const KID_SEQ = {
   pickUpSword: 91,
   /** Drinking a potion; its byte-code raises `getItem 1` as well. */
   drink: 78,
+  /** Walking out of the level; its byte-code raises `endLevel`. */
+  leaveLevel: 70,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47,
 } as const;
@@ -861,6 +863,32 @@ function checkPickUpSword(state: CharacterState, ctx: KidContext): void {
 }
 
 /**
+ * The way out.
+ *
+ * Sequence 70 is the original's own: the Prince steps into the doorway,
+ * turns, and the byte-code raises `endLevel` on the way. Nothing started
+ * it, so a player who opened the door, walked into it and waited was
+ * still on level 1 -- the game could not be finished at all.
+ *
+ * The door has to be all the way up: its modifier counts to 43 and
+ * anything less is a doorway with the portcullis still across it.
+ */
+const LEVEL_DOOR_OPEN = 43;
+
+function checkLevelDoor(state: CharacterState, ctx: KidContext): void {
+  if (state.alive >= 0) return;
+  // On his feet in the doorway, however he arrived: running through it
+  // is how a player leaves a level, so waiting for him to stand still
+  // first means he runs straight past and the level never ends.
+  if (state.y !== floorHeightOfRow(state.currentRow)) return;
+  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.levelDoorLeft || !tile.room) return;
+  if (ctx.world.modifierAt(tile.room, tile.column, tile.row) < LEVEL_DOOR_OPEN) return;
+  startSequence(state, KID_SEQ.leaveLevel, ctx.tables);
+}
+
+/**
  * A potion under his feet is drunk.
  *
  * The port had nothing here at all: the Prince walked over every flask in
@@ -931,6 +959,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
   checkDrink(state, ctx);
+  checkLevelDoor(state, ctx);
 
   // Falling out of the level is fatal, as it is in the original.
   if (state.room === 0 && state.alive < 0) {
