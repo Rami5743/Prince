@@ -20,12 +20,20 @@ same bugs, and reasonably concluded that nothing had been fixed.
 
 ## Work, do not report on work
 
-Do not end a turn with what the next step is. Do the next step. A turn
-that spends its time describing a plan, measuring something and then
-writing up the measurement has not fixed anything, however good the
-write-up. The player wants bugs gone from the game they can play.
+**Nothing runs after you stop calling tools.** A turn ends the moment
+you write your final message; there is no background worker carrying on
+with what you said you would do next. So "I am continuing" at the end of
+a turn is not a plan, it is a stop -- and it has read as one to the
+player three times now.
 
-Report when something is done and deployed, briefly, and keep going.
+So: never end a turn on what you are about to do. Do it, and end on what
+is done and deployed. If a bug needs another measurement, take the
+measurement in the same turn. If the context is running out, say so
+plainly rather than promising to continue.
+
+A turn that spends itself describing a plan, measuring something and
+writing up the measurement has fixed nothing, however good the
+write-up. The player wants bugs gone from the game they can play.
 
 ## What the port is measured against
 
