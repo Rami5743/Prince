@@ -179,5 +179,8 @@ export function placeHurtSplash(
     y,
     direction: character.direction,
     row: character.row,
+    // `obj_tilepos = -1`: the splash is drawn after every tile and every
+    // other object, so nothing in the room can cover it.
+    onTop: true,
   };
 }

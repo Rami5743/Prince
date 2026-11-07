@@ -434,10 +434,19 @@ var Surface = class {
   width;
   height;
   pixels;
+  /**
+   * `obj_clip_bottom`. The original clips everything it draws in the room
+   * to the room's own 192 rows, so nothing reaches the eight rows of hit
+   * points below it. The port had no clip at all, so a Prince stepping
+   * off the bottom row of a room had his feet drawn across the bottom of
+   * the screen on the way out.
+   */
+  clipBottom;
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
+    this.clipBottom = height;
   }
   clear(color = 0) {
     this.pixels.fill(color);
@@ -480,7 +489,7 @@ var Surface = class {
     const sx0 = Math.max(0, -x);
     const sy0 = Math.max(0, -y);
     const sx1 = Math.min(src.width, this.width - x);
-    const sy1 = Math.min(src.height, this.height - y);
+    const sy1 = Math.min(src.height, this.clipBottom - y);
     for (let sy = sy0; sy < sy1; sy++) {
       let sp = sy * src.width + sx0;
       let dp = (y + sy) * this.width + (x + sx0);
@@ -805,6 +814,7 @@ var CHTAB = {
   environmentWall: "environmentWall"
 };
 var ROW_ABOVE_ORDER = -1;
+var ROOM_BOTTOM_Y = 192;
 var COL_X = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288];
 var WALL_RES = {
   divider1: 11,
@@ -888,6 +898,10 @@ var RoomRenderer = class {
   opt;
   back = [];
   mid = [];
+  /** Characters whose tile is outside the room: painted before it. */
+  behind = [];
+  /** `obj_tilepos = -1`: painted after everything. */
+  onTop = [];
   fore = [];
   wipes = [];
   /** Which list draw_tile_base / draw_tile_bottom append to. */
@@ -930,6 +944,8 @@ var RoomRenderer = class {
   render(surface, room, characters = [], mobs = []) {
     this.back = [];
     this.mid = [];
+    this.behind = [];
+    this.onTop = [];
     this.fore = [];
     this.wipes = [];
     this.addTo = "back";
@@ -940,7 +956,10 @@ var RoomRenderer = class {
     this.drawRoom();
     for (const c of characters) this.addCharacter(c);
     for (const m of mobs) this.addMob(m);
+    const clip = surface.clipBottom;
+    surface.clipBottom = ROOM_BOTTOM_Y;
     this.paint(surface);
+    surface.clipBottom = clip;
   }
   // ---------------------------------------------------------------- lists
   addBack(chtab, id, x, yBottom, blit) {
@@ -1800,7 +1819,10 @@ var RoomRenderer = class {
     if (!set) return;
     const img = set.images[c.image];
     if (!img) return;
-    this.mid.push({
+    const row = c.row ?? 0;
+    const layer = c.onTop ? "onTop" : row < 0 || row > 2 ? "behind" : "normal";
+    const list = layer === "behind" ? this.behind : layer === "onTop" ? this.onTop : this.mid;
+    list.push({
       chtab: c.chtab,
       id: c.image,
       x: c.x,
@@ -1809,7 +1831,7 @@ var RoomRenderer = class {
       character: true,
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
-      order: c.row ?? 0
+      order: row
     });
   }
   /**
@@ -1852,6 +1874,7 @@ var RoomRenderer = class {
    */
   paint(surface) {
     this.paintWipes(surface, 0);
+    for (const p of this.behind) this.paintPiece(surface, p);
     for (const p of this.back) this.paintPiece(surface, p);
     const characters = [...this.mid].sort((a, b) => b.order - a.order);
     for (const c of characters) {
@@ -1862,6 +1885,7 @@ var RoomRenderer = class {
     }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
+    for (const p of this.onTop) this.paintPiece(surface, p);
   }
   paintWipes(surface, layer) {
     for (const w of this.wipes) {
@@ -2401,7 +2425,10 @@ function placeHurtSplash(character, frame, chtab = "kid") {
     x,
     y,
     direction: character.direction,
-    row: character.row
+    row: character.row,
+    // `obj_tilepos = -1`: the splash is drawn after every tile and every
+    // other object, so nothing in the room can cover it.
+    onTop: true
   };
 }
 

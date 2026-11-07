@@ -64,11 +64,20 @@ export class Surface {
   readonly width: number;
   readonly height: number;
   readonly pixels: Uint8Array;
+  /**
+   * `obj_clip_bottom`. The original clips everything it draws in the room
+   * to the room's own 192 rows, so nothing reaches the eight rows of hit
+   * points below it. The port had no clip at all, so a Prince stepping
+   * off the bottom row of a room had his feet drawn across the bottom of
+   * the screen on the way out.
+   */
+  clipBottom: number;
 
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
+    this.clipBottom = height;
   }
 
   clear(color = 0): void {
@@ -119,7 +128,7 @@ export class Surface {
     const sx0 = Math.max(0, -x);
     const sy0 = Math.max(0, -y);
     const sx1 = Math.min(src.width, this.width - x);
-    const sy1 = Math.min(src.height, this.height - y);
+    const sy1 = Math.min(src.height, this.clipBottom - y);
     for (let sy = sy0; sy < sy1; sy++) {
       let sp = sy * src.width + sx0;
       let dp = (y + sy) * this.width + (x + sx0);

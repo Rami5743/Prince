@@ -111,10 +111,19 @@ export interface CharacterDraw {
   readonly row?: number;
   /** A sword's x is already in screen pixels and must not be stretched. */
   readonly alreadyScreenX?: boolean;
+  /**
+   * `obj_tilepos = -1`, which `redraw_needed_tiles` draws after every
+   * tile and every other object. The hurt splash is the only thing that
+   * uses it.
+   */
+  readonly onTop?: boolean;
 }
 
 /** The strip of the room above, drawn after every row of this one. */
 const ROW_ABOVE_ORDER = -1;
+
+/** `obj_clip_bottom`: the room is 192 rows, the hit points are below it. */
+const ROOM_BOTTOM_Y = 192;
 
 interface Piece {
   chtab: ChtabId;
@@ -141,6 +150,20 @@ interface Piece {
    */
   order: number;
 }
+
+/**
+ * Where a character goes in the drawing.
+ *
+ * `set_objtile_at_char` gives every character a tile position and the
+ * room is drawn tile by tile, so a character is painted when the
+ * drawing reaches his tile. A position outside the room -- a row above
+ * it or below it, a column off either end -- comes out of
+ * `get_tilepos_nominus` as 30, and `redraw_needed_tiles` draws tile 30
+ * *before* the room, so such a character is behind everything. That is
+ * how the original hides the legs of a Prince stepping off the bottom
+ * row of a room behind the floor he is leaving.
+ */
+type CharacterLayer = 'behind' | 'normal' | 'onTop';
 
 interface Wipe {
   layer: number;
@@ -289,6 +312,10 @@ export class RoomRenderer {
 
   private back: Piece[] = [];
   private mid: Piece[] = [];
+  /** Characters whose tile is outside the room: painted before it. */
+  private behind: Piece[] = [];
+  /** `obj_tilepos = -1`: painted after everything. */
+  private onTop: Piece[] = [];
   private fore: Piece[] = [];
   private wipes: Wipe[] = [];
   /** Which list draw_tile_base / draw_tile_bottom append to. */
@@ -342,6 +369,8 @@ export class RoomRenderer {
   ): void {
     this.back = [];
     this.mid = [];
+    this.behind = [];
+    this.onTop = [];
     this.fore = [];
     this.wipes = [];
     this.addTo = 'back';
@@ -352,7 +381,13 @@ export class RoomRenderer {
     this.drawRoom();
     for (const c of characters) this.addCharacter(c);
     for (const m of mobs) this.addMob(m);
+    // `reset_obj_clip`: everything drawn in the room is clipped to the
+    // room's own 192 rows. Without it a Prince stepping off the bottom
+    // row of a room has his feet drawn across the hit points below.
+    const clip = surface.clipBottom;
+    surface.clipBottom = ROOM_BOTTOM_Y;
     this.paint(surface);
+    surface.clipBottom = clip;
   }
 
   // ---------------------------------------------------------------- lists
@@ -1208,7 +1243,12 @@ export class RoomRenderer {
     if (!set) return;
     const img = set.images[c.image];
     if (!img) return;
-    this.mid.push({
+    const row = c.row ?? 0;
+    const layer: CharacterLayer = c.onTop ? 'onTop'
+      : (row < 0 || row > 2) ? 'behind' : 'normal';
+    const list = layer === 'behind' ? this.behind
+      : layer === 'onTop' ? this.onTop : this.mid;
+    list.push({
       chtab: c.chtab,
       id: c.image,
       x: c.x,
@@ -1217,7 +1257,7 @@ export class RoomRenderer {
       character: true,
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
-      order: c.row ?? 0,
+      order: row,
     });
   }
 
@@ -1261,6 +1301,8 @@ export class RoomRenderer {
    */
   private paint(surface: Surface): void {
     this.paintWipes(surface, 0);
+    // `draw_objtable_items_at_tile(30)`, which comes before the room.
+    for (const p of this.behind) this.paintPiece(surface, p);
     for (const p of this.back) this.paintPiece(surface, p);
     // Nearest first, so that a character lower down is painted before the
     // floors that have to cover a character higher up.
@@ -1276,6 +1318,8 @@ export class RoomRenderer {
     }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
+    // `draw_objtable_items_at_tile(-1)`, which comes after everything.
+    for (const p of this.onTop) this.paintPiece(surface, p);
   }
 
   private paintWipes(surface: Surface, layer: number): void {
