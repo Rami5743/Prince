@@ -101,7 +101,7 @@ const EXPECTED: Record<string, number> = {
   // the capture's Prince stops nine units short of the port's and stays
   // in the room; the port's crosses into room 3. From there they are in
   // different rooms and nothing after it is a measurement of anything.
-  'f6874819': 452,
+  'f6874819': 453,
   // Two probes, not recordings: the same machinery, but with a timeline
   // written here rather than played by the player. They exist because
   // `f6874819` stops measuring anything at its tick 128, and both of
@@ -118,8 +118,8 @@ const EXPECTED: Record<string, number> = {
   // `probeC` is the same opening followed by a run to the left wall of
   // room 2 and a long press of Up: the climb the player called wrong.
   // It is right.
-  'probeC': 224,
-  'probeE': 158,
+  'probeC': 225,
+  'probeE': 159,
   // And the whole of `f6874819` sent again as a probe -- the same keys
   // on the same ticks, a second sample of the original playing it. It
   // follows the port a great deal further than the recording's own
@@ -129,7 +129,7 @@ const EXPECTED: Record<string, number> = {
   // the original spends three ticks on a room change and the port two,
   // so every change costs a tick, and the guard's advance runs about
   // ten pixels ahead of the original's over fifty ticks.
-  'probeF': 384,
+  'probeF': 385,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

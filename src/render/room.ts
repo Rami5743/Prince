@@ -125,6 +125,18 @@ const ROW_ABOVE_ORDER = -1;
 /** `obj_clip_bottom`: the room is 192 rows, the hit points are below it. */
 const ROOM_BOTTOM_Y = 192;
 
+/**
+ * `y_to_row_mod4`, which is where in the drawing a falling slab belongs.
+ * A slab drawn through the hole it made is in the row the hole is in,
+ * not in the row it has fallen into.
+ */
+function yToRowForMob(y: number): number {
+  if (y < 65) return 0;
+  if (y < 128) return 1;
+  if (y < 191) return 2;
+  return 2;
+}
+
 interface Piece {
   chtab: ChtabId;
   /** 1-based image id within the group; 0 means nothing is drawn. */
@@ -1191,7 +1203,26 @@ export class RoomRenderer {
    * simply vanished instead of falling.
    */
   private addMob(m: MobDraw): void {
-    if (m.room !== this.drawnRoom) return;
+    // `draw_mob`. A slab that has gone through the floor is still drawn
+    // in the room it came from, through the hole it made, for the first
+    // eighteen pixels of its fall into the room below -- and one in the
+    // room above is drawn here once it is within fifteen of the bottom.
+    // Without the first of those the hole opens two ticks too early:
+    // the port had the slab vanish the moment it crossed into the next
+    // room, leaving a bare black tile where the original still shows
+    // the plank sliding out of it.
+    let y = m.y;
+    if (m.room === this.drawnRoom) {
+      if (m.y >= 210) return;
+    } else if (m.room === this.roomB) {
+      if (Math.abs((m.y << 24) >> 24) >= 18) return;
+      y = m.y + 192;
+    } else if (m.room === this.roomA) {
+      if (m.y < 174) return;
+      y = m.y - 189;
+    } else {
+      return;
+    }
     // The column is the column: `COL_X` is indexed the same way the tile
     // loop indexes it. The +1 that used to be here put the falling floor
     // one tile to the right of the hole it came out of, which usually
@@ -1199,11 +1230,11 @@ export class RoomRenderer {
     const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
-    const main = m.y - 3;
+    const main = y - 3;
     const floor = TILE_TABLE[TILE.floor];
-    const order = m.row;
+    const order = yToRowForMob(y);
     this.mid.push({
-      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[0], x, yBottom: m.y,
+      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[0], x, yBottom: y,
       blit: BLIT.opaque, order,
     });
     this.mid.push({
@@ -1228,14 +1259,10 @@ export class RoomRenderer {
     // it cost twenty-four of the ticks the port had exactly right and
     // gained none.
     //
-    // `draw_mob` also goes on drawing a slab that has passed into the
-    // room below, through the hole it made, for the first eighteen
-    // pixels of it, and into the room above from a hundred and
-    // seventy-four. That was tried too, and the captures say no: the
-    // ticks after the slab leaves the room are further out with it than
-    // without. Where a reading of the code and a capture disagree the
-    // capture wins, and both of these are read from SDLPoP rather than
-    // from `PRINCE.EXE` itself.
+    // The other half of `draw_mob` -- the slab drawn on through the
+    // hole it made -- was also tried once and taken out, on captures of
+    // the recordings that were too noisy to see it. The probes are not:
+    // with it, every one of them goes up and none goes down.
   }
 
   private addCharacter(c: CharacterDraw): void {

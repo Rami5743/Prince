@@ -815,6 +815,12 @@ var CHTAB = {
 };
 var ROW_ABOVE_ORDER = -1;
 var ROOM_BOTTOM_Y = 192;
+function yToRowForMob(y) {
+  if (y < 65) return 0;
+  if (y < 128) return 1;
+  if (y < 191) return 2;
+  return 2;
+}
 var COL_X = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288];
 var WALL_RES = {
   divider1: 11,
@@ -1790,18 +1796,29 @@ var RoomRenderer = class {
    * simply vanished instead of falling.
    */
   addMob(m) {
-    if (m.room !== this.drawnRoom) return;
+    let y = m.y;
+    if (m.room === this.drawnRoom) {
+      if (m.y >= 210) return;
+    } else if (m.room === this.roomB) {
+      if (Math.abs(m.y << 24 >> 24) >= 18) return;
+      y = m.y + 192;
+    } else if (m.room === this.roomA) {
+      if (m.y < 174) return;
+      y = m.y - 189;
+    } else {
+      return;
+    }
     const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
-    const main = m.y - 3;
+    const main = y - 3;
     const floor = TILE_TABLE[TILE.floor];
-    const order = m.row;
+    const order = yToRowForMob(y);
     this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_BOTTOM[0],
       x,
-      yBottom: m.y,
+      yBottom: y,
       blit: BLIT.opaque,
       order
     });
