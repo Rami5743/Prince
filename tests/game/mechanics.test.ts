@@ -524,6 +524,50 @@ describe('a running jump at a wall', () => {
   });
 });
 
+/**
+ * `at that distance he should follow me to the next screen`.
+ *
+ * Every room keeps its own guard, and changing room used to put that
+ * room's guard on the screen and the old one back in his box -- so the
+ * Prince could walk out of a fight and leave the guard standing where he
+ * was. Level 1's room 3 holds the first guard in the game and room 2 is
+ * the room to its left.
+ */
+describe('a guard with his sword out', () => {
+  const ROOM = 3; const LEFT = 2;
+
+  it('comes after the Prince into the next room', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(ROOM);
+    expect(game.guard.room, 'room 3 has the guard').toBe(ROOM);
+    game.guard.sword = SWORD_DRAWN;
+    const was = game.guard.x;
+    game.showRoom(LEFT);
+    expect(game.guard.room, 'and he comes with him').toBe(LEFT);
+    expect(game.guard.x, 'in at the edge the Prince went out of')
+      .toBe((was + 140) & 0xff);
+    // And he is not left behind in the room he came from as well: going
+    // back meets the same guard, not a second one standing where the
+    // first one was.
+    expect(game.guards.tile[ROOM - 1], 'his box in room 3 is empty')
+      .toBeGreaterThanOrEqual(30);
+    game.showRoom(ROOM);
+    expect(game.guard.room).toBe(ROOM);
+    expect(game.guard.x, 'the same guard, back through the same door')
+      .toBe(was);
+  });
+
+  it('stays put while his sword is sheathed', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(ROOM);
+    game.guard.sword = 0;
+    game.showRoom(LEFT);
+    expect(game.guard.room, 'room 2 has no guard of its own').not.toBe(LEFT);
+  });
+});
+
 describe('the way out of a level', () => {
   it('opens when the Prince stands on its button, and lets him through', async () => {
     const game = await Game.start(assets, exe, 1);

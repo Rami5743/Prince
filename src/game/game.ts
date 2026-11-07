@@ -17,7 +17,7 @@ import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
 import { toScreenX } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
-import { SWORD_SEQ, strikeLands, withinReach, isBlocking } from './sword.ts';
+import { SWORD_SEQ, SWORD_DRAWN, strikeLands, withinReach, isBlocking } from './sword.ts';
 import { startSequence } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
@@ -371,15 +371,52 @@ export class Game {
    * new room's torches and exit door start up.
    */
   private enterRoom(room: number): void {
-    leaveGuard(this.guard, this.guards);
-    enterGuard(this.guard, room, this.guards, {
-      tables: this.tables,
-      guardType: this.scene.guardType,
-      levelGuardHitPoints: this.scene.constants.guardHitPoints[this.levelNumber] ?? 0,
-    });
-    this.applyGuardColour();
+    if (!this.guardFollows(room)) {
+      leaveGuard(this.guard, this.guards);
+      enterGuard(this.guard, room, this.guards, {
+        tables: this.tables,
+        guardType: this.scene.guardType,
+        levelGuardHitPoints: this.scene.constants.guardHitPoints[this.levelNumber] ?? 0,
+      });
+      this.applyGuardColour();
+    }
     this.traps.drawnRoom = room;
     this.startRoomTiles(room);
+  }
+
+  /**
+   * A guard with his sword out comes after the Prince through the door.
+   *
+   * Every room keeps its own guard, and until now changing room always
+   * put that room's guard on the screen and the old one back in his box.
+   * So the Prince could walk out of a fight and the guard would stand
+   * where he was left, which is not what the original does and is what
+   * the player meant by `at that distance he should follow me to the
+   * next screen`.
+   *
+   * He follows sideways only, and only while he is up and armed, and
+   * only into a room with no guard of its own -- there is one guard on
+   * the screen at a time, and the room he arrives in would otherwise
+   * have two. He comes in at the edge the Prince went out of, which is
+   * where a step would have put him, and `advanceOnKid` walks him in
+   * from there.
+   */
+  private guardFollows(room: number): boolean {
+    const guard = this.guard;
+    if (guard.direction === NO_DIRECTION) return false;
+    if (guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return false;
+    if (room === guard.room || room === 0) return false;
+    const toTheLeft = this.scene.state.linkOf(guard.room, 0) === room;
+    const toTheRight = this.scene.state.linkOf(guard.room, 1) === room;
+    if (!toTheLeft && !toTheRight) return false;
+    if (this.guards.tile[room - 1] < 30) return false; // it has a guard already
+    // Out of the box he came from, so that going back does not meet him
+    // twice, and in at the far edge of the room he is going to.
+    this.guards.tile[guard.room - 1] = 30;
+    guard.room = room;
+    guard.x = (guard.x + (toTheLeft ? 140 : -140)) & 0xff;
+    guard.currentColumn += toTheLeft ? 10 : -10;
+    return true;
   }
 
   /**
