@@ -198,6 +198,19 @@ test`.
 The ceiling for that test is the 1412-of-1470 above, not 1470: these are
 pins that must not go down, not targets to reach.
 
+There are sixteen of them now. The last, `f6874819`, is the one the
+player sent with a list of six bugs, and it is the clearest example of
+a run that stops being the same run. The port and the capture are the
+same picture on every tick to 77 and within a tick or two of each other
+to 127. Then, at the right-hand end of room 2, the capture's Prince
+stops nine units short of the port's and stays in the room while the
+port's crosses into room 3 -- and from there they are not in the same
+room, so none of the remaining thousand ticks measures anything. Where
+the recording cannot answer, a probe can: `probeC`, which is that
+recording's own opening followed by a run to the left wall of room 2 and
+a long press of Up, matches the capture on every tick of the climb to
+within the flicker of the two torches.
+
 ## What each tool does
 
 * `recording_to_script.mjs` -- a recording's raw key events become one

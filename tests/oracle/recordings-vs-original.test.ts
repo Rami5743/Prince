@@ -80,12 +80,12 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 201,
   '13ab6867': 648,
-  '25c4ebb8': 372,
+  '25c4ebb8': 373,
   '33e8ace7': 219,
   '3764b76d': 95,
   '5920a8c2': 393,
   '72b3522f': 187,
-  '756b259c': 348,
+  '756b259c': 349,
   '760c3e74': 1027,
   '848ee3c4': 673,
   '9b60bf3a': 470,
@@ -93,6 +93,15 @@ const EXPECTED: Record<string, number> = {
   'b4ff4672': 341,
   'e209b01a': 200,
   'ec99dc5b': 217,
+  // The sixteenth, and the one the player sent with the list of six
+  // bugs. It is long -- 1214 ticks, the whole of level 1 and a fight --
+  // and it is the clearest case of a run that stops being the same run.
+  // The port and the capture are identical to tick 77 and within a tick
+  // or two of each other to 127. Then, at the right-hand end of room 2,
+  // the capture's Prince stops nine units short of the port's and stays
+  // in the room; the port's crosses into room 3. From there they are in
+  // different rooms and nothing after it is a measurement of anything.
+  'f6874819': 452,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
