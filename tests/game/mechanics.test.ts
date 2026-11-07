@@ -470,6 +470,60 @@ describe('a key that is held down', () => {
   });
 });
 
+/**
+ * A wall met in mid-air.
+ *
+ * Sequence 4, the running jump, moves the Prince 12, 8, 8, 4 and 4 units
+ * on its last five frames. Nothing was looking at the tiles he crossed
+ * while it did, so on level 1 he cleared the gap at the right of room 1
+ * and flew through the three wall tiles beyond it, which is what the
+ * player reported as passing through a wall.
+ *
+ * Measured with the probe `14.,14r,6ru,46.`: the original drops straight
+ * down the gap and lands on the bottom row at about screen x 155, where
+ * the port sailed on to x 230 and came down three tiles further along.
+ */
+describe('a running jump at a wall', () => {
+  it('stops at it and drops, instead of flying through it', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    const RUN = { x: 1, y: 0, shift: false };
+    const JUMP = { x: 1, y: -1, shift: false };
+    // He drops into the level over the first fourteen ticks.
+    for (let i = 0; i < 14; i++) game.step(NOTHING);
+    for (let i = 0; i < 14; i++) game.step(RUN);
+    for (let i = 0; i < 6; i++) game.step(JUMP);
+    let landed = -1;
+    for (let i = 0; i < 25 && landed < 0; i++) {
+      game.step(NOTHING);
+      if (game.kid.currentRow === 2 && game.kid.y === standY(2)) {
+        landed = game.kid.currentColumn;
+      }
+    }
+    // Room 1's middle row is floor out to column 4 and wall from 5 on;
+    // the bottom row under column 4 is where the original puts him.
+    expect(game.kid.room).toBe(1);
+    expect(landed, 'he comes down in the gap, not three tiles beyond it')
+      .toBe(4);
+  });
+
+  it('never leaves him standing inside a wall', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    const JUMP = { x: 1, y: -1, shift: false };
+    for (let i = 0; i < 14; i++) game.step(NOTHING);
+    for (let i = 0; i < 14; i++) game.step({ x: 1, y: 0, shift: false });
+    for (let i = 0; i < 6; i++) game.step(JUMP);
+    for (let i = 0; i < 40; i++) {
+      game.step(NOTHING);
+      const kid = game.kid;
+      if (kid.currentColumn < 0 || kid.room === 0) continue;
+      const here = game.scene.state.typeAt(kid.room, kid.currentColumn, kid.currentRow);
+      expect(here, `tick ${i}: standing in a wall`).not.toBe(TILE.wall);
+    }
+  });
+});
+
 describe('the way out of a level', () => {
   it('opens when the Prince stands on its button, and lets him through', async () => {
     const game = await Game.start(assets, exe, 1);

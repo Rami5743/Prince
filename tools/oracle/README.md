@@ -74,6 +74,15 @@ original turns, is facing right by 38 and running by 40; the port stood
 still until the key came up on 61. Lining the whole run up, the port now
 matches the original on 61 of its 91 ticks where it matched 26 before.
 
+The second probe it settled was `14.,14r,6ru,46.` -- run right from the
+start of level 1 and jump. The two runs are identical to the port's tick
+34; then the original drops straight down the gap at the right of room 1
+and lands on the bottom row at about screen x 155, while the port sailed
+on through the three wall tiles beyond the gap and came down at x 230,
+three tiles further along. `where.py` is what showed it: it prints the
+bounding box of whatever moved in each tick, which tells `the port draws
+him somewhere else` apart from `the port does not draw him at all`.
+
 ## What each tool does
 
 * `recording_to_script.mjs` -- a recording's raw key events become one
@@ -89,6 +98,11 @@ matches the original on 61 of its 91 ticks where it matched 26 before.
 * `compare_ticks.py` -- compares two directories of per-tick pictures. The
   torches are masked out: a flame picks its next frame at random and the
   two sides can never agree on one.
+* `where.py` -- the bounding box of what moved from one tick to the next,
+  which for a room that does not move is the character. Run it over both
+  directories side by side to see where each has him.
+* `make_probe.mjs` -- a recording written from a timeline, for a question
+  the player never happened to ask.
 * `state_sequence.py` -- compares the two as sequences of distinct
   pictures with how long each was held, which does not depend on agreeing
   where tick zero is.

@@ -3144,7 +3144,9 @@ var KID_SEQ = {
   /** Walking out of the level; its byte-code raises `endLevel`. */
   leaveLevel: 70,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
-  bump: 47
+  bump: 47,
+  /** Meeting one in mid-air: the fall frames and then a real fall. */
+  bumpFall: 45
 };
 var FRAME = {
   startRunFirst: 1,
@@ -3804,7 +3806,8 @@ function checkBumped(state, ctx) {
   if (f >= 135 && f < 150 || f >= 110 && f < 120 || f >= 150 && f < 163 || f >= 166 && f < 169 || f >= FRAME.hangingFirst && f < 100) {
     return;
   }
-  if (state.y !== floorHeightOfRow(state.currentRow)) return;
+  const airborne = state.y !== floorHeightOfRow(state.currentRow);
+  if (airborne && state.action !== ACTION.runJump) return;
   const frame = frameOf(ctx.tables, state);
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
   const penetration = (column) => {
@@ -3824,13 +3827,13 @@ function checkBumped(state, ctx) {
   const reached = penetration(edge);
   const push = Math.min(here, front, reached);
   if (push === 0) return;
-  bumpBack(state, ctx, frame, push);
+  bumpBack(state, ctx, frame, push, airborne);
 }
-function bumpBack(state, ctx, frame, push) {
+function bumpBack(state, ctx, frame, push, airborne = false) {
   if (state.alive >= 0) return;
   state.x = forwardX(state, push) & 255;
   state.currentColumn = determineColumn(state, frame);
-  startSequence(state, KID_SEQ.bump, ctx.tables);
+  startSequence(state, airborne ? KID_SEQ.bumpFall : KID_SEQ.bump, ctx.tables);
   ctx.latch.releaseArrows();
 }
 var FOE_BODY = 10;

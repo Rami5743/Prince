@@ -98,6 +98,8 @@ export const KID_SEQ = {
   leaveLevel: 70,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47,
+  /** Meeting one in mid-air: the fall frames and then a real fall. */
+  bumpFall: 45,
 } as const;
 
 export const FRAME = {
@@ -1069,13 +1071,25 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
     || (f >= 166 && f < 169) || (f >= FRAME.hangingFirst && f < 100)) {
     return;
   }
-  // Only with both feet on the floor of the row he counts as being in.
-  // Bumping into something in mid-air is a different move in the original --
-  // sequences 45 and 46, which knock the character down -- and neither is
-  // written yet. Pushing a falling character sideways instead walks him into
-  // the wall column and he falls through the floor, which is what happened
-  // when this guard was missing.
-  if (state.y !== floorHeightOfRow(state.currentRow)) return;
+  // Either with both feet on the floor of the row he counts as being in,
+  // or in the middle of a running jump. The jump is the one thing that
+  // carries a character through the air fast enough and far enough to end
+  // up inside a wall: sequence 4 moves him 12, 8, 8, 4 and 4 units on its
+  // last five frames, and on level 1 that is enough to clear the gap at
+  // the right of room 1 and fly through the three wall tiles beyond it.
+  //
+  // Measured. The probe `14.,14r,6ru,46.` -- run right from the start of
+  // level 1 and jump -- has the two runs identical to the port's tick 34,
+  // and then the original drops straight down the gap, landing on the
+  // bottom row at about screen x 155, while the port sailed on to x 230
+  // and came down three tiles further along. That is the player's
+  // `passing through a wall`.
+  //
+  // Anything else in the air is left alone: pushing a falling character
+  // sideways walks him into the wall column and he falls through the
+  // floor, which is what happened when this guard was missing.
+  const airborne = state.y !== floorHeightOfRow(state.currentRow);
+  if (airborne && state.action !== ACTION.runJump) return;
   const frame = frameOf(ctx.tables, state);
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
 
@@ -1112,7 +1126,7 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
   const push = Math.min(here, front, reached);
   if (push === 0) return;
 
-  bumpBack(state, ctx, frame, push);
+  bumpBack(state, ctx, frame, push, airborne);
 }
 
 /**
@@ -1127,11 +1141,16 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
  */
 function bumpBack(
   state: CharacterState, ctx: KidContext, frame: Frame, push: number,
+  airborne = false,
 ): void {
   if (state.alive >= 0) return;
   state.x = forwardX(state, push) & 0xff;
   state.currentColumn = determineColumn(state, frame);
-  startSequence(state, KID_SEQ.bump, ctx.tables);
+  // A wall met in mid-air is not the shuffle of sequence 47. Sequence 45
+  // is the original's own: `action 5`, frames 102 to 105 -- the falling
+  // frames -- and then `setFall 0 15`, so he drops out of the jump where
+  // the wall stopped him instead of carrying on over it.
+  startSequence(state, airborne ? KID_SEQ.bumpFall : KID_SEQ.bump, ctx.tables);
   // And whatever the player is holding counts again afterwards.
   //
   // A latch that a move has used stays used until the key comes back up,
