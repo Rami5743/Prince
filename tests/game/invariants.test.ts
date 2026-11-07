@@ -188,4 +188,62 @@ describe('however it is played', () => {
     expect(deaths.length, 'the made-up runs do kill him').toBeGreaterThan(0);
     expect(bad).toEqual([]);
   });
+
+  /**
+   * And the same three questions of every level, not just the first.
+   *
+   * Level 1 is the one the recordings are of and the one every other
+   * test is about, so it is the one the port has been shaped around. The
+   * other thirteen have chompers, mirrors, loose floors over spikes and
+   * rooms joined up in ways level 1 never asks about, and nothing was
+   * ever played in them. Fifteen made-up runs each of three hundred
+   * ticks is enough to walk into most of it, and cheap: the whole sweep
+   * is under twenty seconds.
+   */
+  it('holds on every level, not just the first', async () => {
+    const bad: string[] = [];
+    for (let level = 1; level <= 14 && bad.length === 0; level++) {
+      for (let seed = 1; seed <= 15 && bad.length === 0; seed++) {
+        let game = await Game.start(assets, exe, level);
+        game.clearBottomText();
+        const keys = inputs(seed + level * 7919, 300);
+        let was: { room: number; row: number; column: number } | null = null;
+        for (let t = 0; t < keys.length; t++) {
+          if (keys[t].shift && !keys[t - 1]?.shift) game.pressButton();
+          game.step(keys[t]);
+          if (game.restartDue) { game = await game.restart(assets, exe); was = null; continue; }
+          const kid = game.kid;
+          if (kid.alive >= 0 || kid.room === 0) continue;
+          const where = `level ${level} seed ${seed} tick ${t}: `
+            + `room ${kid.room} column ${kid.currentColumn} row ${kid.currentRow} `
+            + `frame ${kid.frame}`;
+          const settled = (kid.frame === 15 || (kid.frame >= 1 && kid.frame <= 14))
+            && kid.y === standY(kid.currentRow)
+            && kid.action !== ACTION.hangClimb && kid.action !== ACTION.hangStraight
+            && kid.currentColumn >= 0 && kid.currentColumn <= 9
+            && kid.currentRow >= 0 && kid.currentRow <= 2;
+          if (settled) {
+            const here = game.scene.state.typeAt(kid.room, kid.currentColumn, kid.currentRow);
+            if (here === TILE.wall) bad.push(`${where} is inside a wall`);
+            else if (!tileIsFloor(here)) bad.push(`${where} is standing on ${here}`);
+          }
+          const now = { room: kid.room, row: kid.currentRow, column: kid.currentColumn };
+          if (was && now.room === was.room && now.row === was.row
+            && Math.abs(now.column - was.column) > 1) {
+            const lo = Math.min(now.column, was.column);
+            const hi = Math.max(now.column, was.column);
+            for (let c = lo + 1; c < hi; c++) {
+              if (c < 0 || c > 9) continue;
+              if (game.scene.state.typeAt(now.room, c, now.row) === TILE.wall) {
+                bad.push(`${where} came from column ${was.column} across the wall at ${c}`);
+              }
+            }
+          }
+          was = now;
+          if (kid.frame < 0 || kid.frame > 240) bad.push(`${where} is not a frame`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  }, 180000);
 });
