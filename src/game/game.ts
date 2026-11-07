@@ -465,7 +465,13 @@ export class Game {
   /** `Press Button to Continue`, or the level's number while it is new. */
   private drawBottomText(): void {
     if (!this.font) return;
-    const text = this.awaitingButton ? 'Press Button to Continue'
+    // The words stay up for the tick the button is pressed on; the level's
+    // number takes over only once the screen has gone black. The capture
+    // has `Press Button to Continue` on 298, black with `LEVEL 1` on 299
+    // and 300, and the level running again on 301.
+    const blanking = this.restartCountdown >= 0 && this.restartCountdown <= 1;
+    const asking = this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && !blanking;
+    const text = asking ? 'Press Button to Continue'
       : this.titleTicks > 0 || this.restartCountdown >= 0
         ? `LEVEL ${this.levelNumber}`
         : null;
@@ -529,21 +535,24 @@ export const ROOM_CHANGE_BLANK = 1;
 /**
  * Ticks between the Prince dying and `Press Button to Continue`.
  *
- * Fourteen, measured off the grabbed video of the recorded run: the first
- * blood on the spikes of level 1's room 6 is tick 284 and the words are up
- * on 298. An earlier reading of a different capture made it forty-five,
+ * The words come up fourteen ticks after the Prince does, measured off
+ * the grabbed video of the recorded run: the first blood on the spikes of
+ * level 1's room 6 is tick 284 and the words are up on 298. The constant
+ * is one more than that because `deadTicks` has already counted the tick
+ * the blood appeared on by the time this is asked. An earlier reading of a different capture made it forty-five,
  * from a sword death whose first frame was harder to place; this one is a
  * splash of red on a tick that has nothing else going on.
  */
-export const RESTART_PROMPT_DELAY = 14;
+export const RESTART_PROMPT_DELAY = 15;
 
 /**
  * Ticks from the button being pressed to the level running again. Three,
- * of which the first two are black: the words up on tick 298 of the
+ * of which the middle two are black: the words up on tick 298 of the
  * grabbed video with Left already held, black on 299 and 300, the level
- * running again on 301.
+ * running again on 301. The words are on screen for the tick the button
+ * is pressed on, which is why this is three and not two.
  */
-export const RESTART_DELAY = 2;
+export const RESTART_DELAY = 3;
 
 const TILE_SWORD = TILE.sword;
 const TILE_FLOOR = TILE.floor;

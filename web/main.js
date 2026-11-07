@@ -4749,7 +4749,9 @@ var Game = class _Game {
   /** `Press Button to Continue`, or the level's number while it is new. */
   drawBottomText() {
     if (!this.font) return;
-    const text = this.awaitingButton ? "Press Button to Continue" : this.titleTicks > 0 || this.restartCountdown >= 0 ? `LEVEL ${this.levelNumber}` : null;
+    const blanking = this.restartCountdown >= 0 && this.restartCountdown <= 1;
+    const asking = this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && !blanking;
+    const text = asking ? "Press Button to Continue" : this.titleTicks > 0 || this.restartCountdown >= 0 ? `LEVEL ${this.levelNumber}` : null;
     if (!text) return;
     drawTextCentred(this.surface, this.font, text, 0, 319, TEXT_TOP_Y, TEXT_WHITE);
   }
@@ -4758,8 +4760,8 @@ var TEXT_TOP_Y = 193;
 var TEXT_WHITE = 15;
 var LEVEL_TITLE_TICKS = 49;
 var ROOM_CHANGE_BLANK = 1;
-var RESTART_PROMPT_DELAY = 14;
-var RESTART_DELAY = 2;
+var RESTART_PROMPT_DELAY = 15;
+var RESTART_DELAY = 3;
 var TILE_SWORD = TILE.sword;
 var TILE_FLOOR = TILE.floor;
 var FULL_HP_IMAGE = 217;
