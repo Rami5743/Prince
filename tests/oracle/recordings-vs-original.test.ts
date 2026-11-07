@@ -120,6 +120,16 @@ const EXPECTED: Record<string, number> = {
   // It is right.
   'probeC': 224,
   'probeE': 158,
+  // And the whole of `f6874819` sent again as a probe -- the same keys
+  // on the same ticks, a second sample of the original playing it. It
+  // follows the port a great deal further than the recording's own
+  // capture does: the room change the recording's capture does not make
+  // is made here on the same tick, and the guard that follows the
+  // Prince out of room 3 follows him in both. What is left is drift --
+  // the original spends three ticks on a room change and the port two,
+  // so every change costs a tick, and the guard's advance runs about
+  // ten pixels ahead of the original's over fifty ticks.
+  'probeF': 384,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
