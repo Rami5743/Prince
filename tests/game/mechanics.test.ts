@@ -218,3 +218,91 @@ describe('dying', () => {
     expect(game.kid.frame, 'and still the body').toBe(177);
   });
 });
+
+/**
+ * Every way the Prince can die, and the same five things after each one:
+ * he is dead, a body is on screen, the body is the one the original
+ * draws, the words come up, and a button starts the level again. The
+ * player reports that sometimes it sticks, sometimes there is no body at
+ * all and sometimes the body is the wrong picture; one test per death
+ * says which.
+ */
+describe('every way of dying', () => {
+  /** How much of the picture the body accounts for, to the nearest pixel. */
+  function bodyPixels(game: Game): number {
+    const kid = game.kid;
+    const saved = kid.room;
+    const withBody = picture(game);
+    kid.room = 0;
+    const without = picture(game);
+    kid.room = saved;
+    return differ(withBody, without);
+  }
+
+  async function diesAndRecovers(game: Game, bodyFrame: number): Promise<void> {
+    expect(game.isDead, 'he is dead').toBe(true);
+    // The death animation needs a tick or two to reach the body.
+    for (let i = 0; i < 6 && game.kid.frame !== bodyFrame; i++) game.step(NOTHING);
+    expect(game.kid.frame, 'the body the original draws').toBe(bodyFrame);
+    expect(bodyPixels(game), 'and there is a body to see').toBeGreaterThan(60);
+
+    let asked = -1;
+    for (let i = 0; i < 60 && asked < 0; i++) {
+      game.step(NOTHING);
+      if (game.awaitingButton) asked = i;
+    }
+    expect(asked, 'the words come up rather than sticking').toBeGreaterThanOrEqual(0);
+    expect(bodyPixels(game), 'and the body is still there under them')
+      .toBeGreaterThan(60);
+
+    let due = -1;
+    for (let i = 0; i < 10 && due < 0; i++) {
+      game.step({ x: 0, y: 0, shift: true });
+      if (game.restartDue) due = i;
+    }
+    expect(due, 'a button starts the level again').toBeGreaterThanOrEqual(0);
+  }
+
+  it('on the spikes', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    // Level 1's room 6: run off the ledge at the top into the spikes.
+    stand(game, 6, 2, 0);
+    for (let i = 0; i < 40 && !game.isDead; i++) {
+      game.step({ x: 1, y: 0, shift: false });
+    }
+    // Sequence 51 holds frame 177, the body on the blades.
+    await diesAndRecovers(game, 177);
+  });
+
+  it('on a guard\'s sword, with nothing to fight back with', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    expect(game.hasSword, 'level 1 starts him empty-handed').toBe(false);
+    // Level 1's room 3 has the first guard in the game.
+    stand(game, 3, 0, 1);
+    for (let i = 0; i < 80 && !game.isDead; i++) {
+      game.step({ x: 1, y: 0, shift: false });
+    }
+    // Sequence 54 holds frame 178, the Prince run through.
+    await diesAndRecovers(game, 178);
+  });
+
+  it('down a fall that breaks him', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    const kid = game.kid;
+    // Coming down on the floor of room 2's middle row with the speed of
+    // a three-row drop behind him: a fall of more than about two rows is
+    // fatal in the original, and `land` is where that is decided.
+    kid.room = 2; kid.currentRow = 1; kid.currentColumn = 6;
+    kid.x = standX(6); kid.y = standY(1) - 10;
+    kid.direction = 0; kid.frame = 106; kid.action = 4;
+    kid.fallX = 0; kid.fallY = 35;
+    game.showRoom(2);
+    for (let i = 0; i < 10 && !game.isDead; i++) game.step(NOTHING);
+    expect(game.hitPoints, 'it takes everything').toBe(0);
+    // Sequence 52 settles on frame 109, the broken body.
+    await diesAndRecovers(game, 109);
+  });
+});

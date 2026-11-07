@@ -4441,8 +4441,14 @@ var Game = class _Game {
    * measured about how long it lasts, so it is set and read and no more.
    */
   featherFall = false;
-  /** Ticks left of `LEVEL n` under the room. */
-  titleTicks = LEVEL_TITLE_TICKS;
+  /** Ticks since the level was built, for the words under the room. */
+  titleTicks = 0;
+  /**
+   * Ticks of the hour the Prince has to reach the Princess. The original
+   * gives him sixty minutes and says how many are left every time a level
+   * starts; it runs on across a death, which is the whole point of it.
+   */
+  remainingTicks = MINUTE_TICKS * 60;
   /** The game's own font, out of the executable. */
   font;
   /** Ticks left before the level starts again; -1 when none is coming. */
@@ -4580,7 +4586,8 @@ var Game = class _Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
-    if (this.titleTicks > 0) this.titleTicks -= 1;
+    this.titleTicks += 1;
+    if (this.remainingTicks > 0) this.remainingTicks -= 1;
     if (this.awaitingButton && (controls.x !== 0 || controls.y !== 0 || controls.shift)) {
       this.pressButton();
     }
@@ -4691,7 +4698,9 @@ var Game = class _Game {
    * what the original does after a death.
    */
   async restart(assets, exe) {
-    return _Game.start(assets, exe, this.levelNumber, { effects: this.effects });
+    const game = await _Game.start(assets, exe, this.levelNumber, { effects: this.effects });
+    game.remainingTicks = this.remainingTicks;
+    return game;
   }
   /** Show a different room without playing: for looking around. */
   showRoom(room) {
@@ -4843,21 +4852,43 @@ var Game = class _Game {
    * hundred and twenty-five pixels of `LEVEL n`.
    */
   clearBottomText() {
-    this.titleTicks = 0;
+    this.titleTicks = LEVEL_TITLE_TICKS * 2 + 2;
   }
-  /** `Press Button to Continue`, or the level's number while it is new. */
+  /**
+   * What a level says about itself when it starts: its number for
+   * twenty-four ticks, nothing for one, and then how much of the hour is
+   * left for twenty-four more.
+   *
+   * Measured off the grabbed video of the recorded run: `LEVEL 1` from
+   * tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 48, and
+   * nothing from 49; and the same again from the tick the level is
+   * started afresh after a death.
+   */
+  levelText() {
+    if (this.restartCountdown >= 0) return `LEVEL ${this.levelNumber}`;
+    const t = this.titleTicks;
+    if (t <= LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
+    if (t === LEVEL_TITLE_TICKS + 1) return null;
+    if (t <= LEVEL_TITLE_TICKS * 2 + 1) {
+      const left = Math.max(0, Math.ceil(this.remainingTicks / MINUTE_TICKS));
+      return `${left} MINUTE${left === 1 ? "" : "S"} LEFT`;
+    }
+    return null;
+  }
+  /** `Press Button to Continue`, or what the level says about itself. */
   drawBottomText() {
     if (!this.font) return;
     const blanking = this.restartCountdown >= 0 && this.restartCountdown <= 1;
     const asking = this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && !blanking;
-    const text = asking ? "Press Button to Continue" : this.titleTicks > 0 || this.restartCountdown >= 0 ? `LEVEL ${this.levelNumber}` : null;
+    const text = asking ? "Press Button to Continue" : this.levelText();
     if (!text) return;
     drawTextCentred(this.surface, this.font, text, 0, 319, TEXT_TOP_Y, TEXT_WHITE);
   }
 };
 var TEXT_TOP_Y = 193;
 var TEXT_WHITE = 15;
-var LEVEL_TITLE_TICKS = 49;
+var LEVEL_TITLE_TICKS = 24;
+var MINUTE_TICKS = 720;
 var ROOM_CHANGE_BLANK = 1;
 var RESTART_PROMPT_DELAY = 15;
 var RESTART_DELAY = 3;

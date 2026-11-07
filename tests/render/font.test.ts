@@ -19,7 +19,7 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import { readFont, textWidth, drawTextCentred } from '../../src/render/font.ts';
 import { Surface } from '../../src/render/surface.ts';
 import { Assets } from '../../src/render/assets.ts';
-import { Game, LEVEL_TITLE_TICKS } from '../../src/game/game.ts';
+import { Game, LEVEL_TITLE_TICKS, MINUTE_TICKS } from '../../src/game/game.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -78,13 +78,41 @@ describe('the font in the executable', () => {
 });
 
 describe('the words under the room', () => {
-  it('start with the level number and let it go after forty-nine ticks', async () => {
+  /**
+   * Measured off the grabbed video of the recorded run: `LEVEL 1` from
+   * tick 0 to 23, nothing at all on 24, `60 MINUTES LEFT` from 25 to 48,
+   * and nothing from 49 on. The port said `LEVEL 1` for forty-nine ticks
+   * and never mentioned the hour, which is the whole point of it.
+   */
+  it('say the level and then how much of the hour is left', async () => {
     const game = await Game.start(assets, exe, 1);
-    expect(inkedColumns(game.render(), 15)).toMatchObject({ x0: 139, x1: 179 });
-    for (let i = 0; i < LEVEL_TITLE_TICKS - 1; i++) game.step(NOTHING);
-    expect(inkedColumns(game.render(), 15).n).toBeGreaterThan(0);
-    game.step(NOTHING);
-    expect(inkedColumns(game.render(), 15).n).toBe(0);
+    const seen: (string | null)[] = [];
+    const where = (): string | null => {
+      const c = inkedColumns(game.render(), 15);
+      return c.n === 0 ? null : `${c.x0}-${c.x1}`;
+    };
+    // The picture of a tick is the one the game draws after stepping it,
+    // which is how the replay harness takes them too.
+    for (let t = 0; t < 52; t++) {
+      game.step(NOTHING);
+      seen.push(where());
+    }
+    const level = '139-179';
+    const hour = '113-206';
+    expect(seen.slice(0, 24), 'the level number first').toEqual(Array(24).fill(level));
+    expect(seen[24], 'then a tick of nothing').toBeNull();
+    expect(seen.slice(25, 49), 'then the hour').toEqual(Array(24).fill(hour));
+    expect(seen.slice(49), 'and then nothing').toEqual([null, null, null]);
+  });
+
+  it('count the hour down as it goes, and not restart it on a death', async () => {
+    const game = await Game.start(assets, exe, 1);
+    expect(game.remainingTicks).toBe(MINUTE_TICKS * 60);
+    for (let i = 0; i < MINUTE_TICKS; i++) game.step(NOTHING);
+    expect(game.remainingTicks).toBe(MINUTE_TICKS * 59);
+    const again = await game.restart(assets, exe);
+    expect(again.remainingTicks, 'the hour runs on across a death')
+      .toBe(MINUTE_TICKS * 59);
   });
 
   it('ask for a button once the Prince is dead', async () => {

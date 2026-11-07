@@ -53,8 +53,14 @@ export class Game {
    * measured about how long it lasts, so it is set and read and no more.
    */
   featherFall = false;
-  /** Ticks left of `LEVEL n` under the room. */
-  private titleTicks = LEVEL_TITLE_TICKS;
+  /** Ticks since the level was built, for the words under the room. */
+  private titleTicks = 0;
+  /**
+   * Ticks of the hour the Prince has to reach the Princess. The original
+   * gives him sixty minutes and says how many are left every time a level
+   * starts; it runs on across a death, which is the whole point of it.
+   */
+  remainingTicks = MINUTE_TICKS * 60;
   /** The game's own font, out of the executable. */
   font?: Font;
   /** Ticks left before the level starts again; -1 when none is coming. */
@@ -198,7 +204,8 @@ export class Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
-    if (this.titleTicks > 0) this.titleTicks -= 1;
+    this.titleTicks += 1;
+    if (this.remainingTicks > 0) this.remainingTicks -= 1;
     // Any key answers `Press Button to Continue`, not Shift alone, and the
     // game asks whether one is down rather than waiting for a fresh press.
     // The capture shows it: the Prince is impaled on the spikes of level
@@ -334,7 +341,10 @@ export class Game {
    * what the original does after a death.
    */
   async restart(assets: Assets, exe: Uint8Array): Promise<Game> {
-    return Game.start(assets, exe, this.levelNumber, { effects: this.effects });
+    const game = await Game.start(assets, exe, this.levelNumber, { effects: this.effects });
+    // The hour does not start again with the level.
+    game.remainingTicks = this.remainingTicks;
+    return game;
   }
 
   /** Show a different room without playing: for looking around. */
@@ -499,10 +509,34 @@ export class Game {
    * hundred and twenty-five pixels of `LEVEL n`.
    */
   clearBottomText(): void {
-    this.titleTicks = 0;
+    this.titleTicks = LEVEL_TITLE_TICKS * 2 + 2;
   }
 
-  /** `Press Button to Continue`, or the level's number while it is new. */
+  /**
+   * What a level says about itself when it starts: its number for
+   * twenty-four ticks, nothing for one, and then how much of the hour is
+   * left for twenty-four more.
+   *
+   * Measured off the grabbed video of the recorded run: `LEVEL 1` from
+   * tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 48, and
+   * nothing from 49; and the same again from the tick the level is
+   * started afresh after a death.
+   */
+  private levelText(): string | null {
+    if (this.restartCountdown >= 0) return `LEVEL ${this.levelNumber}`;
+    // `titleTicks` has already counted the tick being drawn, so the
+    // level's first picture sees a one.
+    const t = this.titleTicks;
+    if (t <= LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
+    if (t === LEVEL_TITLE_TICKS + 1) return null;
+    if (t <= LEVEL_TITLE_TICKS * 2 + 1) {
+      const left = Math.max(0, Math.ceil(this.remainingTicks / MINUTE_TICKS));
+      return `${left} MINUTE${left === 1 ? '' : 'S'} LEFT`;
+    }
+    return null;
+  }
+
+  /** `Press Button to Continue`, or what the level says about itself. */
   private drawBottomText(): void {
     if (!this.font) return;
     // The words stay up for the tick the button is pressed on; the level's
@@ -511,10 +545,7 @@ export class Game {
     // and 300, and the level running again on 301.
     const blanking = this.restartCountdown >= 0 && this.restartCountdown <= 1;
     const asking = this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && !blanking;
-    const text = asking ? 'Press Button to Continue'
-      : this.titleTicks > 0 || this.restartCountdown >= 0
-        ? `LEVEL ${this.levelNumber}`
-        : null;
+    const text = asking ? 'Press Button to Continue' : this.levelText();
     if (!text) return;
     drawTextCentred(this.surface, this.font, text, 0, 319, TEXT_TOP_Y, TEXT_WHITE);
   }
@@ -539,11 +570,14 @@ const TEXT_TOP_Y = 193;
 const TEXT_WHITE = 15;
 
 /**
- * How long the level's number stays up. The capture has it from the first
- * tick of the level to the forty-eighth, and again for as long after the
- * level is started again by a button.
+ * How long each of the two things a level says about itself stays up.
+ * The capture has `LEVEL 1` from tick 0 to 23, nothing on 24, and
+ * `60 MINUTES LEFT` from 25 to 48.
  */
-export const LEVEL_TITLE_TICKS = 49;
+export const LEVEL_TITLE_TICKS = 24;
+
+/** Ticks in a minute of the original's hour: twelve a second, sixty seconds. */
+export const MINUTE_TICKS = 720;
 
 /**
  * How many ticks the screen stays blank when the view changes room.
