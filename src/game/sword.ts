@@ -18,11 +18,29 @@
  */
 import type { CharacterState } from './character.ts';
 
+/**
+ * The Prince's own sword sequences, which are not the guard's.
+ *
+ * Two of them differ and the port had the guard's. `sword_strike` picks
+ * 75 for the Kid and 58 for anyone else, and `forward_with_sword` picks
+ * 86 for the Kid and 56 for the guard. Read out of `UNCRKD.EXE` itself,
+ * which is the only thing that settles which byte-code each number is:
+ *
+ *     75  frame 151, 152, 153, 154, 155, 156, 157
+ *     58  frame 168, then the same from 151
+ *     86  set_fall 1 0, dx 6, frame 164, 165
+ *     56  set_fall 1 0, dx 2, frame 163, dx 4, frame 164, 165
+ *
+ * So the Prince's blade is a frame quicker than a guard's -- 58 opens
+ * with 168, the wind-up -- and his step in is one frame of six units
+ * where a guard's is two of two and four. The port gave him the guard's
+ * of each, which is the wrong way round and slower in both.
+ */
 export const SWORD_SEQ = {
   enGarde: 55,
-  advance: 56,
+  advance: 86,
   retreat: 57,
-  strike: 58,
+  strike: 75,
   turn: 60,
   block: 62,
   stabbed: 74,

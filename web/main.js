@@ -2527,9 +2527,9 @@ function playSequence(state, ctx) {
 // src/game/sword.ts
 var SWORD_SEQ = {
   enGarde: 55,
-  advance: 56,
+  advance: 86,
   retreat: 57,
-  strike: 58,
+  strike: 75,
   turn: 60,
   block: 62,
   stabbed: 74,
@@ -3448,10 +3448,12 @@ function control(state, controls, ctx) {
     controlCrouched(state, controls, ctx);
   }
 }
-var DRAW_SWORD_RANGE = SWORD_RANGE * 3;
+var DRAW_SWORD_RANGE = 90;
+var DRAW_SWORD_BEHIND = -10;
 function controlSwordPlay(state, controls, ctx) {
   const foe = ctx.opponent?.() ?? null;
-  const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN && foe.room === state.room && foe.currentRow === state.currentRow && Math.abs(foe.x - state.x) <= DRAW_SWORD_RANGE;
+  const distance = foe === null ? 0 : charOppDist(state, foe);
+  const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN && foe.room === state.room && foe.currentRow === state.currentRow && distance >= DRAW_SWORD_BEHIND && distance < DRAW_SWORD_RANGE;
   if (state.sword !== SWORD_DRAWN) {
     if (ctx.hasSword && !ctx.hasSword()) return false;
     const onFoot = state.y === floorHeightOfRow(state.currentRow) && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair && state.action !== ACTION.hangClimb && state.action !== ACTION.hangStraight;

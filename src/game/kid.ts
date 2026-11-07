@@ -27,7 +27,7 @@ import {
 import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_MID_X } from './geometry.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
 import {
-  SWORD_SEQ, SWORD_DRAWN, SWORD_RANGE, isReady, facingOf, withinReach,
+  SWORD_SEQ, SWORD_DRAWN, isReady, facingOf, withinReach, charOppDist,
 } from './sword.ts';
 import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
 
@@ -229,7 +229,17 @@ export function control(state: CharacterState, controls: Controls, ctx: KidConte
  * How close an armed guard has to be before the Prince draws. Wider than a
  * blade's reach, so that he is ready before he is in danger.
  */
-const DRAW_SWORD_RANGE = SWORD_RANGE * 3;
+/**
+ * How near an armed guard has to be before the Prince draws.
+ *
+ * Ninety, and it is the original's own number: `control_standing` asks
+ * for `can_guard_see_kid >= 2` and a distance in `[-10, 90)`, measured
+ * forwards -- the guard behind him counts for ten units and in front of
+ * him for ninety. The port had three times a blade's reach, which is
+ * seventy-two and even, so he drew late and on the wrong side.
+ */
+const DRAW_SWORD_RANGE = 90;
+const DRAW_SWORD_BEHIND = -10;
 
 /**
  * Sword play, which takes the controls over entirely while the blade is
@@ -243,9 +253,10 @@ function controlSwordPlay(
   state: CharacterState, controls: Controls, ctx: KidContext,
 ): boolean {
   const foe = ctx.opponent?.() ?? null;
+  const distance = foe === null ? 0 : charOppDist(state, foe);
   const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN
     && foe.room === state.room && foe.currentRow === state.currentRow
-    && Math.abs(foe.x - state.x) <= DRAW_SWORD_RANGE;
+    && distance >= DRAW_SWORD_BEHIND && distance < DRAW_SWORD_RANGE;
 
   if (state.sword !== SWORD_DRAWN) {
     // No sword, no drawing it. On level 1 the Prince has not got one until
