@@ -153,6 +153,8 @@ interface Piece {
   flip?: boolean;
   /** Set when x is already in screen pixels, as a sword's is. */
   screenX?: boolean;
+  /** `obj_clip_right`: nothing of this piece is drawn at or past it. */
+  clipRight?: number;
   /**
    * The front of a floor: the slab under its walking surface. A character
    * in the row below passes behind it, which is how the original hides
@@ -1252,9 +1254,11 @@ export class RoomRenderer {
     // than leaving it in. With the right sprite and an exact
     // comparison it is twenty-six pixels of plank that were missing
     // from every tick of every fall.
+    // `add_mob_to_objtable` gives the slab a clip forty pixels wide,
+    // which leaves eight pixels of this piece and cuts the rest.
     this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[MOB], x: x + 32,
-      yBottom: y - 1, blit: BLIT.transparent, order,
+      yBottom: y - 1, blit: BLIT.transparent, order, clipRight: x + 40,
     });
     // And nothing in the next column along. A floor at rest is three
     // pieces -- its top, its front, and the sliver that joins it to the
@@ -1396,6 +1400,13 @@ export class RoomRenderer {
     const set = this.chtabs[p.chtab];
     if (!set) return;
     const y = p.yBottom - img.height + 1;
+    if (p.clipRight !== undefined) {
+      const was = surface.clipRight;
+      surface.clipRight = Math.min(was, p.clipRight);
+      this.paintPiece(surface, { ...p, clipRight: undefined });
+      surface.clipRight = was;
+      return;
+    }
     const base = set.paletteBase;
     if (p.character) {
       let x = p.screenX ? p.x : toScreenX(p.x);

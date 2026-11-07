@@ -442,11 +442,18 @@ var Surface = class {
    * the screen on the way out.
    */
   clipBottom;
+  /**
+   * `obj_clip_right`. Only a falling slab uses it: `add_mob_to_objtable`
+   * sets the object's clip forty pixels wide, which cuts the piece that
+   * joins the slab to the tile on its right down to a sliver.
+   */
+  clipRight;
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
     this.clipBottom = height;
+    this.clipRight = width;
   }
   clear(color = 0) {
     this.pixels.fill(color);
@@ -488,7 +495,7 @@ var Surface = class {
   each(src, x, y, fn) {
     const sx0 = Math.max(0, -x);
     const sy0 = Math.max(0, -y);
-    const sx1 = Math.min(src.width, this.width - x);
+    const sx1 = Math.min(src.width, this.clipRight - x);
     const sy1 = Math.min(src.height, this.clipBottom - y);
     for (let sy = sy0; sy < sy1; sy++) {
       let sp = sy * src.width + sx0;
@@ -1777,12 +1784,6 @@ var RoomRenderer = class {
   }
   // ---------------------------------------------------------------- paint
   /**
-   * Characters are flipped rather than mirrored in the data: the sprites face
-   * left, and the original flips them when the character faces right. Their
-   * horizontal position is in internal units and is stretched to pixels only
-   * here, at the last moment, exactly as the original does.
-   */
-  /**
    * A floor that has come away and is on its way down.
    *
    * It is drawn out of the same three pieces a floor tile is -- the base,
@@ -1809,9 +1810,8 @@ var RoomRenderer = class {
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
     const order = yToRowForMob(y);
-    const list = this.mid;
     const MOB = 10;
-    list.push({
+    this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_LEFT[MOB],
       x,
@@ -1819,7 +1819,7 @@ var RoomRenderer = class {
       blit: BLIT.transparent,
       order
     });
-    list.push({
+    this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_BOTTOM[MOB],
       x,
@@ -1827,13 +1827,14 @@ var RoomRenderer = class {
       blit: BLIT.opaque,
       order
     });
-    list.push({
+    this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_RIGHT[MOB],
       x: x + 32,
       yBottom: y - 1,
       blit: BLIT.transparent,
-      order
+      order,
+      clipRight: x + 40
     });
   }
   addCharacter(c) {
@@ -1929,6 +1930,13 @@ var RoomRenderer = class {
     const set = this.chtabs[p.chtab];
     if (!set) return;
     const y = p.yBottom - img.height + 1;
+    if (p.clipRight !== void 0) {
+      const was = surface.clipRight;
+      surface.clipRight = Math.min(was, p.clipRight);
+      this.paintPiece(surface, { ...p, clipRight: void 0 });
+      surface.clipRight = was;
+      return;
+    }
     const base = set.paletteBase;
     if (p.character) {
       let x = p.screenX ? p.x : toScreenX(p.x);
