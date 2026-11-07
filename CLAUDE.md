@@ -41,6 +41,17 @@ A real `PRINCE.EXE` under DOSBox. `tools/oracle/README.md` has the
 pipeline and the three measurements it rests on. Where a capture of the
 original and a reading of the code disagree, the capture wins.
 
+## Never end a turn by naming the next thing
+
+Do not finish a turn with "what is still missing is X" or "X is the next
+big thing". Naming the work is not doing it, and the player has to come
+back and tell you to do the thing you just described -- which has now
+happened four times.
+
+If you can see what is missing, start it in the same turn. Report what
+is done and deployed, and if something really is too big to begin, say
+so in one line and say why, not as a plan for next time.
+
 ## Stopping is not finishing
 
 If you stop while bugs remain, that is not a finish, it is a pause --

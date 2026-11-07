@@ -12,6 +12,8 @@ import {
   type Recording, type RecordedEvent, type RecordedState,
 } from '../src/game/recording.ts';
 import { Game } from '../src/game/game.ts';
+import { SoundPlayer } from '../src/render/audio.ts';
+import { SOUND } from '../src/game/traps.ts';
 import type { Controls } from '../src/game/kid.ts';
 
 const DATA_URL =
@@ -36,6 +38,27 @@ async function boot(): Promise<void> {
   const fetchFile = custom ?? browserFetcher(DATA_URL);
   const assets = new Assets(fetchFile);
   const exe = await fetchFile('UNCRKD.EXE');
+
+  /**
+   * Sound. A browser will not let a page make a noise until the player
+   * has touched it, so the context is built on the first key or tap and
+   * the sounds the game raises are read in behind it.
+   */
+  let sound: SoundPlayer | null = null;
+  const wakeSound = (): void => {
+    if (!sound) {
+      const Ctor = (window as unknown as {
+        AudioContext?: typeof AudioContext;
+        webkitAudioContext?: typeof AudioContext;
+      });
+      const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
+      if (!Context) return;
+      sound = new SoundPlayer(assets, new Context());
+      void sound.preloadAll(Object.values(SOUND));
+    }
+    void sound.wake();
+  };
+  const effects = { sound: (which: number) => sound?.play(which) };
 
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
@@ -141,7 +164,7 @@ async function boot(): Promise<void> {
       return;
     }
     roomSel.disabled = false;
-    game = await Game.start(assets, exe, v.level);
+    game = await Game.start(assets, exe, v.level, { effects });
     watchRoom = null;
     roomSel.value = String(game.drawnRoom);
   }
@@ -272,6 +295,7 @@ async function boot(): Promise<void> {
     // after a death -- the player in the recording pressed four
     // directions over ten seconds and the original ignored every one.
     if (dirs.includes('shift')) game?.pressButton();
+    wakeSound();
   });
   window.addEventListener('keyup', (e) => {
     const dirs = directionsOf(e);
@@ -298,6 +322,7 @@ async function boot(): Promise<void> {
     else held.delete(d);
     recorder.key(down ? 'down' : 'up', key);
     if (down && d === 'shift') game?.pressButton();
+    if (down) wakeSound();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;

@@ -4768,6 +4768,122 @@ var FULL_HP_IMAGE = 217;
 var EMPTY_HP_IMAGE = 218;
 var HP_TOP_Y = 194;
 
+// src/dat/sound.ts
+var SOUND_RESOURCE_BASE = 1e4;
+var SPEAKER_END = 18;
+function parseSound(payload) {
+  if (payload.length < 2) return null;
+  const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  switch (payload[0]) {
+    case 1: {
+      if (payload.length < 9) return null;
+      const rate = dv.getUint16(1, true);
+      const count = dv.getUint16(3, true);
+      const samples = payload.subarray(8, 8 + count);
+      if (samples.length === 0) return null;
+      return { kind: "digi", rate: rate || 11e3, samples };
+    }
+    case 2:
+      return { kind: "midi", bytes: payload.subarray(1) };
+    case 0: {
+      if (payload.length < 6) return null;
+      const tempo = dv.getUint16(1, true);
+      const notes = [];
+      for (let o = 3; o + 2 < payload.length; o += 3) {
+        const divisor = dv.getUint16(o, true);
+        if (divisor === SPEAKER_END) break;
+        notes.push({ divisor, length: payload[o + 2] });
+      }
+      if (notes.length === 0) return null;
+      return { kind: "speaker", tempo, notes };
+    }
+    default:
+      return null;
+  }
+}
+
+// src/render/audio.ts
+var DIGI_FILES = ["DIGISND1.DAT", "DIGISND2.DAT", "DIGISND3.DAT"];
+async function loadSound(assets, index, files = DIGI_FILES) {
+  for (const name of files) {
+    let dat;
+    try {
+      dat = await assets.dat(name);
+    } catch {
+      continue;
+    }
+    if (!dat.has(SOUND_RESOURCE_BASE + index)) continue;
+    const sound = parseSound(dat.get(SOUND_RESOURCE_BASE + index));
+    if (sound) return sound;
+  }
+  return null;
+}
+var SoundPlayer = class {
+  assets;
+  context;
+  buffers = /* @__PURE__ */ new Map();
+  pending = /* @__PURE__ */ new Set();
+  /** Nothing is played until the player has touched the page. */
+  woken = false;
+  muted = false;
+  constructor(assets, context) {
+    this.assets = assets;
+    this.context = context;
+  }
+  /** Call from the first key or click: a browser blocks sound before one. */
+  async wake() {
+    this.woken = true;
+    if (this.context.state === "suspended") await this.context.resume();
+  }
+  /**
+   * Play sound `index`, loading it the first time it is asked for.
+   *
+   * A sound that is not loaded yet is not played: the alternative is to
+   * play it late, a second after the thing that made it, which is worse
+   * than silence. The load is started all the same, so the next one is
+   * ready.
+   */
+  play(index) {
+    if (this.muted || !this.woken) return;
+    const buffer = this.buffers.get(index);
+    if (buffer === void 0) {
+      void this.preload(index);
+      return;
+    }
+    if (buffer === null) return;
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.context.destination);
+    source.start();
+  }
+  /** Read a sound and turn it into something playable, once. */
+  async preload(index) {
+    if (this.buffers.has(index) || this.pending.has(index)) return;
+    this.pending.add(index);
+    try {
+      const sound = await loadSound(this.assets, index);
+      if (!sound || sound.kind !== "digi") {
+        this.buffers.set(index, null);
+        return;
+      }
+      const buffer = this.context.createBuffer(1, sound.samples.length, sound.rate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < sound.samples.length; i++) {
+        channel[i] = (sound.samples[i] - 128) / 128;
+      }
+      this.buffers.set(index, buffer);
+    } catch {
+      this.buffers.set(index, null);
+    } finally {
+      this.pending.delete(index);
+    }
+  }
+  /** Read every sound the game raises in play, so none of them is late. */
+  async preloadAll(indices) {
+    for (const index of indices) await this.preload(index);
+  }
+};
+
 // web/main.ts
 var DATA_URL = window.__princeDataUrl ?? "../original/prince1";
 var FRAMES_PER_SECOND = 12;
@@ -4782,6 +4898,18 @@ async function boot() {
   const fetchFile = custom ?? browserFetcher(DATA_URL);
   const assets = new Assets(fetchFile);
   const exe = await fetchFile("UNCRKD.EXE");
+  let sound = null;
+  const wakeSound = () => {
+    if (!sound) {
+      const Ctor = window;
+      const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
+      if (!Context) return;
+      sound = new SoundPlayer(assets, new Context());
+      void sound.preloadAll(Object.values(SOUND));
+    }
+    void sound.wake();
+  };
+  const effects = { sound: (which) => sound?.play(which) };
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
   const title = await assets.group("TITLE.DAT", 50);
@@ -4868,7 +4996,7 @@ async function boot() {
       return;
     }
     roomSel.disabled = false;
-    game = await Game.start(assets, exe, v.level);
+    game = await Game.start(assets, exe, v.level, { effects });
     watchRoom = null;
     roomSel.value = String(game.drawnRoom);
   }
@@ -4981,6 +5109,7 @@ async function boot() {
       game.drawnRoom = game.kid.room;
     }
     if (dirs.includes("shift")) game?.pressButton();
+    wakeSound();
   });
   window.addEventListener("keyup", (e) => {
     const dirs = directionsOf(e);
@@ -5012,6 +5141,7 @@ async function boot() {
     } else held.delete(d);
     recorder.key(down ? "down" : "up", key);
     if (down && d === "shift") game?.pressButton();
+    if (down) wakeSound();
     if (down && watchRoom !== null && game) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
