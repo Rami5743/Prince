@@ -109,7 +109,10 @@ export function agreement(
   const SLIP = 2;
   const offsets: number[] = [];
   for (let o = -range; o <= range; o++) offsets.push(o);
-  const n = dos.length;
+  // Only as far as the two runs both go. A capture runs on for a second
+  // or two after the recording's last key, and counting those ticks
+  // against the port is counting ticks it was never asked to play.
+  const n = Math.min(dos.length, port.length);
   const m = offsets.length;
   if (n === 0) return 0;
   const cost = (i: number, j: number): number => {

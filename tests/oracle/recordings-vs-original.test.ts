@@ -65,20 +65,20 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 249,
-  '13ab6867': 652,
-  '25c4ebb8': 371,
+  '13ab6867': 648,
+  '25c4ebb8': 369,
   '33e8ace7': 208,
   '3764b76d': 94,
-  '5920a8c2': 387,
+  '5920a8c2': 383,
   '72b3522f': 159,
-  '756b259c': 359,
+  '756b259c': 348,
   '760c3e74': 1005,
   '848ee3c4': 673,
   '9b60bf3a': 464,
   'a356bdd6': 143,
-  'b4ff4672': 343,
+  'b4ff4672': 342,
   'e209b01a': 187,
-  'ec99dc5b': 209,
+  'ec99dc5b': 208,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
@@ -91,7 +91,7 @@ async function score(name: string): Promise<{ agreed: number; ticks: number }> {
     (g) => g.restart(assets, exe),
     decodeTimeline(rec.timeline),
   );
-  return { agreed: agreement(dos, port), ticks: dos.length };
+  return { agreed: agreement(dos, port), ticks: Math.min(dos.length, port.length) };
 }
 
 describe('the recordings, against a capture of the original', () => {
