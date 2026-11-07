@@ -473,13 +473,35 @@ export class RoomRenderer {
     this.rowBelowMods[0] = t0.modifier;
   }
 
+  /**
+   * A button with a foot on it is drawn as the floor it sits in.
+   *
+   * Its plate is a pixel of height -- an opener's base is 32x14 where a
+   * plain floor's is 32x13, and its right-hand piece sits a pixel higher
+   * -- and that pixel is spread over four of the pieces a tile is built
+   * from, the tile's own and two that its right-hand neighbour draws.
+   * Sinking only some of them leaves the plate half down. Swapping the
+   * type here instead puts every piece on the floor's measurements at
+   * once.
+   *
+   * Whether a foot is on it is not in the tile: a button's modifier is an
+   * index into the level's door links, and the timer kept there is the
+   * record -- `pressButton` sets it to five and `animateButton` counts it
+   * down, so it holds while the foot is there and runs out a few ticks
+   * after it leaves.
+   */
+  private pressedToFloor(type: number, modifier: number): number {
+    if (type !== TILE.opener && type !== TILE.closer) return type;
+    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 0 ? TILE.floor : type;
+  }
+
   private loadCurrentAndLeftTile(): void {
     const outside = this.drawnRow === 2 ? this.opt.topLevelEdgeTile : TILE.wall;
     const curr = this.tileToDraw(this.drawnRoom, this.drawnCol, this.drawnRow, outside);
-    this.currTile = curr.type;
+    this.currTile = this.pressedToFloor(curr.type, curr.modifier);
     this.currModifier = curr.modifier;
     const left = this.tileToDraw(this.drawnRoom, this.drawnCol - 1, this.drawnRow, outside);
-    this.tileLeft = left.type;
+    this.tileLeft = this.pressedToFloor(left.type, left.modifier);
     this.modifierLeft = left.modifier;
     this.drawX = COL_X[this.drawnCol];
   }
@@ -717,9 +739,7 @@ export class RoomRenderer {
       chtab = CHTAB.environmentWall;
     } else {
       if (this.currTile === TILE.doortop) blit = BLIT.or;
-      id = this.buttonDown()
-        ? TILE_TABLE[TILE.floor].bottomId
-        : TILE_TABLE[this.currTile].bottomId;
+      id = TILE_TABLE[this.currTile].bottomId;
     }
     this.addCurrent(chtab, id, this.drawX, this.drawBottomY, blit);
     if (chtab === CHTAB.environmentWall) this.wallPattern(0, 0);
@@ -732,21 +752,6 @@ export class RoomRenderer {
     this.addFore(CHTAB.environment, id, this.drawX, this.drawBottomY, BLIT.opaque);
   }
 
-  /**
-   * Is the plate of this button down?
-   *
-   * A button's modifier is an index into the level's door links, and the
-   * timer kept there is the only record that it is being stood on:
-   * `pressButton` sets it to five and `animateButton` counts it down, so
-   * it stays up while a foot is on the plate and runs out a few ticks
-   * after the foot leaves.
-   */
-  private buttonDown(): boolean {
-    if (this.currTile !== TILE.opener && this.currTile !== TILE.closer) return false;
-    const timer = this.tiles.doorLinkTimer?.(this.currModifier) ?? 0;
-    return timer > 0;
-  }
-
   private drawTileBase(): void {
     let id: number;
     let yBottom = this.drawMainY;
@@ -755,12 +760,6 @@ export class RoomRenderer {
       yBottom += 3;
     } else if (this.currTile === TILE.loose) {
       id = LOOSE_FRAM_LEFT[looseFrame(this.currModifier)] ?? 0;
-    } else if (this.buttonDown()) {
-      // Trodden on, the plate goes flush with the floor. The raised one
-      // is a pixel taller than a plain floor -- 147 against 41 -- and
-      // that pixel is the plate; with a foot on it the tile is drawn as
-      // the floor it sits in.
-      id = TILE_TABLE[TILE.floor].baseId;
     } else if (this.currTile === TILE.opener && this.tileLeft === TILE.empty && !this.isPalace) {
       id = 148;
     } else {

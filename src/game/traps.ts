@@ -421,7 +421,7 @@ export class Traps {
   }
 
   /** A crash shakes every loose floor on the row. */
-  private knock(room: number, row: number): void {
+  knock(room: number, row: number): void {
     for (let column = 0; column < 10; column++) {
       if (this.level.typeAt(room, column, row) === TILE.loose) {
         this.makeLooseShake(room, row * 10 + column);

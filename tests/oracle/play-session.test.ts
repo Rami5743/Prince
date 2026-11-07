@@ -38,7 +38,10 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   //              through the change and is not reproducible.
   //  s039..s050  after that room change. Five to seven hundred pixels out,
   //              not yet looked into.
-  { name: 'level1-open', reproduces: 34 },
+  // 35 since a heavy landing shakes the loose floors around it: the
+  // byte-code raises `knockDown` on the frames where a foot comes down
+  // hard and nothing was listening to it.
+  { name: 'level1-open', reproduces: 35 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
   // 34 of 54. All three careful steps are reproduced exactly, and so is the
@@ -92,7 +95,9 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // is fatal. The route to room 3 is long and the two part company well
   // before it, so the count is low and says little; the frames are what
   // matter.
-  { name: 'level1-guard', reproduces: 14 },
+  //
+  // 16 since landings shake the loose floors near them.
+  { name: 'level1-guard', reproduces: 16 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */

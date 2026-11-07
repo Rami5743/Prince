@@ -1042,13 +1042,34 @@ var RoomRenderer = class {
     this.rowBelowTiles[0] = t0.type;
     this.rowBelowMods[0] = t0.modifier;
   }
+  /**
+   * A button with a foot on it is drawn as the floor it sits in.
+   *
+   * Its plate is a pixel of height -- an opener's base is 32x14 where a
+   * plain floor's is 32x13, and its right-hand piece sits a pixel higher
+   * -- and that pixel is spread over four of the pieces a tile is built
+   * from, the tile's own and two that its right-hand neighbour draws.
+   * Sinking only some of them leaves the plate half down. Swapping the
+   * type here instead puts every piece on the floor's measurements at
+   * once.
+   *
+   * Whether a foot is on it is not in the tile: a button's modifier is an
+   * index into the level's door links, and the timer kept there is the
+   * record -- `pressButton` sets it to five and `animateButton` counts it
+   * down, so it holds while the foot is there and runs out a few ticks
+   * after it leaves.
+   */
+  pressedToFloor(type, modifier) {
+    if (type !== TILE.opener && type !== TILE.closer) return type;
+    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 0 ? TILE.floor : type;
+  }
   loadCurrentAndLeftTile() {
     const outside = this.drawnRow === 2 ? this.opt.topLevelEdgeTile : TILE.wall;
     const curr = this.tileToDraw(this.drawnRoom, this.drawnCol, this.drawnRow, outside);
-    this.currTile = curr.type;
+    this.currTile = this.pressedToFloor(curr.type, curr.modifier);
     this.currModifier = curr.modifier;
     const left = this.tileToDraw(this.drawnRoom, this.drawnCol - 1, this.drawnRow, outside);
-    this.tileLeft = left.type;
+    this.tileLeft = this.pressedToFloor(left.type, left.modifier);
     this.modifierLeft = left.modifier;
     this.drawX = COL_X[this.drawnCol];
   }
@@ -1312,7 +1333,7 @@ var RoomRenderer = class {
       chtab = CHTAB.environmentWall;
     } else {
       if (this.currTile === TILE.doortop) blit = BLIT.or;
-      id = this.buttonDown() ? TILE_TABLE[TILE.floor].bottomId : TILE_TABLE[this.currTile].bottomId;
+      id = TILE_TABLE[this.currTile].bottomId;
     }
     this.addCurrent(chtab, id, this.drawX, this.drawBottomY, blit);
     if (chtab === CHTAB.environmentWall) this.wallPattern(0, 0);
@@ -1323,20 +1344,6 @@ var RoomRenderer = class {
     this.addBack(CHTAB.environment, id, this.drawX, this.drawBottomY, BLIT.opaque);
     this.addFore(CHTAB.environment, id, this.drawX, this.drawBottomY, BLIT.opaque);
   }
-  /**
-   * Is the plate of this button down?
-   *
-   * A button's modifier is an index into the level's door links, and the
-   * timer kept there is the only record that it is being stood on:
-   * `pressButton` sets it to five and `animateButton` counts it down, so
-   * it stays up while a foot is on the plate and runs out a few ticks
-   * after the foot leaves.
-   */
-  buttonDown() {
-    if (this.currTile !== TILE.opener && this.currTile !== TILE.closer) return false;
-    const timer = this.tiles.doorLinkTimer?.(this.currModifier) ?? 0;
-    return timer > 0;
-  }
   drawTileBase() {
     let id;
     let yBottom = this.drawMainY;
@@ -1345,8 +1352,6 @@ var RoomRenderer = class {
       yBottom += 3;
     } else if (this.currTile === TILE.loose) {
       id = LOOSE_FRAM_LEFT[looseFrame(this.currModifier)] ?? 0;
-    } else if (this.buttonDown()) {
-      id = TILE_TABLE[TILE.floor].baseId;
     } else if (this.currTile === TILE.opener && this.tileLeft === TILE.empty && !this.isPalace) {
       id = 148;
     } else {
@@ -4304,6 +4309,22 @@ var Game = class _Game {
       hasSword: () => this.hasSword,
       effects: {
         sound: effects.sound,
+        /**
+         * A heavy landing shakes the loose floors around it. The
+         * sequences raise this themselves -- `knockUp` and `knockDown`
+         * are opcodes of the byte-code, on the frames where a foot comes
+         * down hard -- and nothing was listening, so a loose floor only
+         * ever moved when it was stood on. Jumping down beside one did
+         * nothing at all.
+         *
+         * The sign says which row is shaken: the one the character is
+         * in, or the one above for a knock that goes upwards.
+         */
+        knock: (direction) => {
+          const row = this.kid.currentRow - (direction > 0 ? 1 : 0);
+          if (row < 0 || row > 2) return;
+          this.traps.knock(this.kid.room, row);
+        },
         // `getItem 1` is the sword being lifted off the floor; the tile it
         // was lying on becomes plain floor behind him.
         getItem: (which) => {

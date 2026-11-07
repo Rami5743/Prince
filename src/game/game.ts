@@ -108,6 +108,22 @@ export class Game {
       hasSword: () => this.hasSword,
       effects: {
         sound: effects.sound,
+        /**
+         * A heavy landing shakes the loose floors around it. The
+         * sequences raise this themselves -- `knockUp` and `knockDown`
+         * are opcodes of the byte-code, on the frames where a foot comes
+         * down hard -- and nothing was listening, so a loose floor only
+         * ever moved when it was stood on. Jumping down beside one did
+         * nothing at all.
+         *
+         * The sign says which row is shaken: the one the character is
+         * in, or the one above for a knock that goes upwards.
+         */
+        knock: (direction) => {
+          const row = this.kid.currentRow - (direction > 0 ? 1 : 0);
+          if (row < 0 || row > 2) return;
+          this.traps.knock(this.kid.room, row);
+        },
         // `getItem 1` is the sword being lifted off the floor; the tile it
         // was lying on becomes plain floor behind him.
         getItem: (which) => {
