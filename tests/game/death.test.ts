@@ -184,3 +184,35 @@ describe('dying', () => {
     expect(game.awaitingButton).toBe(false);
   });
 });
+
+/**
+ * Falling into spikes.
+ *
+ * `checkSpiked` asks whether the blades are out and lets anything airborne
+ * past, which is right for a running jump across a set of them and wrong
+ * for a landing: the blades come out *because* something is coming down on
+ * them. The capture of the recorded run of level 1 settles it -- the Prince
+ * runs off the ledge at the top of room 6, lands on the spikes of the
+ * bottom row, and the original impales him there (first blood at tick 284)
+ * and has the level running again by 301. The port charged him one hit
+ * point and let him walk away with two, and the two runs had nothing to do
+ * with each other after that.
+ */
+describe('spikes under a fall', () => {
+  it('kill the Prince who lands in them', async () => {
+    const game = await Game.start(assets, exe, 1);
+    const kid = game.kid;
+    // The top row of room 6, at the lip of the hole over the spikes.
+    expect(game.scene.state.typeAt(6, 3, 2)).toBe(TILE.spike);
+    kid.room = 6; kid.currentRow = 0; kid.currentColumn = 2;
+    kid.x = standX(2); kid.y = standY(0);
+    kid.direction = 0; kid.frame = 15; kid.action = 0; kid.fallX = 0; kid.fallY = 0;
+    game.showRoom(6);
+    for (let i = 0; i < 40 && !game.isDead; i++) game.step(FORWARD);
+    expect(game.isDead).toBe(true);
+    game.step({ x: 0, y: 0, shift: false });
+    expect(kid.currentRow).toBe(2);
+    // Sequence 51's own frame: the body on the blades.
+    expect(kid.frame).toBe(177);
+  });
+});

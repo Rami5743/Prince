@@ -67,6 +67,8 @@ export const KID_SEQ = {
   climbUpToClosedGate: 73,
   /** The landing that kills: a fall of three rows or more. */
   crushed: 52,
+  /** Landing on spikes: `knockDown`, `dx 4`, frame 177, `die`. */
+  spiked: 51,
   unsafeStep: 39,
   /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
   pickUpSword: 91,
@@ -102,6 +104,8 @@ export interface TrapHooks {
   chomperHarm(room: number, tilePos: number): boolean;
   bloodyChomper(room: number, tilePos: number): void;
   startSpike(room: number, tilePos: number): void;
+  /** Drive these spikes straight out, for a character landing on them. */
+  impaleOnSpikes(room: number, tilePos: number): void;
   /** 0 harmless, 1 out and deadly, 2 coming out and deadly to a runner. */
   spikeHarm(room: number, tilePos: number): number;
 }
@@ -111,6 +115,8 @@ export interface KidContext {
   readonly world: World;
   /** Sprite widths, so collisions use the real artwork. */
   spriteWidth(image: number): number;
+  /** Sprite heights, so a character only fits under a gate he fits under. */
+  spriteHeight(image: number): number;
   readonly effects?: SequenceEffects;
   /** What the player is pressing this frame; some checks need it mid-frame. */
   controls: Controls;
@@ -350,7 +356,8 @@ function grabUpWithFloorBehind(state: CharacterState, ctx: KidContext): void {
   const frame = frameOf(ctx.tables, state);
   const distance = distanceToEdgeWeight(state, frame);
   const edge = getEdgeDistance(
-    ctx.world, state, frame, objectX(state, frame), ctx.spriteWidth(frame.image),
+    ctx.world, state, frame, objectX(state, frame),
+    ctx.spriteWidth(frame.image), ctx.spriteHeight(frame.image),
   );
   if (distance < 4 && edge.distance < 4 && edge.edgeType !== EDGE_TYPE.wall) {
     state.x = forwardX(state, distance) & 0xff;
@@ -365,7 +372,8 @@ function jumpUp(state: CharacterState, ctx: KidContext): void {
   ctx.latch.up = ctx.latch.releaseArrows();
   const frame = frameOf(ctx.tables, state);
   const edge = getEdgeDistance(
-    ctx.world, state, frame, objectX(state, frame), ctx.spriteWidth(frame.image),
+    ctx.world, state, frame, objectX(state, frame),
+    ctx.spriteWidth(frame.image), ctx.spriteHeight(frame.image),
   );
   if (edge.distance < 4 && edge.edgeType === EDGE_TYPE.wall) {
     state.x = forwardX(state, edge.distance - 3) & 0xff;
@@ -595,6 +603,7 @@ function forwardPressed(state: CharacterState, ctx: KidContext): void {
   const objX = objectX(state, frame);
   const { distance, edgeType } = getEdgeDistance(
     ctx.world, state, frame, objX, ctx.spriteWidth(frame.image),
+    ctx.spriteHeight(frame.image),
   );
   const front = getTile(ctx.world, state.room,
     DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
@@ -615,6 +624,7 @@ function safeStep(state: CharacterState, ctx: KidContext): void {
   const objX = objectX(state, frame);
   const { distance, edgeType } = getEdgeDistance(
     ctx.world, state, frame, objX, ctx.spriteWidth(frame.image),
+    ctx.spriteHeight(frame.image),
   );
   if (distance) {
     state.repeat = 1;
@@ -641,6 +651,22 @@ export function startFall(state: CharacterState, ctx: KidContext): void {
 function land(state: CharacterState, ctx: KidContext): void {
   state.y = floorHeightOfRow(state.currentRow);
   ctx.traps?.startChompers(state.room, state.currentRow);
+  // Spikes kill whatever falls into them, out or not. `checkSpiked` cannot
+  // do this: it asks whether the blades are already deadly and lets anyone
+  // in the air past, which is right for a leap across a set of them and
+  // wrong for a landing. The capture of level 1 has the Prince run off the
+  // ledge in room 6 and come down on the spikes of the bottom row; the
+  // original impales him there and restarts the level, while the port
+  // charged him one hit point and let him walk away with two.
+  const under = tileHere(state, ctx);
+  if (under.type === TILE.spike && under.room) {
+    ctx.traps?.impaleOnSpikes(under.room, under.row * 10 + under.column);
+    state.fallY = 0;
+    state.fallX = 0;
+    state.alive = 0;
+    startSequence(state, KID_SEQ.spiked, ctx.tables);
+    return;
+  }
   const frame = frameOf(ctx.tables, state);
   const front = getTile(ctx.world, state.room,
     DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
@@ -928,7 +954,7 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
     // an edge to stop at -- and bumping off it would make every chomper
     // impassable.
     if (tile.type === TILE.chomper) return 0;
-    const wall = wallTypeAt(ctx.world, tile);
+    const wall = wallTypeAt(ctx.world, tile, ctx.spriteHeight(frame.image));
     if (wall === 0) return 0;
     const d = distanceFromWallForward(state, tile.type, column, coll, wall);
     return d < 0 ? d : 0;

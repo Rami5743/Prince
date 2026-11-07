@@ -35,32 +35,51 @@ export const EDGE_TYPE = {
 const WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0] as const;
 const WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0] as const;
 
-/**
- * How far a gate has to have risen before a character can pass under it.
- *
- * The modifier counts up to 188 as the gate opens and the game works in
- * quarters of it, 0 to 47. The same threshold decides whether a gate
- * overhead is something to climb past rather than onto -- see `canClimbUp`
- * in kid.ts -- so a gate is "open" here in the same sense it is open there.
- */
-export const GATE_OPEN_ENOUGH = 6;
+/** A gate's modifier when it has risen as far as it goes. */
+export const GATE_FULLY_OPEN = 188;
 
-/** Is this gate still low enough to walk into? */
-export function gateBlocks(modifier: number): boolean {
-  return (modifier >> 2) < GATE_OPEN_ENOUGH;
+/**
+ * The gap under a gate, in pixels, which is what the renderer draws: the
+ * modifier counts up to 188 as the gate rises and the game works in
+ * quarters of it, so the bottom of the bars sits this far above the floor.
+ */
+export function gateClearance(modifier: number): number {
+  return (Math.min(modifier, GATE_FULLY_OPEN) >> 2) + 1;
+}
+
+/**
+ * Is this gate still low enough to walk into?
+ *
+ * A character fits under a gate when the gap is at least as tall as he is,
+ * and not before. The port used to let him through as soon as the bars had
+ * lifted six quarters -- six pixels of a forty-eight pixel opening -- which
+ * is a crack, not a doorway.
+ *
+ * The capture settles it. In the recorded run of level 1 the Prince walks
+ * left along the top of room 6 with the gate of room 8 rising ahead of him,
+ * and the original stops him dead against it: he stands still, Left held,
+ * from tick 240 to tick 256, while the gap grows from twenty-six pixels to
+ * thirty-eight. He is forty-one pixels tall. The port let him walk straight
+ * through into room 8 and the two runs never met again.
+ *
+ * `charHeight` is the height of the sprite the character is drawn with,
+ * which is what has to fit.
+ */
+export function gateBlocks(modifier: number, charHeight: number): boolean {
+  return gateClearance(modifier) < charHeight;
 }
 
 /**
  * `wallType`, for a tile that has been looked up, so that a gate can be
- * asked how far open it is. A gate that has risen is not a wall, and
- * treating it as one leaves the player standing in front of a door they
- * have just opened.
+ * asked how far open it is. A gate that has risen clear of a character's
+ * head is not a wall to him, and treating it as one leaves the player
+ * standing in front of a door they have just opened.
  */
-export function wallTypeAt(world: World, tile: TileQuery): number {
+export function wallTypeAt(world: World, tile: TileQuery, charHeight: number): number {
   if (tile.type === TILE.gate) {
     if (tile.room === 0) return 0;
     const modifier = world.modifierAt(tile.room, tile.column, tile.row);
-    if (!gateBlocks(modifier)) return 0;
+    if (!gateBlocks(modifier, charHeight)) return 0;
   }
   return wallType(tile.type);
 }
@@ -208,7 +227,8 @@ export interface EdgeResult {
  * that something is. A wall stops it short; an open floor does not.
  */
 export function getEdgeDistance(
-  world: World, state: CharacterState, frame: Frame, objX: number, spriteWidth: number,
+  world: World, state: CharacterState, frame: Frame, objX: number,
+  spriteWidth: number, spriteHeight: number,
 ): EdgeResult {
   const coll = charCollision(state, frame, objX, spriteWidth);
   const here = getTile(world, state.room, state.currentColumn, state.currentRow);
@@ -218,7 +238,7 @@ export function getEdgeDistance(
       ? { distance, edgeType: EDGE_TYPE.wall }
       : { distance: 11, edgeType: EDGE_TYPE.floor };
 
-  const hereWall = wallTypeAt(world, here);
+  const hereWall = wallTypeAt(world, here, spriteHeight);
   if (hereWall !== 0) {
     const d = distanceFromWallForward(
       state, here.type, state.currentColumn, coll, hereWall,
@@ -232,7 +252,7 @@ export function getEdgeDistance(
   if (front.type === TILE.doortop && state.direction >= 0) {
     return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
   }
-  const frontWall = wallTypeAt(world, front);
+  const frontWall = wallTypeAt(world, front, spriteHeight);
   if (frontWall !== 0) {
     const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
     if (d >= 0) return classify(d);

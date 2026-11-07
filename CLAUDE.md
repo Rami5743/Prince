@@ -40,3 +40,12 @@ write-up. The player wants bugs gone from the game they can play.
 A real `PRINCE.EXE` under DOSBox. `tools/oracle/README.md` has the
 pipeline and the three measurements it rests on. Where a capture of the
 original and a reading of the code disagree, the capture wins.
+
+## Stopping is not finishing
+
+If you stop while bugs remain, that is not a finish, it is a pause --
+and the only correct thing to do with a pause is start again. Begin the
+next turn by picking the work back up, not by summarising where it got
+to. Keep going round the loop -- measure, fix, build, commit -- until
+every difference against the original is gone. "I ran out of room" is
+not an ending either; say what is done and deployed, then carry on.

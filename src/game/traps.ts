@@ -529,6 +529,19 @@ export class Traps {
     if (old !== -1) this.level.setModifierAtPos(room, tilePos, 0x8f);
   }
 
+  /**
+   * Spikes something has fallen into. They go straight to fully out --
+   * modifier 0x8f, the state `animateSpike` reaches after four frames of
+   * coming up -- so the blades are through the body on the tick it lands
+   * rather than four ticks later.
+   */
+  impaleOnSpikes(room: number, tilePos: number): void {
+    if (this.level.modifierAtPos(room, tilePos) === 0xff) return; // switched off
+    this.level.setModifierAtPos(room, tilePos, 0x8f);
+    this.add(room, tilePos, 1);
+    this.effects.sound?.(SOUND.spikes);
+  }
+
   /** 0 harmless, 1 out and deadly, 2 coming out and deadly to a runner. */
   spikeHarm(room: number, tilePos: number): number {
     const modifier = (this.level.modifierAtPos(room, tilePos) << 24) >> 24;

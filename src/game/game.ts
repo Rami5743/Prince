@@ -94,12 +94,14 @@ export class Game {
       chomperHarm: (room, tilePos) => this.traps.chomperHarm(room, tilePos),
       bloodyChomper: (room, tilePos) => this.traps.bloodyChomper(room, tilePos),
       startSpike: (room, tilePos) => this.traps.startSpike(room, tilePos),
+      impaleOnSpikes: (room, tilePos) => this.traps.impaleOnSpikes(room, tilePos),
       spikeHarm: (room, tilePos) => this.traps.spikeHarm(room, tilePos),
     };
     this.ctx = {
       tables,
       world,
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
+      spriteHeight: (image) => scene.chtabs.kid?.images[image + 1]?.height ?? 0,
       controls: { x: 0, y: 0, shift: false },
       traps: trapHooks,
       latch: new ControlLatch(),
@@ -179,6 +181,16 @@ export class Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    // Any key answers `Press Button to Continue`, not Shift alone, and the
+    // game asks whether one is down rather than waiting for a fresh press.
+    // The capture shows it: the Prince is impaled on the spikes of level
+    // 1's room 6 at tick 284, the words come up at 298, and the screen goes
+    // black on 299 -- too quick for anything but the Left the player was
+    // already holding down.
+    if (this.awaitingButton
+      && (controls.x !== 0 || controls.y !== 0 || controls.shift)) {
+      this.pressButton();
+    }
     // Down to -1, not to 0: `restartDue` is then true for exactly the one
     // tick the level is to be built on.
     if (this.restartCountdown >= 0) this.restartCountdown -= 1;
@@ -456,17 +468,23 @@ export class Game {
 export const ROOM_CHANGE_BLANK = 1;
 
 /**
- * Ticks between the Prince dying and `Press Button to Continue`. Counted
- * off the grabbed video: struck down at tick 177, words up at 221.
+ * Ticks between the Prince dying and `Press Button to Continue`.
+ *
+ * Fourteen, measured off the grabbed video of the recorded run: the first
+ * blood on the spikes of level 1's room 6 is tick 284 and the words are up
+ * on 298. An earlier reading of a different capture made it forty-five,
+ * from a sword death whose first frame was harder to place; this one is a
+ * splash of red on a tick that has nothing else going on.
  */
-export const RESTART_PROMPT_DELAY = 45;
+export const RESTART_PROMPT_DELAY = 14;
 
 /**
- * Ticks from the button being pressed to the level running again. Six, of
- * which the last two are black: Shift at tick 297 of the grabbed video,
- * black at 301 and 302, the room back at 303.
+ * Ticks from the button being pressed to the level running again. Three,
+ * of which the first two are black: the words up on tick 298 of the
+ * grabbed video with Left already held, black on 299 and 300, the level
+ * running again on 301.
  */
-export const RESTART_DELAY = 5;
+export const RESTART_DELAY = 2;
 
 const TILE_SWORD = TILE.sword;
 const TILE_FLOOR = TILE.floor;

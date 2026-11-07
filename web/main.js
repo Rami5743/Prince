@@ -2247,15 +2247,18 @@ var EDGE_TYPE = {
 };
 var WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0];
 var WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0];
-var GATE_OPEN_ENOUGH = 6;
-function gateBlocks(modifier) {
-  return modifier >> 2 < GATE_OPEN_ENOUGH;
+var GATE_FULLY_OPEN = 188;
+function gateClearance(modifier) {
+  return (Math.min(modifier, GATE_FULLY_OPEN) >> 2) + 1;
 }
-function wallTypeAt(world, tile) {
+function gateBlocks(modifier, charHeight) {
+  return gateClearance(modifier) < charHeight;
+}
+function wallTypeAt(world, tile, charHeight) {
   if (tile.type === TILE.gate) {
     if (tile.room === 0) return 0;
     const modifier = world.modifierAt(tile.room, tile.column, tile.row);
-    if (!gateBlocks(modifier)) return 0;
+    if (!gateBlocks(modifier, charHeight)) return 0;
   }
   return wallType(tile.type);
 }
@@ -2352,11 +2355,11 @@ function distanceFromWallForward(state, tileType, tileColumn, coll, knownType) {
   }
   return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
 }
-function getEdgeDistance(world, state, frame, objX, spriteWidth) {
+function getEdgeDistance(world, state, frame, objX, spriteWidth, spriteHeight) {
   const coll = charCollision(state, frame, objX, spriteWidth);
   const here = getTile(world, state.room, state.currentColumn, state.currentRow);
   const classify = (distance) => distance <= TILE_RIGHT_X ? { distance, edgeType: EDGE_TYPE.wall } : { distance: 11, edgeType: EDGE_TYPE.floor };
-  const hereWall = wallTypeAt(world, here);
+  const hereWall = wallTypeAt(world, here, spriteHeight);
   if (hereWall !== 0) {
     const d = distanceFromWallForward(
       state,
@@ -2372,7 +2375,7 @@ function getEdgeDistance(world, state, frame, objX, spriteWidth) {
   if (front.type === TILE.doortop && state.direction >= 0) {
     return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
   }
-  const frontWall = wallTypeAt(world, front);
+  const frontWall = wallTypeAt(world, front, spriteHeight);
   if (frontWall !== 0) {
     const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
     if (d >= 0) return classify(d);
@@ -2994,6 +2997,8 @@ var KID_SEQ = {
   climbUpToClosedGate: 73,
   /** The landing that kills: a fall of three rows or more. */
   crushed: 52,
+  /** Landing on spikes: `knockDown`, `dx 4`, frame 177, `die`. */
+  spiked: 51,
   unsafeStep: 39,
   /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
   pickUpSword: 91,
@@ -3186,7 +3191,8 @@ function grabUpWithFloorBehind(state, ctx) {
     state,
     frame,
     objectX(state, frame),
-    ctx.spriteWidth(frame.image)
+    ctx.spriteWidth(frame.image),
+    ctx.spriteHeight(frame.image)
   );
   if (distance < 4 && edge.distance < 4 && edge.edgeType !== EDGE_TYPE.wall) {
     state.x = forwardX(state, distance) & 255;
@@ -3204,7 +3210,8 @@ function jumpUp(state, ctx) {
     state,
     frame,
     objectX(state, frame),
-    ctx.spriteWidth(frame.image)
+    ctx.spriteWidth(frame.image),
+    ctx.spriteHeight(frame.image)
   );
   if (edge.distance < 4 && edge.edgeType === EDGE_TYPE.wall) {
     state.x = forwardX(state, edge.distance - 3) & 255;
@@ -3391,7 +3398,8 @@ function forwardPressed(state, ctx) {
     state,
     frame,
     objX,
-    ctx.spriteWidth(frame.image)
+    ctx.spriteWidth(frame.image),
+    ctx.spriteHeight(frame.image)
   );
   const front = getTile(
     ctx.world,
@@ -3415,7 +3423,8 @@ function safeStep(state, ctx) {
     state,
     frame,
     objX,
-    ctx.spriteWidth(frame.image)
+    ctx.spriteWidth(frame.image),
+    ctx.spriteHeight(frame.image)
   );
   if (distance) {
     state.repeat = 1;
@@ -3439,6 +3448,15 @@ function startFall(state, ctx) {
 function land(state, ctx) {
   state.y = floorHeightOfRow(state.currentRow);
   ctx.traps?.startChompers(state.room, state.currentRow);
+  const under = tileHere(state, ctx);
+  if (under.type === TILE.spike && under.room) {
+    ctx.traps?.impaleOnSpikes(under.room, under.row * 10 + under.column);
+    state.fallY = 0;
+    state.fallX = 0;
+    state.alive = 0;
+    startSequence(state, KID_SEQ.spiked, ctx.tables);
+    return;
+  }
   const frame = frameOf(ctx.tables, state);
   const front = getTile(
     ctx.world,
@@ -3618,7 +3636,7 @@ function checkBumped(state, ctx) {
     const tile = getTile(ctx.world, state.room, column, state.currentRow);
     if (tile.room === 0) return 0;
     if (tile.type === TILE.chomper) return 0;
-    const wall = wallTypeAt(ctx.world, tile);
+    const wall = wallTypeAt(ctx.world, tile, ctx.spriteHeight(frame.image));
     if (wall === 0) return 0;
     const d = distanceFromWallForward(state, tile.type, column, coll, wall);
     return d < 0 ? d : 0;
@@ -4165,6 +4183,18 @@ var Traps = class {
     }
     if (old !== -1) this.level.setModifierAtPos(room, tilePos, 143);
   }
+  /**
+   * Spikes something has fallen into. They go straight to fully out --
+   * modifier 0x8f, the state `animateSpike` reaches after four frames of
+   * coming up -- so the blades are through the body on the tick it lands
+   * rather than four ticks later.
+   */
+  impaleOnSpikes(room, tilePos) {
+    if (this.level.modifierAtPos(room, tilePos) === 255) return;
+    this.level.setModifierAtPos(room, tilePos, 143);
+    this.add(room, tilePos, 1);
+    this.effects.sound?.(SOUND.spikes);
+  }
   /** 0 harmless, 1 out and deadly, 2 coming out and deadly to a runner. */
   spikeHarm(room, tilePos) {
     const modifier = this.level.modifierAtPos(room, tilePos) << 24 >> 24;
@@ -4295,12 +4325,14 @@ var Game = class _Game {
       chomperHarm: (room, tilePos) => this.traps.chomperHarm(room, tilePos),
       bloodyChomper: (room, tilePos) => this.traps.bloodyChomper(room, tilePos),
       startSpike: (room, tilePos) => this.traps.startSpike(room, tilePos),
+      impaleOnSpikes: (room, tilePos) => this.traps.impaleOnSpikes(room, tilePos),
       spikeHarm: (room, tilePos) => this.traps.spikeHarm(room, tilePos)
     };
     this.ctx = {
       tables,
       world,
       spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
+      spriteHeight: (image) => scene.chtabs.kid?.images[image + 1]?.height ?? 0,
       controls: { x: 0, y: 0, shift: false },
       traps: trapHooks,
       latch: new ControlLatch(),
@@ -4379,6 +4411,9 @@ var Game = class _Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    if (this.awaitingButton && (controls.x !== 0 || controls.y !== 0 || controls.shift)) {
+      this.pressButton();
+    }
     if (this.restartCountdown >= 0) this.restartCountdown -= 1;
     if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
     if (this.drawnRoom !== wasDrawing) {
@@ -4599,8 +4634,8 @@ var Game = class _Game {
   }
 };
 var ROOM_CHANGE_BLANK = 1;
-var RESTART_PROMPT_DELAY = 45;
-var RESTART_DELAY = 5;
+var RESTART_PROMPT_DELAY = 14;
+var RESTART_DELAY = 2;
 var TILE_SWORD = TILE.sword;
 var TILE_FLOOR = TILE.floor;
 var FULL_HP_IMAGE = 217;

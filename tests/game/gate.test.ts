@@ -2,11 +2,17 @@
  * Walking at a gate.
  *
  * A gate is a portcullis: its modifier is how far it has risen, 0 to 188,
- * and the game works in quarters of that. Whether it is something to walk
- * into depends on that number, and the port was not asking -- `wallType`
- * answered from the tile's type alone, so every gate was a wall. Once
- * characters started bumping into walls that meant a player could press the
- * button, watch the gate go up, and still be stopped dead by it.
+ * and the game works in quarters of that, so the gap under it is one to
+ * forty-eight pixels. Whether it is something to walk into depends on that
+ * number, and the port was not asking -- `wallType` answered from the
+ * tile's type alone, so every gate was a wall. Once characters started
+ * bumping into walls that meant a player could press the button, watch the
+ * gate go up, and still be stopped dead by it.
+ *
+ * Asking was only half of it. The first answer was "six quarters is
+ * enough", which is a six pixel crack, and a Prince forty-one pixels tall
+ * walked through it. The capture of level 1 shows the original holding him
+ * against a gate whose gap had grown to thirty-eight.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -15,7 +21,7 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { standX, standY } from '../../src/game/geometry.ts';
-import { gateBlocks, GATE_OPEN_ENOUGH } from '../../src/game/physics.ts';
+import { gateBlocks, gateClearance, GATE_FULLY_OPEN } from '../../src/game/physics.ts';
 import { TILE } from '../../src/game/tiles.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
@@ -29,15 +35,50 @@ const START_COLUMN = 3;
 
 /** Run right from column 3 and report the column he gets to. */
 async function runAtTheGate(modifier: number): Promise<number> {
+  return runAt(modifier, START_COLUMN, 0);
+}
+
+/**
+ * The capture's own situation: the top row of room 6, running left at the
+ * gate that stands in column 9 of room 8 next door. Reports whether he got
+ * out of room 6.
+ */
+async function reachesTheRoomBeyond(modifier: number): Promise<boolean> {
+  const game = await Game.start(assets, exe, 1);
+  game.scene.state.setModifier(8, 9, 0, modifier);
+  const kid = game.kid;
+  kid.room = 6;
+  kid.currentRow = 0;
+  // Column 1, not 2: column 2 is the raise-button that opens this very
+  // gate, and starting on it winds the gate up before he gets there.
+  kid.currentColumn = 1;
+  kid.x = standX(1);
+  kid.y = standY(0);
+  kid.direction = -1;
+  kid.frame = 15;
+  kid.action = 0;
+  kid.fallX = 0;
+  kid.fallY = 0;
+  game.showRoom(6);
+  for (let i = 0; i < 40; i++) {
+    game.step({ x: -1, y: 0, shift: false });
+    if (kid.room !== 6) return true;
+  }
+  return false;
+}
+
+async function runAt(
+  modifier: number, startColumn: number, direction: number,
+): Promise<number> {
   const game = await Game.start(assets, exe, 1);
   game.scene.state.setModifier(ROOM, GATE_COLUMN, ROW, modifier);
   const kid = game.kid;
   kid.room = ROOM;
   kid.currentRow = ROW;
-  kid.currentColumn = START_COLUMN;
-  kid.x = standX(START_COLUMN);
+  kid.currentColumn = startColumn;
+  kid.x = standX(startColumn);
   kid.y = standY(ROW);
-  kid.direction = 0;
+  kid.direction = direction;
   kid.frame = 15;
   kid.action = 0;
   kid.fallX = 0;
@@ -45,41 +86,54 @@ async function runAtTheGate(modifier: number): Promise<number> {
   game.showRoom(ROOM);
   let furthest = kid.currentColumn;
   for (let i = 0; i < 40; i++) {
-    game.step({ x: 1, y: 0, shift: false });
-    if (kid.room === ROOM && kid.currentColumn > furthest) furthest = kid.currentColumn;
+    game.step({ x: direction < 0 ? -1 : 1, y: 0, shift: false });
+    if (kid.room !== ROOM) return direction < 0 ? -1 : 10;
+    if (direction < 0 ? kid.currentColumn < furthest : kid.currentColumn > furthest) {
+      furthest = kid.currentColumn;
+    }
   }
   return furthest;
 }
 
 describe('a gate', () => {
-  it('counts as open once it has risen far enough', () => {
-    expect(gateBlocks(0)).toBe(true);
-    expect(gateBlocks((GATE_OPEN_ENOUGH * 4) - 1)).toBe(true);
-    expect(gateBlocks(GATE_OPEN_ENOUGH * 4)).toBe(false);
-    expect(gateBlocks(188)).toBe(false);
+  it('counts as open once the gap is as tall as the character', () => {
+    // The gap in pixels, which is what the renderer draws under the bars.
+    expect(gateClearance(0)).toBe(1);
+    expect(gateClearance(GATE_FULLY_OPEN)).toBe(48);
+    expect(gateBlocks(0, 41)).toBe(true);
+    expect(gateBlocks(148, 41)).toBe(true); // the capture: 38 pixels, blocked
+    expect(gateBlocks(160, 41)).toBe(false); // 41 pixels, he fits
+    expect(gateBlocks(GATE_FULLY_OPEN, 41)).toBe(false);
   });
 
   it('that has been opened can be walked through', async () => {
-    expect(await runAtTheGate(188)).toBeGreaterThan(GATE_COLUMN);
-  });
-
-  it('that is part way up can be walked through once it is open enough', async () => {
-    expect(await runAtTheGate(GATE_OPEN_ENOUGH * 4)).toBeGreaterThan(GATE_COLUMN);
+    expect(await runAtTheGate(GATE_FULLY_OPEN)).toBeGreaterThan(GATE_COLUMN);
+    expect(await reachesTheRoomBeyond(GATE_FULLY_OPEN)).toBe(true);
   });
 
   /**
-   * Known wrong, and recorded rather than excused. A closed gate ought to
-   * stop him and does not: he bumps into it, is pushed back the few units
-   * the bump is worth, and the next stride carries him past the gate's face
-   * in one frame -- after which his column is the far side of it and
-   * nothing checks the tile behind him. Stopping this properly means
-   * refusing the move rather than correcting it afterwards. It is the
-   * gentler of the two ways to be wrong: before gates were asked how open
-   * they were, every gate blocked, and a player who opened one still could
-   * not get through.
+   * Measured off the recorded run of level 1: the Prince walks left along
+   * the top of room 6 into the rising gate of room 8 and the original
+   * stops him there, Left held, for sixteen ticks. The port walked him
+   * through into room 8 and the two runs never met again.
+   */
+  it('that is part way up stops a Prince who does not fit under it', async () => {
+    expect(await reachesTheRoomBeyond(148)).toBe(false);
+  });
+
+  /**
+   * Known wrong, and recorded rather than excused. A shut gate ought to
+   * stop him and does not when he comes at it from the left: the wall it
+   * presents is ten units into the tile, he bumps into it, is pushed back
+   * the few units the bump is worth, and the next stride carries him past
+   * that face in one frame -- after which his column is the far side of it
+   * and nothing checks the tile behind him. Coming from the right, which
+   * is where the capture has him, the face is the tile's own edge and he
+   * is stopped properly.
    */
   it('that is shut does not stop him yet', async () => {
-    expect(await runAtTheGate(0)).toBeGreaterThan(GATE_COLUMN);
+    expect(await runAtTheGate(0)).toBeGreaterThanOrEqual(GATE_COLUMN);
+    expect(await reachesTheRoomBeyond(0)).toBe(false);
   });
 });
 
