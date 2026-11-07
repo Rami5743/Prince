@@ -14,27 +14,42 @@ times they were pressed, and recover the game's ticks from the grab.
 
 ## The measurements it rests on
 
-* **The original runs at exactly 12 ticks a second under DOSBox**, the
-  same as the port. Counted by grabbing an idle level 1 at 30 fps and
-  counting the frames where the picture changed: 275 changes over 22.83
-  seconds. (`video_ticks.py`)
+* **The original runs at twelve ticks a second under DOSBox**, the same
+  as the port, and `split_ticks.py` now says so for every capture it
+  makes: it counts the screen changes and divides by the video it took,
+  and a twelve-hundred-tick run comes out at 12.0119.
 * **The game area is 640x400 at (192,184)** on the 1024x768 Xvfb, drawn at
   exactly twice the 320x200 of the game, so the way back down is to take
   every other pixel. Averaging blurs every edge and nothing matches.
+  ffmpeg grabs that rectangle and nothing else; encoding the whole
+  desktop losslessly costs more processor than the emulator does, and
+  what it costs comes out of the emulator.
 * **Ctrl+A restarts the level**, with one black frame and then the level's
   own opening. That is the same place a browser recording starts, so it is
-  what the replay anchors on.
+  what the replay anchors on -- but only roughly. Which video frame that
+  flash lands on moves by a tick between one run and the next, so the
+  ticks are numbered from the game's own clock instead: `--anchor-text 24`
+  finds the tick the level title goes off the bottom of the screen and
+  calls it 24, which is what the port calls it.
+* **A key edge goes out in the tick before the one it belongs to.** The
+  game reads the keyboard once a tick, at the start of the tick, so a
+  press meant for tick T has to be down before T begins. Sent at the
+  middle of T itself, every press in `probeE` was read a tick late.
+* **Twenty thousand cycles, not three thousand.** At three thousand the
+  emulator cannot redraw a room inside a tick: the screen is black for
+  two of them and the game loses one. At twenty thousand there is no
+  black frame and no lost tick, so what is left to measure is the game.
 
 ## Running one
 
     node tools/oracle/recording_to_script.mjs rec.json /tmp/rec.txt --settle 0.04
     python3 tools/oracle/dosbox_oracle.py --script /tmp/rec.txt --out /tmp/rep \
-        --record /tmp/rep/run.mkv --fps 30
+        --record /tmp/rep/run.mkv --fps 30 --cycles 20000
     python3 tools/oracle/split_ticks.py /tmp/rep/run.mkv /tmp/dos \
-        --crop 640:400:192:184 --scale 320:200 --start 49 --after-blank \
-        --fps 30 --rate 12 --hybrid
-    node --experimental-strip-types tools/dev/replay-frames.ts rec.json /tmp/port --stride 1
-    python3 tools/oracle/compare_ticks.py /tmp/dos /tmp/port --out /tmp/diff
+        --crop 640:400:0:0 --scale 320:200 --start 49 --after-blank \
+        --fps 30 --rate 12 --hybrid --anchor-text 24
+    python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
+    node --experimental-strip-types tools/dev/oracle-report.ts NAME
 
 `--start 49` is where to begin looking for the restart flash and depends
 on the waits the generated script opens with.

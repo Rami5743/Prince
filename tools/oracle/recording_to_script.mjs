@@ -38,17 +38,17 @@
  * arrived, which is the tick the port acted on it in.
  *
  * For the original to act on it in that tick too, the edge has to be
- * down before that tick begins -- anywhere in the tick before it. So
- * each edge goes out at `(tick - 0.5) / 12`, the middle of the tick
- * before its own, which leaves half a tick of slack either way for the
- * emulator's own phase.
+ * down before that tick begins, and far enough before it that the X
+ * server, DOSBox's keyboard emulation and the game's own read have all
+ * happened. Measured, that is a whole tick: each edge goes out at
+ * `(tick - 1) / 12`.
  *
- * Half a tick is not much and it was not obvious. At `(tick + 0.5)/12`
- * -- the middle of the tick itself -- every press in `probeE` was read
- * one tick late by the original, which cost the alignment a tick at the
- * first press and the three ticks of the level title with it. Moving it
- * back by one takes the run from 158 of its 168 ticks exact to 160 of
- * 166, with no drift at all over the first hundred.
+ * The measurement is `probeE`, captured at a quarter of a tick either
+ * side. At `(tick - 1)/12` the port and the capture line up at offset
+ * nought for every one of the run's 165 ticks, with no drift anywhere.
+ * At `(tick - 1.5)/12` the original acts a tick early from the first
+ * press; at `(tick - 0.5)/12` it acts a tick late. So the window is
+ * about a tick wide and this is the middle of it.
  *
  * Nothing is lost by the quantising: a press and a release inside one
  * tick is not something the game can see anyway.
@@ -109,6 +109,28 @@ const RATE = arg('rate', 12);
 const TICK = 1 / RATE;
 /** Nothing is sent closer together than this, so two edges cannot merge. */
 const MIN_GAP = 0.002;
+/**
+ * What a command in the chain costs, in seconds of wall clock.
+ *
+ * Chaining the whole schedule into one `xdotool` was supposed to settle
+ * this: a process per edge costs twenty to forty milliseconds and a few
+ * hundred of those is seconds of drift. It settled most of it. What is
+ * left is that `keydown` and `keyup` are not free either -- each is a
+ * round trip to the X server -- and `sleep` overshoots a little.
+ *
+ * Measured on this machine, with Xvfb and nothing else running: a chain
+ * of two hundred key edges and two hundred sleeps takes 12.7 ms per edge
+ * longer than the sleeps asked for, and the same chain with the keys
+ * taken out overshoots by 1.0 ms per sleep. So a key edge costs about
+ * twelve milliseconds and a sleep about one.
+ *
+ * Twelve milliseconds is a seventh of a tick, and it accumulates: by the
+ * twenty-fifth edge of a recording the schedule is two ticks late, which
+ * is two ticks of the Prince doing the wrong thing. Each sleep is now
+ * shortened by what the commands around it cost.
+ */
+const SLEEP_COST = 0.0010;
+const EDGE_COST = 0.0130;
 
 const lines = [
   `# generated from ${basename(src)} -- the player's own key events, replayed`,
@@ -132,9 +154,11 @@ for (const e of rec.events) {
   // held. The emulator needs the edges, not the repeats.
   if (e.type === 'down' && down.has(key)) { dropped++; continue; }
   if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
-  const want = rawMs ? e.ms / 1000 : (e.tick - 0.5 + shift) * TICK;
-  const wait = Math.max(MIN_GAP, want - at);
-  chain.push('sleep', wait.toFixed(3));
+  const want = rawMs ? e.ms / 1000 : (e.tick - 1 + shift) * TICK;
+  // Each command in the chain costs wall clock that its own sleep knows
+  // nothing about, so it comes off the sleep before it.
+  const wait = Math.max(MIN_GAP, want - at - (sent ? EDGE_COST : SLEEP_COST));
+  chain.push('sleep', wait.toFixed(4));
   at = Math.max(want, at + MIN_GAP);
   if (e.type === 'down') { down.add(key); chain.push('keydown', '--window', '@W', key); }
   else { down.delete(key); chain.push('keyup', '--window', '@W', key); }
@@ -147,7 +171,8 @@ writeFileSync(out, lines.join('\n') + '\n');
 console.error(`${out}: level ${rec.level}, ${sent} key edges `
   + `(${dropped} auto-repeats and strays dropped), `
   + `${at.toFixed(1)}s of play, settle ${settle}s`
-  + `${rawMs ? ', raw millisecond stamps' : ', edges centred in their ticks'}`
-  + `${shift ? `, shifted ${shift} ticks` : ''}`);
+  + `${rawMs ? ', raw millisecond stamps' : ', edges a tick ahead of their own'}`
+  + `${shift ? `, shifted ${shift} ticks` : ''}`
+  + `, ${(EDGE_COST * 1000).toFixed(1)}ms taken off each sleep`);
 console.log(`python3 tools/oracle/dosbox_oracle.py --script ${out} \\
     --out /tmp/replay-${name} --record /tmp/replay-${name}/run.mkv --fps 30`);
