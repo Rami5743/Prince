@@ -1791,16 +1791,6 @@ var RoomRenderer = class {
       blit: BLIT.transparent,
       order
     });
-    if (col + 1 < COL_X.length) {
-      this.mid.push({
-        chtab: CHTAB.environment,
-        id: LOOSE_FRAM_RIGHT[0],
-        x: COL_X[col + 1],
-        yBottom: floor.rightY + main,
-        blit: BLIT.transparent,
-        order
-      });
-    }
   }
   addCharacter(c) {
     const set = this.chtabs[c.chtab];
@@ -4521,6 +4511,7 @@ var Game = class _Game {
    * new room straight away, which is why those captures were recorded as
    * unreproduced.
    */
+  pendingFirstTick = true;
   blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   deadTicks = 0;
@@ -4672,6 +4663,10 @@ var Game = class _Game {
    * moves, which is the order the original uses.
    */
   step(controls) {
+    if (this.pendingFirstTick) {
+      this.pendingFirstTick = false;
+      return;
+    }
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;

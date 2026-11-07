@@ -1175,12 +1175,18 @@ export class RoomRenderer {
       chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[0], x,
       yBottom: floor.baseY + main, blit: BLIT.transparent, order,
     });
-    if (col + 1 < COL_X.length) {
-      this.mid.push({
-        chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[0], x: COL_X[col + 1],
-        yBottom: floor.rightY + main, blit: BLIT.transparent, order,
-      });
-    }
+    // And nothing in the next column along. A floor at rest is three
+    // pieces -- its top, its front, and the sliver that joins it to the
+    // tile on its right -- but one that has come away is a single sprite
+    // in the original, which `add_mob_to_objtable` puts in the object
+    // table with `id = 10` and a clip forty wide. The port was drawing
+    // the joining sliver with it, so the falling slab was half a tile
+    // too wide on its right.
+    //
+    // Measured on the player's recording `e209b01a`, where the loose
+    // floor of room 1 comes down into room 2 with him: the original's
+    // plank covers screen x 192 to about 225, and the port's covered
+    // 192 to 249.
   }
 
   private addCharacter(c: CharacterDraw): void {

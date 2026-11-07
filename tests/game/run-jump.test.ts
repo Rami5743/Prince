@@ -115,7 +115,7 @@ function matchingStep(file: string): Step | null {
  * captures can land inside a single tick.
  */
 const EXPECTED: Record<string, number | null> = {
-  'jump00.png': 7,
+  'jump00.png': 8,
   'jump01.png': 14,
   'jump02.png': 18,
   'jump03.png': 21,

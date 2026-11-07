@@ -109,8 +109,8 @@ function matchingStep(file: string): Step | null {
  * the port ran him through it. See `checkBumped` in src/game/kid.ts.
  */
 const EXPECTED: Record<string, number | null> = {
-  'run00.png': 7,
-  'run01.png': 7,
+  'run00.png': 8,
+  'run01.png': 8,
   'run02.png': 17,
   'run03.png': 23,
   'run04.png': 30,

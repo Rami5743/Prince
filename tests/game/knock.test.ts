@@ -133,6 +133,9 @@ describe('a button with a foot on it', () => {
     kid.direction = 0; kid.frame = 15; kid.action = 0;
     kid.fallX = 0; kid.fallY = 0;
     game.showRoom(9);
+    // Twice: the first tick of a level moves nothing, as the original's
+    // does, so the foot does not come down on the plate until the second.
+    game.step(NOTHING);
     game.step(NOTHING);
 
     const picture = (): string => {

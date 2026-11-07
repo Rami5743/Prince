@@ -51,6 +51,7 @@ export class Game {
    * new room straight away, which is why those captures were recorded as
    * unreproduced.
    */
+  private pendingFirstTick = true;
   private blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   private deadTicks = 0;
@@ -204,6 +205,18 @@ export class Game {
    * moves, which is the order the original uses.
    */
   step(controls: Controls): void {
+    // The first tick of a level shows what the level start put on the
+    // screen, and nothing moves on it. `enterLevel` has already played
+    // the first frame of the way in -- frame 102 of the drop on level 1
+    // -- and the original holds it for a tick before the game begins.
+    //
+    // Measured: on every capture of a recorded run, the original's tick
+    // n is the port's tick n-1 for the whole of the first room, exactly,
+    // with nothing between them. The port was starting a frame in.
+    if (this.pendingFirstTick) {
+      this.pendingFirstTick = false;
+      return;
+    }
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;

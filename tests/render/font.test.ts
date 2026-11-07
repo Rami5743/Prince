@@ -93,6 +93,9 @@ describe('the words under the room', () => {
     };
     // The picture of a tick is the one the game draws after stepping it,
     // which is how the replay harness takes them too.
+    // The first tick of a level moves nothing -- it shows what the start
+    // put on the screen -- so the words begin on the one after it.
+    game.step(NOTHING);
     for (let t = 0; t < 52; t++) {
       game.step(NOTHING);
       seen.push(where());
@@ -108,6 +111,7 @@ describe('the words under the room', () => {
   it('count the hour down as it goes, and not restart it on a death', async () => {
     const game = await Game.start(assets, exe, 1);
     expect(game.remainingTicks).toBe(MINUTE_TICKS * 60);
+    game.step(NOTHING); // the level start's own tick, which runs nothing
     for (let i = 0; i < MINUTE_TICKS; i++) game.step(NOTHING);
     expect(game.remainingTicks).toBe(MINUTE_TICKS * 59);
     const again = await game.restart(assets, exe);

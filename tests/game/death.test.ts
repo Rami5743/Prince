@@ -126,6 +126,9 @@ describe('dying', () => {
   it('waits before it will take the button', async () => {
     const game = await Game.start(assets, exe, 3);
     const none = { x: 0, y: 0, shift: false };
+    // The first tick of a level moves nothing: it shows what the start
+    // put on the screen, which is what the original does.
+    game.step(none);
     game.damage(100);
     expect(game.isDead).toBe(true);
     expect(game.awaitingButton, 'not straight away').toBe(false);
@@ -138,6 +141,7 @@ describe('dying', () => {
   it('takes six ticks over starting the level again', async () => {
     const game = await Game.start(assets, exe, 3);
     const none = { x: 0, y: 0, shift: false };
+    game.step(none); // the level start's own tick
     game.damage(100);
     for (let i = 0; i < RESTART_PROMPT_DELAY; i++) game.step(none);
     expect(game.awaitingButton).toBe(true);
