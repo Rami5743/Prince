@@ -173,6 +173,8 @@ export interface KidContext {
   markItem?(room: number, column: number, row: number): void;
   /** Which room is on the screen; x is measured in its coordinates. */
   drawnRoom?(): number;
+  /** The room the level starts in; the level door there is not a way out. */
+  startRoom?: number;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -347,6 +349,11 @@ function tileBehind(state: CharacterState, ctx: KidContext) {
     DIR_BEHIND[state.direction + 1] + state.currentColumn, state.currentRow);
 }
 
+function tileFront(state: CharacterState, ctx: KidContext) {
+  return getTile(ctx.world, state.room,
+    DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
+}
+
 function tileHere(state: CharacterState, ctx: KidContext) {
   return getTile(ctx.world, state.room, state.currentColumn, state.currentRow);
 }
@@ -369,6 +376,7 @@ function standingJump(state: CharacterState, ctx: KidContext): void {
 
 /** Up: climb what is above if it can be reached, otherwise jump. */
 function upPressed(state: CharacterState, controls: Controls, ctx: KidContext): void {
+  if (goUpLevelDoor(state, ctx)) return;
   if (forwardHeld(state, controls)) {
     standingJump(state, ctx);
     return;
@@ -976,31 +984,42 @@ function checkPickUpSword(state: CharacterState, ctx: KidContext): void {
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
 
-/**
- * The way out.
- *
- * Sequence 70 is the original's own: the Prince steps into the doorway,
- * turns, and the byte-code raises `endLevel` on the way. Nothing started
- * it, so a player who opened the door, walked into it and waited was
- * still on level 1 -- the game could not be finished at all.
- *
- * The door has to be all the way up: its modifier counts to 43 and
- * anything less is a doorway with the portcullis still across it.
- */
+/** The level door's modifier when it has finished sliding up. */
 const LEVEL_DOOR_OPEN = 43;
 
-function checkLevelDoor(state: CharacterState, ctx: KidContext): void {
-  if (state.alive >= 0) return;
-  // On his feet in the doorway, however he arrived: running through it
-  // is how a player leaves a level, so waiting for him to stand still
-  // first means he runs straight past and the level never ends.
-  if (state.y !== floorHeightOfRow(state.currentRow)) return;
-  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
-  const tile = tileHere(state, ctx);
-  if (tile.type !== TILE.levelDoorLeft || !tile.room) return;
-  if (ctx.world.modifierAt(tile.room, tile.column, tile.row) < LEVEL_DOOR_OPEN) return;
+/**
+ * `up_pressed`, first branch: Up at the level door is the way out.
+ *
+ * The port had this as a `check_leveldoor` of its own, run every tick
+ * from `play_kid_frame`, so the Prince walked into the door and left the
+ * level without being asked -- and left it facing the wrong way, because
+ * nothing had put him where the original puts him.
+ *
+ * The original asks only when Up is pressed, and it asks about three
+ * tiles: the one he is on, the one behind him and the one in front, so
+ * he can be a little short of the door or a little past it. The door of
+ * the room the level starts in is not a way out -- that is the door he
+ * came in by. Then `go_up_leveldoor` snaps him to the door's own column,
+ * turns him to face left, and starts sequence 70, whose byte-code walks
+ * him backwards into the doorway and raises `endLevel` on the way.
+ */
+function goUpLevelDoor(state: CharacterState, ctx: KidContext): boolean {
+  const here = tileHere(state, ctx);
+  const behind = tileBehind(state, ctx);
+  const front = tileFront(state, ctx);
+  const door = here.type === TILE.levelDoorLeft ? here
+    : behind.type === TILE.levelDoorLeft ? behind
+      : front.type === TILE.levelDoorLeft ? front : null;
+  if (!door || !door.room) return false;
+  const drawn = ctx.drawnRoom ? ctx.drawnRoom() : state.room;
+  if (ctx.startRoom === drawn) return false;
+  if (ctx.world.modifierAt(door.room, door.column, door.row) < LEVEL_DOOR_OPEN) return false;
+  state.x = (X_BUMP_START(door.column) - 4) & 0xff;
+  state.direction = -1;
   startSequence(state, KID_SEQ.leaveLevel, ctx.tables);
+  return true;
 }
+
 
 /**
  * A potion under his feet is drunk.
@@ -1080,7 +1099,6 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
   checkDrink(state, ctx);
-  checkLevelDoor(state, ctx);
 
   // `fell_out`: falling out of the level is fatal, and the body is the
   // one the original shows for it -- frame 185, not whichever frame of

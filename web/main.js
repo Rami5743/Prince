@@ -3579,6 +3579,14 @@ function tileBehind(state, ctx) {
     state.currentRow
   );
 }
+function tileFront(state, ctx) {
+  return getTile(
+    ctx.world,
+    state.room,
+    DIR_FRONT[state.direction + 1] + state.currentColumn,
+    state.currentRow
+  );
+}
 function tileHere(state, ctx) {
   return getTile(ctx.world, state.room, state.currentColumn, state.currentRow);
 }
@@ -3596,6 +3604,7 @@ function standingJump(state, ctx) {
   startSequence(state, KID_SEQ.standingJump, ctx.tables);
 }
 function upPressed(state, controls, ctx) {
+  if (goUpLevelDoor(state, ctx)) return;
   if (forwardHeld(state, controls)) {
     standingJump(state, ctx);
     return;
@@ -4061,14 +4070,19 @@ function checkPickUpSword(state, ctx) {
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
 var LEVEL_DOOR_OPEN = 43;
-function checkLevelDoor(state, ctx) {
-  if (state.alive >= 0) return;
-  if (state.y !== floorHeightOfRow(state.currentRow)) return;
-  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
-  const tile = tileHere(state, ctx);
-  if (tile.type !== TILE.levelDoorLeft || !tile.room) return;
-  if (ctx.world.modifierAt(tile.room, tile.column, tile.row) < LEVEL_DOOR_OPEN) return;
+function goUpLevelDoor(state, ctx) {
+  const here = tileHere(state, ctx);
+  const behind = tileBehind(state, ctx);
+  const front = tileFront(state, ctx);
+  const door = here.type === TILE.levelDoorLeft ? here : behind.type === TILE.levelDoorLeft ? behind : front.type === TILE.levelDoorLeft ? front : null;
+  if (!door || !door.room) return false;
+  const drawn = ctx.drawnRoom ? ctx.drawnRoom() : state.room;
+  if (ctx.startRoom === drawn) return false;
+  if (ctx.world.modifierAt(door.room, door.column, door.row) < LEVEL_DOOR_OPEN) return false;
+  state.x = X_BUMP_START(door.column) - 4 & 255;
+  state.direction = -1;
   startSequence(state, KID_SEQ.leaveLevel, ctx.tables);
+  return true;
 }
 function checkDrink(state, ctx) {
   if (state.alive >= 0) return;
@@ -4120,7 +4134,6 @@ function stepKid(state, controls, ctx) {
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
   checkDrink(state, ctx);
-  checkLevelDoor(state, ctx);
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
@@ -5012,6 +5025,7 @@ var Game = class _Game {
         this.itemTile = { room, column, row };
       },
       drawnRoom: () => this.drawnRoom,
+      startRoom: scene.level.startRoom,
       effects: {
         sound: effects.sound,
         /**

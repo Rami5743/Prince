@@ -153,6 +153,7 @@ export class Game {
       hasSword: () => this.hasSword,
       markItem: (room, column, row) => { this.itemTile = { room, column, row }; },
       drawnRoom: () => this.drawnRoom,
+      startRoom: scene.level.startRoom,
       effects: {
         sound: effects.sound,
         /**

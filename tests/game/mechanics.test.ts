@@ -624,14 +624,20 @@ describe('the way out of a level', () => {
     expect(game.scene.state.modifierAt(9, 3, 1), 'the door is up').toBe(43);
   });
 
-  it('ends the level when he walks into it', async () => {
+  /**
+   * Up at the door, not merely standing on it. This test used to walk
+   * him in and expect the level to end, which is what the port did and
+   * not what the original does -- the whole of it is in
+   * tests/game/level-door.test.ts.
+   */
+  it('ends the level when he asks it to', async () => {
     const game = await Game.start(assets, exe, 1);
     game.clearBottomText();
-    // Open the door first, then walk into it along the middle row.
+    // Open the door first, then walk up to it along the middle row.
     game.scene.state.setModifier(9, 3, 1, 43);
     stand(game, 9, 1, 1);
     for (let i = 0; i < 80 && !game.levelFinished; i++) {
-      game.step({ x: 1, y: 0, shift: false });
+      game.step({ x: i < 13 ? 1 : 0, y: i >= 22 ? -1 : 0, shift: false });
     }
     expect(game.levelFinished, 'the level is over').toBe(true);
   });
