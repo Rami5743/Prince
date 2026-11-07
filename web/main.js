@@ -2381,6 +2381,29 @@ function placeSword(state, frame, swordTable, toScreenX2) {
     alreadyScreenX: true
   };
 }
+var SPLASH_IMAGE = { kid: 219, guard: 2 };
+function placeHurtSplash(character, frame, chtab = "kid") {
+  if (frame === 178) return null;
+  const forward = character.direction === 0 ? 1 : -1;
+  let { x, y } = character;
+  if (frame === 185 || frame >= 106 && frame < 111) {
+    y += 4;
+    x += 5 * forward;
+  } else if (frame === 177) {
+    x -= 5 * forward;
+  } else {
+    y -= (chtab === "kid" ? 4 : 0) + 11;
+    x += 5 * forward;
+  }
+  return {
+    chtab,
+    image: SPLASH_IMAGE[chtab === "kid" ? "kid" : "guard"],
+    x,
+    y,
+    direction: character.direction,
+    row: character.row
+  };
+}
 
 // src/game/sequence.ts
 var SEQ_OP = {
@@ -4926,6 +4949,12 @@ var Game = class _Game {
    */
   justBlocked = 0;
   hitPoints;
+  /**
+   * `hitp_delta < 0` and `guardhp_delta < 0`: hit points came off this
+   * tick, so the splash is drawn over whoever lost them.
+   */
+  kidHurt = false;
+  guardHurt = false;
   maxHitPoints;
   /**
    * Has the Prince got a sword? It lies on the floor of level 1 and he
@@ -5056,6 +5085,8 @@ var Game = class _Game {
       this.pendingFirstTick = false;
       return;
     }
+    this.kidHurt = false;
+    this.guardHurt = false;
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;
@@ -5168,6 +5199,7 @@ var Game = class _Game {
       if (dead2) hit.alive = 0;
       return;
     }
+    if (this.guard.hitPoints > 0) this.guardHurt = true;
     this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
     const dead = this.guard.hitPoints === 0;
     startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
@@ -5205,6 +5237,7 @@ var Game = class _Game {
   }
   /** Hurt the Prince. Returns true if that was the last of his hit points. */
   damage(amount) {
+    if (amount > 0 && this.hitPoints > 0) this.kidHurt = true;
     this.hitPoints = Math.max(0, this.hitPoints - amount);
     return this.hitPoints === 0;
   }
@@ -5397,6 +5430,23 @@ var Game = class _Game {
     return placeCharacter(this.kid, frame);
   }
   /**
+   * The star at the point of impact, if hit points came off the Prince
+   * this tick. `draw_hurt_splash`, called from `draw_kid` when
+   * `hitp_delta < 0`.
+   */
+  hurtSplashDraw() {
+    if (!this.kidHurt) return null;
+    const kid = this.kidDraw();
+    return kid ? placeHurtSplash(kid, this.kid.frame, "kid") : null;
+  }
+  /** The same for the guard, from `draw_guard`. */
+  guardHurtSplashDraw() {
+    if (!this.guardHurt) return null;
+    if (this.guard.room !== this.drawnRoom || this.guard.direction === NO_DIRECTION) return null;
+    const draw = guardDraw(this.guard, this.tables);
+    return draw ? placeHurtSplash(draw, this.guard.frame, "guard") : null;
+  }
+  /**
    * Draw the tick.
    *
    * `showBlank: false` draws the room the game has even on the ticks the
@@ -5418,6 +5468,8 @@ var Game = class _Game {
     if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
       const draw = guardDraw(this.guard, this.tables);
       if (draw) characters.push(draw);
+      const guardSplash = this.guardHurtSplashDraw();
+      if (guardSplash) characters.push(guardSplash);
       const frame = guardFrame(this.guard, this.tables);
       if (frame && this.guard.alive < 0) {
         const sword = placeSword(this.guard, frame, this.tables.swordTable, toScreenX);
@@ -5426,6 +5478,8 @@ var Game = class _Game {
     }
     const kid = this.kidDraw();
     if (kid) characters.push(kid);
+    const kidSplash = this.hurtSplashDraw();
+    if (kidSplash) characters.push(kidSplash);
     const kidFrame = this.tables.frameTableKid[this.kid.frame];
     if (kid && kidFrame && this.kid.sword !== 0) {
       const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);

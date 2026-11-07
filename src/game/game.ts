@@ -8,7 +8,7 @@ import { RoomRenderer, type CharacterDraw, type MobDraw } from '../render/room.t
 import { buildLevelScene, type LevelScene } from './scene.ts';
 import { readExeTables, type ExeTables } from './exe-tables.ts';
 import {
-  newCharacter, placeCharacter, placeSword, type CharacterState,
+  newCharacter, placeCharacter, placeHurtSplash, placeSword, type CharacterState,
 } from './character.ts';
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
 import { getTile, tileDivModM7, type World } from './physics.ts';
@@ -86,6 +86,12 @@ export class Game {
    */
   private justBlocked = 0;
   hitPoints: number;
+  /**
+   * `hitp_delta < 0` and `guardhp_delta < 0`: hit points came off this
+   * tick, so the splash is drawn over whoever lost them.
+   */
+  private kidHurt = false;
+  private guardHurt = false;
   maxHitPoints: number;
   /**
    * Has the Prince got a sword? It lies on the floor of level 1 and he
@@ -226,6 +232,12 @@ export class Game {
       this.pendingFirstTick = false;
       return;
     }
+    // `hitp_delta = 0; guardhp_delta = 0;` at the top of the original's
+    // main loop, just before `play_frame`. Whatever takes hit points off
+    // during the tick sets it, and the drawing reads it: that is the
+    // only thing that puts the hurt splash on the screen.
+    this.kidHurt = false;
+    this.guardHurt = false;
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;
@@ -362,6 +374,7 @@ export class Game {
       if (dead) hit.alive = 0;
       return;
     }
+    if (this.guard.hitPoints > 0) this.guardHurt = true;
     this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
     const dead = this.guard.hitPoints === 0;
     startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
@@ -407,6 +420,10 @@ export class Game {
 
   /** Hurt the Prince. Returns true if that was the last of his hit points. */
   damage(amount: number): boolean {
+    // `take_hp`: the delta is what he actually loses, so a hit on a
+    // Prince who has nothing left to lose sets nothing and draws no
+    // splash.
+    if (amount > 0 && this.hitPoints > 0) this.kidHurt = true;
     this.hitPoints = Math.max(0, this.hitPoints - amount);
     return this.hitPoints === 0;
   }
@@ -617,6 +634,25 @@ export class Game {
   }
 
   /**
+   * The star at the point of impact, if hit points came off the Prince
+   * this tick. `draw_hurt_splash`, called from `draw_kid` when
+   * `hitp_delta < 0`.
+   */
+  hurtSplashDraw(): CharacterDraw | null {
+    if (!this.kidHurt) return null;
+    const kid = this.kidDraw();
+    return kid ? placeHurtSplash(kid, this.kid.frame, 'kid') : null;
+  }
+
+  /** The same for the guard, from `draw_guard`. */
+  guardHurtSplashDraw(): CharacterDraw | null {
+    if (!this.guardHurt) return null;
+    if (this.guard.room !== this.drawnRoom || this.guard.direction === NO_DIRECTION) return null;
+    const draw = guardDraw(this.guard, this.tables);
+    return draw ? placeHurtSplash(draw, this.guard.frame, 'guard') : null;
+  }
+
+  /**
    * Draw the tick.
    *
    * `showBlank: false` draws the room the game has even on the ticks the
@@ -644,6 +680,8 @@ export class Game {
     if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
       const draw = guardDraw(this.guard, this.tables);
       if (draw) characters.push(draw);
+      const guardSplash = this.guardHurtSplashDraw();
+      if (guardSplash) characters.push(guardSplash);
       const frame = guardFrame(this.guard, this.tables);
       // A living guard always has his sword out.
       if (frame && this.guard.alive < 0) {
@@ -654,6 +692,8 @@ export class Game {
 
     const kid = this.kidDraw();
     if (kid) characters.push(kid);
+    const kidSplash = this.hurtSplashDraw();
+    if (kidSplash) characters.push(kidSplash);
     const kidFrame = this.tables.frameTableKid[this.kid.frame];
     if (kid && kidFrame && this.kid.sword !== 0) {
       const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);

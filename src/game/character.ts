@@ -134,3 +134,50 @@ export function placeSword(
     alreadyScreenX: true,
   };
 }
+
+/** The two splash sprites: 218 of the Prince's group, 1 of the guard's. */
+const SPLASH_IMAGE = { kid: 219, guard: 2 } as const;
+
+/**
+ * `draw_hurt_splash`: the star at the point of impact.
+ *
+ * The original draws it over whoever lost hit points this tick, in the
+ * same pass as the character and just before his sword, so it lands on
+ * top of him. It is the only thing that marks a hit as a hit -- without
+ * it a sword fight is two men waving at each other -- and the port drew
+ * it nowhere, which is the player's "the hit animation is missing, and
+ * it is missing in other places too": it is also what marks a fall, a
+ * spiking and a crushing.
+ *
+ * Where it goes depends on the pose. A body on the ground (185, or 106
+ * to 110, the fall and the landing) gets it four pixels lower and five
+ * forward; a body on spikes (177) gets it five *backward* and level;
+ * everything else gets it eleven pixels up -- fifteen for the Prince,
+ * who is drawn four pixels taller than a guard -- and five forward.
+ * Nothing is drawn over a Prince in the chomper (178): there is no
+ * point of impact to mark, he is inside the blades.
+ */
+export function placeHurtSplash(
+  character: CharacterDraw, frame: number, chtab: ChtabId = 'kid',
+): CharacterDraw | null {
+  if (frame === 178) return null;
+  const forward = character.direction === 0 ? 1 : -1;
+  let { x, y } = character;
+  if (frame === 185 || (frame >= 106 && frame < 111)) {
+    y += 4;
+    x += 5 * forward;
+  } else if (frame === 177) {
+    x -= 5 * forward;
+  } else {
+    y -= (chtab === 'kid' ? 4 : 0) + 11;
+    x += 5 * forward;
+  }
+  return {
+    chtab,
+    image: SPLASH_IMAGE[chtab === 'kid' ? 'kid' : 'guard'],
+    x,
+    y,
+    direction: character.direction,
+    row: character.row,
+  };
+}
