@@ -64,3 +64,23 @@ The clock and the picture changes disagree by a tick here and there: the
 emulator's frame timing wanders a little, and a screen that is being
 redrawn is grabbed half-finished. Treat a one-tick difference as a maybe
 and a sustained one as real.
+
+## What a room change costs the emulator
+
+A room change does not cost the port anything: the character steps as it
+always does and the screen is blank for one tick while the new room is
+drawn. Under DOSBox it costs about four frames. The grabbed video of
+level 1's room 3 shows it exactly: the Prince is at frame 54 on tick 116
+in both runs, the room changes on 117 in both, and then the original is
+black on 117 and 118 and holds the next two frames for two ticks each,
+so its frame 57 lands on 121 where the port has it on 119.
+
+That is the redraw overrunning the frame, not the game: screenshots
+taken through DOSBox's own capture show the new room already drawn on
+the tick after the change, which is what `tests/game/run.test.ts` and
+`run-jump.test.ts` match pixel for pixel.
+
+So expect the comparison to slip two ticks at every room change, and
+read `drift_map.py`'s per-window offsets rather than the raw tick
+numbers after one. A window whose mean is near zero at a shifted offset
+is the port doing exactly what the original does.

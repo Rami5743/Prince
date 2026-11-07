@@ -3407,6 +3407,7 @@ function forwardPressed(state, ctx) {
     state.currentRow
   );
   if (edgeType === EDGE_TYPE.wall && front.type !== TILE.chomper && distance < 8) {
+    if (ctx.latch.forward !== CONTROL.held) return;
     safeStep(state, ctx);
   } else {
     startSequence(state, KID_SEQ.startRun, ctx.tables);

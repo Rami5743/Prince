@@ -531,7 +531,8 @@ function controlStanding(state: CharacterState, controls: Controls, ctx: KidCont
   } else if (latch.down === CONTROL.held) {
     downPressed(state, ctx);
   } else if (forwardHeld(state, controls)) {
-    // Holding the key does keep him walking, even once the latch is spent.
+    // Holding the key does keep him running; the once-per-press rule
+    // belongs to the careful step inside `forwardPressed`, not here.
     forwardPressed(state, ctx);
   }
 }
@@ -610,6 +611,13 @@ function forwardPressed(state: CharacterState, ctx: KidContext): void {
   if (edgeType === EDGE_TYPE.wall && front.type !== TILE.chomper && distance < 8) {
     // Too close to a wall to break into a run; take a step instead -- and
     // only one, however long the key is held.
+    // Once per press. Without this the Prince pressed against a wall
+    // steps into it, bumps, is pushed back the width of the bump, finds
+    // the wall far enough away to try again, and shuffles on the spot for
+    // as long as the key is held. The capture of the recorded run has the
+    // original standing stock still against the gate of level 1's room 8
+    // with Left held from tick 240 to 256.
+    if (ctx.latch.forward !== CONTROL.held) return;
     safeStep(state, ctx);
   } else {
     startSequence(state, KID_SEQ.startRun, ctx.tables);
