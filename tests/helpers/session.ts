@@ -130,6 +130,9 @@ export async function alignSession(
   // Each pass decides at least one more capture, so this terminates.
   for (let pass = 0; pass <= names.length; pass++) {
     const game = await Game.start(assets, exe, session.level);
+    // The captures were all taken well after the level's number went off
+    // the bottom of the screen; see `clearBottomText`.
+    game.clearBottomText();
     const flameBoxes = makeFlameBoxes(game);
     const frame = (): Uint8Array =>
       toCaptureSpace(game.render().toRgb(game.scene.screenPalette.toRgba()))

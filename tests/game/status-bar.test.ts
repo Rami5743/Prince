@@ -28,6 +28,7 @@ const CASES: [number, string][] = [
 describe('the status bar', () => {
   it.each(CASES)('level %i matches the original', async (level, file) => {
     const game = await Game.start(assets, exe, level);
+    game.clearBottomText();
     const got = toCaptureSpace(game.render().toRgb(game.scene.screenPalette.toRgba()));
     const want = goldenFrame(file).rgb;
     let differing = 0;

@@ -2681,6 +2681,76 @@ function encodeTimeline(ticks) {
   return out.join(",");
 }
 
+// src/render/font.ts
+var FONT_OFFSET = 107020;
+function looksLikeGlyph(exe, o) {
+  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
+}
+function readFont(exe, base = FONT_OFFSET) {
+  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  const firstChar = exe[base];
+  const lastChar = exe[base + 1];
+  const count = lastChar - firstChar + 1;
+  const glyphs = [];
+  for (let i = 0; i < count; i++) {
+    let o = base + dv.getUint16(base + 10 + i * 2, true);
+    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
+    if (!looksLikeGlyph(exe, o)) {
+      glyphs.push(null);
+      continue;
+    }
+    const height = exe[o];
+    const width = exe[o + 2];
+    const stride = Math.ceil(width / 8);
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
+        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
+      }
+    }
+    glyphs.push({ width, height, sprite: { width, height, pixels } });
+  }
+  return {
+    firstChar,
+    lastChar,
+    heightAbove: dv.getInt16(base + 2, true),
+    heightBelow: dv.getInt16(base + 4, true),
+    lineSpacing: dv.getInt16(base + 6, true),
+    charSpacing: dv.getInt16(base + 8, true),
+    glyphs
+  };
+}
+function glyphOf(font, code) {
+  if (code < font.firstChar || code > font.lastChar) return null;
+  return font.glyphs[code - font.firstChar] ?? null;
+}
+function textWidth(font, text) {
+  let width = 0;
+  let drawn = 0;
+  for (const ch of text) {
+    const g = glyphOf(font, ch.charCodeAt(0));
+    if (!g) continue;
+    width += g.width;
+    drawn += 1;
+  }
+  return width + Math.max(0, drawn - 1) * font.charSpacing;
+}
+function drawText(surface, font, text, x, top, color) {
+  let at = x;
+  for (const ch of text) {
+    const g = glyphOf(font, ch.charCodeAt(0));
+    if (!g) continue;
+    surface.blitMono(g.sprite, at, top, color);
+    at += g.width + font.charSpacing;
+  }
+  return at - font.charSpacing;
+}
+function drawTextCentred(surface, font, text, left, right, top, color) {
+  const width = textWidth(font, text);
+  drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
+}
+
 // src/dat/level.ts
 var ROOM_COUNT = 24;
 var ROOM_WIDTH = 10;
@@ -4306,6 +4376,10 @@ var Game = class _Game {
   blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   deadTicks = 0;
+  /** Ticks left of `LEVEL n` under the room. */
+  titleTicks = LEVEL_TITLE_TICKS;
+  /** The game's own font, out of the executable. */
+  font;
   /** Ticks left before the level starts again; -1 when none is coming. */
   restartCountdown = -1;
   hitPoints;
@@ -4409,7 +4483,9 @@ var Game = class _Game {
   }
   static async start(assets, exe, levelNumber, options = {}) {
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? "V");
-    return new _Game(scene, readExeTables(exe), levelNumber, options.effects);
+    const game = new _Game(scene, readExeTables(exe), levelNumber, options.effects);
+    game.font = readFont(exe);
+    return game;
   }
   /**
    * Advance one frame of the game: first the room reacts, then the Prince
@@ -4434,6 +4510,7 @@ var Game = class _Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    if (this.titleTicks > 0) this.titleTicks -= 1;
     if (this.awaitingButton && (controls.x !== 0 || controls.y !== 0 || controls.shift)) {
       this.pressButton();
     }
@@ -4635,6 +4712,7 @@ var Game = class _Game {
    * has, an empty one for each he has lost.
    */
   drawStatusBar() {
+    this.drawBottomText();
     const kid = this.scene.chtabs.kid;
     if (!kid) return;
     const full = kid.images[FULL_HP_IMAGE];
@@ -4655,7 +4733,30 @@ var Game = class _Game {
       this.surface.blitOpaque(marker, 314 - i * 7, HP_TOP_Y, guardSet.paletteBase);
     }
   }
+  /**
+   * Forget the level's number, as the original does once it has been up
+   * its forty-nine ticks.
+   *
+   * Every capture the tests match against was taken after a wait long
+   * enough for that -- `tools/oracle/scripts/level-starts.txt` waits eight
+   * seconds before the first frame -- so a harness that builds a level and
+   * starts stepping has to do the same, or every frame differs by the
+   * hundred and twenty-five pixels of `LEVEL n`.
+   */
+  clearBottomText() {
+    this.titleTicks = 0;
+  }
+  /** `Press Button to Continue`, or the level's number while it is new. */
+  drawBottomText() {
+    if (!this.font) return;
+    const text = this.awaitingButton ? "Press Button to Continue" : this.titleTicks > 0 || this.restartCountdown >= 0 ? `LEVEL ${this.levelNumber}` : null;
+    if (!text) return;
+    drawTextCentred(this.surface, this.font, text, 0, 319, TEXT_TOP_Y, TEXT_WHITE);
+  }
 };
+var TEXT_TOP_Y = 193;
+var TEXT_WHITE = 15;
+var LEVEL_TITLE_TICKS = 49;
 var ROOM_CHANGE_BLANK = 1;
 var RESTART_PROMPT_DELAY = 14;
 var RESTART_DELAY = 2;

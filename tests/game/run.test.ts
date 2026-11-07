@@ -38,6 +38,7 @@ let flameBoxesOf: (room: number) => { x0: number; y0: number; x1: number; y1: nu
 
 beforeAll(async () => {
   const game = await Game.start(assets, exe, LEVEL);
+  game.clearBottomText();
 
   flameBoxesOf = (room) => {
     const out: { x0: number; y0: number; x1: number; y1: number }[] = [];

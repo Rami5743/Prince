@@ -3,6 +3,7 @@
  */
 import type { Assets } from '../render/assets.ts';
 import { Surface } from '../render/surface.ts';
+import { readFont, drawTextCentred, type Font } from '../render/font.ts';
 import { RoomRenderer, type CharacterDraw, type MobDraw } from '../render/room.ts';
 import { buildLevelScene, type LevelScene } from './scene.ts';
 import { readExeTables, type ExeTables } from './exe-tables.ts';
@@ -46,6 +47,10 @@ export class Game {
   private blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   private deadTicks = 0;
+  /** Ticks left of `LEVEL n` under the room. */
+  private titleTicks = LEVEL_TITLE_TICKS;
+  /** The game's own font, out of the executable. */
+  font?: Font;
   /** Ticks left before the level starts again; -1 when none is coming. */
   private restartCountdown = -1;
   hitPoints: number;
@@ -155,7 +160,9 @@ export class Game {
     assets: Assets, exe: Uint8Array, levelNumber: number, options: GameOptions = {},
   ): Promise<Game> {
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? 'V');
-    return new Game(scene, readExeTables(exe), levelNumber, options.effects);
+    const game = new Game(scene, readExeTables(exe), levelNumber, options.effects);
+    game.font = readFont(exe);
+    return game;
   }
 
   /**
@@ -181,6 +188,7 @@ export class Game {
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
+    if (this.titleTicks > 0) this.titleTicks -= 1;
     // Any key answers `Press Button to Continue`, not Shift alone, and the
     // game asks whether one is down rather than waiting for a fresh press.
     // The capture shows it: the Prince is impaled on the spikes of level
@@ -417,6 +425,7 @@ export class Game {
    * has, an empty one for each he has lost.
    */
   private drawStatusBar(): void {
+    this.drawBottomText();
     const kid = this.scene.chtabs.kid;
     if (!kid) return;
     const full = kid.images[FULL_HP_IMAGE];
@@ -438,7 +447,57 @@ export class Game {
       this.surface.blitOpaque(marker, 314 - i * 7, HP_TOP_Y, guardSet.paletteBase);
     }
   }
+
+  /**
+   * Forget the level's number, as the original does once it has been up
+   * its forty-nine ticks.
+   *
+   * Every capture the tests match against was taken after a wait long
+   * enough for that -- `tools/oracle/scripts/level-starts.txt` waits eight
+   * seconds before the first frame -- so a harness that builds a level and
+   * starts stepping has to do the same, or every frame differs by the
+   * hundred and twenty-five pixels of `LEVEL n`.
+   */
+  clearBottomText(): void {
+    this.titleTicks = 0;
+  }
+
+  /** `Press Button to Continue`, or the level's number while it is new. */
+  private drawBottomText(): void {
+    if (!this.font) return;
+    const text = this.awaitingButton ? 'Press Button to Continue'
+      : this.titleTicks > 0 || this.restartCountdown >= 0
+        ? `LEVEL ${this.levelNumber}`
+        : null;
+    if (!text) return;
+    drawTextCentred(this.surface, this.font, text, 0, 319, TEXT_TOP_Y, TEXT_WHITE);
+  }
 }
+
+/**
+ * The words under the room.
+ *
+ * Two of them, and the original draws both in white in the strip below the
+ * room: the level's number when it starts, and `Press Button to Continue`
+ * once the Prince is dead and the game is waiting to be told to begin
+ * again. The port drew neither, because nothing in it could draw a letter
+ * -- see src/render/font.ts, which reads the font out of the executable.
+ *
+ * Both are measured off the grabbed video of the recorded run of level 1:
+ * `LEVEL 1` is forty-one pixels wide at x 139 and rows 193 to 199, and
+ * `Press Button to Continue` is a hundred and fifty at x 85 on the same
+ * rows. Centring each in the three hundred and twenty gives exactly those
+ * two numbers, so there is nothing else to pin.
+ */
+const TEXT_TOP_Y = 193;
+const TEXT_WHITE = 15;
+
+/**
+ * How long the level's number stays up. The capture has it from the first
+ * tick of the level to the forty-eighth, and again for as long after the
+ * level is started again by a button.
+ */
+export const LEVEL_TITLE_TICKS = 49;
 
 /**
  * How many ticks the screen stays blank when the view changes room.
