@@ -27,8 +27,16 @@ export const SWORD_SEQ = {
   block: 62,
   stabbed: 74,
   dropDead: 71,
-  /** The Prince's own death, which is a different sequence from a guard's. */
-  kidDie: 54,
+  /**
+   * Run through by a blade.
+   *
+   * 85, not 54. Sequence 85 is `action 5` and then a jump into the body
+   * of 71, so the Prince goes down the way a guard does: frames 179, 180,
+   * 181, 182, 183 and 185, a collapse. Sequence 54 holds frame 178 for
+   * ever, and frame 178 is the chomper's body -- which is exactly how the
+   * player described what a guard's kill looked like.
+   */
+  kidDie: 85,
 } as const;
 
 /** Drawn, as opposed to sheathed. */

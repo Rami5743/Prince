@@ -2446,8 +2446,16 @@ var SWORD_SEQ = {
   block: 62,
   stabbed: 74,
   dropDead: 71,
-  /** The Prince's own death, which is a different sequence from a guard's. */
-  kidDie: 54
+  /**
+   * Run through by a blade.
+   *
+   * 85, not 54. Sequence 85 is `action 5` and then a jump into the body
+   * of 71, so the Prince goes down the way a guard does: frames 179, 180,
+   * 181, 182, 183 and 185, a collapse. Sequence 54 holds frame 178 for
+   * ever, and frame 178 is the chomper's body -- which is exactly how the
+   * player described what a guard's kill looked like.
+   */
+  kidDie: 85
 };
 var SWORD_DRAWN = 2;
 var STANCE_FRAME = 171;
@@ -3104,10 +3112,30 @@ var KID_SEQ = {
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
-  /** The landing that kills: a fall of three rows or more. */
-  crushed: 52,
+  /**
+   * The landing that kills: a fall of three rows or more.
+   *
+   * 22, not 52. Sequence 52 is one byte -- `jump 8282` -- and 8282 is
+   * where sequence 20, the hard landing, begins: `frame 108`, then frame
+   * 109 thirty times, then 110..119 and back on his feet. So `crushed:
+   * 52` was literally the survivable landing, and a fall of three rows
+   * left the Prince lying in the living crouch and then getting up with
+   * no hit points, which is what the player saw and reported as `no body,
+   * and it looks as though he survived`. Sequence 22 is the one that
+   * kills: `knockDown`, `dy -2`, `dx 3`, frame 185, `die`, frame 185 and
+   * a jump back onto itself -- the body, held for ever.
+   */
+  crushed: 22,
   /** Landing on spikes: `knockDown`, `dx 4`, frame 177, `die`. */
   spiked: 51,
+  /**
+   * Cut in half by a chomper: `action 1`, frame 178, `die`, frame 178 for
+   * ever. Frame 178 is the chomper's own body, and it is the one the port
+   * was using for a sword death as well -- which is how the player knew
+   * something was wrong: `that is what a body looks like after the
+   * guillotine, not after a guard`.
+   */
+  chomped: 54,
   unsafeStep: 39,
   /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
   pickUpSword: 91,
@@ -3565,12 +3593,7 @@ function land(state, ctx) {
   ctx.traps?.startChompers(state.room, state.currentRow);
   const under = tileHere(state, ctx);
   if (under.type === TILE.spike && under.room) {
-    ctx.traps?.impaleOnSpikes(under.room, under.row * 10 + under.column);
-    state.fallY = 0;
-    state.fallX = 0;
-    state.alive = 0;
-    startSequence(state, KID_SEQ.spiked, ctx.tables);
-    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+    impale(state, ctx, under);
     return;
   }
   const frame = frameOf(ctx.tables, state);
@@ -3675,20 +3698,29 @@ function checkSpikeBelow(state, ctx) {
     }
   }
 }
+function impale(state, ctx, tile) {
+  ctx.traps?.impaleOnSpikes(tile.room, tile.row * 10 + tile.column);
+  state.fallY = 0;
+  state.fallX = 0;
+  state.alive = 0;
+  ctx.damage?.(100);
+  startSequence(state, KID_SEQ.spiked, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+}
 function checkSpiked(state, ctx) {
-  if (!ctx.traps) return;
+  if (!ctx.traps || state.alive >= 0) return;
   const t = tileHere(state, ctx);
   if (t.type !== TILE.spike || !t.room) return;
   const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
   if (harm === 0) return;
   const f = state.frame;
   if (f === 43 || f === 26) {
-    state.alive = 0;
+    impale(state, ctx, t);
     return;
   }
   if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
   const running = f >= 7 && f < 15 || f >= 34 && f < 40;
-  if (harm >= 2 || !running) state.alive = 0;
+  if (harm >= 2 || !running) impale(state, ctx, t);
 }
 function checkPickUpSword(state, ctx) {
   if (state.alive >= 0 || !ctx.hasSword || ctx.hasSword()) return;
@@ -3725,6 +3757,9 @@ function checkChomped(state, ctx) {
   if (!ctx.traps.chomperHarm(tile.room, tilePos)) return;
   ctx.traps.bloodyChomper(tile.room, tilePos);
   state.alive = 0;
+  ctx.damage?.(100);
+  startSequence(state, KID_SEQ.chomped, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
 function stepKid(state, controls, ctx) {
   ctx.controls = controls;
@@ -3792,6 +3827,7 @@ function checkBumped(state, ctx) {
   bumpBack(state, ctx, frame, push);
 }
 function bumpBack(state, ctx, frame, push) {
+  if (state.alive >= 0) return;
   state.x = forwardX(state, push) & 255;
   state.currentColumn = determineColumn(state, frame);
   startSequence(state, KID_SEQ.bump, ctx.tables);

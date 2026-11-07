@@ -51,6 +51,20 @@ function differ(a: string, b: string): number {
   return n;
 }
 
+/** Where the first tile of a kind is on a level, if it is on it at all. */
+function findTile(game: Game, type: number): [number, number, number] | null {
+  for (let room = 1; room <= 24; room++) {
+    for (let row = 0; row < 3; row++) {
+      for (let column = 0; column < 10; column++) {
+        if (game.scene.state.typeAt(room, column, row) === type) {
+          return [room, column, row];
+        }
+      }
+    }
+  }
+  return null;
+}
+
 describe('a potion', () => {
   /** Level 1 keeps one in room 5, on the floor of the bottom row. */
   const ROOM = 5; const COLUMN = 3; const ROW = 2;
@@ -266,12 +280,37 @@ describe('every way of dying', () => {
     return differ(withBody, without);
   }
 
+  /**
+   * What every death has to do: reach the body the original draws, keep
+   * it, and then let the level start again.
+   *
+   * The frame is the whole of the evidence for `the right body`, and the
+   * four deaths draw four different ones. The port had two of them wrong
+   * and these tests had the same two wrong with them, which is why the
+   * player found them and the suite did not: `on a guard's sword` asked
+   * for frame 178, the chomper's body, and `down a fall that breaks him`
+   * asked for frame 109, which is not a body at all but the crouch he
+   * lands a two-row drop in, held for thirty ticks and then stood up out
+   * of. A test that names a number taken from the code it is testing says
+   * nothing; these numbers come from the byte-code of the sequences the
+   * original starts, which is written out beside each one.
+   */
   async function diesAndRecovers(game: Game, bodyFrame: number): Promise<void> {
     expect(game.isDead, 'he is dead').toBe(true);
+    expect(game.hitPoints, 'a death takes every hit point').toBe(0);
     // The death animation needs a tick or two to reach the body.
-    for (let i = 0; i < 6 && game.kid.frame !== bodyFrame; i++) game.step(NOTHING);
+    for (let i = 0; i < 10 && game.kid.frame !== bodyFrame; i++) game.step(NOTHING);
     expect(game.kid.frame, 'the body the original draws').toBe(bodyFrame);
     expect(bodyPixels(game), 'and there is a body to see').toBeGreaterThan(60);
+
+    // And it stays that body, in that place. The byte-code of all four
+    // ends on a jump onto its own last frame, so nothing about it moves
+    // again. The port let the bump push a corpse off the spikes, stagger
+    // it and stand it up with no hit points.
+    const resting = { frame: game.kid.frame, x: game.kid.x, y: game.kid.y };
+    for (let i = 0; i < 30; i++) game.step(NOTHING);
+    expect({ frame: game.kid.frame, x: game.kid.x, y: game.kid.y },
+      'a body does not move or get up').toEqual(resting);
 
     let asked = -1;
     for (let i = 0; i < 60 && asked < 0; i++) {
@@ -298,7 +337,8 @@ describe('every way of dying', () => {
     for (let i = 0; i < 40 && !game.isDead; i++) {
       game.step({ x: 1, y: 0, shift: false });
     }
-    // Sequence 51 holds frame 177, the body on the blades.
+    // Sequence 51: `knockDown`, `dx 4`, frame 177, `die`, frame 177 and a
+    // jump back onto that frame. The body on the blades, for ever.
     await diesAndRecovers(game, 177);
   });
 
@@ -311,8 +351,10 @@ describe('every way of dying', () => {
     for (let i = 0; i < 80 && !game.isDead; i++) {
       game.step({ x: 1, y: 0, shift: false });
     }
-    // Sequence 54 holds frame 178, the Prince run through.
-    await diesAndRecovers(game, 178);
+    // Sequence 85 is `action 5` and a jump into sequence 71, which is the
+    // collapse a guard dies in as well: `die`, frames 179, 180, 181, 182,
+    // 183 and 185. He goes down rather than snapping into a pose.
+    await diesAndRecovers(game, 185);
   });
 
   it('down a fall that breaks him', async () => {
@@ -329,30 +371,49 @@ describe('every way of dying', () => {
     game.showRoom(2);
     for (let i = 0; i < 10 && !game.isDead; i++) game.step(NOTHING);
     expect(game.hitPoints, 'it takes everything').toBe(0);
-    // Sequence 52 settles on frame 109, the broken body.
-    await diesAndRecovers(game, 109);
+    // Sequence 22: `knockDown`, `dy -2`, `dx 3`, frame 185, `die`, frame
+    // 185. Not sequence 52, which is a one-byte jump into sequence 20 --
+    // the landing he gets up from.
+    await diesAndRecovers(game, 185);
   });
-});
 
-describe('a chomper', () => {
-  it('cuts the Prince down when he stands in it', async () => {
+  it('in a chomper', async () => {
     const game = await Game.start(assets, exe, 3);
     game.clearBottomText();
-    // Find one and stand in it.
-    let found: [number, number, number] | null = null;
-    for (let room = 1; room <= 24 && !found; room++) {
-      for (let r = 0; r < 3 && !found; r++) {
-        for (let c = 0; c < 10 && !found; c++) {
-          if (game.scene.state.typeAt(room, c, r) === TILE.chomper) found = [room, c, r];
-        }
-      }
-    }
+    const found = findTile(game, TILE.chomper);
     expect(found, 'level 3 has a chomper').not.toBeNull();
     if (!found) return;
-    const [room, column, row] = found;
-    stand(game, room, column, row);
+    stand(game, found[0], found[1], found[2]);
     for (let i = 0; i < 60 && !game.isDead; i++) game.step(NOTHING);
-    expect(game.isDead, 'the blade comes down on him').toBe(true);
+    // Sequence 54: `action 1`, frame 178, `die`, frame 178. The body the
+    // port was using for a sword death too.
+    await diesAndRecovers(game, 178);
+  });
+
+  /**
+   * The one the player found: `death on the spikes is wrong again`.
+   *
+   * He falls into the pit in the bottom row of level 1's room 6, which is
+   * narrow, and frame 177 has his arms out far enough to reach the wall.
+   * Nothing dead walks into a wall, so nothing dead is pushed out of one;
+   * the port pushed him off the blades, played the stagger and stood him
+   * up, and the player saw a Prince alive on screen with no hit points
+   * who would not answer the keyboard.
+   */
+  it('stays where it died, even in a pit it only just fits in', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    const kid = game.kid;
+    kid.room = 6; kid.currentRow = 2; kid.currentColumn = 3;
+    kid.x = standX(3); kid.y = standY(2) - 20;
+    kid.direction = -1; kid.frame = 106; kid.action = 4;
+    kid.fallX = 0; kid.fallY = 30;
+    game.showRoom(6);
+    for (let i = 0; i < 12 && !game.isDead; i++) game.step(NOTHING);
+    expect(game.kid.frame, 'impaled').toBe(177);
+    const where = { x: kid.x, y: kid.y, frame: kid.frame };
+    for (let i = 0; i < 40; i++) game.step(NOTHING);
+    expect({ x: kid.x, y: kid.y, frame: kid.frame }).toEqual(where);
   });
 });
 

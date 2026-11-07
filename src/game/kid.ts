@@ -65,10 +65,30 @@ export const KID_SEQ = {
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
-  /** The landing that kills: a fall of three rows or more. */
-  crushed: 52,
+  /**
+   * The landing that kills: a fall of three rows or more.
+   *
+   * 22, not 52. Sequence 52 is one byte -- `jump 8282` -- and 8282 is
+   * where sequence 20, the hard landing, begins: `frame 108`, then frame
+   * 109 thirty times, then 110..119 and back on his feet. So `crushed:
+   * 52` was literally the survivable landing, and a fall of three rows
+   * left the Prince lying in the living crouch and then getting up with
+   * no hit points, which is what the player saw and reported as `no body,
+   * and it looks as though he survived`. Sequence 22 is the one that
+   * kills: `knockDown`, `dy -2`, `dx 3`, frame 185, `die`, frame 185 and
+   * a jump back onto itself -- the body, held for ever.
+   */
+  crushed: 22,
   /** Landing on spikes: `knockDown`, `dx 4`, frame 177, `die`. */
   spiked: 51,
+  /**
+   * Cut in half by a chomper: `action 1`, frame 178, `die`, frame 178 for
+   * ever. Frame 178 is the chomper's own body, and it is the one the port
+   * was using for a sword death as well -- which is how the player knew
+   * something was wrong: `that is what a body looks like after the
+   * guillotine, not after a guard`.
+   */
+  chomped: 54,
   unsafeStep: 39,
   /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
   pickUpSword: 91,
@@ -684,12 +704,7 @@ function land(state: CharacterState, ctx: KidContext): void {
   // charged him one hit point and let him walk away with two.
   const under = tileHere(state, ctx);
   if (under.type === TILE.spike && under.room) {
-    ctx.traps?.impaleOnSpikes(under.room, under.row * 10 + under.column);
-    state.fallY = 0;
-    state.fallX = 0;
-    state.alive = 0;
-    startSequence(state, KID_SEQ.spiked, ctx.tables);
-    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+    impale(state, ctx, under);
     return;
   }
   const frame = frameOf(ctx.tables, state);
@@ -826,6 +841,29 @@ function checkSpikeBelow(state: CharacterState, ctx: KidContext): void {
 }
 
 /**
+ * The original's `spiked`: the blades go through him.
+ *
+ * All of it, not only the pose. The original takes every hit point --
+ * `take_hp(100)` -- so the markers go out, which is how the player can
+ * tell the difference between a death and a bad landing; it stops him
+ * falling; and it plays the first frame of sequence 51 on the tick he is
+ * caught, so the body is on the screen at once rather than a tick late.
+ */
+function impale(
+  state: CharacterState,
+  ctx: KidContext,
+  tile: { room: number; column: number; row: number },
+): void {
+  ctx.traps?.impaleOnSpikes(tile.room, tile.row * 10 + tile.column);
+  state.fallY = 0;
+  state.fallX = 0;
+  state.alive = 0;
+  ctx.damage?.(100);
+  startSequence(state, KID_SEQ.spiked, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+}
+
+/**
  * Spikes that are out kill whoever is standing in them.
  *
  * This used to be the other way round -- only a *runner* was killed, and
@@ -843,19 +881,22 @@ function checkSpikeBelow(state: CharacterState, ctx: KidContext): void {
  * land in them.
  */
 function checkSpiked(state: CharacterState, ctx: KidContext): void {
-  if (!ctx.traps) return;
+  // Once. He goes on standing in the blades after they have killed him,
+  // so without this the sequence is restarted every tick and its `dx 4`
+  // walks the body four units along the pit for as long as it lies there.
+  if (!ctx.traps || state.alive >= 0) return;
   const t = tileHere(state, ctx);
   if (t.type !== TILE.spike || !t.room) return;
   const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
   if (harm === 0) return;
   const f = state.frame;
   if (f === 43 || f === 26) { // coming down into them
-    state.alive = 0;
+    impale(state, ctx, t);
     return;
   }
   if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
   const running = (f >= 7 && f < 15) || (f >= 34 && f < 40);
-  if (harm >= 2 || !running) state.alive = 0;
+  if (harm >= 2 || !running) impale(state, ctx, t);
 }
 
 /**
@@ -927,6 +968,12 @@ function checkChomped(state: CharacterState, ctx: KidContext): void {
   if (!ctx.traps.chomperHarm(tile.room, tilePos)) return;
   ctx.traps.bloodyChomper(tile.room, tilePos);
   state.alive = 0;
+  ctx.damage?.(100);
+  // Frame 178, held: the original's own body for a chomper. Without a
+  // sequence of its own the Prince simply froze in whatever pose the
+  // blade caught him in.
+  startSequence(state, KID_SEQ.chomped, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
 
 /** Advance the Prince by one frame of the game. */
@@ -1061,10 +1108,20 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
   bumpBack(state, ctx, frame, push);
 }
 
-/** Push a character back out of what it walked into, and stagger it. */
+/**
+ * Push a character back out of what it walked into, and stagger it.
+ *
+ * Not a dead one. A body does not walk into anything, and the only thing
+ * the bump can do to it is take it out of the pose it died in: impaled on
+ * the spikes of level 1's room 6 the Prince is on frame 177 with his arms
+ * out, wide enough to reach the wall beside him, and the port pushed him
+ * off the blades, staggered him through frames 50, 51, 52 and stood him
+ * up again, alive to look at and dead to play.
+ */
 function bumpBack(
   state: CharacterState, ctx: KidContext, frame: Frame, push: number,
 ): void {
+  if (state.alive >= 0) return;
   state.x = forwardX(state, push) & 0xff;
   state.currentColumn = determineColumn(state, frame);
   startSequence(state, KID_SEQ.bump, ctx.tables);
