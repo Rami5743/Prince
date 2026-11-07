@@ -665,6 +665,7 @@ function land(state: CharacterState, ctx: KidContext): void {
     state.fallX = 0;
     state.alive = 0;
     startSequence(state, KID_SEQ.spiked, ctx.tables);
+    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
     return;
   }
   const frame = frameOf(ctx.tables, state);
@@ -692,6 +693,13 @@ function land(state: CharacterState, ctx: KidContext): void {
   }
   state.fallY = 0;
   state.fallX = 0;
+  // The landing shows this tick, not the next one. `checkAction` runs
+  // after `playSequence`, so a sequence merely started here would leave
+  // the last frame of the fall on screen for one tick more than the
+  // original holds it -- and from the first drop of the recorded run of
+  // level 1 the port was a tick behind for the rest of the level.
+  // `startFall` plays its first frame the same way, for the same reason.
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
 
 function doFall(state: CharacterState, ctx: KidContext): void {

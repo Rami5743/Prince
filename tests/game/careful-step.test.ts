@@ -103,7 +103,7 @@ function matchingStep(file: string): Step | null {
  * (164..166, 126). Left unexplained rather than excused.
  */
 const EXPECTED: Record<string, number | null> = {
-  'step00.png': 18,
+  'step00.png': 17,
   'step01.png': 24,
   'step02.png': 26,
   'step03.png': 29,

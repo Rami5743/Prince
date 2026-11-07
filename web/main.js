@@ -3454,6 +3454,7 @@ function land(state, ctx) {
     state.fallX = 0;
     state.alive = 0;
     startSequence(state, KID_SEQ.spiked, ctx.tables);
+    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
     return;
   }
   const frame = frameOf(ctx.tables, state);
@@ -3482,6 +3483,7 @@ function land(state, ctx) {
   }
   state.fallY = 0;
   state.fallX = 0;
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
 function doFall(state, ctx) {
   if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y)) {
