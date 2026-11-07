@@ -3874,21 +3874,48 @@ function startFall(state, ctx) {
 }
 function land(state, ctx) {
   state.y = floorHeightOfRow(state.currentRow);
-  ctx.traps?.startChompers(state.room, state.currentRow);
-  const under = tileHere(state, ctx);
-  if (under.type === TILE.spike && under.room) {
-    impale(state, ctx, under);
-    return;
-  }
   const frame = frameOf(ctx.tables, state);
-  const front = getTile(
-    ctx.world,
-    state.room,
-    DIR_FRONT[state.direction + 1] + state.currentColumn,
-    state.currentRow
-  );
-  if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
-    state.x = forwardX(state, -3) & 255;
+  const here = tileHere(state, ctx);
+  const onSpikes = here.type === TILE.spike && here.room !== 0;
+  let spikeTile = null;
+  if (onSpikes) {
+    spikeTile = here;
+  } else {
+    const front = getTile(
+      ctx.world,
+      state.room,
+      DIR_FRONT[state.direction + 1] + state.currentColumn,
+      state.currentRow
+    );
+    if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
+      state.x = forwardX(state, -3) & 255;
+    }
+    ctx.traps?.startChompers(state.room, state.currentRow);
+    if (state.alive >= 0) {
+      ctx.damage?.(100);
+      startSequence(state, KID_SEQ.crushed, ctx.tables);
+      state.fallY = 0;
+      state.fallX = 0;
+      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+      return;
+    }
+    const behind = getTile(
+      ctx.world,
+      state.room,
+      DIR_BEHIND[state.direction + 1] + state.currentColumn,
+      state.currentRow
+    );
+    if (distanceToEdgeWeight(state, frame) >= 12 && behind.type === TILE.spike && behind.room !== 0) spikeTile = behind;
+  }
+  if (spikeTile !== null) {
+    const harm = ctx.traps?.spikeHarm(
+      spikeTile.room,
+      spikeTile.row * 10 + spikeTile.column
+    ) ?? 0;
+    if (harm !== 0) {
+      impale(state, ctx, spikeTile);
+      return;
+    }
   }
   if (state.fallY < 22) {
     startSequence(state, KID_SEQ.softLand, ctx.tables);
@@ -3998,13 +4025,9 @@ function checkSpiked(state, ctx) {
   const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
   if (harm === 0) return;
   const f = state.frame;
-  if (f === 43 || f === 26) {
-    impale(state, ctx, t);
-    return;
-  }
-  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
   const running = f >= 7 && f < 15 || f >= 34 && f < 40;
-  if (harm >= 2 || !running) impale(state, ctx, t);
+  const landing = f === 43 || f === 26;
+  if (harm >= 2 && running || landing) impale(state, ctx, t);
 }
 function checkPickUpSword(state, ctx) {
   if (state.alive >= 0 || !ctx.hasSword || ctx.hasSword()) return;

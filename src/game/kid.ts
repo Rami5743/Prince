@@ -723,25 +723,53 @@ export function startFall(state: CharacterState, ctx: KidContext): void {
 
 function land(state: CharacterState, ctx: KidContext): void {
   state.y = floorHeightOfRow(state.currentRow);
-  ctx.traps?.startChompers(state.room, state.currentRow);
-  // Spikes kill whatever falls into them, out or not. `checkSpiked` cannot
-  // do this: it asks whether the blades are already deadly and lets anyone
-  // in the air past, which is right for a leap across a set of them and
-  // wrong for a landing. The capture of level 1 has the Prince run off the
-  // ledge in room 6 and come down on the spikes of the bottom row; the
-  // original impales him there and restarts the level, while the port
-  // charged him one hit point and let him walk away with two.
-  const under = tileHere(state, ctx);
-  if (under.type === TILE.spike && under.room) {
-    impale(state, ctx, under);
-    return;
-  }
   const frame = frameOf(ctx.tables, state);
-  const front = getTile(ctx.world, state.room,
-    DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
-  if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
-    // Landed with his toes over the edge: shuffle back onto the floor.
-    state.x = forwardX(state, -3) & 0xff;
+  const here = tileHere(state, ctx);
+  const onSpikes = here.type === TILE.spike && here.room !== 0;
+  // The original's `land` is a goto across its own middle: coming down
+  // on spikes jumps straight to the spike test, past the edge shuffle,
+  // past `start_chompers`, and -- this is the part that matters -- past
+  // the test for whether he was alive when he came down. So a dead body
+  // dropped on blades is still spiked, and a body dropped on blades that
+  // are not out falls through into the fall-damage arm below.
+  let spikeTile: ReturnType<typeof tileHere> | null = null;
+  if (onSpikes) {
+    spikeTile = here;
+  } else {
+    const front = getTile(ctx.world, state.room,
+      DIR_FRONT[state.direction + 1] + state.currentColumn, state.currentRow);
+    if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
+      // Landed with his toes over the edge: shuffle back onto the floor.
+      state.x = forwardX(state, -3) & 0xff;
+    }
+    ctx.traps?.startChompers(state.room, state.currentRow);
+    if (state.alive >= 0) {
+      // Already dead when he came down, and not on spikes: the full
+      // hundred and the crushed sequence, whatever the drop was.
+      ctx.damage?.(100);
+      startSequence(state, KID_SEQ.crushed, ctx.tables);
+      state.fallY = 0;
+      state.fallX = 0;
+      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+      return;
+    }
+    // The tile behind counts too, once he is far enough into his own,
+    // and it is tried first -- the original reads it before it reads the
+    // tile he is standing on.
+    const behind = getTile(ctx.world, state.room,
+      DIR_BEHIND[state.direction + 1] + state.currentColumn, state.currentRow);
+    if (distanceToEdgeWeight(state, frame) >= 12
+      && behind.type === TILE.spike && behind.room !== 0) spikeTile = behind;
+  }
+  // The blades still have to be out: a landing on spikes that have not
+  // come up is one of the things the original lets him get away with.
+  if (spikeTile !== null) {
+    const harm = ctx.traps?.spikeHarm(spikeTile.room,
+      spikeTile.row * 10 + spikeTile.column) ?? 0;
+    if (harm !== 0) {
+      impale(state, ctx, spikeTile);
+      return;
+    }
   }
   // How far he fell decides what it costs him: one row is free, two rows
   // cost a hit point, three or more are fatal.
@@ -918,14 +946,20 @@ function checkSpiked(state: CharacterState, ctx: KidContext): void {
   if (t.type !== TILE.spike || !t.room) return;
   const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
   if (harm === 0) return;
+  // `check_spiked`, and it is a short list. Four frames of running and
+  // six of the start of a run-jump, and only while the blades are on
+  // their way up; or the two frames a jump lands on, at any stage of
+  // the blades. Nothing else: standing on spikes is how a careful step
+  // across them works, and the original lets him do it.
+  //
+  // The port killed him on every frame that was not one of the running
+  // ones, which is most of them -- including 40, 41 and 42, the middle
+  // of a running jump. That is the player's `they kill even when you
+  // jump over them`.
   const f = state.frame;
-  if (f === 43 || f === 26) { // coming down into them
-    impale(state, ctx, t);
-    return;
-  }
-  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
   const running = (f >= 7 && f < 15) || (f >= 34 && f < 40);
-  if (harm >= 2 || !running) impale(state, ctx, t);
+  const landing = f === 43 || f === 26;
+  if ((harm >= 2 && running) || landing) impale(state, ctx, t);
 }
 
 /**

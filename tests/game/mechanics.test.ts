@@ -21,6 +21,7 @@ import { Game } from '../../src/game/game.ts';
 import { standX, standY } from '../../src/game/geometry.ts';
 import { TILE } from '../../src/game/tiles.ts';
 import { SWORD_DRAWN } from '../../src/game/sword.ts';
+import { startSequence, SEQ } from '../../src/game/sequence.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -410,13 +411,23 @@ describe('every way of dying', () => {
     const game = await Game.start(assets, exe, 1);
     game.clearBottomText();
     const kid = game.kid;
-    kid.room = 6; kid.currentRow = 2; kid.currentColumn = 3;
-    kid.x = standX(3); kid.y = standY(2) - 20;
-    kid.direction = -1; kid.frame = 106; kid.action = 4;
-    kid.fallX = 0; kid.fallY = 30;
+    // Off the right-hand end of the top row of room 6, into the pit of
+    // the bottom row, which is the drop the capture of level 1 takes.
+    // He has to fall the whole way: `check_spike_below` is what puts the
+    // blades up, and it runs while he is in the air, so a Prince dropped
+    // in from just above the floor lands on blades that are still down
+    // -- the original lets that one go, and so does the port.
+    kid.room = 6; kid.currentRow = 0; kid.currentColumn = 2;
+    kid.x = standX(2); kid.y = standY(0);
+    kid.direction = 0; kid.action = 0;
+    kid.fallX = 0; kid.fallY = 0;
+    startSequence(kid, SEQ.stand, game.tables);
     game.showRoom(6);
-    for (let i = 0; i < 12 && !game.isDead; i++) game.step(NOTHING);
-    expect(game.kid.frame, 'impaled').toBe(177);
+    for (let i = 0; i < 40 && !game.isDead; i++) {
+      game.step({ x: 1, y: 0, shift: false });
+    }
+    expect(kid.currentRow, 'in the pit').toBe(2);
+    expect(kid.frame, 'impaled').toBe(177);
     const where = { x: kid.x, y: kid.y, frame: kid.frame };
     for (let i = 0; i < 40; i++) game.step(NOTHING);
     expect({ x: kid.x, y: kid.y, frame: kid.frame }).toEqual(where);

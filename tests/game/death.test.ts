@@ -164,20 +164,16 @@ describe('dying', () => {
    * grabbed video of the recorded play has the original killing him on the
    * spot in this very room while the port had him standing there unhurt.
    */
-  it('standing in spikes that are out is fatal', async () => {
-    const game = await Game.start(assets, exe, 1);
-    const none = { x: 0, y: 0, shift: false };
-    // Level 1, room 6: column 3 of the bottom row is a spike.
-    expect(game.scene.state.typeAt(6, 3, 2)).toBe(TILE.spike);
-    game.showRoom(6);
-    const kid = game.kid;
-    kid.room = 6; kid.currentRow = 2; kid.currentColumn = 3;
-    kid.x = standX(3); kid.y = standY(2);
-    kid.direction = 0; kid.frame = 15; kid.action = 0;
-    kid.fallX = 0; kid.fallY = 0;
-    for (let i = 0; i < 20 && !game.isDead; i++) game.step(none);
-    expect(game.isDead, 'the spikes come out and he is on them').toBe(true);
-  });
+  /**
+   * There used to be a test here called "standing in spikes that are out
+   * is fatal". It was wrong. `check_spiked` kills on four frames of
+   * running, six of the start of a run-jump and the two a jump lands on;
+   * standing is in none of them, and a Prince standing on extended
+   * blades is unharmed -- that is the careful step across a spike row.
+   * The test passed only because it left the byte-code pointer wherever
+   * the level's opening drop had put it, so he was never standing. What
+   * the blades really do is pinned in tests/game/spikes.test.ts.
+   */
 
   it('is not waiting for the button while he is alive', async () => {
     const game = await Game.start(assets, exe, 3);
