@@ -50,6 +50,8 @@ describe('the recordings, replayed', () => {
         if (bad.length < 6) bad.push(`tick ${t}: ${m}`);
       };
       let was: { room: number; row: number; column: number } | null = null;
+      let dead: { t: number; frame: number; x: number; y: number } | null = null;
+      let resting: { frame: number; x: number; y: number } | null = null;
       for (let t = 0; t < ticks.length; t++) {
         // The page restarts the level when a button is pressed after a
         // death, and so does the recorder.
@@ -58,6 +60,8 @@ describe('the recordings, replayed', () => {
         if (game.restartDue) {
           game = await game.restart(assets, exe);
           was = null;
+          dead = null;
+          resting = null;
           continue;
         }
 
@@ -82,6 +86,30 @@ describe('the recordings, replayed', () => {
         }
 
         const kid = game.kid;
+        if (game.isDead) {
+          // A death takes every hit point, settles on one of the bodies
+          // the original draws, and then nothing about it moves again.
+          if (game.hitPoints !== 0) {
+            say(t, `dead with ${game.hitPoints} hit points left`);
+          }
+          dead = dead === null ? { t, frame: kid.frame, x: kid.x, y: kid.y } : dead;
+          if (t > dead.t + 12) {
+            const BODIES = [177, 178, 185, 106];
+            if (!BODIES.includes(kid.frame)) {
+              say(t, `dead on frame ${kid.frame}, which is not a body`);
+            }
+            if (resting === null) resting = { frame: kid.frame, x: kid.x, y: kid.y };
+            else if (resting.frame !== kid.frame || resting.x !== kid.x
+              || resting.y !== kid.y) {
+              say(t, `the body moved: frame ${resting.frame} at ${resting.x},`
+                + `${resting.y} became frame ${kid.frame} at ${kid.x},${kid.y}`);
+              resting = { frame: kid.frame, x: kid.x, y: kid.y };
+            }
+          }
+        } else {
+          dead = null;
+          resting = null;
+        }
         if (kid.alive >= 0 || kid.room === 0) { was = null; continue; }
         const walking = kid.frame === 15 || (kid.frame >= 1 && kid.frame <= 14);
         const onFloor = kid.y === standY(kid.currentRow)
