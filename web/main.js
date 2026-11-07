@@ -756,9 +756,6 @@ var Y_LAND = [-8, 55, 118, 181, 244];
 function toScreenX(logicalX) {
   return Math.trunc(logicalX * 320 / 280);
 }
-function standX(column) {
-  return X_BUMP[column + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
-}
 
 // src/render/room.ts
 var flipCache = /* @__PURE__ */ new WeakMap();
@@ -4508,7 +4505,8 @@ var Prng2 = class {
 };
 
 // src/game/game.ts
-var GUARD_DOORWAY = 2;
+var GUARD_FOLLOWS_LEFT = 91;
+var GUARD_FOLLOWS_RIGHT = 165;
 var Game = class _Game {
   scene;
   tables;
@@ -4842,29 +4840,30 @@ var Game = class _Game {
    * the player meant by `at that distance he should follow me to the
    * next screen`.
    *
-   * He follows sideways only, and only while he is up and armed, and
-   * only into a room with no guard of its own -- there is one guard on
-   * the screen at a time, and the room he arrives in would otherwise
-   * have two. And only from the doorway: he has to be within two tiles
-   * of the side the Prince left by, or he is too far back to have come
-   * through it with him.
+   * This is `exit_room` and `follow_guard` of the original, which
+   * SDLPoP has as C. He follows sideways only -- the up and down cases
+   * there always fall through to leaving him behind -- and only if the
+   * room the Prince is going to has no guard of its own, and only if he
+   * is near the door: `Guard.x < 91` going left, `>= 165` going right.
+   * Then he is shifted by the width of a room exactly the way the
+   * Prince is, and his box in both rooms is emptied.
    *
-   * That last condition is not a nicety. A character's x is one byte
-   * counting half-tiles across a five-room span, and the Prince crosses
-   * a room boundary by adding or taking off the hundred and forty units
-   * a room is wide -- which works for him because he only ever crosses
-   * with his feet already past the edge. A guard standing in the middle
-   * of his room is ten tiles from the edge; shifting him the same way
-   * puts him three tiles beyond the far side of the room he is going to,
-   * the byte wraps, and he turns up at the opposite end of it. The
-   * player's recording `33e8ace7` has exactly that: the guard of room 3
-   * was at column 6 when the Prince ran out to the left, and he arrived
-   * in room 2 at column 19, then column -2, walked the wrong way along
-   * the bottom of the room and killed the Prince from three tiles off.
+   * The distance test is the whole of it, and the port had it missing.
+   * Shifting a guard who is ten tiles from the door puts him three
+   * tiles beyond the far side of the room he is going to; x is one byte,
+   * it wraps, and he turns up at the opposite end. The player's
+   * recording `33e8ace7` has that: the guard of room 3 was at column 6,
+   * arrived in room 2 at column 19, then at -2, walked the wrong way
+   * along the bottom of the room and killed the Prince from three tiles
+   * off.
    *
-   * So he is not shifted at all. He comes through the door, which is the
-   * edge column of the room he is entering, and `advanceOnKid` walks him
-   * in from there.
+   * With the test in place he can still land outside the room -- at
+   * x 90 going left he arrives at 230, two tiles past the right edge --
+   * and that is right. A grabbed video of the original replaying
+   * `e209b01a` has the guard vanish with the room change and walk back
+   * into view from the right twenty-four ticks later. His x when the
+   * Prince left was 90 or 91, measured from the width of his tunic on
+   * the screen, which is the threshold to the unit.
    */
   guardFollows(room) {
     const guard = this.guard;
@@ -4874,13 +4873,17 @@ var Game = class _Game {
     const toTheLeft = this.scene.state.linkOf(guard.room, 0) === room;
     const toTheRight = this.scene.state.linkOf(guard.room, 1) === room;
     if (!toTheLeft && !toTheRight) return false;
-    if (this.guards.tile[room - 1] < 30) return false;
-    const doorway = toTheLeft ? 0 : 9;
-    if (Math.abs(guard.currentColumn - doorway) > GUARD_DOORWAY) return false;
-    this.guards.tile[guard.room - 1] = 30;
+    if ((this.guards.tile[room - 1] ?? 255) < 30 && this.guards.seqHi[room - 1] === 0) {
+      return false;
+    }
+    if (toTheLeft ? guard.x >= GUARD_FOLLOWS_LEFT : guard.x < GUARD_FOLLOWS_RIGHT) {
+      return false;
+    }
+    this.guards.tile[guard.room - 1] = 255;
+    this.guards.tile[room - 1] = 255;
     guard.room = room;
-    guard.currentColumn = toTheLeft ? 9 : 0;
-    guard.x = standX(guard.currentColumn);
+    guard.x = guard.x + (toTheLeft ? 140 : -140) & 255;
+    guard.currentColumn += toTheLeft ? 10 : -10;
     return true;
   }
   /**

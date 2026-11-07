@@ -32,6 +32,9 @@ import { NO_DIRECTION } from '../../src/game/guard.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+/** The most a guard can move in one tick without a door being involved. */
+const GUARD_STRIDE = 12;
+
 const DIR = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'recordings');
 const files = existsSync(DIR) ? readdirSync(DIR).filter((f) => f.endsWith('.json')) : [];
 
@@ -50,6 +53,7 @@ describe('the recordings, replayed', () => {
         if (bad.length < 6) bad.push(`tick ${t}: ${m}`);
       };
       let was: { room: number; row: number; column: number } | null = null;
+      let wasGuard: { room: number; x: number } | null = null;
       let dead: { t: number; frame: number; x: number; y: number } | null = null;
       let resting: { frame: number; x: number; y: number } | null = null;
       for (let t = 0; t < ticks.length; t++) {
@@ -60,6 +64,7 @@ describe('the recordings, replayed', () => {
         if (game.restartDue) {
           game = await game.restart(assets, exe);
           was = null;
+          wasGuard = null;
           dead = null;
           resting = null;
           continue;
@@ -73,16 +78,37 @@ describe('the recordings, replayed', () => {
             say(t, `the guard is in room ${guard.room} and room `
               + `${game.drawnRoom} is on the screen`);
           }
-          // -1 and 10 are the half-tile either side of the room, which a
-          // character standing at the very edge of it really is in; the
-          // guard of level 1's room 3 starts at 10. Anything beyond that
-          // is a character who is not in the room at all.
-          if (guard.currentColumn < -1 || guard.currentColumn > 10) {
+          // A guard who has just come through a door is beyond the edge
+          // of the room he arrived in and walks the rest of the way: the
+          // original's own thresholds put him anywhere from three tiles
+          // short of it to two past it. Outside that he is nowhere.
+          if (guard.currentColumn < -4 || guard.currentColumn > 13) {
             say(t, `the guard is at column ${guard.currentColumn}`);
           }
           if (guard.currentRow < 0 || guard.currentRow > 2) {
             say(t, `the guard is on row ${guard.currentRow}`);
           }
+          // And he got where he is by walking or by stepping through a
+          // door. A stride is a few units; a door is the width of a room,
+          // a hundred and forty, and the room changes with it. Anything
+          // else is a guard who has been moved by arithmetic that went
+          // wrong -- which is how the one in `33e8ace7` crossed room 2.
+          if (wasGuard !== null) {
+            const moved = (guard.x - wasGuard.x) & 0xff;
+            if (guard.room === wasGuard.room) {
+              if (moved > GUARD_STRIDE && moved < 256 - GUARD_STRIDE) {
+                say(t, `the guard moved ${((moved + 128) & 0xff) - 128} units `
+                  + `in one tick, inside room ${guard.room}`);
+              }
+            } else if (moved !== 140 && moved !== (-140 & 0xff)) {
+              say(t, `the guard went from room ${wasGuard.room} to `
+                + `${guard.room} and his x moved by `
+                + `${((moved + 128) & 0xff) - 128}, which is not a door`);
+            }
+          }
+          wasGuard = { room: guard.room, x: guard.x };
+        } else {
+          wasGuard = null;
         }
 
         const kid = game.kid;

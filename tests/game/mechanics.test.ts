@@ -542,9 +542,10 @@ describe('a guard with his sword out', () => {
     game.showRoom(ROOM);
     expect(game.guard.room, 'room 3 has the guard').toBe(ROOM);
     game.guard.sword = SWORD_DRAWN;
-    // At the door: the left side of room 3, which is the side room 2 is on.
+    // At the door: the original follows going left only while the
+    // guard's x is under 91, which is about the first tile of the room.
     game.guard.currentColumn = 1;
-    game.guard.x = standX(1);
+    game.guard.x = 88;
     game.showRoom(LEFT);
     expect(game.guard.room, 'and he comes with him').toBe(LEFT);
     // The only thing worth checking about where he lands is that it is
@@ -555,10 +556,14 @@ describe('a guard with his sword out', () => {
     // column -2 -- the player's recording `33e8ace7` has him walking the
     // wrong way along the bottom of room 2 and killing the Prince from
     // three tiles off.
-    expect(game.guard.currentColumn, 'inside the room')
-      .toBeGreaterThanOrEqual(0);
-    expect(game.guard.currentColumn).toBeLessThanOrEqual(9);
-    expect(game.guard.currentColumn, 'at the side room 3 is on').toBe(9);
+    // He is shifted by the width of a room, as the Prince is, which can
+    // leave him just outside it: he walks the rest of the way in, and a
+    // grabbed video of the original doing exactly this has him out of
+    // sight for twenty-four ticks and then coming in from the right.
+    expect(game.guard.x, 'a door is a room\'s width').toBe((88 + 140) & 0xff);
+    expect(game.guard.currentColumn, 'at or just past the side room 3 is on')
+      .toBeGreaterThanOrEqual(9);
+    expect(game.guard.currentColumn).toBeLessThanOrEqual(12);
     // And he is not left behind in the room he came from as well: going
     // back meets the same guard, not a second one standing where the
     // first one was.
@@ -574,6 +579,7 @@ describe('a guard with his sword out', () => {
     // The middle of room 3, which is where he was in `33e8ace7`.
     game.guard.currentColumn = 6;
     game.guard.x = standX(6);
+    expect(game.guard.x, 'well past the threshold').toBeGreaterThanOrEqual(91);
     game.showRoom(LEFT);
     expect(game.guard.room, 'he did not come through the door')
       .not.toBe(LEFT);
