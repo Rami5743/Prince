@@ -138,6 +138,7 @@ export class Game {
       opponent: () => (this.guard.direction === NO_DIRECTION ? null : this.guard),
       hasSword: () => this.hasSword,
       markItem: (room, column, row) => { this.itemTile = { room, column, row }; },
+      drawnRoom: () => this.drawnRoom,
       effects: {
         sound: effects.sound,
         /**
@@ -643,19 +644,22 @@ export class Game {
    * twenty-four ticks, nothing for one, and then how much of the hour is
    * left for twenty-four more.
    *
-   * Measured off the grabbed video of the recorded run: `LEVEL 1` from
-   * tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 48, and
-   * nothing from 49; and the same again from the tick the level is
-   * started afresh after a death.
+   * Measured off all ten grabbed runs, which agree to the tick: `LEVEL 1`
+   * from tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 47,
+   * and nothing from 48; and the same again from the tick the level is
+   * started afresh after a death. The second message is a tick shorter
+   * than the first, which looks like an oversight in the original and is
+   * what every capture shows.
    */
   private levelText(): string | null {
     if (this.restartCountdown >= 0) return `LEVEL ${this.levelNumber}`;
-    // `titleTicks` has already counted the tick being drawn, so the
-    // level's first picture sees a one.
+    // The first tick of a level is not stepped -- see `pendingFirstTick`
+    // -- so `titleTicks` is still zero on the level's first picture and
+    // counts the ticks drawn before this one.
     const t = this.titleTicks;
-    if (t <= LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
-    if (t === LEVEL_TITLE_TICKS + 1) return null;
-    if (t <= LEVEL_TITLE_TICKS * 2 + 1) {
+    if (t < LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
+    if (t === LEVEL_TITLE_TICKS) return null;
+    if (t < LEVEL_TITLE_TICKS * 2) {
       const left = Math.max(0, Math.ceil(this.remainingTicks / MINUTE_TICKS));
       return `${left} MINUTE${left === 1 ? '' : 'S'} LEFT`;
     }
@@ -697,8 +701,8 @@ const TEXT_WHITE = 15;
 
 /**
  * How long each of the two things a level says about itself stays up.
- * The capture has `LEVEL 1` from tick 0 to 23, nothing on 24, and
- * `60 MINUTES LEFT` from 25 to 48.
+ * Every capture has `LEVEL 1` from tick 0 to 23, nothing on 24, and
+ * `60 MINUTES LEFT` from 25 to 47.
  */
 export const LEVEL_TITLE_TICKS = 24;
 

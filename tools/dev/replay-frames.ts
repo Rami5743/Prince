@@ -15,6 +15,7 @@ import { PNG } from 'pngjs';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
+import { ReplayDrift } from './replay-drift.ts';
 
 const GAME_DIR = join(import.meta.dirname, '..', '..', 'original', 'prince1');
 const W = 320, H = 200;
@@ -48,13 +49,25 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 let game = await Game.start(assets, exe, rec.level);
 
 mkdirSync(outdir, { recursive: true });
+// `--stall n` feeds the replay the presses the original was reading, not
+// the ones the port recorded: see `replay-drift.ts`. Zero is the port's
+// own timing, which is what the browser recorded.
+const drift = new ReplayDrift(arg('stall', 0));
+const idle = { x: 0, y: 0, shift: false };
+let drawnRoom = game.drawnRoom;
 let written = 0;
 for (let t = 0; t < ticks.length; t++) {
+  const now = ticks[drift.index(t)] ?? idle;
+  const before = ticks[drift.index(t - 1)];
   // The page restarts the level when the button -- Shift -- is pressed
   // after a death, and so does the original. Without it a replay stops
   // dead at the first mistake and everything after it is noise.
-  if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
-  game.step(ticks[t]);
+  if (now.shift && !before?.shift) game.pressButton();
+  game.step(now);
+  if (game.drawnRoom !== drawnRoom) {
+    drawnRoom = game.drawnRoom;
+    drift.roomChanged();
+  }
   // The picture of this tick comes from the game that played it, and only
   // then is the level built again: the tick the restart falls due is one
   // of the black ones, and rendering the new level into it would lose it.

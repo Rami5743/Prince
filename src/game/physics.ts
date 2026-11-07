@@ -32,8 +32,8 @@ export const EDGE_TYPE = {
 } as const;
 
 /** How far into a tile its wall stands, by wall type. */
-const WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0] as const;
-const WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0] as const;
+export const WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0] as const;
+export const WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0] as const;
 
 /** A gate's modifier when it has risen as far as it goes. */
 export const GATE_FULLY_OPEN = 188;
@@ -66,7 +66,11 @@ export function gateClearance(modifier: number): number {
  * which is what has to fit.
  */
 export function gateBlocks(modifier: number, charHeight: number): boolean {
-  return gateClearance(modifier) < charHeight;
+  // `can_bump_into_gate` of the original: the gap under the bars has to
+  // be shorter than he is, and the gap it counts is five more than the
+  // one it draws. The port used the drawn gap, so a gate between 140 and
+  // 159 stopped a Prince the original lets through.
+  return (modifier >> 2) + 6 < charHeight;
 }
 
 /**
@@ -128,13 +132,15 @@ export function getTile(
   let r = room;
   let col = column;
   let line = row;
-  while (col < 0 && r) { r = world.linkOf(r, 0); col += 10; }
-  while (col > 9 && r) { r = world.linkOf(r, 1); col -= 10; }
-  while (line < 0 && r) { r = world.linkOf(r, 2); line += 3; }
-  while (line > 2 && r) { r = world.linkOf(r, 3); line -= 3; }
-  if (!r || col < 0 || col > 9 || line < 0 || line > 2) {
-    return { type: world.levelEdgeHitTile, room: 0, column: col, row: line };
-  }
+  // `find_room_of_tile`: the column and the row are wrapped whether or not
+  // there is a room that way. Off the edge of the level the room is 0 and
+  // the tile is a wall, but the column is still the column of the tile it
+  // would have been -- the original indexes its collision data by it.
+  while (col < 0) { if (r) r = world.linkOf(r, 0); col += 10; }
+  while (col > 9) { if (r) r = world.linkOf(r, 1); col -= 10; }
+  while (line < 0) { if (r) r = world.linkOf(r, 2); line += 3; }
+  while (line > 2) { if (r) r = world.linkOf(r, 3); line -= 3; }
+  if (!r) return { type: world.levelEdgeHitTile, room: 0, column: col, row: line };
   return { type: world.tileAt(r, col, line) & TILE_TYPE_MASK, room: r, column: col, row: line };
 }
 
@@ -278,4 +284,134 @@ export function hasFloorUnder(world: World, state: CharacterState): boolean {
 
 export function floorHeightOfRow(row: number): number {
   return Y_LAND[row + 1];
+}
+
+/**
+ * The original's collision data, which is what tells it that a character
+ * has *just* walked into something.
+ *
+ * `check_collisions` of `seg004.c` keeps, for the row the character is
+ * in and the two beside it, one byte per column: the low nibble is set
+ * when his right edge has passed that column's left wall face, the high
+ * nibble when his left edge is still short of its right face. It then
+ * compares those bytes with the previous tick's and reports the column
+ * where one of them has *become* set.
+ *
+ * That transition is the whole of it, and the port had nothing like it:
+ * it asked whether there was a wall at the character's column, which is
+ * true of a wall he is standing beside and has been for a while. On
+ * level 1 that threw a Prince jumping straight up next to the wall of
+ * room 1's bottom row twenty units into it, and it is why the bump used
+ * to need a list of frames to keep away from.
+ */
+export interface CollisionMemory {
+  /** The row the last reading was taken in. */
+  row: number;
+  /** Three rows of ten columns: above, the row itself, below. */
+  room: Int8Array;
+  flags: Uint8Array;
+}
+
+export function newCollisionMemory(): CollisionMemory {
+  return { row: -9, room: new Int8Array(30).fill(-1), flags: new Uint8Array(30) };
+}
+
+/** Where a bump has just begun, by column, or -1. */
+export interface Bumps {
+  /** He has walked into the left face of the wall in this column. */
+  intoLeftOfWall: number;
+  /** He has walked into its right face. */
+  intoRightOfWall: number;
+}
+
+const ROW_ABOVE = 0;
+const ROW_HERE = 10;
+const ROW_BELOW = 20;
+
+/**
+ * `xpos_in_drawn_room`: the x of a tile of a neighbouring room, measured
+ * in the coordinates of the room that is on the screen. A character's x is
+ * always in those coordinates, so the face of a wall in the room next door
+ * has to be moved by a room's width before the two can be compared.
+ */
+export function xposInDrawnRoom(
+  world: World, room: number, drawnRoom: number, xpos: number,
+): number {
+  if (room === drawnRoom) return xpos;
+  const below = world.linkOf(drawnRoom, 3);
+  if (room === world.linkOf(drawnRoom, 0) || room === world.linkOf(below, 0)) {
+    return xpos - TILE_SIZE_X * 10;
+  }
+  if (room === world.linkOf(drawnRoom, 1) || room === world.linkOf(below, 1)) {
+    return xpos + TILE_SIZE_X * 10;
+  }
+  return xpos;
+}
+
+/** The room the current row's collision data for a column was read from. */
+export function collisionRoomAt(memory: CollisionMemory, column: number): number {
+  return memory.room[ROW_HERE + column];
+}
+
+/**
+ * Read this tick's collision data and say where a bump has just begun.
+ * `memory` is the character's own, and is updated.
+ */
+export function checkCollisions(
+  world: World, state: CharacterState, coll: Collision, memory: CollisionMemory,
+): Bumps {
+  const none: Bumps = { intoLeftOfWall: -1, intoRightOfWall: -1 };
+  if (state.action === 7) return none; // turning
+  const row = state.currentRow;
+  // `move_coll_to_prev`: which of the three rows the last reading holds
+  // the row he is in now.
+  let was = ROW_HERE;
+  if (row === memory.row || row + 3 === memory.row || row - 3 === memory.row) {
+    was = ROW_HERE;
+  } else if (row + 1 === memory.row || row - 2 === memory.row) {
+    was = ROW_ABOVE;
+  } else {
+    was = ROW_BELOW;
+  }
+  const prevRoom = memory.room.slice(was, was + 10);
+  const prevFlags = memory.flags.slice(was, was + 10);
+  memory.room.fill(-1);
+  memory.flags.fill(0);
+  memory.row = row;
+
+  const rightChecked = Math.min(tileDivModM7(coll.xRightColl).column + 2, 11);
+  const leftChecked = tileDivModM7(coll.xLeftColl).column - 1;
+  const readRow = (which: number, offset: number): void => {
+    let tileLeft = X_BUMP[leftChecked + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+    for (let column = leftChecked; column <= rightChecked; column++) {
+      const tile = getTile(world, state.room, column, which);
+      const type = wallType(tile.type);
+      const leftFace = type ? WALL_DIST_FROM_LEFT[type] + tileLeft : 0xff;
+      const rightFace = type ? tileLeft - WALL_DIST_FROM_RIGHT[type] + TILE_RIGHT_X : 0;
+      let flags = leftFace < coll.xRightColl ? 0x0f : 0;
+      if (rightFace > coll.xLeftColl) flags |= 0xf0;
+      // Room 0, off the edge of the level, is recorded like any other: the
+      // original's test is `>= 0`, and a wall out there stops a character
+      // just as the wall of a room does.
+      memory.flags[offset + tile.column] = flags;
+      memory.room[offset + tile.column] = tile.room;
+      tileLeft += TILE_SIZE_X;
+    }
+  };
+  readRow(row, ROW_HERE);
+  readRow(row + 1, ROW_BELOW);
+  readRow(row - 1, ROW_ABOVE);
+
+  const out: Bumps = { intoLeftOfWall: -1, intoRightOfWall: -1 };
+  for (let column = 9; column >= 0; column--) {
+    const here = memory.room[ROW_HERE + column];
+    if (here < 0 || prevRoom[column] !== here) continue;
+    if ((prevFlags[column] & 0x0f) === 0 && (memory.flags[ROW_HERE + column] & 0x0f) !== 0) {
+      out.intoLeftOfWall = column;
+    }
+    if ((prevFlags[column] & 0xf0) === 0 && (memory.flags[ROW_HERE + column] & 0xf0) !== 0) {
+      out.intoRightOfWall = column;
+    }
+  }
+  return out;
 }

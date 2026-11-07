@@ -20,8 +20,11 @@ import {
   type World, EDGE_TYPE, getEdgeDistance, getTile, determineColumn,
   distanceToEdgeWeight, floorHeightOfRow, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX,
   DIR_FRONT, DIR_BEHIND, TILE_RIGHT_X, TILE_SIZE_Y, charCollision,
-  tileDivModM7, weightX, distanceToEdge, wallTypeAt, distanceFromWallForward,
+  tileDivModM7, weightX, distanceToEdge, wallTypeAt, wallType, distanceFromWallForward,
+  checkCollisions, WALL_DIST_FROM_LEFT, WALL_DIST_FROM_RIGHT, type Collision,
+  collisionRoomAt, xposInDrawnRoom,
 } from './physics.ts';
+import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_MID_X } from './geometry.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
 import {
   SWORD_SEQ, SWORD_DRAWN, SWORD_RANGE, isReady, facingOf, withinReach,
@@ -100,6 +103,8 @@ export const KID_SEQ = {
   bump: 47,
   /** Meeting one in mid-air: the fall frames and then a real fall. */
   bumpFall: 45,
+  /** Meeting one at the end of a jump: hands down, then the crouch. */
+  hardBump: 46,
 } as const;
 
 export const FRAME = {
@@ -117,6 +122,8 @@ export const FRAME = {
   turnLast: 52,
   run1: 7,
   run2: 11,
+  /** The body the original leaves when the Prince falls out of the level. */
+  dead: 185,
 } as const;
 
 /** What the player is asking for this frame. */
@@ -164,6 +171,8 @@ export interface KidContext {
    * wrong tile and left the flask where it was.
    */
   markItem?(room: number, column: number, row: number): void;
+  /** Which room is on the screen; x is measured in its coordinates. */
+  drawnRoom?(): number;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -1028,10 +1037,14 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkDrink(state, ctx);
   checkLevelDoor(state, ctx);
 
-  // Falling out of the level is fatal, as it is in the original.
+  // `fell_out`: falling out of the level is fatal, and the body is the
+  // one the original shows for it -- frame 185, not whichever frame of
+  // the fall he happened to be on. He goes on falling through the room
+  // that is not there, which is off the screen and nobody's business.
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
+    state.frame = FRAME.dead;
   }
 }
 
@@ -1055,120 +1068,126 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
  * the world.
  */
 function checkBumped(state: CharacterState, ctx: KidContext): void {
-  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight
-    || state.action === ACTION.bumped || state.action === ACTION.inFreefall
-    || state.action === ACTION.inMidair) {
-    return;
-  }
-  // Not while he is climbing, landing or hanging. These are the frames
-  // `leaveDirection` refuses to carry across a room boundary, for the same
-  // reason: between them the character is moving from one tile to another
-  // and is not simply walking about. A climb begins `action 1`, so the
-  // action alone does not tell them apart -- and bumping mid-climb knocks
-  // him off the ledge he is pulling himself onto.
-  const f = state.frame;
-  if ((f >= 135 && f < 150) || (f >= 110 && f < 120) || (f >= 150 && f < 163)
-    || (f >= 166 && f < 169) || (f >= FRAME.hangingFirst && f < 100)) {
-    return;
-  }
-  // Nor while he is going straight up. Frames 67 to 76 are the whole of
-  // the rise, and every sequence that uses them -- 8, 14, 16, 24, 28 --
-  // runs them without a single `dx`, so a character on one of them has
-  // not walked into anything and there is nothing to push him out of.
-  //
-  // Asking anyway is worse than useless, because the tile a jump counts
-  // as being in is the tile under his weight, and at the top of the rise
-  // that can be the one next door. Found by the made-up runs in
-  // `tests/game/invariants.test.ts`: standing at x 128 on the rubble of
-  // level 1's room 1 and pressing Up, the Prince counted as being in
-  // column 3, which is wall, was pushed twenty units into it, bumped off
-  // the next wall along and fell out of the bottom of the world.
-  if (f >= FRAME.startJumpUp && f <= 76) return;
-  // Either with both feet on the floor of the row he counts as being in,
-  // or in the middle of a running jump. The jump is the one thing that
-  // carries a character through the air fast enough and far enough to end
-  // up inside a wall: sequence 4 moves him 12, 8, 8, 4 and 4 units on its
-  // last five frames, and on level 1 that is enough to clear the gap at
-  // the right of room 1 and fly through the three wall tiles beyond it.
-  //
-  // Measured. The probe `14.,14r,6ru,46.` -- run right from the start of
-  // level 1 and jump -- has the two runs identical to the port's tick 34,
-  // and then the original drops straight down the gap, landing on the
-  // bottom row at about screen x 155, while the port sailed on to x 230
-  // and came down three tiles further along. That is the player's
-  // `passing through a wall`.
-  //
-  // Anything else in the air is left alone: pushing a falling character
-  // sideways walks him into the wall column and he falls through the
-  // floor, which is what happened when this guard was missing.
-  const airborne = state.y !== floorHeightOfRow(state.currentRow);
-  if (airborne && state.action !== ACTION.runJump) return;
   const frame = frameOf(ctx.tables, state);
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
+  const bumps = checkCollisions(ctx.world, state, coll, state.collisions);
+  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight) return;
+  // Climbing is left alone: between those frames he is moving from one
+  // tile to another and is not walking about.
+  if (state.frame >= 135 && state.frame < 149) return;
+  if (bumps.intoLeftOfWall >= 0) {
+    lookRight(state, ctx, frame, coll, bumps.intoLeftOfWall);
+  } else if (bumps.intoRightOfWall >= 0) {
+    lookLeft(state, ctx, frame, coll, bumps.intoRightOfWall);
+  }
+}
 
-  const penetration = (column: number): number => {
-    const tile = getTile(ctx.world, state.room, column, state.currentRow);
-    // Only a wall the level actually has. Off the edge of the level
-    // `getTile` reports a wall too, but the original does not stop the
-    // Prince there -- he runs out of the level and dies.
-    if (tile.room === 0) return 0;
-    // A chomper is not something to walk into. Its blades are a hazard to
-    // run between, not a wall -- `safeStep` already refuses to treat one as
-    // an edge to stop at -- and bumping off it would make every chomper
-    // impassable.
-    if (tile.type === TILE.chomper) return 0;
-    const wall = wallTypeAt(ctx.world, tile, ctx.spriteHeight(frame.image));
-    if (wall === 0) return 0;
-    const d = distanceFromWallForward(state, tile.type, column, coll, wall);
-    return d < 0 ? d : 0;
-  };
+/**
+ * `is_obstacle_at_col`: the tile that the collision data for a column was
+ * read from. Not `getTile(state.room, column, ...)`: the column is an index
+ * into a row of ten readings that may have come from two rooms at once, and
+ * the room each one came from is recorded beside it. Reading room 6's column
+ * 9 when the reading was of room 8's is how a shut gate at the edge of the
+ * room next door stopped nothing at all.
+ */
+function obstacleAtColumn(
+  state: CharacterState, ctx: KidContext, column: number,
+): { type: number; room: number; column: number; row: number } {
+  return getTile(ctx.world, collisionRoomAt(state.collisions, column),
+    column, obstacleRow(state));
+}
 
-  // The wall may be the tile the character counts as standing on, or the
-  // one it is walking towards -- or the one his leading edge has already
-  // reached. `currentColumn` is the column of his weight, which lags the
-  // body: running right out of room 12 of level 1 he was in column 7 by
-  // that measure with his shoulder already in column 9, where the shut
-  // gate is, and nothing looked at column 9 at all. He walked through it
-  // into room 20.
-  const edge = tileDivModM7(
-    state.direction < 0 ? coll.xLeftColl : coll.xRightColl,
-  ).column;
-  const here = penetration(state.currentColumn);
-  const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
-  const reached = penetration(edge);
-  const push = Math.min(here, front, reached);
-  if (push === 0) return;
+/** The row `is_obstacle_at_col` reads, folded back into the room. */
+function obstacleRow(state: CharacterState): number {
+  let row = state.currentRow;
+  if (row < 0) row += 3;
+  if (row >= 3) row -= 3;
+  return row;
+}
 
-  bumpBack(state, ctx, frame, push, airborne);
+/** The left edge of a column of the room a reading came from. */
+function collisionTileLeft(ctx: KidContext, state: CharacterState, tile: { room: number; column: number }): number {
+  const drawn = ctx.drawnRoom ? ctx.drawnRoom() : state.room;
+  return xposInDrawnRoom(
+    ctx.world, tile.room, drawn, X_BUMP[tile.column + FIRST_ONSCREEN_COLUMN],
+  ) + TILE_MID_X;
+}
+
+/** `check_bumped_look_right`: he is facing right and has met a left face. */
+function lookRight(
+  state: CharacterState, ctx: KidContext, frame: Frame, coll: Collision, column: number,
+): void {
+  if (state.sword !== 2 && state.direction !== 0) return;
+  const tile = obstacleAtColumn(state, ctx, column);
+  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
+  const type = wallType(tile.type);
+  if (type === 0) return;
+  const tileLeft = collisionTileLeft(ctx, state, tile);
+  bumpBack(state, ctx, frame,
+    WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl, tile, false);
+}
+
+/** `check_bumped_look_left`: facing left, and he has met a right face. */
+function lookLeft(
+  state: CharacterState, ctx: KidContext, frame: Frame, coll: Collision, column: number,
+): void {
+  if (state.sword !== 2 && state.direction >= 0) return;
+  const tile = obstacleAtColumn(state, ctx, column);
+  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
+  const type = wallType(tile.type);
+  if (type === 0) return;
+  const tileLeft = collisionTileLeft(ctx, state, tile);
+  bumpBack(state, ctx, frame,
+    tileLeft - WALL_DIST_FROM_RIGHT[type] + TILE_RIGHT_X - coll.xLeftColl, tile, true);
+}
+
+/**
+ * `is_obstacle`: what is worth bumping into. A flask is not, an open
+ * gate is not, a chomper is only while its blade is down.
+ */
+function isObstacle(
+  ctx: KidContext, charHeight: number,
+  tile: { type: number; room: number; column: number; row: number },
+): boolean {
+  if (tile.type === TILE.potion) return false;
+  if (tile.type === TILE.gate) {
+    // `can_bump_into_gate`: the gap under it has to be shorter than he is.
+    const modifier = ctx.world.modifierAt(tile.room, tile.column, tile.row);
+    return (modifier >> 2) + 6 < charHeight;
+  }
+  if (tile.type === TILE.chomper) {
+    return ctx.world.modifierAt(tile.room, tile.column, tile.row) === 2;
+  }
+  return true;
 }
 
 /**
  * Push a character back out of what it walked into, and stagger it.
  *
- * Not a dead one. A body does not walk into anything, and the only thing
- * the bump can do to it is take it out of the pose it died in: impaled on
- * the spikes of level 1's room 6 the Prince is on frame 177 with his arms
- * out, wide enough to reach the wall beside him, and the port pushed him
- * off the blades, staggered him through frames 50, 51, 52 and stood him
- * up again, alive to look at and dead to play.
+ * This is the original's `bumped`, `bumped_floor` and `bumped_fall`,
+ * which SDLPoP has in `seg004.c`. The port used to have one of the
+ * three, and the two that were missing are worth more than they look.
+ *
+ * Not a dead one. A body does not walk into anything, and the only
+ * thing the bump can do to it is take it out of the pose it died in:
+ * impaled on the spikes of level 1's room 6 the Prince is on frame 177
+ * with his arms out, wide enough to reach the wall beside him, and the
+ * port pushed him off the blades, staggered him and stood him up.
  */
 function bumpBack(
-  state: CharacterState, ctx: KidContext, frame: Frame, push: number,
-  airborne = false,
+  state: CharacterState, ctx: KidContext, frame: Frame, deltaX: number,
+  wall: { type: number; room: number; column: number }, pushingRight: boolean,
 ): void {
-  if (state.alive >= 0) return;
-  state.x = forwardX(state, push) & 0xff;
+  if (state.alive >= 0 || state.frame === 177) return;
+  // `Char.x += delta_x`, and the sign is already in it: the original
+  // works out how far the wall's face is from the edge that met it.
+  state.x = (state.x + deltaX) & 0xff;
   state.currentColumn = determineColumn(state, frame);
-  // A wall met in mid-air is not the shuffle of sequence 47. Sequence 45
-  // is the original's own: `action 5`, frames 102 to 105 -- the falling
-  // frames -- and then `setFall 0 15`, so he drops out of the jump where
-  // the wall stopped him instead of carrying on over it.
-  startSequence(state, airborne ? KID_SEQ.bumpFall : KID_SEQ.bump, ctx.tables);
   // And whatever the player is holding counts again afterwards.
   //
   // A latch that a move has used stays used until the key comes back up,
-  // which is what stops a held key repeating -- and a move cut short by a
-  // wall had used one without finishing. Running left out of level 1's
+  // which is what stops a held key repeating -- and a move cut short by
+  // a wall had used one without finishing. Running left out of level 1's
   // room 6 with Right pressed, the Prince starts the run-turn, which
   // marks Right as used and would have flipped him at the end of it; the
   // wall stops him three frames in, so the flip never happens and Right
@@ -1176,39 +1195,103 @@ function bumpBack(
   // nothing at all, which is what the player reported as a jammed
   // keyboard.
   //
-  // The original turns and runs. Measured: the probe
-  // `14.,11l,36r,30.` on level 1 -- run left into the left wall of room
-  // 1 and hold Right from before the bump -- has the two runs identical
-  // through tick 32, and from 33 the original turns, is facing right by
-  // 38 and running by 40, while the port stood still until the key came
-  // up on 61. (`tools/oracle/make_probe.mjs` writes that probe; the rest
-  // of the pipeline takes it from there.)
+  // The original turns and runs. Measured: the probe `14.,11l,36r,30.`
+  // on level 1 -- run left into the left wall of room 1 and hold Right
+  // from before the bump -- has the two runs identical through tick 32,
+  // and from 33 the original turns, is facing right by 38 and running by
+  // 40, while the port stood still until the key came up on 61.
   ctx.latch.releaseArrows();
+
+  // Which tile decides what happens next. The original steps one column
+  // further in the direction of the push when the thing he hit is a wall
+  // -- or a door top, pushing right -- because those have their face on
+  // one side of their tile and the floor he may land on is in the next.
+  //
+  // The step is taken in the room the wall was read from, which need not
+  // be his own: a character at the left edge of a room is stopped by the
+  // wall the original returns for column 9 of the room that is not there,
+  // and stepping right from that is column 0 of his own room -- the floor
+  // he is standing on. Reading it in his room instead gave column 9 of it,
+  // the wall at the other end, and he bumped into it again every tick:
+  // running at the left wall of level 1's room 1, the Prince was caught in
+  // the bump for ever and never turned.
+  let room = wall.room;
+  let column = wall.column;
+  if (pushingRight) {
+    if (wall.type === TILE.doortop || wall.type === TILE.doortopWithFloor
+      || wall.type === TILE.wall) {
+      column += 1;
+      if (room === 0 && column === 10) {
+        room = state.room;
+        column = 0;
+      }
+    }
+  } else if (wall.type === TILE.wall) {
+    column -= 1;
+  }
+  const under = getTile(ctx.world, room, column, obstacleRow(state));
+  if (tileIsFloor(under.type)) bumpedFloor(state, ctx, frame, pushingRight);
+  else bumpedFall(state, ctx, frame);
 }
 
 /**
- * How close the Prince may come to a guard before the guard's body stops
- * him, in internal units.
+ * Nothing to land on where he was stopped, so he comes off the wall and
+ * drops. Four units back in code -- sequence 45 opens `action 5, dx 1,
+ * dy 3` and nothing in it moves him off what he hit.
  *
- * A guard is not a wall but he is not thin air either, and the port had
- * nothing here at all: the Prince ran straight through the one in level
- * 1's room 3 and out the other side. It did not show while the guard was
- * a tick-and-a-half too slow to reach him -- the blade always landed
- * first -- but at the original's own pace the two simply swapped places.
- *
- * Ten units is inside `GUARD_REACH`, which is 21, so a guard who has
- * closed to his own stopping distance can still lunge; the body only
- * matters to a Prince who tried to keep going.
+ * Those four units are the difference between catching the ledge of
+ * room 2 on the way down from level 1's first fall and falling past it.
+ * The original falls, and loses a hit point for it; the port caught the
+ * ledge, and every one of the player's recordings parted company with
+ * the original there.
+ */
+function bumpedFall(state: CharacterState, ctx: KidContext, frame: Frame): void {
+  state.x = forwardX(state, -4) & 0xff;
+  state.currentColumn = determineColumn(state, frame);
+  if (state.action === ACTION.inFreefall) {
+    state.fallX = 0;
+    return;
+  }
+  startSequence(state, KID_SEQ.bumpFall, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+}
+
+/** There is floor where he was stopped: the original's `bumped_floor`. */
+function bumpedFloor(
+  state: CharacterState, ctx: KidContext, frame: Frame, pushingRight: boolean,
+): void {
+  // High enough above that floor and he falls to it rather than landing.
+  if (state.sword !== 2
+    && u16(floorHeightOfRow(state.currentRow) - state.y) >= 15) {
+    bumpedFall(state, ctx, frame);
+    return;
+  }
+  state.y = floorHeightOfRow(state.currentRow);
+  if (state.fallY >= 22) {
+    // Coming down hard: he is simply shoved clear and the landing that
+    // is already running deals with him.
+    state.x = forwardX(state, -5) & 0xff;
+    state.currentColumn = determineColumn(state, frame);
+    return;
+  }
+  state.fallY = 0;
+  if (state.alive === 0) return;
+  // The stagger a running jump ends in is not the one a walk ends in:
+  // sequence 46 puts him on his hands, 47 is the three-frame shuffle.
+  const f = state.frame;
+  const hard = f === 24 || f === 25 || (f >= 40 && f < 43) || (f >= 102 && f < 107);
+  startSequence(state, hard ? KID_SEQ.hardBump : KID_SEQ.bump, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+}
+
+/**
+ * Two bodies cannot be in the same place. The original has no such rule
+ * -- its collision data is walls only -- but without it the Prince walks
+ * through a guard, and a guard who is walking at him walks through him.
+ * Ten units is as close as they get.
  */
 const FOE_BODY = 10;
 
-/**
- * A guard is something to walk into, not through.
- *
- * Only on the floor, and only forwards: a character in the air is a
- * different case in the original -- sequences 45 and 46 knock it down --
- * and neither is written yet.
- */
 function checkBumpedIntoFoe(state: CharacterState, ctx: KidContext): void {
   if (state.alive >= 0) return;
   if (state.action === ACTION.bumped || state.action === ACTION.inFreefall
@@ -1225,7 +1308,11 @@ function checkBumpedIntoFoe(state: CharacterState, ctx: KidContext): void {
   if (!inFront) return;
   const push = Math.abs(gap) - FOE_BODY;
   if (push >= 0) return;
-  bumpBack(state, ctx, frameOf(ctx.tables, state), push);
+  // Not a wall, so the tile he is standing on is the one that decides
+  // whether he staggers or drops.
+  const here = getTile(ctx.world, state.room, state.currentColumn, obstacleRow(state));
+  bumpBack(state, ctx, frameOf(ctx.tables, state), state.direction === 0 ? push : -push,
+    here, state.direction !== 0);
 }
 
 /**

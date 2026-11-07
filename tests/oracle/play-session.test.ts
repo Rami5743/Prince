@@ -40,8 +40,10 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   //              not yet looked into.
   // 35 since a heavy landing shakes the loose floors around it: the
   // byte-code raises `knockDown` on the frames where a foot comes down
-  // hard and nothing was listening to it.
-  { name: 'level1-open', reproduces: 35 },
+  // hard and nothing was listening to it; 43 since bumping into a wall
+  // became the original's own `check_collisions`, which took most of the
+  // tail with it -- s039 to s046 are now exact.
+  { name: 'level1-open', reproduces: 43 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
   // 36 of 54. All three careful steps are reproduced exactly, and so is

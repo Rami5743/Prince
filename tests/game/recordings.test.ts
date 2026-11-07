@@ -134,7 +134,11 @@ describe('the recordings, replayed', () => {
             if (!BODIES.includes(kid.frame)) {
               say(t, `dead on frame ${kid.frame}, which is not a body`);
             }
-            if (resting === null) resting = { frame: kid.frame, x: kid.x, y: kid.y };
+            // Unless he fell out of the level: room 0 is not a room, it
+            // has no floor, and the original goes on dropping the body
+            // through it for as long as the level lasts. Nobody sees it.
+            if (kid.room === 0) resting = null;
+            else if (resting === null) resting = { frame: kid.frame, x: kid.x, y: kid.y };
             else if (resting.frame !== kid.frame || resting.x !== kid.x
               || resting.y !== kid.y) {
               say(t, `the body moved: frame ${resting.frame} at ${resting.x},`

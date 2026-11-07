@@ -7,6 +7,7 @@
  * character faces, which is why a single table serves both ways round.
  */
 import type { Frame } from './exe-tables.ts';
+import { newCollisionMemory, type CollisionMemory } from './physics.ts';
 import type { CharacterDraw, ChtabId } from '../render/room.ts';
 
 export const DIRECTION = {
@@ -45,6 +46,11 @@ export interface CharacterState {
   fallY: number;
   /** -1 alive, 0 or more while dying. */
   alive: number;
+  /**
+   * Last tick's reading of the walls around him, which is how the
+   * original tells walking into one from standing beside one.
+   */
+  collisions: CollisionMemory;
   sword: number;
   repeat: number;
   /** Counts down after grabbing a ledge, before a climb is allowed. */
@@ -58,6 +64,7 @@ export function newCharacter(partial: Partial<CharacterState> = {}): CharacterSt
     room: 1, currentColumn: 0, currentRow: 0, charId: CHAR_ID.kid,
     currentSequence: 0, action: 0, fallX: 0, fallY: 0,
     alive: -1, sword: 0, repeat: 0, grabTimer: 0,
+    collisions: newCollisionMemory(),
     ...partial,
   };
 }

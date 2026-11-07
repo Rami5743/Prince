@@ -1909,76 +1909,6 @@ var RoomRenderer = class {
   }
 };
 
-// src/game/character.ts
-var DIRECTION = {
-  right: 0,
-  left: -1
-};
-var CHAR_ID = {
-  kid: 0,
-  shadow: 1,
-  guard: 2,
-  skeleton: 4,
-  princess: 5,
-  vizier: 6,
-  mouse: 24
-};
-function newCharacter(partial = {}) {
-  return {
-    x: 0,
-    y: 0,
-    direction: DIRECTION.left,
-    frame: 0,
-    room: 1,
-    currentColumn: 0,
-    currentRow: 0,
-    charId: CHAR_ID.kid,
-    currentSequence: 0,
-    action: 0,
-    fallX: 0,
-    fallY: 0,
-    alive: -1,
-    sword: 0,
-    repeat: 0,
-    grabTimer: 0,
-    ...partial
-  };
-}
-function forwardX(state, deltaX) {
-  return state.x + (state.direction < 0 ? -deltaX : deltaX);
-}
-function placeCharacter(state, frame, chtab = "kid") {
-  if (frame.image === 255) return null;
-  let x = (forwardX(state, frame.dx) << 1) - 116;
-  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
-  return {
-    chtab,
-    image: frame.image + 1,
-    x,
-    y: frame.dy + state.y,
-    direction: state.direction,
-    row: state.currentRow
-  };
-}
-function placeSword(state, frame, swordTable, toScreenX2) {
-  const index = frame.sword & 63;
-  if (!index) return null;
-  const placement = swordTable[index];
-  if (!placement || placement.id === 255) return null;
-  const base = placeCharacter(state, frame);
-  if (!base) return null;
-  const dx = state.direction < 0 ? -placement.x : placement.x;
-  return {
-    chtab: "sword",
-    image: placement.id + 1,
-    x: toScreenX2(base.x) + dx,
-    y: base.y + placement.y,
-    direction: state.direction,
-    row: state.currentRow,
-    alreadyScreenX: true
-  };
-}
-
 // src/game/exe-constants.ts
 var OFF = {
   startMinutesLeft: 18979,
@@ -2153,6 +2083,305 @@ function readExeTables(exe) {
   };
 }
 
+// src/game/physics.ts
+var SCREENSPACE_X = 58;
+var TILE_RIGHT_X = 13;
+var TILE_SIZE_Y = 63;
+var FALLING_SPEED_MAX = 33;
+var FALLING_SPEED_ACCEL = 3;
+var DIR_FRONT = [-1, 1];
+var DIR_BEHIND = [1, -1];
+var EDGE_TYPE = {
+  floor: 0,
+  wall: 1,
+  /** A tile the character must stop short of: a button, a sword, a potion. */
+  closer: 2
+};
+var WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0];
+var WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0];
+function gateBlocks(modifier, charHeight) {
+  return (modifier >> 2) + 6 < charHeight;
+}
+function wallTypeAt(world, tile, charHeight) {
+  if (tile.type === TILE.gate) {
+    if (tile.room === 0) return 0;
+    const modifier = world.modifierAt(tile.room, tile.column, tile.row);
+    if (!gateBlocks(modifier, charHeight)) return 0;
+  }
+  return wallType(tile.type);
+}
+function wallType(tileType) {
+  switch (tileType) {
+    case TILE.gate:
+    case TILE.doortopWithFloor:
+    case TILE.doortop:
+      return 1;
+    // wall on the right
+    case TILE.mirror:
+      return 2;
+    // wall on the left
+    case TILE.chomper:
+      return 3;
+    // chomper on the left
+    case TILE.wall:
+      return 4;
+    // wall on both sides
+    default:
+      return 0;
+  }
+}
+function getTile(world, room, column, row) {
+  let r = room;
+  let col = column;
+  let line = row;
+  while (col < 0) {
+    if (r) r = world.linkOf(r, 0);
+    col += 10;
+  }
+  while (col > 9) {
+    if (r) r = world.linkOf(r, 1);
+    col -= 10;
+  }
+  while (line < 0) {
+    if (r) r = world.linkOf(r, 2);
+    line += 3;
+  }
+  while (line > 2) {
+    if (r) r = world.linkOf(r, 3);
+    line -= 3;
+  }
+  if (!r) return { type: world.levelEdgeHitTile, room: 0, column: col, row: line };
+  return { type: world.tileAt(r, col, line) & TILE_TYPE_MASK, room: r, column: col, row: line };
+}
+function tileDivMod(xpos) {
+  const x = xpos - SCREENSPACE_X;
+  let column = Math.trunc(x / TILE_SIZE_X);
+  let offset = x % TILE_SIZE_X;
+  if (offset < 0) {
+    column -= 1;
+    offset += TILE_SIZE_X;
+  }
+  return { column, offset };
+}
+function tileDivModM7(xpos) {
+  return tileDivMod(xpos - TILE_MID_X);
+}
+function weightX(state, frame) {
+  return forwardX(state, frame.dx - (frame.flags & FRAME_FLAG.weightX));
+}
+function determineColumn(state, frame) {
+  return tileDivModM7(weightX(state, frame)).column;
+}
+function distanceToEdge(state, xpos) {
+  const { offset } = tileDivModM7(xpos);
+  return state.direction === 0 ? TILE_RIGHT_X - offset : offset;
+}
+function distanceToEdgeWeight(state, frame) {
+  return distanceToEdge(state, weightX(state, frame));
+}
+function charCollision(state, frame, objX, spriteWidth) {
+  const halfWidth = Math.trunc((spriteWidth + 1) / 2);
+  let xLeft = Math.trunc(objX / 2) + SCREENSPACE_X;
+  if (state.direction >= 0) xLeft -= halfWidth;
+  const xRight = xLeft + halfWidth;
+  let xLeftColl = xLeft;
+  let xRightColl = xRight;
+  if (frame.flags & FRAME_FLAG.thin) {
+    xLeftColl += 4;
+    xRightColl -= 4;
+  }
+  return { xLeft, xRight, xLeftColl, xRightColl };
+}
+function distanceFromWallForward(state, tileType, tileColumn, coll, knownType) {
+  const type = knownType ?? wallType(tileType);
+  if (type === 0) return -1;
+  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (state.direction < 0) {
+    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
+  }
+  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
+}
+function getEdgeDistance(world, state, frame, objX, spriteWidth, spriteHeight) {
+  const coll = charCollision(state, frame, objX, spriteWidth);
+  const here = getTile(world, state.room, state.currentColumn, state.currentRow);
+  const classify = (distance) => distance <= TILE_RIGHT_X ? { distance, edgeType: EDGE_TYPE.wall } : { distance: 11, edgeType: EDGE_TYPE.floor };
+  const hereWall = wallTypeAt(world, here, spriteHeight);
+  if (hereWall !== 0) {
+    const d = distanceFromWallForward(
+      state,
+      here.type,
+      state.currentColumn,
+      coll,
+      hereWall
+    );
+    if (d >= 0) return classify(d);
+  }
+  const frontColumn = DIR_FRONT[state.direction + 1] + state.currentColumn;
+  const front = getTile(world, state.room, frontColumn, state.currentRow);
+  if (front.type === TILE.doortop && state.direction >= 0) {
+    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
+  }
+  const frontWall = wallTypeAt(world, front, spriteHeight);
+  if (frontWall !== 0) {
+    const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
+    if (d >= 0) return classify(d);
+  }
+  if (front.type === TILE.loose) {
+    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
+  }
+  if (front.type === TILE.closer || front.type === TILE.sword || front.type === TILE.potion) {
+    const d = distanceToEdgeWeight(state, frame);
+    return { distance: d, edgeType: d !== 0 ? EDGE_TYPE.closer : EDGE_TYPE.floor };
+  }
+  if (!tileIsFloor(front.type)) {
+    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.floor };
+  }
+  return { distance: 11, edgeType: EDGE_TYPE.floor };
+}
+function floorHeightOfRow(row) {
+  return Y_LAND[row + 1];
+}
+function newCollisionMemory() {
+  return { row: -9, room: new Int8Array(30).fill(-1), flags: new Uint8Array(30) };
+}
+var ROW_ABOVE = 0;
+var ROW_HERE = 10;
+var ROW_BELOW = 20;
+function xposInDrawnRoom(world, room, drawnRoom, xpos) {
+  if (room === drawnRoom) return xpos;
+  const below = world.linkOf(drawnRoom, 3);
+  if (room === world.linkOf(drawnRoom, 0) || room === world.linkOf(below, 0)) {
+    return xpos - TILE_SIZE_X * 10;
+  }
+  if (room === world.linkOf(drawnRoom, 1) || room === world.linkOf(below, 1)) {
+    return xpos + TILE_SIZE_X * 10;
+  }
+  return xpos;
+}
+function collisionRoomAt(memory, column) {
+  return memory.room[ROW_HERE + column];
+}
+function checkCollisions(world, state, coll, memory) {
+  const none = { intoLeftOfWall: -1, intoRightOfWall: -1 };
+  if (state.action === 7) return none;
+  const row = state.currentRow;
+  let was = ROW_HERE;
+  if (row === memory.row || row + 3 === memory.row || row - 3 === memory.row) {
+    was = ROW_HERE;
+  } else if (row + 1 === memory.row || row - 2 === memory.row) {
+    was = ROW_ABOVE;
+  } else {
+    was = ROW_BELOW;
+  }
+  const prevRoom = memory.room.slice(was, was + 10);
+  const prevFlags = memory.flags.slice(was, was + 10);
+  memory.room.fill(-1);
+  memory.flags.fill(0);
+  memory.row = row;
+  const rightChecked = Math.min(tileDivModM7(coll.xRightColl).column + 2, 11);
+  const leftChecked = tileDivModM7(coll.xLeftColl).column - 1;
+  const readRow = (which, offset) => {
+    let tileLeft = X_BUMP[leftChecked + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+    for (let column = leftChecked; column <= rightChecked; column++) {
+      const tile = getTile(world, state.room, column, which);
+      const type = wallType(tile.type);
+      const leftFace = type ? WALL_DIST_FROM_LEFT[type] + tileLeft : 255;
+      const rightFace = type ? tileLeft - WALL_DIST_FROM_RIGHT[type] + TILE_RIGHT_X : 0;
+      let flags = leftFace < coll.xRightColl ? 15 : 0;
+      if (rightFace > coll.xLeftColl) flags |= 240;
+      memory.flags[offset + tile.column] = flags;
+      memory.room[offset + tile.column] = tile.room;
+      tileLeft += TILE_SIZE_X;
+    }
+  };
+  readRow(row, ROW_HERE);
+  readRow(row + 1, ROW_BELOW);
+  readRow(row - 1, ROW_ABOVE);
+  const out = { intoLeftOfWall: -1, intoRightOfWall: -1 };
+  for (let column = 9; column >= 0; column--) {
+    const here = memory.room[ROW_HERE + column];
+    if (here < 0 || prevRoom[column] !== here) continue;
+    if ((prevFlags[column] & 15) === 0 && (memory.flags[ROW_HERE + column] & 15) !== 0) {
+      out.intoLeftOfWall = column;
+    }
+    if ((prevFlags[column] & 240) === 0 && (memory.flags[ROW_HERE + column] & 240) !== 0) {
+      out.intoRightOfWall = column;
+    }
+  }
+  return out;
+}
+
+// src/game/character.ts
+var DIRECTION = {
+  right: 0,
+  left: -1
+};
+var CHAR_ID = {
+  kid: 0,
+  shadow: 1,
+  guard: 2,
+  skeleton: 4,
+  princess: 5,
+  vizier: 6,
+  mouse: 24
+};
+function newCharacter(partial = {}) {
+  return {
+    x: 0,
+    y: 0,
+    direction: DIRECTION.left,
+    frame: 0,
+    room: 1,
+    currentColumn: 0,
+    currentRow: 0,
+    charId: CHAR_ID.kid,
+    currentSequence: 0,
+    action: 0,
+    fallX: 0,
+    fallY: 0,
+    alive: -1,
+    sword: 0,
+    repeat: 0,
+    grabTimer: 0,
+    collisions: newCollisionMemory(),
+    ...partial
+  };
+}
+function forwardX(state, deltaX) {
+  return state.x + (state.direction < 0 ? -deltaX : deltaX);
+}
+function placeCharacter(state, frame, chtab = "kid") {
+  if (frame.image === 255) return null;
+  let x = (forwardX(state, frame.dx) << 1) - 116;
+  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
+  return {
+    chtab,
+    image: frame.image + 1,
+    x,
+    y: frame.dy + state.y,
+    direction: state.direction,
+    row: state.currentRow
+  };
+}
+function placeSword(state, frame, swordTable, toScreenX2) {
+  const index = frame.sword & 63;
+  if (!index) return null;
+  const placement = swordTable[index];
+  if (!placement || placement.id === 255) return null;
+  const base = placeCharacter(state, frame);
+  if (!base) return null;
+  const dx = state.direction < 0 ? -placement.x : placement.x;
+  return {
+    chtab: "sword",
+    image: placement.id + 1,
+    x: toScreenX2(base.x) + dx,
+    y: base.y + placement.y,
+    direction: state.direction,
+    row: state.currentRow,
+    alreadyScreenX: true
+  };
+}
+
 // src/game/sequence.ts
 var SEQ_OP = {
   dx: 251,
@@ -2293,171 +2522,6 @@ function playSequence(state, ctx) {
     }
   }
   throw new Error("sequence did not reach a frame");
-}
-
-// src/game/physics.ts
-var SCREENSPACE_X = 58;
-var TILE_RIGHT_X = 13;
-var TILE_SIZE_Y = 63;
-var FALLING_SPEED_MAX = 33;
-var FALLING_SPEED_ACCEL = 3;
-var DIR_FRONT = [-1, 1];
-var DIR_BEHIND = [1, -1];
-var EDGE_TYPE = {
-  floor: 0,
-  wall: 1,
-  /** A tile the character must stop short of: a button, a sword, a potion. */
-  closer: 2
-};
-var WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0];
-var WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0];
-var GATE_FULLY_OPEN = 188;
-function gateClearance(modifier) {
-  return (Math.min(modifier, GATE_FULLY_OPEN) >> 2) + 1;
-}
-function gateBlocks(modifier, charHeight) {
-  return gateClearance(modifier) < charHeight;
-}
-function wallTypeAt(world, tile, charHeight) {
-  if (tile.type === TILE.gate) {
-    if (tile.room === 0) return 0;
-    const modifier = world.modifierAt(tile.room, tile.column, tile.row);
-    if (!gateBlocks(modifier, charHeight)) return 0;
-  }
-  return wallType(tile.type);
-}
-function wallType(tileType) {
-  switch (tileType) {
-    case TILE.gate:
-    case TILE.doortopWithFloor:
-    case TILE.doortop:
-      return 1;
-    // wall on the right
-    case TILE.mirror:
-      return 2;
-    // wall on the left
-    case TILE.chomper:
-      return 3;
-    // chomper on the left
-    case TILE.wall:
-      return 4;
-    // wall on both sides
-    default:
-      return 0;
-  }
-}
-function getTile(world, room, column, row) {
-  let r = room;
-  let col = column;
-  let line = row;
-  while (col < 0 && r) {
-    r = world.linkOf(r, 0);
-    col += 10;
-  }
-  while (col > 9 && r) {
-    r = world.linkOf(r, 1);
-    col -= 10;
-  }
-  while (line < 0 && r) {
-    r = world.linkOf(r, 2);
-    line += 3;
-  }
-  while (line > 2 && r) {
-    r = world.linkOf(r, 3);
-    line -= 3;
-  }
-  if (!r || col < 0 || col > 9 || line < 0 || line > 2) {
-    return { type: world.levelEdgeHitTile, room: 0, column: col, row: line };
-  }
-  return { type: world.tileAt(r, col, line) & TILE_TYPE_MASK, room: r, column: col, row: line };
-}
-function tileDivMod(xpos) {
-  const x = xpos - SCREENSPACE_X;
-  let column = Math.trunc(x / TILE_SIZE_X);
-  let offset = x % TILE_SIZE_X;
-  if (offset < 0) {
-    column -= 1;
-    offset += TILE_SIZE_X;
-  }
-  return { column, offset };
-}
-function tileDivModM7(xpos) {
-  return tileDivMod(xpos - TILE_MID_X);
-}
-function weightX(state, frame) {
-  return forwardX(state, frame.dx - (frame.flags & FRAME_FLAG.weightX));
-}
-function determineColumn(state, frame) {
-  return tileDivModM7(weightX(state, frame)).column;
-}
-function distanceToEdge(state, xpos) {
-  const { offset } = tileDivModM7(xpos);
-  return state.direction === 0 ? TILE_RIGHT_X - offset : offset;
-}
-function distanceToEdgeWeight(state, frame) {
-  return distanceToEdge(state, weightX(state, frame));
-}
-function charCollision(state, frame, objX, spriteWidth) {
-  const halfWidth = Math.trunc((spriteWidth + 1) / 2);
-  let xLeft = Math.trunc(objX / 2) + SCREENSPACE_X;
-  if (state.direction >= 0) xLeft -= halfWidth;
-  const xRight = xLeft + halfWidth;
-  let xLeftColl = xLeft;
-  let xRightColl = xRight;
-  if (frame.flags & FRAME_FLAG.thin) {
-    xLeftColl += 4;
-    xRightColl -= 4;
-  }
-  return { xLeft, xRight, xLeftColl, xRightColl };
-}
-function distanceFromWallForward(state, tileType, tileColumn, coll, knownType) {
-  const type = knownType ?? wallType(tileType);
-  if (type === 0) return -1;
-  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  if (state.direction < 0) {
-    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
-  }
-  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
-}
-function getEdgeDistance(world, state, frame, objX, spriteWidth, spriteHeight) {
-  const coll = charCollision(state, frame, objX, spriteWidth);
-  const here = getTile(world, state.room, state.currentColumn, state.currentRow);
-  const classify = (distance) => distance <= TILE_RIGHT_X ? { distance, edgeType: EDGE_TYPE.wall } : { distance: 11, edgeType: EDGE_TYPE.floor };
-  const hereWall = wallTypeAt(world, here, spriteHeight);
-  if (hereWall !== 0) {
-    const d = distanceFromWallForward(
-      state,
-      here.type,
-      state.currentColumn,
-      coll,
-      hereWall
-    );
-    if (d >= 0) return classify(d);
-  }
-  const frontColumn = DIR_FRONT[state.direction + 1] + state.currentColumn;
-  const front = getTile(world, state.room, frontColumn, state.currentRow);
-  if (front.type === TILE.doortop && state.direction >= 0) {
-    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
-  }
-  const frontWall = wallTypeAt(world, front, spriteHeight);
-  if (frontWall !== 0) {
-    const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
-    if (d >= 0) return classify(d);
-  }
-  if (front.type === TILE.loose) {
-    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
-  }
-  if (front.type === TILE.closer || front.type === TILE.sword || front.type === TILE.potion) {
-    const d = distanceToEdgeWeight(state, frame);
-    return { distance: d, edgeType: d !== 0 ? EDGE_TYPE.closer : EDGE_TYPE.floor };
-  }
-  if (!tileIsFloor(front.type)) {
-    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.floor };
-  }
-  return { distance: 11, edgeType: EDGE_TYPE.floor };
-}
-function floorHeightOfRow(row) {
-  return Y_LAND[row + 1];
 }
 
 // src/game/sword.ts
@@ -3268,7 +3332,9 @@ var KID_SEQ = {
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47,
   /** Meeting one in mid-air: the fall frames and then a real fall. */
-  bumpFall: 45
+  bumpFall: 45,
+  /** Meeting one at the end of a jump: hands down, then the crouch. */
+  hardBump: 46
 };
 var FRAME = {
   startRunFirst: 1,
@@ -3284,7 +3350,9 @@ var FRAME = {
   turnEnd: 50,
   turnLast: 52,
   run1: 7,
-  run2: 11
+  run2: 11,
+  /** The body the original leaves when the Prince falls out of the level. */
+  dead: 185
 };
 function frameOf(tables, state) {
   return tables.frameTableKid[state.frame] ?? tables.frameTableKid[0];
@@ -3918,46 +3986,136 @@ function stepKid(state, controls, ctx) {
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
+    state.frame = FRAME.dead;
   }
 }
 function checkBumped(state, ctx) {
-  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight || state.action === ACTION.bumped || state.action === ACTION.inFreefall || state.action === ACTION.inMidair) {
-    return;
-  }
-  const f = state.frame;
-  if (f >= 135 && f < 150 || f >= 110 && f < 120 || f >= 150 && f < 163 || f >= 166 && f < 169 || f >= FRAME.hangingFirst && f < 100) {
-    return;
-  }
-  if (f >= FRAME.startJumpUp && f <= 76) return;
-  const airborne = state.y !== floorHeightOfRow(state.currentRow);
-  if (airborne && state.action !== ACTION.runJump) return;
   const frame = frameOf(ctx.tables, state);
   const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
-  const penetration = (column) => {
-    const tile = getTile(ctx.world, state.room, column, state.currentRow);
-    if (tile.room === 0) return 0;
-    if (tile.type === TILE.chomper) return 0;
-    const wall = wallTypeAt(ctx.world, tile, ctx.spriteHeight(frame.image));
-    if (wall === 0) return 0;
-    const d = distanceFromWallForward(state, tile.type, column, coll, wall);
-    return d < 0 ? d : 0;
-  };
-  const edge = tileDivModM7(
-    state.direction < 0 ? coll.xLeftColl : coll.xRightColl
-  ).column;
-  const here = penetration(state.currentColumn);
-  const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
-  const reached = penetration(edge);
-  const push = Math.min(here, front, reached);
-  if (push === 0) return;
-  bumpBack(state, ctx, frame, push, airborne);
+  const bumps = checkCollisions(ctx.world, state, coll, state.collisions);
+  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight) return;
+  if (state.frame >= 135 && state.frame < 149) return;
+  if (bumps.intoLeftOfWall >= 0) {
+    lookRight(state, ctx, frame, coll, bumps.intoLeftOfWall);
+  } else if (bumps.intoRightOfWall >= 0) {
+    lookLeft(state, ctx, frame, coll, bumps.intoRightOfWall);
+  }
 }
-function bumpBack(state, ctx, frame, push, airborne = false) {
-  if (state.alive >= 0) return;
-  state.x = forwardX(state, push) & 255;
+function obstacleAtColumn(state, ctx, column) {
+  return getTile(
+    ctx.world,
+    collisionRoomAt(state.collisions, column),
+    column,
+    obstacleRow(state)
+  );
+}
+function obstacleRow(state) {
+  let row = state.currentRow;
+  if (row < 0) row += 3;
+  if (row >= 3) row -= 3;
+  return row;
+}
+function collisionTileLeft(ctx, state, tile) {
+  const drawn = ctx.drawnRoom ? ctx.drawnRoom() : state.room;
+  return xposInDrawnRoom(
+    ctx.world,
+    tile.room,
+    drawn,
+    X_BUMP[tile.column + FIRST_ONSCREEN_COLUMN]
+  ) + TILE_MID_X;
+}
+function lookRight(state, ctx, frame, coll, column) {
+  if (state.sword !== 2 && state.direction !== 0) return;
+  const tile = obstacleAtColumn(state, ctx, column);
+  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
+  const type = wallType(tile.type);
+  if (type === 0) return;
+  const tileLeft = collisionTileLeft(ctx, state, tile);
+  bumpBack(
+    state,
+    ctx,
+    frame,
+    WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl,
+    tile,
+    false
+  );
+}
+function lookLeft(state, ctx, frame, coll, column) {
+  if (state.sword !== 2 && state.direction >= 0) return;
+  const tile = obstacleAtColumn(state, ctx, column);
+  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
+  const type = wallType(tile.type);
+  if (type === 0) return;
+  const tileLeft = collisionTileLeft(ctx, state, tile);
+  bumpBack(
+    state,
+    ctx,
+    frame,
+    tileLeft - WALL_DIST_FROM_RIGHT[type] + TILE_RIGHT_X - coll.xLeftColl,
+    tile,
+    true
+  );
+}
+function isObstacle(ctx, charHeight, tile) {
+  if (tile.type === TILE.potion) return false;
+  if (tile.type === TILE.gate) {
+    const modifier = ctx.world.modifierAt(tile.room, tile.column, tile.row);
+    return (modifier >> 2) + 6 < charHeight;
+  }
+  if (tile.type === TILE.chomper) {
+    return ctx.world.modifierAt(tile.room, tile.column, tile.row) === 2;
+  }
+  return true;
+}
+function bumpBack(state, ctx, frame, deltaX, wall, pushingRight) {
+  if (state.alive >= 0 || state.frame === 177) return;
+  state.x = state.x + deltaX & 255;
   state.currentColumn = determineColumn(state, frame);
-  startSequence(state, airborne ? KID_SEQ.bumpFall : KID_SEQ.bump, ctx.tables);
   ctx.latch.releaseArrows();
+  let room = wall.room;
+  let column = wall.column;
+  if (pushingRight) {
+    if (wall.type === TILE.doortop || wall.type === TILE.doortopWithFloor || wall.type === TILE.wall) {
+      column += 1;
+      if (room === 0 && column === 10) {
+        room = state.room;
+        column = 0;
+      }
+    }
+  } else if (wall.type === TILE.wall) {
+    column -= 1;
+  }
+  const under = getTile(ctx.world, room, column, obstacleRow(state));
+  if (tileIsFloor(under.type)) bumpedFloor(state, ctx, frame, pushingRight);
+  else bumpedFall(state, ctx, frame);
+}
+function bumpedFall(state, ctx, frame) {
+  state.x = forwardX(state, -4) & 255;
+  state.currentColumn = determineColumn(state, frame);
+  if (state.action === ACTION.inFreefall) {
+    state.fallX = 0;
+    return;
+  }
+  startSequence(state, KID_SEQ.bumpFall, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+}
+function bumpedFloor(state, ctx, frame, pushingRight) {
+  if (state.sword !== 2 && u16(floorHeightOfRow(state.currentRow) - state.y) >= 15) {
+    bumpedFall(state, ctx, frame);
+    return;
+  }
+  state.y = floorHeightOfRow(state.currentRow);
+  if (state.fallY >= 22) {
+    state.x = forwardX(state, -5) & 255;
+    state.currentColumn = determineColumn(state, frame);
+    return;
+  }
+  state.fallY = 0;
+  if (state.alive === 0) return;
+  const f = state.frame;
+  const hard = f === 24 || f === 25 || f >= 40 && f < 43 || f >= 102 && f < 107;
+  startSequence(state, hard ? KID_SEQ.hardBump : KID_SEQ.bump, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
 var FOE_BODY = 10;
 function checkBumpedIntoFoe(state, ctx) {
@@ -3974,7 +4132,15 @@ function checkBumpedIntoFoe(state, ctx) {
   if (!inFront) return;
   const push = Math.abs(gap) - FOE_BODY;
   if (push >= 0) return;
-  bumpBack(state, ctx, frameOf(ctx.tables, state), push);
+  const here = getTile(ctx.world, state.room, state.currentColumn, obstacleRow(state));
+  bumpBack(
+    state,
+    ctx,
+    frameOf(ctx.tables, state),
+    state.direction === 0 ? push : -push,
+    here,
+    state.direction !== 0
+  );
 }
 var WALL_ON_THE_RIGHT = 1;
 var WALL_ON_BOTH_SIDES = 4;
@@ -4695,6 +4861,7 @@ var Game = class _Game {
       markItem: (room, column, row) => {
         this.itemTile = { room, column, row };
       },
+      drawnRoom: () => this.drawnRoom,
       effects: {
         sound: effects.sound,
         /**
@@ -5150,17 +5317,19 @@ var Game = class _Game {
    * twenty-four ticks, nothing for one, and then how much of the hour is
    * left for twenty-four more.
    *
-   * Measured off the grabbed video of the recorded run: `LEVEL 1` from
-   * tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 48, and
-   * nothing from 49; and the same again from the tick the level is
-   * started afresh after a death.
+   * Measured off all ten grabbed runs, which agree to the tick: `LEVEL 1`
+   * from tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 47,
+   * and nothing from 48; and the same again from the tick the level is
+   * started afresh after a death. The second message is a tick shorter
+   * than the first, which looks like an oversight in the original and is
+   * what every capture shows.
    */
   levelText() {
     if (this.restartCountdown >= 0) return `LEVEL ${this.levelNumber}`;
     const t = this.titleTicks;
-    if (t <= LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
-    if (t === LEVEL_TITLE_TICKS + 1) return null;
-    if (t <= LEVEL_TITLE_TICKS * 2 + 1) {
+    if (t < LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
+    if (t === LEVEL_TITLE_TICKS) return null;
+    if (t < LEVEL_TITLE_TICKS * 2) {
       const left = Math.max(0, Math.ceil(this.remainingTicks / MINUTE_TICKS));
       return `${left} MINUTE${left === 1 ? "" : "S"} LEFT`;
     }

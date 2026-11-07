@@ -92,10 +92,13 @@ describe('the words under the room', () => {
       return c.n === 0 ? null : `${c.x0}-${c.x1}`;
     };
     // The picture of a tick is the one the game draws after stepping it,
-    // which is how the replay harness takes them too.
-    // The first tick of a level moves nothing -- it shows what the start
-    // put on the screen -- so the words begin on the one after it.
-    game.step(NOTHING);
+    // which is how the replay harness takes them too; the first of those
+    // steps moves nothing and shows what the level's start put on the
+    // screen, and the original's tick 0 is that same picture.
+    //
+    // All ten captures agree to the tick: the level's number on 0 to 23,
+    // nothing on 24, the hour on 25 to 47, nothing from 48. The second
+    // message is a tick shorter than the first.
     for (let t = 0; t < 52; t++) {
       game.step(NOTHING);
       seen.push(where());
@@ -104,8 +107,8 @@ describe('the words under the room', () => {
     const hour = '113-206';
     expect(seen.slice(0, 24), 'the level number first').toEqual(Array(24).fill(level));
     expect(seen[24], 'then a tick of nothing').toBeNull();
-    expect(seen.slice(25, 49), 'then the hour').toEqual(Array(24).fill(hour));
-    expect(seen.slice(49), 'and then nothing').toEqual([null, null, null]);
+    expect(seen.slice(25, 48), 'then the hour').toEqual(Array(23).fill(hour));
+    expect(seen.slice(48), 'and then nothing').toEqual([null, null, null, null]);
   });
 
   it('count the hour down as it goes, and not restart it on a death', async () => {

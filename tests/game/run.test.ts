@@ -107,6 +107,12 @@ function matchingStep(file: string): Step | null {
  * not following the Prince out of the room; they were in fact the missing
  * bump -- the original stops him at the wall at the far end of room 12 and
  * the port ran him through it. See `checkBumped` in src/game/kid.ts.
+ *
+ * Those same three moved a tick earlier when `checkBumped` was rewritten
+ * to the original's own `check_collisions`, which reports a bump on the
+ * tick the character's edge first crosses the face of the wall rather
+ * than on the tick after. All three are still reproduced exactly; it is
+ * the step they are reproduced on that moved.
  */
 const EXPECTED: Record<string, number | null> = {
   'run00.png': 8,
@@ -117,9 +123,9 @@ const EXPECTED: Record<string, number | null> = {
   'run05.png': 35,
   'run06.png': 41,
   'run07.png': 48,
-  'run08.png': 55,
-  'run09.png': 61,
-  'run10.png': 62,
+  'run08.png': 54,
+  'run09.png': 60,
+  'run10.png': 61,
 };
 
 describe('running, against the original', () => {

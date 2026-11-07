@@ -11,8 +11,16 @@
  *
  * Asking was only half of it. The first answer was "six quarters is
  * enough", which is a six pixel crack, and a Prince forty-one pixels tall
- * walked through it. The capture of level 1 shows the original holding him
- * against a gate whose gap had grown to thirty-eight.
+ * walked through it. The rule is the original's own `can_bump_into_gate`:
+ * the gap plus five has to be less than the height of the sprite he is
+ * drawn with. A running Prince is thirty-nine to forty-two pixels tall,
+ * so a gap of thirty-six stops him and one of thirty-seven does not.
+ *
+ * An earlier reading of the capture of level 1 put the gap he was held
+ * against at thirty-eight, which this rule would let him through. That
+ * number was not measured off the picture: it came from the port's own
+ * count of how far the gate had wound up by then, and the port's gate and
+ * the original's need not be on the same quarter at the same tick.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -100,10 +108,10 @@ describe('a gate', () => {
     // The gap in pixels, which is what the renderer draws under the bars.
     expect(gateClearance(0)).toBe(1);
     expect(gateClearance(GATE_FULLY_OPEN)).toBe(48);
-    expect(gateBlocks(0, 41)).toBe(true);
-    expect(gateBlocks(148, 41)).toBe(true); // the capture: 38 pixels, blocked
-    expect(gateBlocks(160, 41)).toBe(false); // 41 pixels, he fits
-    expect(gateBlocks(GATE_FULLY_OPEN, 41)).toBe(false);
+    expect(gateBlocks(0, 38)).toBe(true);
+    expect(gateBlocks(124, 38)).toBe(true); // 32 pixels: 31 + 6 < 38
+    expect(gateBlocks(128, 38)).toBe(false); // 33 pixels: 32 + 6 is not
+    expect(gateBlocks(GATE_FULLY_OPEN, 38)).toBe(false);
   });
 
   it('that has been opened can be walked through', async () => {
@@ -118,7 +126,7 @@ describe('a gate', () => {
    * through into room 8 and the two runs never met again.
    */
   it('that is part way up stops a Prince who does not fit under it', async () => {
-    expect(await reachesTheRoomBeyond(148)).toBe(false);
+    expect(await reachesTheRoomBeyond(120)).toBe(false);
   });
 
   /**

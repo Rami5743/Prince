@@ -229,6 +229,11 @@ describe('dying', () => {
       }
       return out.join(',');
     };
+    // Give the blades their five ticks first. The body lands beside a
+    // second set of spikes and sets them off, and they come up a notch a
+    // tick for five ticks afterwards -- in the same tiles the body is
+    // drawn over, so there is no window that holds one and not the other.
+    for (let i = 0; i < 8; i++) game.step(NOTHING);
     const was = bodyOnly();
     for (let i = 0; i < 10; i++) {
       game.step(NOTHING);
