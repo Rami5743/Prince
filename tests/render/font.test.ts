@@ -127,11 +127,12 @@ describe('the words under the room', () => {
     game.clearBottomText();
     game.damage(3);
     game.kid.alive = 0;
-    // Nothing is said at once: the original waits, and the capture puts
-    // the first blood on the spikes at tick 284 and the words at 298.
+    // Nothing is said at once: the original counts six ticks and then
+    // plays the death music out before the words, which is forty-six
+    // ticks across the captures -- see RESTART_PROMPT_DELAY.
     game.step(NOTHING);
     expect(inkedColumns(game.render(), 15).n).toBe(0);
-    for (let i = 0; i < 20 && !game.awaitingButton; i++) game.step(NOTHING);
+    for (let i = 0; i < 70 && !game.awaitingButton; i++) game.step(NOTHING);
     expect(game.awaitingButton).toBe(true);
     expect(inkedColumns(game.render(), 15)).toMatchObject({ x0: 85, x1: 234 });
   });

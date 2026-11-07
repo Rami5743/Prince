@@ -244,7 +244,8 @@ describe('dying', () => {
   it('asks for a button and then begins again', async () => {
     const game = await killOnSpikes();
     let asked = -1;
-    for (let i = 0; i < 40 && asked < 0; i++) {
+    // Forty-six ticks of them, not fourteen: see RESTART_PROMPT_DELAY.
+    for (let i = 0; i < 70 && asked < 0; i++) {
       game.step(NOTHING);
       if (game.awaitingButton) asked = i;
     }

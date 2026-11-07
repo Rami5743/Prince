@@ -5043,7 +5043,7 @@ var Game = class _Game {
     if (this.isDead) this.deadTicks += 1;
     this.titleTicks += 1;
     if (this.remainingTicks > 0) this.remainingTicks -= 1;
-    if (this.awaitingButton && (controls.x !== 0 || controls.y !== 0 || controls.shift)) {
+    if (this.awaitingButton && controls.shift) {
       this.pressButton();
     }
     if (this.restartCountdown >= 0) this.restartCountdown -= 1;
@@ -5421,7 +5421,7 @@ var TEXT_WHITE = 15;
 var LEVEL_TITLE_TICKS = 24;
 var MINUTE_TICKS = 720;
 var ROOM_CHANGE_BLANK = 1;
-var RESTART_PROMPT_DELAY = 15;
+var RESTART_PROMPT_DELAY = 46;
 var RESTART_DELAY = 3;
 var TILE_SWORD = TILE.sword;
 var TILE_POTION = TILE.potion;

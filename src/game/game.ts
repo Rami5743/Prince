@@ -274,14 +274,21 @@ export class Game {
     if (this.isDead) this.deadTicks += 1;
     this.titleTicks += 1;
     if (this.remainingTicks > 0) this.remainingTicks -= 1;
-    // Any key answers `Press Button to Continue`, not Shift alone, and the
-    // game asks whether one is down rather than waiting for a fresh press.
-    // The capture shows it: the Prince is impaled on the spikes of level
-    // 1's room 6 at tick 284, the words come up at 298, and the screen goes
-    // black on 299 -- too quick for anything but the Left the player was
-    // already holding down.
-    if (this.awaitingButton
-      && (controls.x !== 0 || controls.y !== 0 || controls.shift)) {
+    // Shift answers `Press Button to Continue`, and nothing else does:
+    // `if (rem_min != 0 && Kid.alive > 6 && (control_shift || key ==
+    // RETURN))` in seg000. The port took any key, which is wrong and is
+    // not a small wrongness -- the player is usually leaning on a
+    // direction when he dies, so the port restarted the level the
+    // instant the words were due and the rest of the run was a
+    // different run.
+    //
+    // Six captures say the same thing. In `25c4ebb8` the words come up
+    // on tick 278 with Left held and are still there at the end of the
+    // recording, a hundred and twenty ticks later, because the player
+    // never pressed Shift. In the five that do restart -- `756b259c`,
+    // `5920a8c2`, `72b3522f`, `9b60bf3a`, `848ee3c4` -- the words go
+    // within a few ticks of the first tick Shift is down, and not before.
+    if (this.awaitingButton && controls.shift) {
       this.pressButton();
     }
     // Down to -1, not to 0: `restartDue` is then true for exactly the one
@@ -765,15 +772,23 @@ export const ROOM_CHANGE_BLANK = 1;
 /**
  * Ticks between the Prince dying and `Press Button to Continue`.
  *
- * The words come up fourteen ticks after the Prince does, measured off
- * the grabbed video of the recorded run: the first blood on the spikes of
- * level 1's room 6 is tick 284 and the words are up on 298. The constant
- * is one more than that because `deadTicks` has already counted the tick
- * the blood appeared on by the time this is asked. An earlier reading of a different capture made it forty-five,
- * from a sword death whose first frame was harder to place; this one is a
- * splash of red on a tick that has nothing else going on.
+ * The original counts: `Char.alive` goes up a tick at a time once he is
+ * dead, the death music starts at six, and the words come up at seven
+ * once that music has finished -- and the counter does not move while a
+ * sound is playing, so the whole of it is six ticks plus the music.
+ *
+ * Measured as the gap between the tick the port has him die and the tick
+ * the words appear in the capture, across the five recordings that have
+ * both: 25c4ebb8 46, 5920a8c2 47, 756b259c 47, 9b60bf3a 49, 13ab6867 52.
+ * The spread is the drift between the two clocks and whatever else was
+ * making a noise at the time. Forty-six is the low end and the one two
+ * captures agree on.
+ *
+ * It was fifteen, from a reading of one capture that put the first blood
+ * at tick 284 and the words at 298. That reading cannot be right: no
+ * capture here has the words within forty ticks of a death.
  */
-export const RESTART_PROMPT_DELAY = 15;
+export const RESTART_PROMPT_DELAY = 46;
 
 /**
  * Ticks from the button being pressed to the level running again. Three,
