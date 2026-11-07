@@ -35,6 +35,19 @@ import { CONTROL, ControlLatch, type Controls } from './control-latch.ts';
 const u16 = (v: number): number => v & 0xffff;
 
 /** Sequence ids this module uses, in the original's numbering. */
+/**
+ * The sequences `start_fall` chooses between.
+ *
+ * 7 is the common one -- off a stand, a walk, a crouch or the first of
+ * the two run frames -- and the others belong to the frame they are
+ * named for. The port used 7 for every one of them.
+ */
+const SEQ_FALL_FROM_RUN = 19;
+const SEQ_FALL_AFTER_STANDING_JUMP = 18;
+const SEQ_FALL_AFTER_RUNNING_JUMP = 21;
+const SEQ_PUSHED_OFF_LEDGE = 81;
+const SEQ_START_FALL_AT_WALL = 104;
+
 export const KID_SEQ = {
   startRun: 1,
   stand: 2,
@@ -721,12 +734,65 @@ function safeStep(state: CharacterState, ctx: KidContext): void {
 /** Begin falling from wherever the character is standing. */
 export function startFall(state: CharacterState, ctx: KidContext): void {
   state.sword = 0;
+  const was = state.frame;
   state.currentRow += 1;
   ctx.traps?.startChompers(state.room, state.currentRow);
-  startSequence(state, KID_SEQ.fall, ctx.tables);
+  // `start_fall` picks the sequence by the frame he fell from: the two
+  // run frames fall differently from each other, a landing out of a
+  // standing jump and one out of a running jump each have their own,
+  // and dropping off a ledge after a jump up moves him five forward
+  // first. The port had one sequence for all of them.
+  let seq: number = KID_SEQ.fall;
+  if (was === 9) seq = KID_SEQ.fall;
+  else if (was === 13) seq = SEQ_FALL_FROM_RUN;
+  else if (was === 26) seq = SEQ_FALL_AFTER_STANDING_JUMP;
+  else if (was === 44) seq = SEQ_FALL_AFTER_RUNNING_JUMP;
+  else if (was >= 81 && was < 86) {
+    seq = SEQ_FALL_FROM_RUN;
+    state.x = forwardX(state, 5) & 0xff;
+  } else if (was >= 150 && was < 180) {
+    // Pushed off a ledge with his sword out.
+    if (state.direction < 0
+      && distanceToEdgeWeight(state, frameOf(ctx.tables, state)) <= 7) {
+      state.x = forwardX(state, -5) & 0xff;
+    }
+    seq = SEQ_PUSHED_OFF_LEDGE;
+  }
+  startSequence(state, seq, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  const frame = frameOf(ctx.tables, state);
+  let frame = frameOf(ctx.tables, state);
   state.currentColumn = determineColumn(state, frame);
+  // And then the two walls. A character who starts falling inside one
+  // is pushed out of it; one who starts falling with his face against
+  // one is moved back a single unit, and that unit is three pixels on
+  // the screen. It is the whole of the difference between the port and
+  // a capture for the three ticks of the first descent of level 1: the
+  // Prince steps off the ledge of room 1 with the wall of room 2's top
+  // row in front of him, and the original backs him off it.
+  if (tileHere(state, ctx).type === TILE.wall) {
+    inWall(state, ctx);
+    return;
+  }
+  if (tileFront(state, ctx).type === TILE.wall) {
+    frame = frameOf(ctx.tables, state);
+    if (was !== 44 || distanceToEdgeWeight(state, frame) >= 6) {
+      state.x = forwardX(state, -1) & 0xff;
+    } else {
+      startSequence(state, SEQ_START_FALL_AT_WALL, ctx.tables);
+      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+    }
+    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  }
+}
+
+/** The original's `in_wall`: put back out of the stone he is standing in. */
+function inWall(state: CharacterState, ctx: KidContext): void {
+  const frame = frameOf(ctx.tables, state);
+  let delta = distanceToEdgeWeight(state, frame);
+  if (delta >= 8 || tileFront(state, ctx).type === TILE.wall) delta = 6 - delta;
+  else delta += 4;
+  state.x = forwardX(state, delta) & 0xff;
+  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
 }
 
 function land(state: CharacterState, ctx: KidContext): void {

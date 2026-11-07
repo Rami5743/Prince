@@ -143,11 +143,18 @@ class Dosbox:
         time.sleep(0.5)
         if self.record:
             os.makedirs(os.path.dirname(self.record) or '.', exist_ok=True)
+            # Grab the game's own rectangle, not the whole 1024x768
+            # display. Encoding the desktop losslessly at thirty frames
+            # a second costs more processor than the emulator does, and
+            # what it costs comes out of the emulator: measured on the
+            # long probe, the game fell two ticks behind the clock over
+            # a thousand of them, and a key sent on the clock then lands
+            # two ticks late. The game area is a sixth of the pixels.
             self.ffmpeg = subprocess.Popen(
                 ['ffmpeg', '-y', '-loglevel', 'error',
                  '-f', 'x11grab', '-draw_mouse', '0',
-                 '-framerate', str(self.fps), '-video_size', '1024x768',
-                 '-i', self.display,
+                 '-framerate', str(self.fps), '-video_size', '640x400',
+                 '-i', self.display + '+192,184',
                  '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0',
                  '-pix_fmt', 'yuv444p', self.record],
                 env=dict(os.environ, DISPLAY=self.display),

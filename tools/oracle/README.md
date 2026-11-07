@@ -104,112 +104,90 @@ him somewhere else` apart from `the port does not draw him at all`.
 
 ## What a capture cannot settle
 
-A recording is a list of what was held on each of the port's ticks. The
-original is sent those presses on the clock, because that is the only
-thing a keyboard understands, and the two only stay in step while the
-original's ticks are as long as the port's. At a room change they are
-not: the original stops to blank the screen and draw the new room, and
-the capture shows it two to four ticks behind for a while afterwards.
+Two things in the harness are a tick wide, and neither of them is the
+game.
 
-So a key that goes up within a few ticks of a decision the game is about
-to make is not evidence either way. The first descent of level 1 is one:
-the Prince falls through the loose floor of room 1 with Shift held, and
-whether he catches the ledge of room 2 on the way down turns on whether
-Shift is still down three ticks later. The recorded run has it going up
-on tick 81 and the grab falling due on 78; the original did not grab and
-the port did.
+**Which tick a key press lands in.** The game reads the keyboard once a
+tick and nowhere else, so the only thing that matters about a press is
+which tick it falls in. The emulator is sent it on the clock, and where
+the clock sits inside a tick depends on how long DOSBox took to restart
+the level. `recording_to_script.mjs` sends each edge at the middle of
+its tick, which is the best that can be done without asking the game,
+and that is still half a tick either way; over a long run the two
+clocks part company further, and by the thousandth tick of `probeF` a
+press lands two ticks from where it should.
 
-The probe `11.,50r,1.,34s,20.` is the same descent with Shift held
-fifteen ticks longer, which puts the decision well clear of the key.
-The original grabs the ledge, hangs, and lets go -- the same as the
-port, tick for tick. The difference in the recording is the measurement,
-not the game.
+**A room change.** The original holds the screen black for one tick
+longer than the port. That is the redraw and not the game -- see
+`ROOM_CHANGE_BLANK` -- and it shifts every tick after it by one.
 
-The sharpest case of it found so far. The probe `14.,21r,17.,8r,4.,2s,
-2rs,5s,2rs,16s,40.` is the opening of the player's recording `0fbffa60`
-to the tick: the same keys, the same ticks, as far as tick 90, and the
-decision falls on tick 79. Captured, the probe grabs the ledge and the
-recording does not -- same game, same input, two runs. All that differs
-is where the key edges landed inside the game's ticks, and the Prince
-either catches the ledge of room 2 or goes past it. `0fbffa60` is the
-lowest-scoring of the fifteen for exactly that reason: from tick 79 its
-capture is a different run, not a different port.
+So the comparison lets the alignment slip, and pays two disagreements
+for each tick of slip; it slips for nothing at a room change and at a
+tick where the player's keys changed.
 
-The port is on the right side of that one, which took some showing.
-Over ticks 66 to 75 -- the last careful step before the drop -- the box
-around the Prince in the probe's capture and in the port is the same box
-to the pixel on every tick. The capture of the recording has him eight
-pixels to the left of both and a tick ahead: one careful step that did
-not carry as far, because the press that started it landed a fraction
-later in its tick. Eight pixels is three and a half of the game's units,
-and that is the difference between catching the ledge and going past it.
+## The original is deterministic
 
-`replay-frames.ts --stall n` feeds a replay the presses the original was
-reading rather than the ones the port recorded, skipping n of them at
-every room change. It is an instrument for asking whether a difference
-is this drift, not a fix: fitted across the ten captures the best n is
-nothing like constant, which is itself the answer -- the drift depends
-on what the emulator was doing, and a capture whose key edges fall near
-a decision cannot be made to line up.
+It was written here that it is not: two captures of the same recording
+agreed on 1397 of 1473 ticks, and ninety-five per cent was called the
+ceiling. That was the measurement, not the game.
 
-## How close a capture can get
+Captured twice at three thousand cycles and twice at twenty thousand,
+the same recording gives the same pictures tick for tick. The only
+pixels that differ between two of the original's own runs are the
+torches, which pick their next flame from the game's random numbers and
+cannot be reproduced by anything; outside them the four runs are
+identical. What differs between runs is which video frame tick zero
+lands on, which `split_ticks.py --anchor-text` now settles by numbering
+the ticks from the game's own clock -- the tick the level title goes
+off the bottom of the screen.
 
-The original was captured twice from the same recording, `848ee3c4`,
-and the two runs of `PRINCE.EXE` were compared with each other. Over
-ticks 100 to 400 they are the same picture on 143 of 301 ticks, with
-the rest within a couple of hundred pixels, and the alignment between
-them wanders between two and four ticks. Their first difference is at
-tick 81, long before a guard is on the screen.
+The oracle runs at twenty thousand cycles. At three thousand the
+emulator cannot redraw a room inside a tick, so it loses one at every
+room change, and the port and the capture drift apart for a reason that
+has nothing to do with the game.
 
-So "identical on every tick" is not a thing the original does against
-itself, and a figure like that is the ceiling for the port, not a
-failure of it.
+## All the recordings, in the suite
 
-Two reasons. The key events go in on the clock, so a press lands a tick
-either side of where it did last time; and the fight is driven by the
-game's own random numbers, which are not the same twice. Once the
-Prince dies at a different tick, everything after it is a different
-run, which is why a recording that ends in a sword fight has a tail
-that cannot be measured at all.
+The captures cannot go in the repository -- a thousand pictures and
+twenty-five megabytes each -- but a fingerprint of each tick can.
+`digest.py` writes, per tick, the capture's screen as indices into the
+capture's own palette with the flames masked out, and a CRC of that.
+The port computes the same number from its own rendering, so equal
+means the same picture to the pixel.
 
-`align.py` is the measure to use where that matters. It walks the two
-runs together and lets the alignment slip by a tick at a time, so a
-port that does the same thing a tick out is counted as doing the same
-thing, and prints the drift it needed, which is itself worth reading.
-`segments.py` -- one offset per stretch between room changes -- is the
-stricter test and the better one where the two runs really are in step.
+Indices rather than colours because DOSBox's output, grabbed off an X
+display and encoded, is a unit or three away from the port's idea of
+the same colour -- 81,84,81 where the port has 84,84,84 -- and no
+tolerance can be folded into a hash. A capture uses two or three dozen
+colours and they are far apart, so which one a pixel is is never in
+doubt.
 
-## All fifteen recordings, in the suite
-
-The captures cannot go in the repository -- five hundred pictures and
-twenty megabytes each -- but what a comparison reads out of them can.
-`digest.py` boils a capture down to what moved on each tick: the box
-around whatever changed and how many pixels of it there were. That is
-four numbers and a count, it is the same on both sides whatever the
-palette is doing, and all fifteen runs come to a hundred and sixty
-kilobytes. They are in `digests/`, and `tests/oracle/recordings-vs-
-original.test.ts` replays every recording against them on every `npm
-test`.
+The flame mask is found by how often a pixel changes rather than by
+what colour it is, counted room by room: a torch in a room the run
+visits for fifty of its twelve hundred ticks changes on nearly all
+fifty and on four per cent of the run, which no threshold over the
+whole thing can tell from a pixel the Prince crossed twice.
 
     python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
-    node --experimental-strip-types tools/dev/digest-port.ts \
-        tools/oracle/recordings/NAME.json /tmp/port.json
 
-The ceiling for that test is the 1412-of-1470 above, not 1470: these are
-pins that must not go down, not targets to reach.
+Nineteen runs are pinned in `tests/oracle/recordings-vs-original.test.ts`:
+the sixteen recordings the player has sent, and three probes.
 
-There are sixteen of them now. The last, `f6874819`, is the one the
-player sent with a list of six bugs, and it is the clearest example of
-a run that stops being the same run. The port and the capture are the
-same picture on every tick to 77 and within a tick or two of each other
-to 127. Then, at the right-hand end of room 2, the capture's Prince
-stops nine units short of the port's and stays in the room while the
-port's crosses into room 3 -- and from there they are not in the same
-room, so none of the remaining thousand ticks measures anything. Where
-the recording cannot answer, a probe can: `probeC`, which is that
-recording's own opening followed by a run to the left wall of room 2 and
-a long press of Up, matches the capture on every tick of the climb to
-within the flicker of the two torches.
+`f6874819` is the one he sent with a list of six bugs, and it is the
+clearest example of a run that stops being the same run. The port and
+the capture are the same picture on every tick to 77. Then, at the
+right-hand end of room 2, the capture's Prince stops nine units short
+of the port's and stays in the room while the port's crosses into room
+3 -- and from there they are not in the same room, so none of the
+remaining thousand ticks measures anything.
+
+Where a recording cannot answer, a probe can, and `probeE` answers
+that one: the same keys on the same ticks, sent again, and the
+original crosses into room 3 on the same tick as the port and its
+guard then walks left at the port's pace, frame for frame. So the
+recording's own capture is the odd one out there, and the port is
+right. `probeC` is the same opening followed by the climb at the left
+of room 2, and `probeF` is the whole of `f6874819` sent again.
 
 ## What each tool does
 

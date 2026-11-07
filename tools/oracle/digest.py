@@ -88,23 +88,40 @@ def flame_mask(frames):
 
     Found by how often they change rather than by what colour they are.
     A torch picks a new flame nearly every tick; a pixel the Prince walks
-    over changes a handful of times in a run. Grown by one, because the
-    edge of a flame lights the stone beside it.
+    over changes a handful of times in a run.
+
+    Counted room by room, not over the whole run. A torch in a room the
+    run visits for fifty of its twelve hundred ticks changes on nearly
+    all fifty and on four per cent of the run, which no threshold over
+    the whole thing can tell from a pixel the Prince crossed twice. The
+    run is cut at the ticks where the whole screen changed -- that is a
+    room change -- and each piece is counted on its own.
+
+    Grown generously afterwards. A flame is not only the pixels that
+    change often: its edges reach further on some ticks than on others,
+    and what the Prince happens to be standing in front of changes
+    rarely and still has to go.
     """
-    pairs = [(a, b) for a, b in zip(frames, frames[1:])
+    pairs = [(i, a, b) for i, (a, b) in enumerate(zip(frames, frames[1:]))
              if a is not None and b is not None]
     if len(pairs) < 8:
         return np.zeros((H, W), dtype=bool)
-    counts = np.zeros((H, W), dtype=np.int32)
-    for a, b in pairs:
-        counts += (np.abs(a - b).max(axis=2) > TOLERANCE)
-    hot = counts > FLAME_SHARE * len(pairs)
-    # Grown generously. A flame is not only the pixels that change
-    # often: its edges reach a little further on some ticks than on
-    # others, and what the Prince happens to be standing in front of
-    # changes rarely and still has to go. Six pixels of growth around a
-    # torch costs about two thousand pixels of the sixty-four thousand
-    # and takes the whole fire with it.
+    # Where the whole screen changed: a room change, and the start of a
+    # new set of torches.
+    cuts = [0]
+    for i, a, b in pairs:
+        if (np.abs(a - b).max(axis=2) > TOLERANCE).sum() > 0.5 * W * H:
+            cuts.append(i + 1)
+    cuts.append(len(frames))
+    hot = np.zeros((H, W), dtype=bool)
+    for lo, hi in zip(cuts, cuts[1:]):
+        part = [(a, b) for i, a, b in pairs if lo <= i < hi]
+        if len(part) < 8:
+            continue
+        counts = np.zeros((H, W), dtype=np.int32)
+        for a, b in part:
+            counts += (np.abs(a - b).max(axis=2) > TOLERANCE)
+        hot |= counts > FLAME_SHARE * len(part)
     out = hot.copy()
     for _ in range(FLAME_GROW):
         prev = out.copy()

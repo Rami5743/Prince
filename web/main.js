@@ -816,10 +816,7 @@ var CHTAB = {
 var ROW_ABOVE_ORDER = -1;
 var ROOM_BOTTOM_Y = 192;
 function yToRowForMob(y) {
-  if (y < 65) return 0;
-  if (y < 128) return 1;
-  if (y < 191) return 2;
-  return 2;
+  return Math.min(2, Math.max(0, Math.floor((y + 60) / 63) % 4 - 1));
 }
 var COL_X = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288];
 var WALL_RES = {
@@ -1811,22 +1808,30 @@ var RoomRenderer = class {
     const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
-    const main = y - 3;
-    const floor = TILE_TABLE[TILE.floor];
     const order = yToRowForMob(y);
-    this.mid.push({
+    const list = this.mid;
+    const MOB = 10;
+    list.push({
       chtab: CHTAB.environment,
-      id: LOOSE_FRAM_BOTTOM[0],
+      id: LOOSE_FRAM_LEFT[MOB],
+      x,
+      yBottom: y - 3,
+      blit: BLIT.transparent,
+      order
+    });
+    list.push({
+      chtab: CHTAB.environment,
+      id: LOOSE_FRAM_BOTTOM[MOB],
       x,
       yBottom: y,
       blit: BLIT.opaque,
       order
     });
-    this.mid.push({
+    list.push({
       chtab: CHTAB.environment,
-      id: LOOSE_FRAM_LEFT[0],
-      x,
-      yBottom: floor.baseY + main,
+      id: LOOSE_FRAM_RIGHT[MOB],
+      x: x + 32,
+      yBottom: y - 1,
       blit: BLIT.transparent,
       order
     });
@@ -3425,6 +3430,11 @@ function step(latch, down) {
 
 // src/game/kid.ts
 var u16 = (v) => v & 65535;
+var SEQ_FALL_FROM_RUN = 19;
+var SEQ_FALL_AFTER_STANDING_JUMP = 18;
+var SEQ_FALL_AFTER_RUNNING_JUMP = 21;
+var SEQ_PUSHED_OFF_LEDGE = 81;
+var SEQ_START_FALL_AT_WALL = 104;
 var KID_SEQ = {
   startRun: 1,
   stand: 2,
@@ -3944,12 +3954,49 @@ function safeStep(state, ctx) {
 }
 function startFall(state, ctx) {
   state.sword = 0;
+  const was = state.frame;
   state.currentRow += 1;
   ctx.traps?.startChompers(state.room, state.currentRow);
-  startSequence(state, KID_SEQ.fall, ctx.tables);
+  let seq = KID_SEQ.fall;
+  if (was === 9) seq = KID_SEQ.fall;
+  else if (was === 13) seq = SEQ_FALL_FROM_RUN;
+  else if (was === 26) seq = SEQ_FALL_AFTER_STANDING_JUMP;
+  else if (was === 44) seq = SEQ_FALL_AFTER_RUNNING_JUMP;
+  else if (was >= 81 && was < 86) {
+    seq = SEQ_FALL_FROM_RUN;
+    state.x = forwardX(state, 5) & 255;
+  } else if (was >= 150 && was < 180) {
+    if (state.direction < 0 && distanceToEdgeWeight(state, frameOf(ctx.tables, state)) <= 7) {
+      state.x = forwardX(state, -5) & 255;
+    }
+    seq = SEQ_PUSHED_OFF_LEDGE;
+  }
+  startSequence(state, seq, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  const frame = frameOf(ctx.tables, state);
+  let frame = frameOf(ctx.tables, state);
   state.currentColumn = determineColumn(state, frame);
+  if (tileHere(state, ctx).type === TILE.wall) {
+    inWall(state, ctx);
+    return;
+  }
+  if (tileFront(state, ctx).type === TILE.wall) {
+    frame = frameOf(ctx.tables, state);
+    if (was !== 44 || distanceToEdgeWeight(state, frame) >= 6) {
+      state.x = forwardX(state, -1) & 255;
+    } else {
+      startSequence(state, SEQ_START_FALL_AT_WALL, ctx.tables);
+      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+    }
+    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  }
+}
+function inWall(state, ctx) {
+  const frame = frameOf(ctx.tables, state);
+  let delta = distanceToEdgeWeight(state, frame);
+  if (delta >= 8 || tileFront(state, ctx).type === TILE.wall) delta = 6 - delta;
+  else delta += 4;
+  state.x = forwardX(state, delta) & 255;
+  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
 }
 function land(state, ctx) {
   state.y = floorHeightOfRow(state.currentRow);

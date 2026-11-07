@@ -269,6 +269,17 @@ export function fingerprint(rgb: Uint8Array, map: PaletteMap, mask: Uint8Array):
   return crc32(bytes);
 }
 
+/** The ticks on which what the player was holding changed. */
+export function inputChanges(ticks: readonly Controls[]): Set<number> {
+  const out = new Set<number>();
+  for (let t = 1; t < ticks.length; t++) {
+    const a = ticks[t - 1];
+    const b = ticks[t];
+    if (a.x !== b.x || a.y !== b.y || a.shift !== b.shift) out.add(t);
+  }
+  return out;
+}
+
 /** A replay's fingerprints and movement boxes, for a given digest. */
 export interface Run {
   readonly hash: number[];
@@ -311,7 +322,7 @@ export async function runOf(
  * not the game's -- see `ROOM_CHANGE_BLANK`.
  */
 export function exactAgreement(
-  digest: Digest, port: Run, range = 12,
+  digest: Digest, port: Run, freeSlipAt: ReadonlySet<number> = new Set(), range = 16,
 ): { agreed: number; ticks: number; drift: number[] } {
   const dos = digest.hash ?? [];
   const n = Math.min(dos.length, port.hash.length);
@@ -333,7 +344,13 @@ export function exactAgreement(
   for (let i = 1; i < n; i++) {
     const next = new Array(m).fill(0);
     const from = new Array(m).fill(0);
-    const slip = wholeScreen(digest.ticks[i]) ? 0 : SLIP;
+    // Free where the harness cannot be more precise than a tick: a
+    // room change, which the original holds black one tick longer than
+    // the port, and a tick on which the player's keys changed, because
+    // the emulator is sent the edge on the clock and the game reads the
+    // keyboard on its own tick -- see `recording_to_script.mjs`.
+    const slip = wholeScreen(digest.ticks[i]) || freeSlipAt.has(i)
+      || freeSlipAt.has(i - 1) || freeSlipAt.has(i + 1) ? 0 : SLIP;
     for (let j = 0; j < m; j++) {
       let pick = j;
       let value = best[j];

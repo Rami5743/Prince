@@ -126,15 +126,19 @@ const ROW_ABOVE_ORDER = -1;
 const ROOM_BOTTOM_Y = 192;
 
 /**
- * `y_to_row_mod4`, which is where in the drawing a falling slab belongs.
- * A slab drawn through the hole it made is in the row the hole is in,
- * not in the row it has fallen into.
+ * `y_to_row_mod4`: which row of the drawing a falling slab belongs to.
+ *
+ * It comes out as -1 for a slab drawn through the hole it made --
+ * `draw_mob` adds 192 to its y to put it back in the room above -- and
+ * SDLPoP's reading of that is tile 30, which is drawn before the room
+ * and therefore behind it. A capture says otherwise: the plank falling
+ * past the hole in the first descent of level 1 is painted over the
+ * black that `draw_tile_floorright` stamps there, not under it. So the
+ * row is clamped and the slab stays in front, and where a reading of
+ * the code and a capture disagree the capture wins.
  */
 function yToRowForMob(y: number): number {
-  if (y < 65) return 0;
-  if (y < 128) return 1;
-  if (y < 191) return 2;
-  return 2;
+  return Math.min(2, Math.max(0, (Math.floor((y + 60) / 63) % 4) - 1));
 }
 
 interface Piece {
@@ -1230,16 +1234,34 @@ export class RoomRenderer {
     const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
-    const main = y - 3;
-    const floor = TILE_TABLE[TILE.floor];
     const order = yToRowForMob(y);
-    this.mid.push({
-      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[0], x, yBottom: y,
+    const list = this.mid;
+    // `draw_mid_obj` case 10, and the ten is the point: a slab that has
+    // come away is not drawn with the pictures of a floor at rest.
+    // `add_mob_to_objtable` gives it `id = 10`, which indexes the same
+    // `loose_fram_*` tables the shaking floor uses and lands on the
+    // tilted pictures -- 70, 74 and 72 -- not on 41, 43 and 42. The
+    // port used index nought, so a falling plank was drawn as a tidy
+    // flat floor hanging in the air: the right height, the wrong shape,
+    // and a good half-tile short on its left.
+    const MOB = 10;
+    list.push({
+      chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[MOB], x,
+      yBottom: y - 3, blit: BLIT.transparent, order,
+    });
+    list.push({
+      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[MOB], x, yBottom: y,
       blit: BLIT.opaque, order,
     });
-    this.mid.push({
-      chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[0], x,
-      yBottom: floor.baseY + main, blit: BLIT.transparent, order,
+    // And the piece that joins it to the tile on its right, a tile
+    // along and a pixel up. This was in the port once, with the wrong
+    // sprite and no way of telling, and taking it out scored better
+    // than leaving it in. With the right sprite and an exact
+    // comparison it is twenty-six pixels of plank that were missing
+    // from every tick of every fall.
+    list.push({
+      chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[MOB], x: x + 32,
+      yBottom: y - 1, blit: BLIT.transparent, order,
     });
     // And nothing in the next column along. A floor at rest is three
     // pieces -- its top, its front, and the sliver that joins it to the
