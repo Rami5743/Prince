@@ -2611,11 +2611,10 @@ function fight(guard, ctx) {
   guard.waitTimer = Math.max(2, GUARD_STRIKE_WAIT - guard.skill);
   startSequence(guard, SWORD_SEQ.strike, ctx.tables);
 }
-var EN_GARDE_FIRST = 170;
-var EN_GARDE_LAST = 171;
+var STANCE_FRAMES = /* @__PURE__ */ new Set([158, 170, 171]);
 function advanceOnKid(guard, ctx) {
   if (guard.alive >= 0 || guard.sword !== 2) return;
-  if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
+  if (!STANCE_FRAMES.has(guard.frame)) return;
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   if (ctx.kidX === void 0) return;
   const gap = ctx.kidX - guard.x;
@@ -3605,6 +3604,7 @@ function stepKid(state, controls, ctx) {
   const frame = frameOf(ctx.tables, state);
   state.currentColumn = determineColumn(state, frame);
   checkBumped(state, ctx);
+  checkBumpedIntoFoe(state, ctx);
   checkAction(state, ctx);
   const leave = leaveDirection(state, ctx);
   if (leave >= 0) {
@@ -3645,9 +3645,29 @@ function checkBumped(state, ctx) {
   const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
   const push = Math.min(here, front);
   if (push === 0) return;
+  bumpBack(state, ctx, frame, push);
+}
+function bumpBack(state, ctx, frame, push) {
   state.x = forwardX(state, push) & 255;
   state.currentColumn = determineColumn(state, frame);
   startSequence(state, KID_SEQ.bump, ctx.tables);
+}
+var FOE_BODY = 10;
+function checkBumpedIntoFoe(state, ctx) {
+  if (state.alive >= 0) return;
+  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall || state.action === ACTION.inMidair || state.action === ACTION.hangClimb || state.action === ACTION.hangStraight) {
+    return;
+  }
+  const foe = ctx.opponent?.();
+  if (!foe || foe.alive >= 0) return;
+  if (foe.room !== state.room || foe.currentRow !== state.currentRow) return;
+  if (state.y !== floorHeightOfRow(state.currentRow)) return;
+  const gap = foe.x - state.x;
+  const inFront = state.direction === 0 ? gap > 0 : gap < 0;
+  if (!inFront) return;
+  const push = Math.abs(gap) - FOE_BODY;
+  if (push >= 0) return;
+  bumpBack(state, ctx, frameOf(ctx.tables, state), push);
 }
 function yToRow(y) {
   return Math.trunc((y + 60) / TILE_SIZE_Y) % 4 - 1;

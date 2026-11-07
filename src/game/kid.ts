@@ -876,6 +876,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   // a wall has also walked off the floor, and the original pushes it back
   // first, so the floor test sees where it really ends up.
   checkBumped(state, ctx);
+  checkBumpedIntoFoe(state, ctx);
   checkAction(state, ctx);
 
   const leave = leaveDirection(state, ctx);
@@ -967,9 +968,58 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
   const push = Math.min(here, front);
   if (push === 0) return;
 
+  bumpBack(state, ctx, frame, push);
+}
+
+/** Push a character back out of what it walked into, and stagger it. */
+function bumpBack(
+  state: CharacterState, ctx: KidContext, frame: Frame, push: number,
+): void {
   state.x = forwardX(state, push) & 0xff;
   state.currentColumn = determineColumn(state, frame);
   startSequence(state, KID_SEQ.bump, ctx.tables);
+}
+
+/**
+ * How close the Prince may come to a guard before the guard's body stops
+ * him, in internal units.
+ *
+ * A guard is not a wall but he is not thin air either, and the port had
+ * nothing here at all: the Prince ran straight through the one in level
+ * 1's room 3 and out the other side. It did not show while the guard was
+ * a tick-and-a-half too slow to reach him -- the blade always landed
+ * first -- but at the original's own pace the two simply swapped places.
+ *
+ * Ten units is inside `GUARD_REACH`, which is 21, so a guard who has
+ * closed to his own stopping distance can still lunge; the body only
+ * matters to a Prince who tried to keep going.
+ */
+const FOE_BODY = 10;
+
+/**
+ * A guard is something to walk into, not through.
+ *
+ * Only on the floor, and only forwards: a character in the air is a
+ * different case in the original -- sequences 45 and 46 knock it down --
+ * and neither is written yet.
+ */
+function checkBumpedIntoFoe(state: CharacterState, ctx: KidContext): void {
+  if (state.alive >= 0) return;
+  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall
+    || state.action === ACTION.inMidair || state.action === ACTION.hangClimb
+    || state.action === ACTION.hangStraight) {
+    return;
+  }
+  const foe = ctx.opponent?.();
+  if (!foe || foe.alive >= 0) return;
+  if (foe.room !== state.room || foe.currentRow !== state.currentRow) return;
+  if (state.y !== floorHeightOfRow(state.currentRow)) return;
+  const gap = foe.x - state.x;
+  const inFront = state.direction === 0 ? gap > 0 : gap < 0;
+  if (!inFront) return;
+  const push = Math.abs(gap) - FOE_BODY;
+  if (push >= 0) return;
+  bumpBack(state, ctx, frameOf(ctx.tables, state), push);
 }
 
 /** Row a given height falls in, counting the row above the room as -1. */

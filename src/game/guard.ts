@@ -307,19 +307,32 @@ function fight(guard: GuardState, ctx: GuardStepContext): void {
 /**
  * The frames of the en garde stance, which a guard holds between moves.
  *
- * This makes his stride five ticks -- 163, 164, 165, 158 and then 170,
- * where the next one starts. The original's is four: the grabbed video
- * of level 1's room 3 has its guard covering 14 pixels every four ticks
- * against the port's 12 every five, so the port trails where the
- * original keeps up. Letting the stride start from 158 as well gives the
- * right four ticks and the right speed -- and makes everything after it
- * worse, because 158 is also on the way back from a lunge and the guard
- * then walks in instead of holding. `session-level1-guard` drops from 14
- * captures to fewer and the recorded run parts company 150 ticks
- * earlier. Left as it is until what else reads 158 is understood.
+ * Sequence 56 is `dx 2, frame 163, dx 4, frame 164, frame 165` and then a
+ * jump into the stance at 158, 170, 171, 171... A guard who waits for 170
+ * to come round has a five tick stride.
+ *
+ * The original's is four. The grabbed video of the recorded run of level
+ * 1 pins every frame of it in room 3, by rebuilding each tick's picture
+ * from the port's own renderer and asking which guard frame and position
+ * reproduce it:
+ *
+ *     tick 120 121 122 123 124 125 126 127 128 129
+ *     frame 158 163 164 165 158 163 164 165 158 163
+ *     x     170 168 164 164 164 162 158 158 158 156
+ *
+ * -- 163, 164, 165, 158 and round again, six internal units every four
+ * ticks. 170 never shows at all while he is walking in.
+ *
+ * So the stance a guard may step out of is 158 as well as 170 and 171,
+ * which is also how he gets going at all: the draw, sequence 69, ends
+ * 157, 158 and the original is already striding on the next tick. An
+ * earlier attempt wrote this as the range 158..171 and matched 163, 164
+ * and 165 too, which restarted the stride every tick; it is a set of
+ * three frames, not a range.
  */
-const EN_GARDE_FIRST = 170;
-const EN_GARDE_LAST = 171;
+const STANCE_FRAMES = new Set([158, 170, 171]);
+
+
 
 /**
  * A guard who is on guard walks in on the Prince.
@@ -342,7 +355,7 @@ function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
   // room shows him walking in from x 273 to x 100 over fifty ticks while
   // the Prince, who has no sword on level 1, backs away in front of him.
   // The captures were too sparse to see it.
-  if (guard.frame < EN_GARDE_FIRST || guard.frame > EN_GARDE_LAST) return;
+  if (!STANCE_FRAMES.has(guard.frame)) return;
   if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
   if (ctx.kidX === undefined) return;
   const gap = ctx.kidX - guard.x;
