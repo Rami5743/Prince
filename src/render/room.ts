@@ -151,6 +151,12 @@ export interface RoomTiles {
   modifierAt(room: number, column: number, row: number): number;
   /** roomLinks[(room-1)*4 + dir], dir 0 left, 1 right, 2 up, 3 down. */
   linkOf(room: number, dir: number): number;
+  /**
+   * How long a button's link still has to run. A button's modifier is an
+   * index into the door links, and the timer there is what says the plate
+   * is down -- there is nothing in the tile itself to say so.
+   */
+  doorLinkTimer?(index: number): number;
 }
 
 export interface RoomRenderOptions {
@@ -711,7 +717,9 @@ export class RoomRenderer {
       chtab = CHTAB.environmentWall;
     } else {
       if (this.currTile === TILE.doortop) blit = BLIT.or;
-      id = TILE_TABLE[this.currTile].bottomId;
+      id = this.buttonDown()
+        ? TILE_TABLE[TILE.floor].bottomId
+        : TILE_TABLE[this.currTile].bottomId;
     }
     this.addCurrent(chtab, id, this.drawX, this.drawBottomY, blit);
     if (chtab === CHTAB.environmentWall) this.wallPattern(0, 0);
@@ -724,6 +732,21 @@ export class RoomRenderer {
     this.addFore(CHTAB.environment, id, this.drawX, this.drawBottomY, BLIT.opaque);
   }
 
+  /**
+   * Is the plate of this button down?
+   *
+   * A button's modifier is an index into the level's door links, and the
+   * timer kept there is the only record that it is being stood on:
+   * `pressButton` sets it to five and `animateButton` counts it down, so
+   * it stays up while a foot is on the plate and runs out a few ticks
+   * after the foot leaves.
+   */
+  private buttonDown(): boolean {
+    if (this.currTile !== TILE.opener && this.currTile !== TILE.closer) return false;
+    const timer = this.tiles.doorLinkTimer?.(this.currModifier) ?? 0;
+    return timer > 0;
+  }
+
   private drawTileBase(): void {
     let id: number;
     let yBottom = this.drawMainY;
@@ -732,6 +755,12 @@ export class RoomRenderer {
       yBottom += 3;
     } else if (this.currTile === TILE.loose) {
       id = LOOSE_FRAM_LEFT[looseFrame(this.currModifier)] ?? 0;
+    } else if (this.buttonDown()) {
+      // Trodden on, the plate goes flush with the floor. The raised one
+      // is a pixel taller than a plain floor -- 147 against 41 -- and
+      // that pixel is the plate; with a foot on it the tile is drawn as
+      // the floor it sits in.
+      id = TILE_TABLE[TILE.floor].baseId;
     } else if (this.currTile === TILE.opener && this.tileLeft === TILE.empty && !this.isPalace) {
       id = 148;
     } else {

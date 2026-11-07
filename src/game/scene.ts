@@ -96,6 +96,7 @@ export async function buildLevelScene(
     typeAt: (room, column, row) => state.typeAt(room, column, row),
     modifierAt: (room, column, row) => state.modifierAt(room, column, row),
     linkOf: (room, dir) => state.linkOf(room, dir),
+    doorLinkTimer: (index) => state.doorLinkTimer(index),
   };
 
   return {
