@@ -29,25 +29,29 @@
  * `--settle <seconds>` is how long after Ctrl+A the level is running
  * again; see tools/oracle/README for how it was measured.
  *
- * ## Why the edges go in the middle of a tick
+ * ## Where inside a tick an edge goes
  *
- * The game looks at the keyboard once a tick and nowhere else, so the
- * only thing that matters about when a key goes down is *which tick it
- * lands in*. The recorder knows that: every event it keeps carries the
- * tick that was current when it arrived.
+ * The game looks at the keyboard once a tick and nowhere else, at the
+ * start of the tick, so the only thing that matters about when a key
+ * goes down is *which tick first sees it*. The recorder knows that:
+ * every event it keeps carries the tick that was current when it
+ * arrived, which is the tick the port acted on it in.
  *
- * What the emulator cannot know is where the original's tick boundaries
- * fall in wall-clock time. Ctrl+A anchors the run, but the phase of the
- * timer after it is whatever it is. Sending an edge at exactly `tick/12`
- * seconds therefore puts it within a hair of a boundary and it lands on
- * either side by luck: measured on `probeE`, every press went in one
- * tick early and the original ran a tick ahead of the port for the whole
- * of the rest of the run.
+ * For the original to act on it in that tick too, the edge has to be
+ * down before that tick begins -- anywhere in the tick before it. So
+ * each edge goes out at `(tick - 0.5) / 12`, the middle of the tick
+ * before its own, which leaves half a tick of slack either way for the
+ * emulator's own phase.
  *
- * So each edge goes out at the *middle* of its tick, `(tick + 0.5) / 12`.
- * Half a tick of phase error either way then changes nothing, and
- * nothing is lost by it: a press and a release inside one tick is not
- * something the game can see anyway.
+ * Half a tick is not much and it was not obvious. At `(tick + 0.5)/12`
+ * -- the middle of the tick itself -- every press in `probeE` was read
+ * one tick late by the original, which cost the alignment a tick at the
+ * first press and the three ticks of the level title with it. Moving it
+ * back by one takes the run from 158 of its 168 ticks exact to 160 of
+ * 166, with no drift at all over the first hundred.
+ *
+ * Nothing is lost by the quantising: a press and a release inside one
+ * tick is not something the game can see anyway.
  *
  * `--raw-ms` puts the millisecond stamps back, which is what this did
  * before, and is kept for showing that the difference is real.
@@ -128,7 +132,7 @@ for (const e of rec.events) {
   // held. The emulator needs the edges, not the repeats.
   if (e.type === 'down' && down.has(key)) { dropped++; continue; }
   if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
-  const want = rawMs ? e.ms / 1000 : (e.tick + 0.5 + shift) * TICK;
+  const want = rawMs ? e.ms / 1000 : (e.tick - 0.5 + shift) * TICK;
   const wait = Math.max(MIN_GAP, want - at);
   chain.push('sleep', wait.toFixed(3));
   at = Math.max(want, at + MIN_GAP);
