@@ -21,7 +21,8 @@ import {
   SWORD_SEQ, SWORD_DRAWN, isReady, facingOf, charOppDist, SWORD_REACH,
 } from './sword.ts';
 import type { LevelState } from './level-state.ts';
-import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_SIZE_X, Y_LAND } from './geometry.ts';
+import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_SIZE_X, TILE_MID_X, Y_LAND } from './geometry.ts';
+import { TILE, tileIsFloor } from './tiles.ts';
 
 /** Sequence the guard starts on when a room is entered. */
 export const GUARD_SEQ = {
@@ -235,6 +236,68 @@ export interface GuardStepContext {
   readonly random?: () => number;
   /** Is there floor in front of the guard to step onto? */
   readonly floorInFront?: (guard: GuardState) => boolean;
+  /**
+   * `get_tile_at_kid`: the tile of the Prince's own room and row at an x,
+   * for the line of sight between a guard and him.
+   */
+  readonly tileAtKid?: (xpos: number) => { type: number; modifier: number };
+}
+
+/** What a guard can see of the Prince. */
+export const SIGHT = {
+  /** Nothing: something solid is in the way. */
+  none: 0,
+  /** Him, but across something the guard will not cross. */
+  wont: 1,
+  /** Him, with a clear floor between. */
+  comes: 2,
+} as const;
+
+/**
+ * `check_can_guard_see_kid`.
+ *
+ * Not "the same room and the same row", which is what the port asked.
+ * The original walks the tiles between the two of them: a wall or a door
+ * top and it sees nothing at all; a loose floor, a chomper, a gate that
+ * is less than most of the way up, or a hole in the floor, and it sees
+ * him but will not come. The difference is not cosmetic -- a guard that
+ * can see him but will not come stands still, one that cannot see him at
+ * all backs away, and one with a clear floor between comes on.
+ */
+export function canGuardSeeKid(
+  guard: GuardState, kid: CharacterState, ctx: GuardStepContext,
+): number {
+  const at = ctx.tileAtKid;
+  if (!at) return kid.room === guard.room && kid.currentRow === guard.currentRow
+    ? SIGHT.comes : SIGHT.none;
+  // Frames 219..228 are the way out of a level, where nothing can touch him.
+  if (kid.frame === 0 || (kid.frame >= 219 && kid.frame < 229)) return SIGHT.none;
+  if (guard.direction === NO_DIRECTION || kid.alive >= 0 || guard.alive >= 0) {
+    return SIGHT.none;
+  }
+  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return SIGHT.none;
+  let left = X_BUMP[kid.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  let right = X_BUMP[guard.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (left === undefined || right === undefined) return SIGHT.none;
+  if (left > right) { const t = left; left = right; right = t; }
+  // A chomper is on the left of its tile and a gate on the right, so
+  // neither is between them when it is the tile one of them stands on.
+  if (at(left).type === TILE.chomper) left += TILE_SIZE_X;
+  if (at(right).type === TILE.gate) right -= TILE_SIZE_X;
+  let sight: number = SIGHT.comes;
+  for (let x = left; x <= right; x += TILE_SIZE_X) {
+    const tile = at(x);
+    if (tile.type === TILE.wall || tile.type === TILE.doortopWithFloor
+      || tile.type === TILE.doortop) {
+      return SIGHT.none;
+    }
+    if (tile.type === TILE.loose || tile.type === TILE.chomper
+      || (tile.type === TILE.gate && tile.modifier < 112)
+      || !tileIsFloor(tile.type)) {
+      sight = SIGHT.wont;
+    }
+  }
+  return sight;
 }
 
 /**
@@ -274,7 +337,14 @@ export const GUARD_FRAME_INACTIVE = 166;
 function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.alive >= 0 || guard.sword !== 0) return;
   if (guard.frame !== GUARD_FRAME_INACTIVE) return;
-  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
+  const kid = ctx.kid;
+  if (!kid || kid.alive >= 0) return;
+  // `autocontrol_guard_inactive`: a guard with his sword away comes on
+  // guard when he can see the Prince at all, which is not the same as
+  // the Prince being in the room. Across a hole in the floor or behind a
+  // gate he still draws -- `can_guard_see_kid` of one is enough for that
+  // -- but behind a wall he does not.
+  if (canGuardSeeKid(guard, kid, ctx) === SIGHT.none) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
@@ -405,8 +475,15 @@ function autocontrolGuardActive(guard: GuardState, ctx: GuardStepContext): void 
   if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
   if (guard.sword !== SWORD_DRAWN) return;
   if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
-  // `can_guard_see_kid`, as near as the port has it.
-  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return;
+  const sight = canGuardSeeKid(guard, kid, ctx);
+  // He can see him but will not cross what is between them: he stands.
+  if (sight === SIGHT.wont) return;
+  if (sight === SIGHT.none) {
+    // `move_down_back`. Out of sight is not out of the fight: the
+    // original backs away rather than freezing where it stands.
+    moveBackward(guard, ctx);
+    return;
+  }
   const distance = charOppDist(guard, kid);
   // A Prince picking himself up off the floor is left alone.
   if (distance >= 12 && kid.frame >= 102 && kid.frame < 118

@@ -11,7 +11,7 @@ import {
   newCharacter, placeCharacter, placeSword, type CharacterState,
 } from './character.ts';
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
-import { getTile, type World } from './physics.ts';
+import { getTile, tileDivModM7, type World } from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
 import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS, tileIsFloor } from './tiles.ts';
 import { toScreenX, standX, standY } from './geometry.ts';
@@ -28,7 +28,8 @@ const GUARD_FOLLOWS_RIGHT = 165;
 import { startSequence } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
-  guardFrame, stepGuard, NO_DIRECTION, type GuardState, type GuardsData,
+  guardFrame, stepGuard, refractoryFor, NO_DIRECTION, type GuardState,
+  type GuardsData,
 } from './guard.ts';
 
 export interface GameOptions {
@@ -233,11 +234,30 @@ export class Game {
       kidX: this.kid.x,
       kid: this.kid,
       kidArmed: this.hasSword,
-      random: () => this.prng.next(8),
+      // `prandom(255)`. It was `next(8)`, which is not the same roll at
+      // all: every one of the original's probabilities is a number out
+      // of 255, so against a nought-to-eight roll anything over eight
+      // always wins. A guard of level 1 strikes on 61 and advances on
+      // 255, so he struck every tick he could and never missed a chance
+      // to close -- which is why he killed a Prince who stood still in
+      // a dozen ticks and the capture's did not.
+      random: () => this.prng.next(255),
       // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
       // follow the room links: a guard who has come through a door is
       // standing a tile or two outside the room he is walking into, and
       // asking his own room for column eleven answers nothing.
+      // `get_tile_at_kid`: the tile of the Prince's own room and row at
+      // an x, for the line of sight between a guard and him.
+      tileAtKid: (xpos) => {
+        const t = getTile(
+          this.ctx.world, this.kid.room,
+          tileDivModM7(xpos).column, this.kid.currentRow,
+        );
+        return {
+          type: t.type,
+          modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0,
+        };
+      },
       floorInFront: (guard) => {
         const ahead = guard.direction < 0 ? -1 : 1;
         for (const step of [1, 2]) {
@@ -327,6 +347,12 @@ export class Game {
     const dead = this.guard.hitPoints === 0;
     startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
     if (dead) hit.alive = 0;
+    // `check_sword_hurt`: a guard who has been hit holds off for a while,
+    // the while being his skill's own number. The port had the timer and
+    // the table and never set it, so a guard came straight back at the
+    // Prince on the tick after taking a blow and there was no moment to
+    // press the attack in.
+    this.guard.waitTimer = refractoryFor(this.guard.skill);
   }
 
 
@@ -533,7 +559,7 @@ export class Game {
         const type = this.scene.state.typeAt(room, column, row);
         const tilePos = row * 10 + column;
         if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(8));
+          this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(255));
           this.traps.add(room, tilePos, 1);
         } else if (type === 10 || type === 22) {
           this.traps.add(room, tilePos, 1);
@@ -543,7 +569,7 @@ export class Game {
       if (left) {
         const type = this.scene.state.typeAt(left, 9, row);
         if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(left, row * 10 + 9, this.prng.next(8));
+          this.scene.state.setModifierAtPos(left, row * 10 + 9, this.prng.next(255));
           this.traps.add(left, row * 10 + 9, 1);
         }
       }

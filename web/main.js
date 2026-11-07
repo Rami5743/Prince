@@ -2735,11 +2735,51 @@ function leaveGuard(guard, guards) {
   }
   guard.direction = NO_DIRECTION;
 }
+var SIGHT = {
+  /** Nothing: something solid is in the way. */
+  none: 0,
+  /** Him, but across something the guard will not cross. */
+  wont: 1,
+  /** Him, with a clear floor between. */
+  comes: 2
+};
+function canGuardSeeKid(guard, kid, ctx) {
+  const at = ctx.tileAtKid;
+  if (!at) return kid.room === guard.room && kid.currentRow === guard.currentRow ? SIGHT.comes : SIGHT.none;
+  if (kid.frame === 0 || kid.frame >= 219 && kid.frame < 229) return SIGHT.none;
+  if (guard.direction === NO_DIRECTION || kid.alive >= 0 || guard.alive >= 0) {
+    return SIGHT.none;
+  }
+  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return SIGHT.none;
+  let left = X_BUMP[kid.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  let right = X_BUMP[guard.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (left === void 0 || right === void 0) return SIGHT.none;
+  if (left > right) {
+    const t = left;
+    left = right;
+    right = t;
+  }
+  if (at(left).type === TILE.chomper) left += TILE_SIZE_X;
+  if (at(right).type === TILE.gate) right -= TILE_SIZE_X;
+  let sight = SIGHT.comes;
+  for (let x = left; x <= right; x += TILE_SIZE_X) {
+    const tile = at(x);
+    if (tile.type === TILE.wall || tile.type === TILE.doortopWithFloor || tile.type === TILE.doortop) {
+      return SIGHT.none;
+    }
+    if (tile.type === TILE.loose || tile.type === TILE.chomper || tile.type === TILE.gate && tile.modifier < 112 || !tileIsFloor(tile.type)) {
+      sight = SIGHT.wont;
+    }
+  }
+  return sight;
+}
 var GUARD_FRAME_INACTIVE = 166;
 function comeOnGuard(guard, ctx) {
   if (guard.alive >= 0 || guard.sword !== 0) return;
   if (guard.frame !== GUARD_FRAME_INACTIVE) return;
-  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
+  const kid = ctx.kid;
+  if (!kid || kid.alive >= 0) return;
+  if (canGuardSeeKid(guard, kid, ctx) === SIGHT.none) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
@@ -2748,6 +2788,7 @@ var RESTRIKE_PROB = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
 var BLOCK_PROB = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
 var IMP_BLOCK_PROB = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
 var ADV_PROB = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
+var REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
 var CAN_STRIKE = [157, 158, 165, 170, 171];
 var CAN_STEP = [158, 170, 171];
 var CAN_PARRY = [158, 170, 171, 168, 165];
@@ -2820,7 +2861,12 @@ function autocontrolGuardActive(guard, ctx) {
   if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
   if (guard.sword !== SWORD_DRAWN) return;
   if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
-  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return;
+  const sight = canGuardSeeKid(guard, kid, ctx);
+  if (sight === SIGHT.wont) return;
+  if (sight === SIGHT.none) {
+    moveBackward(guard, ctx);
+    return;
+  }
   const distance = charOppDist(guard, kid);
   if (distance >= 12 && kid.frame >= 102 && kid.frame < 118 && kid.action === ACTION.bumped) {
     return;
@@ -2855,6 +2901,9 @@ function faceTheKid(guard, ctx) {
   if (guard.direction !== facingOf(guard, kid)) {
     startSequence(guard, SWORD_SEQ.turn, ctx.tables);
   }
+}
+function refractoryFor(skill) {
+  return REFRACTORY[skill] ?? 0;
 }
 function stepGuard(guard, ctx) {
   if (guard.direction === NO_DIRECTION) return;
@@ -4950,11 +4999,32 @@ var Game = class _Game {
       kidX: this.kid.x,
       kid: this.kid,
       kidArmed: this.hasSword,
-      random: () => this.prng.next(8),
+      // `prandom(255)`. It was `next(8)`, which is not the same roll at
+      // all: every one of the original's probabilities is a number out
+      // of 255, so against a nought-to-eight roll anything over eight
+      // always wins. A guard of level 1 strikes on 61 and advances on
+      // 255, so he struck every tick he could and never missed a chance
+      // to close -- which is why he killed a Prince who stood still in
+      // a dozen ticks and the capture's did not.
+      random: () => this.prng.next(255),
       // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
       // follow the room links: a guard who has come through a door is
       // standing a tile or two outside the room he is walking into, and
       // asking his own room for column eleven answers nothing.
+      // `get_tile_at_kid`: the tile of the Prince's own room and row at
+      // an x, for the line of sight between a guard and him.
+      tileAtKid: (xpos) => {
+        const t = getTile(
+          this.ctx.world,
+          this.kid.room,
+          tileDivModM7(xpos).column,
+          this.kid.currentRow
+        );
+        return {
+          type: t.type,
+          modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0
+        };
+      },
       floorInFront: (guard) => {
         const ahead = guard.direction < 0 ? -1 : 1;
         for (const step2 of [1, 2]) {
@@ -5027,6 +5097,7 @@ var Game = class _Game {
     const dead = this.guard.hitPoints === 0;
     startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
     if (dead) hit.alive = 0;
+    this.guard.waitTimer = refractoryFor(this.guard.skill);
   }
   /**
    * What a flask does, by the kind it is -- the top five bits of its
@@ -5216,7 +5287,7 @@ var Game = class _Game {
         const type = this.scene.state.typeAt(room, column, row);
         const tilePos = row * 10 + column;
         if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(8));
+          this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(255));
           this.traps.add(room, tilePos, 1);
         } else if (type === 10 || type === 22) {
           this.traps.add(room, tilePos, 1);
@@ -5226,7 +5297,7 @@ var Game = class _Game {
       if (left) {
         const type = this.scene.state.typeAt(left, 9, row);
         if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(left, row * 10 + 9, this.prng.next(8));
+          this.scene.state.setModifierAtPos(left, row * 10 + 9, this.prng.next(255));
           this.traps.add(left, row * 10 + 9, 1);
         }
       }
