@@ -133,6 +133,33 @@ nothing like constant, which is itself the answer -- the drift depends
 on what the emulator was doing, and a capture whose key edges fall near
 a decision cannot be made to line up.
 
+## How close a capture can get
+
+The original was captured twice from the same recording, `848ee3c4`,
+and the two runs of `PRINCE.EXE` were compared with each other. Over
+ticks 100 to 400 they are the same picture on 143 of 301 ticks, with
+the rest within a couple of hundred pixels, and the alignment between
+them wanders between two and four ticks. Their first difference is at
+tick 81, long before a guard is on the screen.
+
+So "identical on every tick" is not a thing the original does against
+itself, and a figure like that is the ceiling for the port, not a
+failure of it.
+
+Two reasons. The key events go in on the clock, so a press lands a tick
+either side of where it did last time; and the fight is driven by the
+game's own random numbers, which are not the same twice. Once the
+Prince dies at a different tick, everything after it is a different
+run, which is why a recording that ends in a sword fight has a tail
+that cannot be measured at all.
+
+`align.py` is the measure to use where that matters. It walks the two
+runs together and lets the alignment slip by a tick at a time, so a
+port that does the same thing a tick out is counted as doing the same
+thing, and prints the drift it needed, which is itself worth reading.
+`segments.py` -- one offset per stretch between room changes -- is the
+stricter test and the better one where the two runs really are in step.
+
 ## What each tool does
 
 * `recording_to_script.mjs` -- a recording's raw key events become one
@@ -148,6 +175,8 @@ a decision cannot be made to line up.
 * `compare_ticks.py` -- compares two directories of per-tick pictures. The
   torches are masked out: a flame picks its next frame at random and the
   two sides can never agree on one.
+* `align.py` -- the two runs walked together with the alignment free to
+  move a tick at a time; prints the drift and what is left after it.
 * `where.py` -- the bounding box of what moved from one tick to the next,
   which for a room that does not move is the character. Run it over both
   directories side by side to see where each has him.
