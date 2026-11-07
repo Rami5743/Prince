@@ -82,6 +82,33 @@ describe('a potion', () => {
     expect(game.hitPoints, 'the Prince is one better off').toBe(3);
   });
 
+  /**
+   * And the flask goes, wherever he was standing when he reached for it.
+   * The byte-code raises `getItem` a dozen frames into the drink and the
+   * animation opens by moving him four units, so by then the column he
+   * counts as standing in need not be the one the flask is on; the port
+   * emptied whatever was under his feet at that moment, which left the
+   * flask where it was and cleared a tile that had nothing on it.
+   */
+  it('goes from the tile it was on, whatever he does while drinking', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    const kid = game.kid;
+    stand(game, ROOM, COLUMN, ROW);
+    // Standing a few units to the right of the middle of the tile, as a
+    // Prince who has just walked onto it is.
+    kid.x = standX(COLUMN) + 5;
+    let drank = -1;
+    for (let i = 0; i < 80 && drank < 0; i++) {
+      game.step(NOTHING);
+      if (game.scene.state.typeAt(ROOM, COLUMN, ROW) !== TILE.potion) drank = i;
+    }
+    expect(drank, 'the flask he drank from is the one that empties')
+      .toBeGreaterThanOrEqual(0);
+    // And nothing else was taken away with it.
+    expect(game.scene.state.typeAt(ROOM, COLUMN + 1, ROW)).toBe(TILE.floor);
+  });
+
   it('does not take him past his maximum', async () => {
     const game = await Game.start(assets, exe, 1);
     stand(game, ROOM, COLUMN, ROW);

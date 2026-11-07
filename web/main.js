@@ -3695,6 +3695,7 @@ function checkPickUpSword(state, ctx) {
   if (state.frame !== FRAME.stand) return;
   const tile = tileHere(state, ctx);
   if (tile.type !== TILE.sword || !tile.room) return;
+  ctx.markItem?.(tile.room, tile.column, tile.row);
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
 var LEVEL_DOOR_OPEN = 43;
@@ -3713,6 +3714,7 @@ function checkDrink(state, ctx) {
   if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
   const tile = tileHere(state, ctx);
   if (tile.type !== TILE.potion || !tile.room) return;
+  ctx.markItem?.(tile.room, tile.column, tile.row);
   startSequence(state, KID_SEQ.drink, ctx.tables);
 }
 function checkChomped(state, ctx) {
@@ -4454,6 +4456,8 @@ var Game = class _Game {
    * measured about how long it lasts, so it is set and read and no more.
    */
   featherFall = false;
+  /** The tile whose sword or flask the Prince is reaching for. */
+  itemTile = null;
   /** True once the Prince has walked out of the level. */
   levelFinished = false;
   /** Ticks since the level was built, for the words under the room. */
@@ -4522,6 +4526,9 @@ var Game = class _Game {
       damage: (amount) => this.damage(amount),
       opponent: () => this.guard.direction === NO_DIRECTION ? null : this.guard,
       hasSword: () => this.hasSword,
+      markItem: (room, column, row) => {
+        this.itemTile = { room, column, row };
+      },
       effects: {
         sound: effects.sound,
         /**
@@ -4551,7 +4558,10 @@ var Game = class _Game {
         },
         getItem: (which) => {
           if (which !== 1) return;
-          const k = this.kid;
+          const at = this.itemTile;
+          this.itemTile = null;
+          if (!at) return;
+          const k = { room: at.room, currentColumn: at.column, currentRow: at.row };
           const tile = this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow);
           if (tile === TILE_SWORD) this.hasSword = true;
           else if (tile === TILE_POTION) {

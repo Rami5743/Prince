@@ -133,6 +133,15 @@ export interface KidContext {
   opponent?(): CharacterState | null;
   /** Has the Prince picked up a sword? Without one he cannot draw. */
   hasSword?(): boolean;
+  /**
+   * Remember which tile the thing he is reaching for is on. The byte-code
+   * raises `getItem` a dozen frames after the animation starts, and both
+   * animations move him on the way -- the drink opens with `dx 4` -- so by
+   * then the column he counts as standing in need not be the one the
+   * flask is on. Taking it from under his feet at that moment emptied the
+   * wrong tile and left the flask where it was.
+   */
+  markItem?(room: number, column: number, row: number): void;
 }
 
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
@@ -859,6 +868,7 @@ function checkPickUpSword(state: CharacterState, ctx: KidContext): void {
   if (state.frame !== FRAME.stand) return;
   const tile = tileHere(state, ctx);
   if (tile.type !== TILE.sword || !tile.room) return;
+  ctx.markItem?.(tile.room, tile.column, tile.row);
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
 
@@ -904,6 +914,7 @@ function checkDrink(state: CharacterState, ctx: KidContext): void {
   if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
   const tile = tileHere(state, ctx);
   if (tile.type !== TILE.potion || !tile.room) return;
+  ctx.markItem?.(tile.room, tile.column, tile.row);
   startSequence(state, KID_SEQ.drink, ctx.tables);
 }
 
