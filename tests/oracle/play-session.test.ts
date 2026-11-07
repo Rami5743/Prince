@@ -90,7 +90,10 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // few units further, onto the solid floor at column 6, so it stays up.
   // The two also part company at the ninth capture, where the original
   // blanks the screen to change room and the port does not.
-  { name: 'level2-guard', reproduces: 9 },
+  // 11 since a guard comes on guard the way the original's does: his
+  // `seq_90_en_garde` is one instruction, `jmp(ready)`, and the port had
+  // him on 69, which is `attack was parried` and four frames long.
+  { name: 'level2-guard', reproduces: 11 },
 
   // The same room, with the run left not interrupted, so the Prince
   // crosses the loose floors at speed and reaches the guard. 9 of 55 --
@@ -99,7 +102,8 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // closes on the Prince and then fights him, with the Prince taking a hit
   // and giving ground. The closing is now reproduced; the fight is not
   // written at all. 9 of 55.
-  { name: 'level2-meet', reproduces: 13 },
+  // 16 with the same fix.
+  { name: 'level2-meet', reproduces: 16 },
 
   // Level 1's own guard, in room 3, met by a Prince who has not got a
   // sword yet -- it lies in room 15, on the far side of him. 14 of 87.

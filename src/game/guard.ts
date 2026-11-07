@@ -39,7 +39,7 @@ export const GUARD_SEQ = {
    * 167, then 155..157 and 158, 170, 171 into the stance, all of them
    * inside his own table.
    */
-  enGarde: 69,
+  enGarde: 90,
   advance: 56,
   retreat: 57,
   strike: 58,

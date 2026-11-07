@@ -78,21 +78,21 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * too, which is three of the five lowest scores on one knife edge.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 249,
-  '13ab6867': 648,
+  '0fbffa60': 204,
+  '13ab6867': 651,
   '25c4ebb8': 369,
-  '33e8ace7': 208,
+  '33e8ace7': 219,
   '3764b76d': 94,
-  '5920a8c2': 383,
-  '72b3522f': 159,
-  '756b259c': 348,
-  '760c3e74': 1005,
-  '848ee3c4': 673,
+  '5920a8c2': 394,
+  '72b3522f': 188,
+  '756b259c': 346,
+  '760c3e74': 1020,
+  '848ee3c4': 679,
   '9b60bf3a': 464,
-  'a356bdd6': 143,
-  'b4ff4672': 342,
-  'e209b01a': 187,
-  'ec99dc5b': 208,
+  'a356bdd6': 141,
+  'b4ff4672': 340,
+  'e209b01a': 200,
+  'ec99dc5b': 216,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

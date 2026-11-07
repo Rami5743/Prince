@@ -202,10 +202,15 @@ describe('a guard left to himself', () => {
     // through 207..210, which a guard cannot show at all: sending him
     // through it left him missing for those four frames.
     expect(frames.every((f) => f >= 149 && f <= 189), `frames ${frames}`).toBe(true);
-    // 167 opens it; what follows is one of the sword frames -- the stance
-    // at 170/171, or a move out of it if the Prince is already close
-    // enough to be worth lunging at.
-    expect(frames).toContain(167);
+    // And he is on guard at once. `seq_90_en_garde` is one instruction,
+    // `jmp(ready)`, so a guard goes straight to 158 and then into the
+    // stance at 170/171 -- there is no flourish for him to make. The
+    // port had him on sequence 69, which is `attack was parried` and
+    // takes four frames he should never have spent: by the time he was
+    // ready the Prince was a tile further on, and in the player's
+    // recording `e209b01a` that tile is the difference between a guard
+    // who follows him into the next room and one who stays behind.
+    expect(frames.slice(0, 3)).toEqual([166, 158, 163]);
     expect(frames[frames.length - 1]).toBeGreaterThanOrEqual(150);
     expect(frames[frames.length - 1]).toBeLessThanOrEqual(171);
   });
