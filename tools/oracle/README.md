@@ -84,3 +84,25 @@ So expect the comparison to slip two ticks at every room change, and
 read `drift_map.py`'s per-window offsets rather than the raw tick
 numbers after one. A window whose mean is near zero at a shifted offset
 is the port doing exactly what the original does.
+
+## What the replay cannot resolve
+
+The script sends the player's key edges at the milliseconds the browser
+recorded them, which is as fine as the recording gets, but the two runs
+do not agree about where a tick begins. A press of two ticks or less is
+therefore a coin toss: the original may see it on one tick, on two, or
+on none.
+
+The recorded run `756b259c` has one. The player lets Up go for four
+ticks and presses it again for two, while the Prince is running; the
+port starts a running jump and the original keeps running, and the two
+have nothing to do with each other from there on. The recording
+`b4ff4672` has the same two jumps in the same two places with a press
+four ticks long, and there the original jumps exactly as the port does.
+Nothing in the port tells those two apart, and nothing should: refusing
+the short one makes `756b259c` agree for 178 more ticks and `b4ff4672`
+disagree for 111.
+
+So treat a divergence that begins on a press of a tick or two as the
+replay's own limit, and look for the first difference that begins
+somewhere else.

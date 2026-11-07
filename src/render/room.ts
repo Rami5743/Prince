@@ -489,10 +489,17 @@ export class RoomRenderer {
    * record -- `pressButton` sets it to five and `animateButton` counts it
    * down, so it holds while the foot is there and runs out a few ticks
    * after it leaves.
+   *
+   * It runs out at one, not at nought. `animateButton` writes the timer
+   * back and then drops the tile off the list of things to animate once
+   * it is below two, so the last value ever written is one and nothing
+   * will ever write a nought. A plate that counted one as pressed stayed
+   * sunk for the rest of the level, which is what the player saw: step
+   * on it, step off, and it never comes back up.
    */
   private pressedToFloor(type: number, modifier: number): number {
     if (type !== TILE.opener && type !== TILE.closer) return type;
-    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 0 ? TILE.floor : type;
+    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 1 ? TILE.floor : type;
   }
 
   private loadCurrentAndLeftTile(): void {

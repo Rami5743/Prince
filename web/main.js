@@ -1058,10 +1058,17 @@ var RoomRenderer = class {
    * record -- `pressButton` sets it to five and `animateButton` counts it
    * down, so it holds while the foot is there and runs out a few ticks
    * after it leaves.
+   *
+   * It runs out at one, not at nought. `animateButton` writes the timer
+   * back and then drops the tile off the list of things to animate once
+   * it is below two, so the last value ever written is one and nothing
+   * will ever write a nought. A plate that counted one as pressed stayed
+   * sunk for the rest of the level, which is what the player saw: step
+   * on it, step off, and it never comes back up.
    */
   pressedToFloor(type, modifier) {
     if (type !== TILE.opener && type !== TILE.closer) return type;
-    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 0 ? TILE.floor : type;
+    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 1 ? TILE.floor : type;
   }
   loadCurrentAndLeftTile() {
     const outside = this.drawnRow === 2 ? this.opt.topLevelEdgeTile : TILE.wall;
@@ -3440,8 +3447,9 @@ function controlRunning(state, controls, ctx) {
     startSequence(state, KID_SEQ.crouchWhileRunning, ctx.tables);
   }
 }
+var RUN_JUMP_FIRST = FRAME.run7;
 function runJump(state, ctx) {
-  if (state.frame < FRAME.run7) return;
+  if (state.frame < RUN_JUMP_FIRST) return;
   const xpos = forwardX(state, 4);
   let column = tileDivModM7(xpos).column;
   for (let ahead = 0; ahead < 2; ahead++) {

@@ -571,12 +571,15 @@ function controlRunning(state: CharacterState, controls: Controls, ctx: KidConte
   }
 }
 
+/** Which frames of the stride a running jump may be taken from. */
+const RUN_JUMP_FIRST = FRAME.run7;
+
 /**
  * A running jump, lined up with the edge of the floor so that the Prince
  * leaves the ground from the right spot however he was running.
  */
 function runJump(state: CharacterState, ctx: KidContext): void {
-  if (state.frame < FRAME.run7) return;
+  if (state.frame < RUN_JUMP_FIRST) return;
   const xpos = forwardX(state, 4);
   let column = tileDivModM7(xpos).column;
   for (let ahead = 0; ahead < 2; ahead++) {

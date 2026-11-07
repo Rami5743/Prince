@@ -78,4 +78,39 @@ describe('a button with a foot on it', () => {
     expect(rows.size, 'over the depth of a plate, not one row')
       .toBeGreaterThan(10);
   });
+
+  /**
+   * And comes back up. `animateButton` counts the timer down and drops
+   * the tile off the list of things to animate once it is below two, so
+   * the last value ever written is one -- a plate that counted one as
+   * pressed stayed sunk for the rest of the level.
+   */
+  it('comes back up once the foot has gone', async () => {
+    const game = await Game.start(assets, exe, 1);
+    // Level 1's room 9: a plate at column 0 of the top row, with the way
+    // out of the level on the end of it.
+    expect(game.scene.state.typeAt(9, 0, 0)).toBe(TILE.opener);
+    const kid = game.kid;
+    kid.room = 9; kid.currentRow = 0; kid.currentColumn = 0;
+    kid.x = standX(0); kid.y = standY(0);
+    kid.direction = 0; kid.frame = 15; kid.action = 0;
+    kid.fallX = 0; kid.fallY = 0;
+    game.showRoom(9);
+    game.step(NOTHING);
+
+    const picture = (): string => {
+      const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+      return rgb.slice(0, 64 * 320 * 3).join(',');
+    };
+    const pressed = picture();
+
+    // Off the plate, and well past the few ticks the timer runs for.
+    kid.room = 0;
+    const under = picture();
+    expect(under, 'the plate is still down with the foot just gone')
+      .not.toBe(pressed);
+    for (let i = 0; i < 20; i++) game.step(NOTHING);
+    const after = picture();
+    expect(after, 'and up again a few ticks later').not.toBe(under);
+  });
 });
