@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
+import { NO_DIRECTION } from '../../src/game/guard.ts';
 
 const GAME_DIR = join(import.meta.dirname, '..', '..', 'original', 'prince1');
 const path = process.argv[2];
@@ -38,7 +39,7 @@ for (let t = 0; t < ticks.length; t++) {
   const k = game.kid;
   const c = ticks[t];
   const g = game.guard;
-  const guard = g.direction === -128
+  const guard = g.direction === NO_DIRECTION
     ? ''
     : ` | guard r${g.room} c${g.currentColumn} f${g.frame} sw${g.sword} hp${g.hitPoints}`;
   const line = `room ${k.room} r${k.currentRow} c${k.currentColumn} `

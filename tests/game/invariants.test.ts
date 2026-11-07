@@ -165,6 +165,9 @@ describe('however it is played', () => {
       }
       if (died < 0) continue;
       deaths.push(seed);
+      // The collapse of a sword death runs six frames and the fall takes
+      // a few more, so give it room before asking what he is lying on.
+      for (let i = 0; i < 12; i++) game.step({ x: 0, y: 0, shift: false });
       if (game.hitPoints !== 0) {
         bad.push(`seed ${seed}: dead with ${game.hitPoints} hit points left`);
       }

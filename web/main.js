@@ -756,6 +756,9 @@ var Y_LAND = [-8, 55, 118, 181, 244];
 function toScreenX(logicalX) {
   return Math.trunc(logicalX * 320 / 280);
 }
+function standY(row) {
+  return Y_LAND[row + 1];
+}
 
 // src/render/room.ts
 var flipCache = /* @__PURE__ */ new WeakMap();
@@ -2466,6 +2469,8 @@ var SWORD_SEQ = {
   turn: 60,
   block: 62,
   stabbed: 74,
+  /** A blow that was stopped: the striker's own recoil. */
+  parried: 69,
   dropDead: 71,
   /**
    * Run through by a blade.
@@ -2479,19 +2484,33 @@ var SWORD_SEQ = {
   kidDie: 85
 };
 var SWORD_DRAWN = 2;
-var STANCE_FRAME = 171;
-var STANCE_SETTLING = 170;
-var BLOCK_FRAMES = [150, 169];
-var STRIKE_CONTACT = 155;
+var BLOCK_FRAMES = [150, 161];
+var PARRY_FRAME = 161;
+var STRIKE_PARRYABLE = 153;
+var STRIKE_CONTACT = 154;
+var READY_FRAMES = [157, 158, 165, 170, 171];
 function isReady(c) {
-  return c.sword === SWORD_DRAWN && (c.frame === STANCE_FRAME || c.frame === STANCE_SETTLING);
+  return c.sword === SWORD_DRAWN && READY_FRAMES.includes(c.frame);
 }
-function isBlocking(c) {
-  return c.sword === SWORD_DRAWN && BLOCK_FRAMES.includes(c.frame);
+function charOppDist(c, other) {
+  if (c.room !== other.room) return 999;
+  let distance = other.x - c.x;
+  if (c.direction < 0) distance = -distance;
+  if (distance >= 0 && c.direction !== other.direction) distance += 13;
+  return distance;
 }
-function strikeLands(c) {
-  return c.sword === SWORD_DRAWN && c.frame === STRIKE_CONTACT;
+function checkHurting(c, other) {
+  if (c.sword !== SWORD_DRAWN) return null;
+  if (c.currentRow !== other.currentRow) return null;
+  if (c.frame !== STRIKE_PARRYABLE && c.frame !== STRIKE_CONTACT) return null;
+  const distance = charOppDist(c, other);
+  const parrying = BLOCK_FRAMES.includes(other.frame);
+  if (distance >= 0 && distance < SWORD_REACH && parrying) return "parried";
+  if (c.frame !== STRIKE_CONTACT) return null;
+  const nearest = other.sword < SWORD_DRAWN ? 8 : 12;
+  return distance >= nearest && distance < SWORD_REACH ? "hurt" : null;
 }
+var SWORD_REACH = 29;
 var SWORD_RANGE = 24;
 function withinReach(c, other) {
   if (c.room !== other.room || c.currentRow !== other.currentRow) return false;
@@ -2652,8 +2671,6 @@ function leaveGuard(guard, guards) {
   }
   guard.direction = NO_DIRECTION;
 }
-var GUARD_STRIKE_WAIT = 14;
-var GUARD_REACH = 21;
 var GUARD_FRAME_INACTIVE = 166;
 function comeOnGuard(guard, ctx) {
   if (guard.alive >= 0 || guard.sword !== 0) return;
@@ -2662,41 +2679,125 @@ function comeOnGuard(guard, ctx) {
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
-function fight(guard, ctx) {
+var STRIKE_PROB = [61, 100, 61, 61, 61, 40, 100, 220, 0, 48, 32, 48];
+var RESTRIKE_PROB = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
+var BLOCK_PROB = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
+var IMP_BLOCK_PROB = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
+var ADV_PROB = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
+var CAN_STRIKE = [157, 158, 165, 170, 171];
+var CAN_STEP = [158, 170, 171];
+var CAN_PARRY = [158, 170, 171, 168, 165];
+var PARRY_FRAMES = [150, 161];
+function moveShift(guard, ctx) {
+  if (CAN_STRIKE.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.strike, ctx.tables);
+  } else if (PARRY_FRAMES.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.blockToStrike, ctx.tables);
+  }
+}
+function moveForward(guard, ctx) {
+  if (CAN_STEP.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.advance, ctx.tables);
+  }
+}
+function moveBackward(guard, ctx) {
+  if (CAN_STEP.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.retreat, ctx.tables);
+  }
+}
+function moveUp(guard, ctx) {
+  if (CAN_PARRY.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
+  }
+}
+function chance(ctx, probability) {
+  return probability > (ctx.random?.() ?? 128);
+}
+function guardAdvance(guard, ctx) {
+  if (chance(ctx, ADV_PROB[guard.skill] ?? 0)) moveForward(guard, ctx);
+}
+function guardStrike(guard, kid, ctx) {
+  if (kid.frame === 169 || kid.frame === 151) return;
+  const table = PARRY_FRAMES.includes(guard.frame) ? RESTRIKE_PROB : STRIKE_PROB;
+  if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
+}
+function guardBlock(guard, kid, ctx) {
+  if (kid.frame === 152 || kid.frame === 153 || kid.frame === 162) {
+    if (chance(ctx, IMP_BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
+  } else if (kid.frame === 150 || kid.frame === 161) {
+    if (chance(ctx, BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
+  }
+}
+function guardKidArmed(guard, kid, distance, ctx) {
+  if (distance < 10 || distance >= 29) {
+    guardAdvance(guard, ctx);
+    return;
+  }
+  guardBlock(guard, kid, ctx);
+  if (guard.waitTimer !== 0) return;
+  if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
+  else guardStrike(guard, kid, ctx);
+}
+function guardKidInSight(guard, kid, distance, ctx) {
+  if (kid.sword === SWORD_DRAWN) {
+    guardKidArmed(guard, kid, distance, ctx);
+  } else if (guard.waitTimer === 0) {
+    if (distance < SWORD_REACH) moveShift(guard, ctx);
+    else moveForward(guard, ctx);
+  }
+}
+function guardKidFar(guard, ctx) {
+  const front = ctx.floorInFront?.(guard) ?? true;
+  if (front) moveForward(guard, ctx);
+  else moveBackward(guard, ctx);
+}
+function autocontrolGuardActive(guard, ctx) {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
+  if (guard.sword !== SWORD_DRAWN) return;
+  if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
+  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return;
+  const distance = charOppDist(guard, kid);
+  if (distance >= 12 && kid.frame >= 102 && kid.frame < 118 && kid.action === ACTION.bumped) {
+    return;
+  }
+  if (distance < 35) {
+    if (distance < 12) {
+      if (guard.direction === kid.direction) moveBackward(guard, ctx);
+      else moveForward(guard, ctx);
+    } else {
+      guardKidInSight(guard, kid, distance, ctx);
+    }
+    return;
+  }
+  if (guard.waitTimer !== 0) return;
+  if (guard.direction !== kid.direction) {
+    if (kid.frame >= 7 && kid.frame < 15) {
+      if (distance < 40) moveShift(guard, ctx);
+      return;
+    }
+    if (kid.frame >= 34 && kid.frame < 44) {
+      if (distance < 50) moveShift(guard, ctx);
+      return;
+    }
+  }
+  guardKidFar(guard, ctx);
+}
+function faceTheKid(guard, ctx) {
   const kid = ctx.kid;
   if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
-  if (!isReady(guard)) return;
-  if (kid.alive >= 0) return;
+  if (!isReady(guard) || kid.alive >= 0) return;
   if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
   if (guard.direction !== facingOf(guard, kid)) {
     startSequence(guard, SWORD_SEQ.turn, ctx.tables);
-    return;
   }
-  if (!withinReach(guard, kid)) return;
-  if (guard.waitTimer > 0) {
-    guard.waitTimer -= 1;
-    return;
-  }
-  guard.waitTimer = Math.max(2, GUARD_STRIKE_WAIT - guard.skill);
-  startSequence(guard, SWORD_SEQ.strike, ctx.tables);
-}
-var STANCE_FRAMES = /* @__PURE__ */ new Set([158, 170, 171]);
-function advanceOnKid(guard, ctx) {
-  if (guard.alive >= 0 || guard.sword !== 2) return;
-  if (!STANCE_FRAMES.has(guard.frame)) return;
-  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
-  if (ctx.kidX === void 0) return;
-  const gap = ctx.kidX - guard.x;
-  if (Math.abs(gap) <= GUARD_REACH) return;
-  const towards = gap > 0 ? 0 : -1;
-  if (guard.direction !== towards) return;
-  startSequence(guard, GUARD_SEQ.advance, ctx.tables);
 }
 function stepGuard(guard, ctx) {
   if (guard.direction === NO_DIRECTION) return;
+  if (guard.waitTimer > 0) guard.waitTimer -= 1;
   comeOnGuard(guard, ctx);
-  fight(guard, ctx);
-  advanceOnKid(guard, ctx);
+  faceTheKid(guard, ctx);
+  autocontrolGuardActive(guard, ctx);
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
   if (guard.action === ACTION.inFreefall) {
     guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
@@ -4681,7 +4782,25 @@ var Game = class _Game {
       kidRow: this.kid.currentRow,
       kidX: this.kid.x,
       kid: this.kid,
-      kidArmed: this.hasSword
+      kidArmed: this.hasSword,
+      random: () => this.prng.next(8),
+      // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
+      // follow the room links: a guard who has come through a door is
+      // standing a tile or two outside the room he is walking into, and
+      // asking his own room for column eleven answers nothing.
+      floorInFront: (guard) => {
+        const ahead = guard.direction < 0 ? -1 : 1;
+        for (const step2 of [1, 2]) {
+          const t = getTile(
+            this.ctx.world,
+            guard.room,
+            guard.currentColumn + ahead * step2,
+            guard.currentRow
+          );
+          if (t.room !== 0 && tileIsFloor(t.type)) return true;
+        }
+        return false;
+      }
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
@@ -4709,23 +4828,38 @@ var Game = class _Game {
    */
   resolveSwordplay() {
     if (this.guard.direction === NO_DIRECTION) return;
-    this.tryHit(this.kid, this.guard);
-    this.tryHit(this.guard, this.kid);
+    const atGuard = checkHurting(this.kid, this.guard);
+    const atKid = checkHurting(this.guard, this.kid);
+    if (atGuard === "parried") this.parried(this.kid, this.guard);
+    if (atKid === "parried") this.parried(this.guard, this.kid);
+    if (atGuard === "hurt") this.hurtBySword(this.guard);
+    else if (atKid === "hurt") this.hurtBySword(this.kid);
   }
-  tryHit(attacker, defender) {
-    if (attacker.alive >= 0 || defender.alive >= 0) return;
-    if (!strikeLands(attacker) || !withinReach(attacker, defender)) return;
-    if (isBlocking(defender)) return;
-    if (defender === this.kid) {
+  /** A blade stopped by a raised one: the striker recoils. */
+  parried(striker, blocker) {
+    blocker.frame = PARRY_FRAME;
+    startSequence(striker, SWORD_SEQ.parried, this.tables);
+  }
+  /**
+   * The original's `hurt_by_sword`. A character caught without his blade
+   * up dies of it whatever his hit points are; one with it up loses one,
+   * and the last of them kills him.
+   */
+  hurtBySword(hit) {
+    if (hit.alive >= 0) return;
+    hit.y = standY(hit.currentRow);
+    hit.fallY = 0;
+    hit.fallX = 0;
+    if (hit === this.kid) {
       const dead2 = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
-      startSequence(defender, dead2 ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
-      if (dead2) defender.alive = 0;
+      startSequence(hit, dead2 ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
+      if (dead2) hit.alive = 0;
       return;
     }
     this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
     const dead = this.guard.hitPoints === 0;
-    startSequence(defender, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
-    if (dead) defender.alive = 0;
+    startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
+    if (dead) hit.alive = 0;
   }
   /**
    * What a flask does, by the kind it is -- the top five bits of its

@@ -97,7 +97,7 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // closes on the Prince and then fights him, with the Prince taking a hit
   // and giving ground. The closing is now reproduced; the fight is not
   // written at all. 9 of 55.
-  { name: 'level2-meet', reproduces: 9 },
+  { name: 'level2-meet', reproduces: 13 },
 
   // Level 1's own guard, in room 3, met by a Prince who has not got a
   // sword yet -- it lies in room 15, on the far side of him. 14 of 87.

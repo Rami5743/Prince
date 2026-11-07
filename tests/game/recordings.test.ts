@@ -100,10 +100,20 @@ describe('the recordings, replayed', () => {
                 say(t, `the guard moved ${((moved + 128) & 0xff) - 128} units `
                   + `in one tick, inside room ${guard.room}`);
               }
-            } else if (moved !== 140 && moved !== (-140 & 0xff)) {
-              say(t, `the guard went from room ${wasGuard.room} to `
-                + `${guard.room} and his x moved by `
-                + `${((moved + 128) & 0xff) - 128}, which is not a door`);
+            } else {
+              // A door, and whatever stride he took in the same tick
+              // before going through it. Counted the way x itself counts,
+              // round the byte.
+              const apart = (a: number, b: number): number => {
+                const d = Math.abs(a - b);
+                return Math.min(d, 256 - d);
+              };
+              const over = Math.min(apart(moved, 140), apart(moved, 256 - 140));
+              if (over > GUARD_STRIDE) {
+                say(t, `the guard went from room ${wasGuard.room} to `
+                  + `${guard.room} and his x moved by ${moved}, `
+                  + 'which is not a door and a step');
+              }
             }
           }
           wasGuard = { room: guard.room, x: guard.x };
@@ -119,7 +129,7 @@ describe('the recordings, replayed', () => {
             say(t, `dead with ${game.hitPoints} hit points left`);
           }
           dead = dead === null ? { t, frame: kid.frame, x: kid.x, y: kid.y } : dead;
-          if (t > dead.t + 12) {
+          if (t > dead.t + 20) {
             const BODIES = [177, 178, 185, 106];
             if (!BODIES.includes(kid.frame)) {
               say(t, `dead on frame ${kid.frame}, which is not a body`);

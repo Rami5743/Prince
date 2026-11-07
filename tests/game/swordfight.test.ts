@@ -146,11 +146,29 @@ describe('a Prince with no sword', () => {
     }
     expect(died, 'running at him unarmed is fatal').toBeGreaterThan(0);
     expect(game.hitPoints, 'and it takes everything at once').toBe(0);
-    // And he comes to meet him. A grabbed video of this very room shows
-    // the guard walking in from x 273 to x 100 on the screen over fifty
-    // ticks while the Prince, who has no sword on level 1, is in front of
-    // him; the sparse captures this used to rest on could not see it, and
-    // had the guard standing in his corner.
+    expect(guardStart).toBeGreaterThan(0);
+  });
+
+  /**
+   * And he comes to meet a Prince who stays where he is. A grabbed video
+   * of this very room shows the guard walking in from x 273 to x 100 on
+   * the screen over fifty ticks while the Prince, who has no sword on
+   * level 1, stands in front of him.
+   *
+   * It is a separate test from the one above because the original kills
+   * a Prince who runs at a guard before the guard has taken many steps:
+   * `autocontrol_guard_active` puts a running one under the blade at a
+   * distance of forty and one in a running jump at fifty.
+   */
+  it('is walked towards while he stands still', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.showRoom(3);
+    const kid = game.kid;
+    kid.room = 3; kid.currentRow = 1; kid.currentColumn = 0;
+    kid.x = 72; kid.y = 118; kid.direction = 0; kid.frame = 15;
+    kid.action = 0; kid.fallX = 0; kid.fallY = 0;
+    const guardStart = game.guard.x;
+    for (let i = 0; i < 40; i++) game.step({ x: 0, y: 0, shift: false });
     expect(game.guard.x, 'the guard closes on him')
       .toBeLessThan(guardStart - 14);
   });

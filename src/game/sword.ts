@@ -26,6 +26,8 @@ export const SWORD_SEQ = {
   turn: 60,
   block: 62,
   stabbed: 74,
+  /** A blow that was stopped: the striker's own recoil. */
+  parried: 69,
   dropDead: 71,
   /**
    * Run through by a blade.
@@ -46,23 +48,46 @@ export const SWORD_DRAWN = 2;
 export const STANCE_FRAME = 171;
 const STANCE_SETTLING = 170;
 
-/** The blade-up frames of sequence 62. */
-const BLOCK_FRAMES = [150, 169];
+/**
+ * Parrying. The original looks for exactly these two frames and no
+ * others -- `check_hurting` in SDLPoP's `seg002.c` -- and the port had
+ * 169 in the list, which is not one of them.
+ */
+const BLOCK_FRAMES = [150, 161];
+
+/** The frame a blocker is put on when a blow is parried. */
+export const PARRY_FRAME = 161;
 
 /** The lunge of sequence 58, from the wind-up to the recovery. */
 const STRIKE_FIRST = 151;
 const STRIKE_LAST = 157;
 /**
- * The frame the blow lands on. Sequence 58 marks it: `action 5` falls
- * immediately before frame 155, which is the only thing in the sequence
- * that singles a frame out.
+ * The two frames a blade can do anything on. 153 can only be parried;
+ * 154, the poke, is the one that lands. The port had the contact on 155
+ * -- read off `action 5` in sequence 58, which turns out to mark
+ * something else -- and a blow that lands a frame late misses a Prince
+ * who is running past, which is how he got through the guard of level
+ * 1's room 3 in the recording `13ab6867` where the original kills him.
  */
-const STRIKE_CONTACT = 155;
+const STRIKE_PARRYABLE = 153;
+const STRIKE_CONTACT = 154;
 
-/** Between moves, and free to start another. */
+/**
+ * Between moves, and free to start another.
+ *
+ * Five frames, not two. The original's `sword_strike` will begin a lunge
+ * from 157, 158, 165, 170 or 171 -- the two standing poses, the two of
+ * the walk, and the one it settles into -- and the port only knew 170
+ * and 171. A guard who has just taken a step is on 165 or 158, so he
+ * waited two or three ticks for a pose he was not going to reach before
+ * the Prince had gone past. That is how an unarmed Prince ran through
+ * the guard of level 1's room 3 in the recording `13ab6867`, where the
+ * original runs him through on the way.
+ */
+const READY_FRAMES = [157, 158, 165, 170, 171];
+
 export function isReady(c: CharacterState): boolean {
-  return c.sword === SWORD_DRAWN
-    && (c.frame === STANCE_FRAME || c.frame === STANCE_SETTLING);
+  return c.sword === SWORD_DRAWN && READY_FRAMES.includes(c.frame);
 }
 
 export function isBlocking(c: CharacterState): boolean {
@@ -77,6 +102,38 @@ export function isStriking(c: CharacterState): boolean {
 export function strikeLands(c: CharacterState): boolean {
   return c.sword === SWORD_DRAWN && c.frame === STRIKE_CONTACT;
 }
+
+/**
+ * How far in front of a character its opponent is, the original's own
+ * `char_opp_dist`: positive in front, negative behind, 999 in another
+ * room, and thirteen more when the two are facing opposite ways.
+ */
+export function charOppDist(c: CharacterState, other: CharacterState): number {
+  if (c.room !== other.room) return 999;
+  let distance = other.x - c.x;
+  if (c.direction < 0) distance = -distance;
+  if (distance >= 0 && c.direction !== other.direction) distance += 13;
+  return distance;
+}
+
+/** What a blade does this tick, if anything: the original's `check_hurting`. */
+export type Blow = 'parried' | 'hurt' | null;
+
+export function checkHurting(c: CharacterState, other: CharacterState): Blow {
+  if (c.sword !== SWORD_DRAWN) return null;
+  if (c.currentRow !== other.currentRow) return null;
+  if (c.frame !== STRIKE_PARRYABLE && c.frame !== STRIKE_CONTACT) return null;
+  const distance = charOppDist(c, other);
+  const parrying = BLOCK_FRAMES.includes(other.frame);
+  if (distance >= 0 && distance < SWORD_REACH && parrying) return 'parried';
+  if (c.frame !== STRIKE_CONTACT) return null;
+  // Eight from an unarmed opponent, twelve from one with his blade up.
+  const nearest = other.sword < SWORD_DRAWN ? 8 : 12;
+  return distance >= nearest && distance < SWORD_REACH ? 'hurt' : null;
+}
+
+/** How far a poke reaches, the original's twenty-nine. */
+export const SWORD_REACH = 29;
 
 /** How far a blade reaches, in internal units. */
 export const SWORD_RANGE = 24;

@@ -18,7 +18,7 @@ import {
 import { forwardX } from './character.ts';
 import { determineColumn, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX } from './physics.ts';
 import {
-  SWORD_SEQ, SWORD_DRAWN, isReady, withinReach, facingOf,
+  SWORD_SEQ, SWORD_DRAWN, isReady, facingOf, charOppDist, SWORD_REACH,
 } from './sword.ts';
 import type { LevelState } from './level-state.ts';
 import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_SIZE_X, Y_LAND } from './geometry.ts';
@@ -231,6 +231,10 @@ export interface GuardStepContext {
   readonly kid?: CharacterState;
   /** Has the Prince got a sword? A guard treats him differently without one. */
   readonly kidArmed?: boolean;
+  /** The game's own generator, for the probabilities a guard fights by. */
+  readonly random?: () => number;
+  /** Is there floor in front of the guard to step onto? */
+  readonly floorInFront?: (guard: GuardState) => boolean;
 }
 
 /**
@@ -276,95 +280,180 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
 }
 
 /**
- * Within a blade's length of the Prince, a guard lunges -- not every frame,
- * but after a wait that its skill shortens. Out of reach it does nothing
- * here and `advanceOnKid` walks it in.
+ * What a guard with his sword out does, which is `autocontrol_guard_active`
+ * and the handful of little functions under it in the original -- SDLPoP
+ * has them in `seg002.c`, and this follows them.
  *
- * The wait is a guess. `session-level2-meet` shows a guard of skill 1
- * lunging, landing a blow and pressing on, but a handful of captures of
- * one guard cannot say how long it waits or how skill changes that.
+ * The port used to have a guess here: close to within a tile and a half,
+ * then lunge after a wait that the guard's skill shortened. The real
+ * thing is decided on the distance alone, and against an unarmed Prince
+ * it has no wait at all:
+ *
+ *   under 12   too close to fight; step forward, or turn if he is
+ *              facing the same way
+ *   12 to 34   in sight. An unarmed Prince is struck at under 29 and
+ *              walked towards beyond it; an armed one is blocked and
+ *              struck by the probability tables
+ *   35 and up  a Prince who is running comes under the blade at 40, and
+ *              one in a running jump at 50 -- which is the whole of this
+ *              bug. Otherwise step towards him if there is floor to step
+ *              onto
+ *
+ * The last line is what let an unarmed Prince run through the guard of
+ * level 1's room 3 in the recording `13ab6867`. He comes at the guard in
+ * a running jump from six tiles off; the original's guard starts his
+ * lunge while the Prince is still in the air and runs him through on the
+ * way past, and the grabbed video shows exactly that, the red of it at
+ * tick 639. The port's guard waited for him to be within a sword's
+ * length, by which time he had gone by, and the player watched him
+ * vanish into the next room.
  */
-function fight(guard: GuardState, ctx: GuardStepContext): void {
-  const kid = ctx.kid;
-  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
-  if (!isReady(guard)) return;
-  if (kid.alive >= 0) return;
-  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
+const STRIKE_PROB = [61, 100, 61, 61, 61, 40, 100, 220, 0, 48, 32, 48];
+const RESTRIKE_PROB = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
+const BLOCK_PROB = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
+const IMP_BLOCK_PROB = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
+const ADV_PROB = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
+const REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
 
-  if (guard.direction !== facingOf(guard, kid)) {
-    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
+/** The frames a blade can be started from, by what is being started. */
+const CAN_STRIKE = [157, 158, 165, 170, 171];
+const CAN_STEP = [158, 170, 171];
+const CAN_PARRY = [158, 170, 171, 168, 165];
+const PARRY_FRAMES = [150, 161];
+
+function moveShift(guard: GuardState, ctx: GuardStepContext): void {
+  if (CAN_STRIKE.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.strike, ctx.tables);
+  } else if (PARRY_FRAMES.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.blockToStrike, ctx.tables);
+  }
+}
+
+function moveForward(guard: GuardState, ctx: GuardStepContext): void {
+  if (CAN_STEP.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.advance, ctx.tables);
+  }
+}
+
+function moveBackward(guard: GuardState, ctx: GuardStepContext): void {
+  if (CAN_STEP.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.retreat, ctx.tables);
+  }
+}
+
+function moveUp(guard: GuardState, ctx: GuardStepContext): void {
+  if (CAN_PARRY.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
+  }
+}
+
+/** `prandom(255)` of the original, from the game's own generator. */
+function chance(ctx: GuardStepContext, probability: number): boolean {
+  return probability > (ctx.random?.() ?? 128);
+}
+
+function guardAdvance(guard: GuardState, ctx: GuardStepContext): void {
+  if (chance(ctx, ADV_PROB[guard.skill] ?? 0)) moveForward(guard, ctx);
+}
+
+function guardStrike(guard: GuardState, kid: CharacterState, ctx: GuardStepContext): void {
+  if (kid.frame === 169 || kid.frame === 151) return;
+  const table = PARRY_FRAMES.includes(guard.frame) ? RESTRIKE_PROB : STRIKE_PROB;
+  if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
+}
+
+function guardBlock(guard: GuardState, kid: CharacterState, ctx: GuardStepContext): void {
+  if (kid.frame === 152 || kid.frame === 153 || kid.frame === 162) {
+    if (chance(ctx, IMP_BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
+  } else if (kid.frame === 150 || kid.frame === 161) {
+    if (chance(ctx, BLOCK_PROB[guard.skill] ?? 0)) moveUp(guard, ctx);
+  }
+}
+
+function guardKidArmed(
+  guard: GuardState, kid: CharacterState, distance: number, ctx: GuardStepContext,
+): void {
+  if (distance < 10 || distance >= 29) {
+    guardAdvance(guard, ctx);
     return;
   }
-  if (!withinReach(guard, kid)) return;
-  if (guard.waitTimer > 0) {
-    guard.waitTimer -= 1;
+  guardBlock(guard, kid, ctx);
+  if (guard.waitTimer !== 0) return;
+  if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
+  else guardStrike(guard, kid, ctx);
+}
+
+function guardKidInSight(
+  guard: GuardState, kid: CharacterState, distance: number, ctx: GuardStepContext,
+): void {
+  if (kid.sword === SWORD_DRAWN) {
+    guardKidArmed(guard, kid, distance, ctx);
+  } else if (guard.waitTimer === 0) {
+    if (distance < SWORD_REACH) moveShift(guard, ctx);
+    else moveForward(guard, ctx);
+  }
+}
+
+function guardKidFar(guard: GuardState, ctx: GuardStepContext): void {
+  const front = ctx.floorInFront?.(guard) ?? true;
+  if (front) moveForward(guard, ctx);
+  else moveBackward(guard, ctx);
+}
+
+function autocontrolGuardActive(guard: GuardState, ctx: GuardStepContext): void {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
+  if (guard.sword !== SWORD_DRAWN) return;
+  if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
+  // `can_guard_see_kid`, as near as the port has it.
+  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return;
+  const distance = charOppDist(guard, kid);
+  // A Prince picking himself up off the floor is left alone.
+  if (distance >= 12 && kid.frame >= 102 && kid.frame < 118
+    && kid.action === ACTION.bumped) {
     return;
   }
-  guard.waitTimer = Math.max(2, GUARD_STRIKE_WAIT - guard.skill);
-  startSequence(guard, SWORD_SEQ.strike, ctx.tables);
+  if (distance < 35) {
+    if (distance < 12) {
+      if (guard.direction === kid.direction) moveBackward(guard, ctx);
+      else moveForward(guard, ctx);
+    } else {
+      guardKidInSight(guard, kid, distance, ctx);
+    }
+    return;
+  }
+  if (guard.waitTimer !== 0) return;
+  if (guard.direction !== kid.direction) {
+    if (kid.frame >= 7 && kid.frame < 15) {
+      if (distance < 40) moveShift(guard, ctx);
+      return;
+    }
+    if (kid.frame >= 34 && kid.frame < 44) {
+      if (distance < 50) moveShift(guard, ctx);
+      return;
+    }
+  }
+  guardKidFar(guard, ctx);
 }
 
 /**
- * The frames of the en garde stance, which a guard holds between moves.
- *
- * Sequence 56 is `dx 2, frame 163, dx 4, frame 164, frame 165` and then a
- * jump into the stance at 158, 170, 171, 171... A guard who waits for 170
- * to come round has a five tick stride.
- *
- * The original's is four. The grabbed video of the recorded run of level
- * 1 pins every frame of it in room 3, by rebuilding each tick's picture
- * from the port's own renderer and asking which guard frame and position
- * reproduce it:
- *
- *     tick 120 121 122 123 124 125 126 127 128 129
- *     frame 158 163 164 165 158 163 164 165 158 163
- *     x     170 168 164 164 164 162 158 158 158 156
- *
- * -- 163, 164, 165, 158 and round again, six internal units every four
- * ticks. 170 never shows at all while he is walking in.
- *
- * So the stance a guard may step out of is 158 as well as 170 and 171,
- * which is also how he gets going at all: the draw, sequence 69, ends
- * 157, 158 and the original is already striding on the next tick. An
- * earlier attempt wrote this as the range 158..171 and matched 163, 164
- * and 165 too, which restarted the stride every tick; it is a set of
- * three frames, not a range.
+ * A guard with his back to the Prince turns round. The original does
+ * this out of `move_2_backward` and the turn sequences; here it is kept
+ * as the one thing of the old `fight` worth keeping.
  */
-const STANCE_FRAMES = new Set([158, 170, 171]);
+function faceTheKid(guard: GuardState, ctx: GuardStepContext): void {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
+  if (!isReady(guard) || kid.alive >= 0) return;
+  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
+  if (guard.direction !== facingOf(guard, kid)) {
+    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
+  }
+}
 
-
-
-/**
- * A guard who is on guard walks in on the Prince.
- *
- * `session-level2-meet` shows it plainly: an armed Prince stops a few tiles
- * away, the guard draws his sword and then closes the distance a step at a
- * time until the two are within a sword's length of each other, and holds
- * there. Sequence 56 is the step, and it ends back on the stance, so one
- * call per step is all this needs.
- *
- * What is still missing from the capture is everything after the two of
- * them meet -- the striking, the blocking and the damage. The guard here
- * therefore walks up and waits.
- */
-function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
-  if (guard.alive >= 0 || guard.sword !== 2) return;
-  // A guard closes on an unarmed Prince too. This used to stop at one,
-  // read off `session-level1-guard`, where the guard of level 1's room 3
-  // looked as though he stood his ground; a grabbed video of that same
-  // room shows him walking in from x 273 to x 100 over fifty ticks while
-  // the Prince, who has no sword on level 1, backs away in front of him.
-  // The captures were too sparse to see it.
-  if (!STANCE_FRAMES.has(guard.frame)) return;
-  if (ctx.kidRoom !== guard.room || ctx.kidRow !== guard.currentRow) return;
-  if (ctx.kidX === undefined) return;
-  const gap = ctx.kidX - guard.x;
-  if (Math.abs(gap) <= GUARD_REACH) return;
-  // Only forwards. Turning to face the other way is its own sequence and
-  // the captures have not pinned when a guard decides to use it.
-  const towards = gap > 0 ? 0 : -1;
-  if (guard.direction !== towards) return;
-  startSequence(guard, GUARD_SEQ.advance, ctx.tables);
+/** How long a guard holds off after a blow has landed, by his skill. */
+export function refractoryFor(skill: number): number {
+  return REFRACTORY[skill] ?? 0;
 }
 
 /**
@@ -382,9 +471,10 @@ function advanceOnKid(guard: GuardState, ctx: GuardStepContext): void {
  */
 export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.direction === NO_DIRECTION) return;
+  if (guard.waitTimer > 0) guard.waitTimer -= 1;
   comeOnGuard(guard, ctx);
-  fight(guard, ctx);
-  advanceOnKid(guard, ctx);
+  faceTheKid(guard, ctx);
+  autocontrolGuardActive(guard, ctx);
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
   if (guard.action === ACTION.inFreefall) {
     guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);

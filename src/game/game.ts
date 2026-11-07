@@ -11,13 +11,13 @@ import {
   newCharacter, placeCharacter, placeSword, type CharacterState,
 } from './character.ts';
 import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
-import type { World } from './physics.ts';
+import { getTile, type World } from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
-import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
-import { toScreenX, standX } from './geometry.ts';
+import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS, tileIsFloor } from './tiles.ts';
+import { toScreenX, standX, standY } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
-import { SWORD_SEQ, SWORD_DRAWN, strikeLands, withinReach, isBlocking } from './sword.ts';
+import { SWORD_SEQ, SWORD_DRAWN, checkHurting, PARRY_FRAME } from './sword.ts';
 
 /**
  * How near the side of his room a guard has to be to come through it
@@ -232,6 +232,22 @@ export class Game {
       kidX: this.kid.x,
       kid: this.kid,
       kidArmed: this.hasSword,
+      random: () => this.prng.next(8),
+      // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
+      // follow the room links: a guard who has come through a door is
+      // standing a tile or two outside the room he is walking into, and
+      // asking his own room for column eleven answers nothing.
+      floorInFront: (guard) => {
+        const ahead = guard.direction < 0 ? -1 : 1;
+        for (const step of [1, 2]) {
+          const t = getTile(
+            this.ctx.world, guard.room,
+            guard.currentColumn + ahead * step, guard.currentRow,
+          );
+          if (t.room !== 0 && tileIsFloor(t.type)) return true;
+        }
+        return false;
+      },
     });
     this.resolveSwordplay();
     if (this.isDead) this.deadTicks += 1;
@@ -269,31 +285,49 @@ export class Game {
    */
   private resolveSwordplay(): void {
     if (this.guard.direction === NO_DIRECTION) return;
-    this.tryHit(this.kid, this.guard);
-    this.tryHit(this.guard, this.kid);
+    // The original's `check_sword_hurting`: each blade is asked what it
+    // did this tick, both before either answer is acted on, and then
+    // `check_sword_hurt` deals with the guard first.
+    const atGuard = checkHurting(this.kid, this.guard);
+    const atKid = checkHurting(this.guard, this.kid);
+    if (atGuard === 'parried') this.parried(this.kid, this.guard);
+    if (atKid === 'parried') this.parried(this.guard, this.kid);
+    if (atGuard === 'hurt') this.hurtBySword(this.guard);
+    else if (atKid === 'hurt') this.hurtBySword(this.kid);
   }
 
-  private tryHit(attacker: CharacterState, defender: CharacterState): void {
-    if (attacker.alive >= 0 || defender.alive >= 0) return;
-    if (!strikeLands(attacker) || !withinReach(attacker, defender)) return;
-    if (isBlocking(defender)) return; // parried
-    if (defender === this.kid) {
-      // A blow on a Prince with no sword kills him where he stands. The
-      // capture of level 1's room 3 shows it: he runs at that guard with
-      // two hit points left, is struck once, and the markers go out
-      // altogether. Whether the original takes all of them or simply ends
-      // him is not something two hit points can tell apart; either way he
-      // does not get up.
+  /** A blade stopped by a raised one: the striker recoils. */
+  private parried(striker: CharacterState, blocker: CharacterState): void {
+    blocker.frame = PARRY_FRAME;
+    startSequence(striker, SWORD_SEQ.parried, this.tables);
+  }
+
+  /**
+   * The original's `hurt_by_sword`. A character caught without his blade
+   * up dies of it whatever his hit points are; one with it up loses one,
+   * and the last of them kills him.
+   */
+  private hurtBySword(hit: CharacterState): void {
+    if (hit.alive >= 0) return;
+    // He comes down on the floor of the row he was in, whatever he was
+    // doing: the original's `hurt_by_sword` ends `Char.y = y_land[...];
+    // Char.fall_y = 0`, so a Prince run through in mid-jump does not
+    // hang in the air where the blade caught him.
+    hit.y = standY(hit.currentRow);
+    hit.fallY = 0;
+    hit.fallX = 0;
+    if (hit === this.kid) {
       const dead = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
-      startSequence(defender, dead ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
-      if (dead) defender.alive = 0;
+      startSequence(hit, dead ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
+      if (dead) hit.alive = 0;
       return;
     }
     this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
     const dead = this.guard.hitPoints === 0;
-    startSequence(defender, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
-    if (dead) defender.alive = 0;
+    startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
+    if (dead) hit.alive = 0;
   }
+
 
   /**
    * What a flask does, by the kind it is -- the top five bits of its
