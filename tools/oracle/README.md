@@ -135,6 +135,15 @@ either catches the ledge of room 2 or goes past it. `0fbffa60` is the
 lowest-scoring of the fifteen for exactly that reason: from tick 79 its
 capture is a different run, not a different port.
 
+The port is on the right side of that one, which took some showing.
+Over ticks 66 to 75 -- the last careful step before the drop -- the box
+around the Prince in the probe's capture and in the port is the same box
+to the pixel on every tick. The capture of the recording has him eight
+pixels to the left of both and a tick ahead: one careful step that did
+not carry as far, because the press that started it landed a fraction
+later in its tick. Eight pixels is three and a half of the game's units,
+and that is the difference between catching the ledge and going past it.
+
 `replay-frames.ts --stall n` feeds a replay the presses the original was
 reading rather than the ones the port recorded, skipping n of them at
 every room change. It is an instrument for asking whether a difference

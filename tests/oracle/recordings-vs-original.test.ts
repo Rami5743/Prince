@@ -62,6 +62,20 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * all that differs is where the key edges landed inside the ticks. From
  * tick 79 that capture is a different run, and nothing the port does can
  * score against it.
+ *
+ * And the port is on the right side of it. Over ticks 66 to 75, which is
+ * the last careful step before the drop, the box around the Prince in
+ * the probe's capture and in the port is the same box to the pixel on
+ * every tick -- (201,150)-(219,177), (207,151)-(225,177),
+ * (216,150)-(225,176), and so on. The capture of `0fbffa60` has him
+ * eight pixels to the left of both and a tick ahead: one careful step
+ * that did not carry as far, because the press that started it landed a
+ * fraction later in the tick. Eight pixels is three and a half of the
+ * game's own units, and three and a half units is the difference between
+ * catching the ledge and going past it.
+ *
+ * The same grab is the whole of the gap in `3764b76d` and `33e8ace7`
+ * too, which is three of the five lowest scores on one knife edge.
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 249,
