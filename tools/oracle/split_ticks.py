@@ -184,9 +184,20 @@ def main():
             shrink(held, sw, sh).save(
                 os.path.join(a.outdir, f't{t + shift:05d}.png'))
             written += 1
+        # What the game's clock actually did. If the emulator keeps
+        # time, the first and last tick boundaries are `per` frames
+        # apart for every tick between them; if it does not, a key sent
+        # on the wall clock lands in the wrong tick and there is no
+        # fixing that after the fact.
+        spanned = changes[-1] - changes[0]
+        counted = 0
+        for n in range(1, len(changes)):
+            counted += max(1, int(round((changes[n] - changes[n - 1]) / per)))
+        rate = counted * a.fps / spanned if spanned else 0
         print(f'{written} ticks written to {a.outdir} '
               f'({len(changes)} changes, {last + 1} ticks spanned, '
-              f'tick 0 at video frame {base + skip_until + 1})')
+              f'tick 0 at video frame {base + skip_until + 1}, '
+              f'{rate:.4f} ticks a second)')
         return
 
     if a.rate:

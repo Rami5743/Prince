@@ -91,8 +91,18 @@ const rawMs = process.argv.includes('--raw-ms');
  * emulator's speed does.
  */
 const shift = arg('shift', 0);
-/** The game reads the keyboard once a tick, and this is the middle of one. */
-const TICK = 1 / (rec.ticksPerSecond || 12);
+/**
+ * How long one of the original's ticks lasts, in seconds of wall clock.
+ *
+ * A twelfth, and `split_ticks.py` says that is right to a tenth of a
+ * per cent: counting the screen changes of a twelve-hundred-tick
+ * capture and dividing by the video it took gives 12.0119 ticks a
+ * second. `--rate` is here because that tenth of a per cent is still a
+ * tick and a half over the longest recording, and because the number
+ * is worth being able to change without editing this file.
+ */
+const RATE = arg('rate', 12);
+const TICK = 1 / RATE;
 /** Nothing is sent closer together than this, so two edges cannot merge. */
 const MIN_GAP = 0.002;
 

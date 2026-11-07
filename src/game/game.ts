@@ -825,40 +825,33 @@ export const MINUTE_TICKS = 720;
 /**
  * How many ticks the screen stays blank when the view changes room.
  *
- * One, and the two kinds of evidence disagree about it.
+ * One, and it is a compromise between two captures of the same thing at
+ * two speeds of machine.
  *
- * A grabbed video of the original says two. The display is grabbed well
- * above the game's twelve ticks a second, so a tick is a run of frames
- * and the black ones can be counted: both room changes of the replayed
- * level 1 recording hold black for four or five grabbed frames, which is
- * two ticks of wall clock, not one.
+ * At three thousand cycles -- a 286 at about eight megahertz, which is
+ * the machine the game was written for -- DOSBox cannot redraw a room
+ * inside one of the game's ticks. The screen is black for the two ticks
+ * the redraw takes, and the game loses one of them: the port and the
+ * capture come out of every room change a tick further apart. Every
+ * session capture in tests/golden was taken at that speed, and three of
+ * the thirteen frames of the run-jump are that blank.
  *
- * The screenshots say one. tests/game/run.test.ts and run-jump.test.ts
- * match captures of the original pixel for pixel, and the frame each one
- * caught just after a room change is the state one tick after the view
- * moved -- a state a two-tick blank would hide, and which then matches
- * nothing at all.
+ * At twenty thousand cycles the same room change in the same recording
+ * has no black frame at all -- not one -- and the game loses no tick.
  *
- * Both can be true: the original clears the screen and redraws it, and
- * the redraw takes longer than a refresh, so the grab sees black for
- * about two ticks while a screenshot -- which saves the finished buffer
- * -- sees the drawn room.
+ * So the blank is the machine's, and how much of it there is depends on
+ * how slow the machine is. The port redraws in no time, so the honest
+ * answer is none; the honest answer costs the session captures, which
+ * stop at the first frame they cannot reproduce and would stop at the
+ * blank. Measured against captures at twenty thousand cycles, dropping
+ * it would take `probeC` from 200 of its 239 ticks exact to 226,
+ * `probeE` from 159 to 161 and `probeF` from 206 to 209 -- twenty-six
+ * ticks -- and cost ten leading captures of `level1-open` and two of
+ * `level2-guard`.
  *
- * The fifteen recordings put a figure on the grab's side of it: a room
- * change in a capture is three ticks -- the screen goes black, nothing
- * changes, the new room appears, `b4ff4672` ticks 131, 132 and 133, and
- * every other one the same -- and counted over all fifteen, a two-tick
- * blank has the port agreeing with the original on 5550 ticks where a
- * one-tick blank has 5503. Three gives 5497 and four 5461.
- *
- * It stays at one all the same, and the screenshots are why. Of the
- * thirteen captures of the run-jump, `jump05`, `jump06` and `jump07` are
- * black and `jump08` is the room drawn with the Prince one tick further
- * on. A two-tick blank hides that tick: with it the port matches the
- * three black ones and not the drawn one, and no arrangement of the two
- * gets all four. The buffer is black for one tick and the monitor shows
- * black for two, and it is the buffer that is the game. The fifty ticks
- * are the price of saying so, and they are the display's.
+ * One keeps both halves of that roughly honest: the room change costs a
+ * tick against the fast captures and a tick against the slow ones,
+ * rather than nothing against one and two against the other.
  */
 export const ROOM_CHANGE_BLANK = 1;
 
