@@ -1191,12 +1191,6 @@ export class RoomRenderer {
   // ---------------------------------------------------------------- paint
 
   /**
-   * Characters are flipped rather than mirrored in the data: the sprites face
-   * left, and the original flips them when the character faces right. Their
-   * horizontal position is in internal units and is stretched to pixels only
-   * here, at the last moment, exactly as the original does.
-   */
-  /**
    * A floor that has come away and is on its way down.
    *
    * It is drawn out of the same three pieces a floor tile is -- the base,
@@ -1235,7 +1229,6 @@ export class RoomRenderer {
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
     const order = yToRowForMob(y);
-    const list = this.mid;
     // `draw_mid_obj` case 10, and the ten is the point: a slab that has
     // come away is not drawn with the pictures of a floor at rest.
     // `add_mob_to_objtable` gives it `id = 10`, which indexes the same
@@ -1245,11 +1238,11 @@ export class RoomRenderer {
     // flat floor hanging in the air: the right height, the wrong shape,
     // and a good half-tile short on its left.
     const MOB = 10;
-    list.push({
+    this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[MOB], x,
       yBottom: y - 3, blit: BLIT.transparent, order,
     });
-    list.push({
+    this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[MOB], x, yBottom: y,
       blit: BLIT.opaque, order,
     });
@@ -1259,7 +1252,7 @@ export class RoomRenderer {
     // than leaving it in. With the right sprite and an exact
     // comparison it is twenty-six pixels of plank that were missing
     // from every tick of every fall.
-    list.push({
+    this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[MOB], x: x + 32,
       yBottom: y - 1, blit: BLIT.transparent, order,
     });

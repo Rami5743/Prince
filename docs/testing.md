@@ -274,6 +274,40 @@ captures the port reproduces. A regression makes that number smaller and a
 fix makes it larger; either way the test says so rather than quietly
 changing.
 
+## 4b. A whole recording, tick by tick
+
+A session is a few moves with a screenshot after each. A *recording* is
+the player's own keyboard, every tick of it, written by the page while
+he plays and sent back as a file. `tools/oracle/` replays one against
+the original and compares what the two draw on every tick of it.
+
+    node tools/oracle/recording_to_script.mjs rec.json /tmp/rec.txt --settle 0.04
+    python3 tools/oracle/dosbox_oracle.py --script /tmp/rec.txt \
+        --out /tmp/rep --record /tmp/rep/run.mkv --fps 30 --cycles 20000
+    python3 tools/oracle/split_ticks.py /tmp/rep/run.mkv /tmp/dos \
+        --crop 640:400:0:0 --scale 320:200 --start 49 --after-blank \
+        --fps 30 --rate 12 --hybrid --anchor-text 24
+    python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
+
+The capture itself cannot go in the repository -- a thousand pictures
+and twenty-five megabytes -- so what is kept is a fingerprint of each
+tick: the screen written as indices into the capture's own palette with
+the torches masked out, and a CRC of that. The port computes the same
+number from its own rendering, so equal means the same picture to the
+pixel. `tools/oracle/README.md` has why it is indices and not colours,
+how the mask is found, and the two places where the harness is still a
+tick wide.
+
+`tests/oracle/recordings-vs-original.test.ts` pins, per recording, how
+many of the original's ticks the port draws exactly. Before a release,
+read them with
+
+    node --experimental-strip-types tools/dev/oracle-report.ts
+
+which prints the same numbers and, for each run, the ranges of ticks
+that are not exact. The pins say a run has not got worse; the ranges
+say what is still wrong with it.
+
 ## 5. The port, in a real browser
 
 `tests/browser/render.test.ts` serves the repository, opens the page in

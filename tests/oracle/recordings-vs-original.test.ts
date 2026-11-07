@@ -53,7 +53,9 @@ import { GAME_DIR, REPO } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
-import { runOf, exactAgreement, type Digest } from '../../tools/dev/digest-common.ts';
+import {
+  runOf, exactAgreement, inputChanges, type Digest,
+} from '../../tools/dev/digest-common.ts';
 
 const DIGESTS = join(REPO, 'tools', 'oracle', 'digests');
 const RECORDINGS = join(REPO, 'tools', 'oracle', 'recordings');
@@ -92,15 +94,20 @@ async function score(name: string): Promise<{ agreed: number; ticks: number }> {
   const digest = JSON.parse(
     readFileSync(join(DIGESTS, `${name}.json`), 'utf8'),
   ) as Digest;
+  // A digest from before the fingerprints would quietly score nothing
+  // and pass a pin of nothing, which is worse than failing.
+  if (!digest.hash || !digest.palette) {
+    throw new Error(`${name}: the digest has no fingerprints; recapture it`);
+  }
   const rec = parseRecording(readFileSync(join(RECORDINGS, `${name}.json`), 'utf8'));
+  const ticks = decodeTimeline(rec.timeline);
   const port = await runOf(
     () => Game.start(assets, exe, rec.level),
     (g) => g.restart(assets, exe),
-    decodeTimeline(rec.timeline),
+    ticks,
     digest,
   );
-  const { agreed, ticks } = exactAgreement(digest, port);
-  return { agreed, ticks };
+  return exactAgreement(digest, port, inputChanges(ticks));
 }
 
 describe('the recordings, against a capture of the original', () => {
