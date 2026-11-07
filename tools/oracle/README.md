@@ -160,6 +160,25 @@ thing, and prints the drift it needed, which is itself worth reading.
 `segments.py` -- one offset per stretch between room changes -- is the
 stricter test and the better one where the two runs really are in step.
 
+## All fifteen recordings, in the suite
+
+The captures cannot go in the repository -- five hundred pictures and
+twenty megabytes each -- but what a comparison reads out of them can.
+`digest.py` boils a capture down to what moved on each tick: the box
+around whatever changed and how many pixels of it there were. That is
+four numbers and a count, it is the same on both sides whatever the
+palette is doing, and all fifteen runs come to a hundred and sixty
+kilobytes. They are in `digests/`, and `tests/oracle/recordings-vs-
+original.test.ts` replays every recording against them on every `npm
+test`.
+
+    python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
+    node --experimental-strip-types tools/dev/digest-port.ts \
+        tools/oracle/recordings/NAME.json /tmp/port.json
+
+The ceiling for that test is the 1412-of-1470 above, not 1470: these are
+pins that must not go down, not targets to reach.
+
 ## What each tool does
 
 * `recording_to_script.mjs` -- a recording's raw key events become one
@@ -175,6 +194,8 @@ stricter test and the better one where the two runs really are in step.
 * `compare_ticks.py` -- compares two directories of per-tick pictures. The
   torches are masked out: a flame picks its next frame at random and the
   two sides can never agree on one.
+* `digest.py` -- a capture boiled down to what moved on each tick, small
+  enough to keep in the repository and compare against on every test run.
 * `align.py` -- the two runs walked together with the alignment free to
   move a tick at a time; prints the drift and what is left after it.
 * `where.py` -- the bounding box of what moved from one tick to the next,
