@@ -604,12 +604,26 @@ export class Game {
     return placeCharacter(this.kid, frame);
   }
 
-  render(): Surface {
+  /**
+   * Draw the tick.
+   *
+   * `showBlank: false` draws the room the game has even on the ticks the
+   * original is holding a black screen over it while it redraws. That is
+   * what a screenshot of the original catches -- it saves the finished
+   * buffer, not what the monitor is showing -- and it is what the
+   * pixel-exact captures in `tests/game/run.test.ts` and
+   * `run-jump.test.ts` are of. A video grab of the same moment is black:
+   * see `ROOM_CHANGE_BLANK`.
+   */
+  render(options: { showBlank?: boolean } = {}): Surface {
+    const showBlank = options.showBlank ?? true;
     this.surface.clear();
     // While the view is changing room the original shows no room -- but it
     // keeps the hit points below it. The captures of those frames are black
     // everywhere except the bottom few rows.
-    if (this.blankFrames > 0 || (this.restartCountdown >= 0 && this.restartCountdown <= 1)) {
+    if (showBlank
+      && (this.blankFrames > 0
+        || (this.restartCountdown >= 0 && this.restartCountdown <= 1))) {
       this.drawStatusBar();
       return this.surface;
     }
@@ -775,10 +789,23 @@ export const MINUTE_TICKS = 720;
  * Both can be true: the original clears the screen and redraws it, and
  * the redraw takes longer than a refresh, so the grab sees black for
  * about two ticks while a screenshot -- which saves the finished buffer
- * -- sees the drawn room. That makes the two-tick blank a property of the
- * redraw rather than of the game, and the pixel-exact captures the better
- * evidence for what the game shows. It stays at one until something
- * settles it the other way.
+ * -- sees the drawn room.
+ *
+ * The fifteen recordings put a figure on the grab's side of it: a room
+ * change in a capture is three ticks -- the screen goes black, nothing
+ * changes, the new room appears, `b4ff4672` ticks 131, 132 and 133, and
+ * every other one the same -- and counted over all fifteen, a two-tick
+ * blank has the port agreeing with the original on 5550 ticks where a
+ * one-tick blank has 5503. Three gives 5497 and four 5461.
+ *
+ * It stays at one all the same, and the screenshots are why. Of the
+ * thirteen captures of the run-jump, `jump05`, `jump06` and `jump07` are
+ * black and `jump08` is the room drawn with the Prince one tick further
+ * on. A two-tick blank hides that tick: with it the port matches the
+ * three black ones and not the drawn one, and no arrangement of the two
+ * gets all four. The buffer is black for one tick and the monitor shows
+ * black for two, and it is the buffer that is the game. The fifty ticks
+ * are the price of saying so, and they are the display's.
  */
 export const ROOM_CHANGE_BLANK = 1;
 

@@ -5321,9 +5321,21 @@ var Game = class _Game {
     if (!frame) return null;
     return placeCharacter(this.kid, frame);
   }
-  render() {
+  /**
+   * Draw the tick.
+   *
+   * `showBlank: false` draws the room the game has even on the ticks the
+   * original is holding a black screen over it while it redraws. That is
+   * what a screenshot of the original catches -- it saves the finished
+   * buffer, not what the monitor is showing -- and it is what the
+   * pixel-exact captures in `tests/game/run.test.ts` and
+   * `run-jump.test.ts` are of. A video grab of the same moment is black:
+   * see `ROOM_CHANGE_BLANK`.
+   */
+  render(options = {}) {
+    const showBlank = options.showBlank ?? true;
     this.surface.clear();
-    if (this.blankFrames > 0 || this.restartCountdown >= 0 && this.restartCountdown <= 1) {
+    if (showBlank && (this.blankFrames > 0 || this.restartCountdown >= 0 && this.restartCountdown <= 1)) {
       this.drawStatusBar();
       return this.surface;
     }
