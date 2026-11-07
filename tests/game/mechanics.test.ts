@@ -536,26 +536,47 @@ describe('a running jump at a wall', () => {
 describe('a guard with his sword out', () => {
   const ROOM = 3; const LEFT = 2;
 
-  it('comes after the Prince into the next room', async () => {
+  it('comes after the Prince through the door he went out of', async () => {
     const game = await Game.start(assets, exe, 1);
     game.clearBottomText();
     game.showRoom(ROOM);
     expect(game.guard.room, 'room 3 has the guard').toBe(ROOM);
     game.guard.sword = SWORD_DRAWN;
-    const was = game.guard.x;
+    // At the door: the left side of room 3, which is the side room 2 is on.
+    game.guard.currentColumn = 1;
+    game.guard.x = standX(1);
     game.showRoom(LEFT);
     expect(game.guard.room, 'and he comes with him').toBe(LEFT);
-    expect(game.guard.x, 'in at the edge the Prince went out of')
-      .toBe((was + 140) & 0xff);
+    // The only thing worth checking about where he lands is that it is
+    // inside the room, at the side he came in by. The first version of
+    // this shifted him by the width of a room the way the Prince is
+    // shifted and asserted exactly that arithmetic, so it passed a guard
+    // who arrived at column 19 and then, the byte having wrapped, at
+    // column -2 -- the player's recording `33e8ace7` has him walking the
+    // wrong way along the bottom of room 2 and killing the Prince from
+    // three tiles off.
+    expect(game.guard.currentColumn, 'inside the room')
+      .toBeGreaterThanOrEqual(0);
+    expect(game.guard.currentColumn).toBeLessThanOrEqual(9);
+    expect(game.guard.currentColumn, 'at the side room 3 is on').toBe(9);
     // And he is not left behind in the room he came from as well: going
     // back meets the same guard, not a second one standing where the
     // first one was.
     expect(game.guards.tile[ROOM - 1], 'his box in room 3 is empty')
       .toBeGreaterThanOrEqual(30);
+  });
+
+  it('stays where he is if he was not at the door', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
     game.showRoom(ROOM);
-    expect(game.guard.room).toBe(ROOM);
-    expect(game.guard.x, 'the same guard, back through the same door')
-      .toBe(was);
+    game.guard.sword = SWORD_DRAWN;
+    // The middle of room 3, which is where he was in `33e8ace7`.
+    game.guard.currentColumn = 6;
+    game.guard.x = standX(6);
+    game.showRoom(LEFT);
+    expect(game.guard.room, 'he did not come through the door')
+      .not.toBe(LEFT);
   });
 
   it('stays put while his sword is sheathed', async () => {

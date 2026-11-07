@@ -14,10 +14,16 @@ import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } f
 import type { World } from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
 import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS } from './tiles.ts';
-import { toScreenX } from './geometry.ts';
+import { toScreenX, standX } from './geometry.ts';
 import { Traps, type TrapEffects } from './traps.ts';
 import { Prng } from './random.ts';
 import { SWORD_SEQ, SWORD_DRAWN, strikeLands, withinReach, isBlocking } from './sword.ts';
+
+/**
+ * How near the side of his room a guard has to be to come through it
+ * after the Prince. Two tiles: close enough that he was at the door.
+ */
+const GUARD_DOORWAY = 2;
 import { startSequence } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
@@ -397,9 +403,26 @@ export class Game {
    * He follows sideways only, and only while he is up and armed, and
    * only into a room with no guard of its own -- there is one guard on
    * the screen at a time, and the room he arrives in would otherwise
-   * have two. He comes in at the edge the Prince went out of, which is
-   * where a step would have put him, and `advanceOnKid` walks him in
-   * from there.
+   * have two. And only from the doorway: he has to be within two tiles
+   * of the side the Prince left by, or he is too far back to have come
+   * through it with him.
+   *
+   * That last condition is not a nicety. A character's x is one byte
+   * counting half-tiles across a five-room span, and the Prince crosses
+   * a room boundary by adding or taking off the hundred and forty units
+   * a room is wide -- which works for him because he only ever crosses
+   * with his feet already past the edge. A guard standing in the middle
+   * of his room is ten tiles from the edge; shifting him the same way
+   * puts him three tiles beyond the far side of the room he is going to,
+   * the byte wraps, and he turns up at the opposite end of it. The
+   * player's recording `33e8ace7` has exactly that: the guard of room 3
+   * was at column 6 when the Prince ran out to the left, and he arrived
+   * in room 2 at column 19, then column -2, walked the wrong way along
+   * the bottom of the room and killed the Prince from three tiles off.
+   *
+   * So he is not shifted at all. He comes through the door, which is the
+   * edge column of the room he is entering, and `advanceOnKid` walks him
+   * in from there.
    */
   private guardFollows(room: number): boolean {
     const guard = this.guard;
@@ -410,12 +433,14 @@ export class Game {
     const toTheRight = this.scene.state.linkOf(guard.room, 1) === room;
     if (!toTheLeft && !toTheRight) return false;
     if (this.guards.tile[room - 1] < 30) return false; // it has a guard already
+    const doorway = toTheLeft ? 0 : 9;
+    if (Math.abs(guard.currentColumn - doorway) > GUARD_DOORWAY) return false;
     // Out of the box he came from, so that going back does not meet him
-    // twice, and in at the far edge of the room he is going to.
+    // twice, and in through the door of the room he is going to.
     this.guards.tile[guard.room - 1] = 30;
     guard.room = room;
-    guard.x = (guard.x + (toTheLeft ? 140 : -140)) & 0xff;
-    guard.currentColumn += toTheLeft ? 10 : -10;
+    guard.currentColumn = toTheLeft ? 9 : 0;
+    guard.x = standX(guard.currentColumn);
     return true;
   }
 

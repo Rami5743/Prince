@@ -756,6 +756,9 @@ var Y_LAND = [-8, 55, 118, 181, 244];
 function toScreenX(logicalX) {
   return Math.trunc(logicalX * 320 / 280);
 }
+function standX(column) {
+  return X_BUMP[column + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
+}
 
 // src/render/room.ts
 var flipCache = /* @__PURE__ */ new WeakMap();
@@ -4505,6 +4508,7 @@ var Prng2 = class {
 };
 
 // src/game/game.ts
+var GUARD_DOORWAY = 2;
 var Game = class _Game {
   scene;
   tables;
@@ -4841,9 +4845,26 @@ var Game = class _Game {
    * He follows sideways only, and only while he is up and armed, and
    * only into a room with no guard of its own -- there is one guard on
    * the screen at a time, and the room he arrives in would otherwise
-   * have two. He comes in at the edge the Prince went out of, which is
-   * where a step would have put him, and `advanceOnKid` walks him in
-   * from there.
+   * have two. And only from the doorway: he has to be within two tiles
+   * of the side the Prince left by, or he is too far back to have come
+   * through it with him.
+   *
+   * That last condition is not a nicety. A character's x is one byte
+   * counting half-tiles across a five-room span, and the Prince crosses
+   * a room boundary by adding or taking off the hundred and forty units
+   * a room is wide -- which works for him because he only ever crosses
+   * with his feet already past the edge. A guard standing in the middle
+   * of his room is ten tiles from the edge; shifting him the same way
+   * puts him three tiles beyond the far side of the room he is going to,
+   * the byte wraps, and he turns up at the opposite end of it. The
+   * player's recording `33e8ace7` has exactly that: the guard of room 3
+   * was at column 6 when the Prince ran out to the left, and he arrived
+   * in room 2 at column 19, then column -2, walked the wrong way along
+   * the bottom of the room and killed the Prince from three tiles off.
+   *
+   * So he is not shifted at all. He comes through the door, which is the
+   * edge column of the room he is entering, and `advanceOnKid` walks him
+   * in from there.
    */
   guardFollows(room) {
     const guard = this.guard;
@@ -4854,10 +4875,12 @@ var Game = class _Game {
     const toTheRight = this.scene.state.linkOf(guard.room, 1) === room;
     if (!toTheLeft && !toTheRight) return false;
     if (this.guards.tile[room - 1] < 30) return false;
+    const doorway = toTheLeft ? 0 : 9;
+    if (Math.abs(guard.currentColumn - doorway) > GUARD_DOORWAY) return false;
     this.guards.tile[guard.room - 1] = 30;
     guard.room = room;
-    guard.x = guard.x + (toTheLeft ? 140 : -140) & 255;
-    guard.currentColumn += toTheLeft ? 10 : -10;
+    guard.currentColumn = toTheLeft ? 9 : 0;
+    guard.x = standX(guard.currentColumn);
     return true;
   }
   /**
