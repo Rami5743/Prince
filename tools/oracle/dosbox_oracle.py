@@ -13,6 +13,8 @@ Usage:
 
 Script file: one command per line.
     wait <seconds>          sleep
+    origin                  start the clock the `at` commands count from
+    at <seconds>            sleep until that many seconds after `origin`
     key <xdotool-keyspec>   send one key press
     hold <key> <seconds>    press and hold a key
     keydown <key>           press and keep held
@@ -254,6 +256,7 @@ def run_script(path, outdir, machine, cycles, autoexec, display,
     workdir = os.path.join(outdir, '_work')
     os.makedirs(workdir, exist_ok=True)
     made = []
+    origin = None
     with Dosbox(workdir, machine=machine, cycles=cycles, display=display,
                 autoexec=autoexec, record=record, fps=fps) as db:
         for raw in open(path):
@@ -264,6 +267,20 @@ def run_script(path, outdir, machine, cycles, autoexec, display,
             rest = rest.strip()
             if op == 'wait':
                 time.sleep(float(rest))
+            elif op == 'origin':
+                # The clock the rest of the script is measured against.
+                # Everything after this is sent at an absolute time, so
+                # that what one command costs does not push the next one
+                # late: a chained `xdotool` drifts about thirteen
+                # milliseconds per key edge, and a long recording has
+                # enough edges for that to come to two ticks.
+                origin = time.monotonic()
+            elif op == 'at':
+                if origin is None:
+                    origin = time.monotonic()
+                delay = origin + float(rest) - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
             elif op == 'key':
                 parts = rest.split()
                 db.key(parts[0], int(parts[1]) if len(parts) > 1 else 1)

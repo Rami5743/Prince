@@ -142,9 +142,20 @@ for (let l = 1; l < rec.level; l++) lines.push('key shift+l', 'wait 70');
 // Ctrl+A restarts the level, which is where the recording starts too.
 lines.push('key ctrl+a', `wait ${settle.toFixed(3)}`);
 
-const chain = [];
+/**
+ * The schedule, in blocks that each start at an absolute time.
+ *
+ * One chained `xdotool` for the whole run was an improvement on a
+ * process per edge, but it is still a chain: what each command costs
+ * pushes the next one later, and thirteen milliseconds an edge over a
+ * hundred and thirty edges is two ticks by the end. So the schedule is
+ * cut into blocks, and `dosbox_oracle.py` sleeps to the block's own
+ * absolute time before firing it. The drift inside a block is a few
+ * edges' worth and the next block starts where it should.
+ */
+const BLOCK_GAP = 0.3;
+const edges = [];
 const down = new Set();
-let at = 0;
 let sent = 0;
 let dropped = 0;
 for (const e of rec.events) {
@@ -155,17 +166,39 @@ for (const e of rec.events) {
   if (e.type === 'down' && down.has(key)) { dropped++; continue; }
   if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
   const want = rawMs ? e.ms / 1000 : (e.tick - 1 + shift) * TICK;
-  // Each command in the chain costs wall clock that its own sleep knows
-  // nothing about, so it comes off the sleep before it.
-  const wait = Math.max(MIN_GAP, want - at - (sent ? EDGE_COST : SLEEP_COST));
-  chain.push('sleep', wait.toFixed(4));
-  at = Math.max(want, at + MIN_GAP);
-  if (e.type === 'down') { down.add(key); chain.push('keydown', '--window', '@W', key); }
-  else { down.delete(key); chain.push('keyup', '--window', '@W', key); }
+  if (e.type === 'down') down.add(key); else down.delete(key);
+  edges.push({ want, type: e.type, key });
   sent++;
 }
-for (const key of down) chain.push('keyup', '--window', '@W', key);
-lines.push(`xdo ${chain.join(' ')}`, 'wait 3');
+lines.push('origin');
+let at = 0;
+let block = [];
+let blockStart = 0;
+const flush = () => {
+  if (!block.length) return;
+  lines.push(`at ${blockStart.toFixed(4)}`, `xdo ${block.join(' ')}`);
+  block = [];
+};
+for (let i = 0; i < edges.length; i++) {
+  const e = edges[i];
+  if (!block.length) {
+    // The block's own clock starts here. Starting the process costs
+    // about twenty-three milliseconds and the keydown itself twelve,
+    // and the `at` has to be that much earlier.
+    blockStart = Math.max(0, e.want - EDGE_COST);
+    at = e.want;
+  } else {
+    const wait = Math.max(MIN_GAP, e.want - at - EDGE_COST);
+    block.push('sleep', wait.toFixed(4));
+    at = Math.max(e.want, at + MIN_GAP);
+  }
+  block.push(e.type === 'down' ? 'keydown' : 'keyup', '--window', '@W', e.key);
+  const next = edges[i + 1];
+  if (!next || next.want - e.want >= BLOCK_GAP) flush();
+}
+flush();
+for (const key of down) lines.push(`xdo keyup --window @W ${key}`);
+lines.push('wait 3');
 
 writeFileSync(out, lines.join('\n') + '\n');
 console.error(`${out}: level ${rec.level}, ${sent} key edges `
