@@ -39,6 +39,25 @@ times they were pressed, and recover the game's ticks from the grab.
 `--start 49` is where to begin looking for the restart flash and depends
 on the waits the generated script opens with.
 
+## A second source: SDLPoP
+
+`https://github.com/NagyD/SDLPoP` is the game's logic as C, reconstructed
+from the original. It is not the oracle -- where it and a capture of
+`PRINCE.EXE` disagree, the capture wins -- but it answers in seconds what
+a capture takes a careful experiment to answer, and it says *why*.
+
+It has settled, in one afternoon: which sequence each of the four deaths
+uses and that spikes and a chomper take every hit point; that a guard
+follows the Prince through a door only from `Guard.x < 91` going left or
+`>= 165` going right, and is then shifted by a room's width like the
+Prince; that a blow lands on frame 154 and may be parried on 153, with a
+reach of 8 to 28 against an unarmed man; that a lunge may be started
+from frames 157, 158, 165, 170 or 171; and the whole of
+`autocontrol_guard_active`, which decides what a guard does purely on
+the distance to the Prince.
+
+Each of those was then checked against a capture, and each held.
+
 ## Asking the original a question of my own
 
 A browser recording settles an argument about a run the player actually
