@@ -80,6 +80,17 @@ const name = basename(src).replace(/\.json$/, '');
 const out = process.argv[3] ?? `tools/oracle/scripts/replay-${name}.txt`;
 const settle = arg('settle', 1.6);
 const rawMs = process.argv.includes('--raw-ms');
+/**
+ * Whole ticks to move the whole schedule by.
+ *
+ * Centring takes care of where inside a tick an edge lands; this takes
+ * care of *which* tick, which depends on how long the emulator takes to
+ * restart the level after Ctrl+A and is therefore a property of the
+ * machine it is run on, not of the recording. It is measured once --
+ * `tools/oracle/calibrate.mjs` -- and does not move again until the
+ * emulator's speed does.
+ */
+const shift = arg('shift', 0);
 /** The game reads the keyboard once a tick, and this is the middle of one. */
 const TICK = 1 / (rec.ticksPerSecond || 12);
 /** Nothing is sent closer together than this, so two edges cannot merge. */
@@ -107,7 +118,7 @@ for (const e of rec.events) {
   // held. The emulator needs the edges, not the repeats.
   if (e.type === 'down' && down.has(key)) { dropped++; continue; }
   if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
-  const want = rawMs ? e.ms / 1000 : (e.tick + 0.5) * TICK;
+  const want = rawMs ? e.ms / 1000 : (e.tick + 0.5 + shift) * TICK;
   const wait = Math.max(MIN_GAP, want - at);
   chain.push('sleep', wait.toFixed(3));
   at = Math.max(want, at + MIN_GAP);
@@ -122,6 +133,7 @@ writeFileSync(out, lines.join('\n') + '\n');
 console.error(`${out}: level ${rec.level}, ${sent} key edges `
   + `(${dropped} auto-repeats and strays dropped), `
   + `${at.toFixed(1)}s of play, settle ${settle}s`
-  + `${rawMs ? ', raw millisecond stamps' : ', edges centred in their ticks'}`);
+  + `${rawMs ? ', raw millisecond stamps' : ', edges centred in their ticks'}`
+  + `${shift ? `, shifted ${shift} ticks` : ''}`);
 console.log(`python3 tools/oracle/dosbox_oracle.py --script ${out} \\
     --out /tmp/replay-${name} --record /tmp/replay-${name}/run.mkv --fps 30`);

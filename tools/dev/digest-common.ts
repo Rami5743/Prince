@@ -195,7 +195,8 @@ export interface Digest {
   version?: number;
   palette?: number[][];
   mask?: number[];
-  hash?: number[];
+  /** Per tick, or null for a tick the capture does not have. */
+  hash?: (number | null)[];
   ticks: Moved[];
 }
 
@@ -315,6 +316,7 @@ export function exactAgreement(
   const dos = digest.hash ?? [];
   const n = Math.min(dos.length, port.hash.length);
   if (n === 0) return { agreed: 0, ticks: 0, drift: [] };
+  const have = dos.slice(0, n).filter((h) => h !== null).length;
   const SLIP = 2;
   const wholeScreen = (m: Moved): boolean =>
     m !== null && m[0] <= 2 && m[1] <= 2 && m[2] >= 317 && m[3] >= 189;
@@ -324,7 +326,7 @@ export function exactAgreement(
   const cost = (i: number, j: number): number => {
     const k = i + offsets[j];
     if (k < 0 || k >= port.hash.length) return 1;
-    return dos[i] === port.hash[k] ? 0 : 1;
+    return dos[i] !== null && dos[i] === port.hash[k] ? 0 : 1;
   };
   let best = offsets.map((_, j) => cost(0, j));
   const back: number[][] = [new Array(m).fill(0)];
@@ -353,5 +355,5 @@ export function exactAgreement(
     if (cost(i, j) === 0) agreed += 1;
     j = back[i][j];
   }
-  return { agreed, ticks: n, drift };
+  return { agreed, ticks: have, drift };
 }

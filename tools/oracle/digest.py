@@ -65,13 +65,22 @@ TOLERANCE = 40
 
 
 def load_dir(path):
+    """Every tick's picture, indexed by the tick it is, not by how many
+    came before it. `split_ticks --anchor-text` renumbers what it writes
+    so that the game's own clock decides which tick is which, and that
+    can leave the first few missing; reading the directory as a list
+    would then slide the whole run along by that many ticks."""
     files = {}
     for f in glob.glob(os.path.join(path, 't*.png')):
         m = re.search(r't(\d+)', os.path.basename(f))
         if m:
             files[int(m.group(1))] = f
-    return [np.asarray(Image.open(files[t]).convert('RGB')).astype(np.int16)
-            for t in sorted(files)]
+    if not files:
+        return []
+    out = [None] * (max(files) + 1)
+    for t, f in files.items():
+        out[t] = np.asarray(Image.open(f).convert('RGB')).astype(np.int16)
+    return out
 
 
 def flame_mask(frames):
@@ -82,12 +91,14 @@ def flame_mask(frames):
     over changes a handful of times in a run. Grown by one, because the
     edge of a flame lights the stone beside it.
     """
-    if len(frames) < 8:
+    pairs = [(a, b) for a, b in zip(frames, frames[1:])
+             if a is not None and b is not None]
+    if len(pairs) < 8:
         return np.zeros((H, W), dtype=bool)
     counts = np.zeros((H, W), dtype=np.int32)
-    for a, b in zip(frames, frames[1:]):
+    for a, b in pairs:
         counts += (np.abs(a - b).max(axis=2) > TOLERANCE)
-    hot = counts > FLAME_SHARE * (len(frames) - 1)
+    hot = counts > FLAME_SHARE * len(pairs)
     # Grown generously. A flame is not only the pixels that change
     # often: its edges reach a little further on some ticks than on
     # others, and what the Prince happens to be standing in front of
@@ -123,6 +134,8 @@ def palette_of(frames):
     """Every colour the capture uses, as a list of [r, g, b]."""
     seen = set()
     for f in frames:
+        if f is None:
+            continue
         for c in np.unique(f.reshape(-1, 3), axis=0):
             seen.add((int(c[0]), int(c[1]), int(c[2])))
     return sorted(seen)
@@ -165,6 +178,10 @@ def digest_dir(path):
     moves = []
     prev = None
     for f in frames:
+        if f is None:
+            hashes.append(None)
+            moves.append(None)
+            continue
         hashes.append(hash_image(index_image(f, lookup), mask_flat))
         moves.append(None if prev is None else moved(prev, f, mask))
         prev = f
@@ -181,5 +198,6 @@ if __name__ == '__main__':
     out = digest_dir(sys.argv[1])
     with open(sys.argv[2], 'w') as f:
         json.dump(out, f, separators=(',', ':'))
-    print(f"{len(out['hash'])} ticks, {len(out['palette'])} colours, "
+    print(f"{sum(1 for h in out['hash'] if h is not None)} ticks "
+          f"(numbered to {len(out['hash']) - 1}), {len(out['palette'])} colours, "
           f"{int(sum(out['mask'][1::2]))} masked pixels -> {sys.argv[2]}")

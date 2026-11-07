@@ -75,6 +75,14 @@ def main():
     ap.add_argument('--rate', type=float, default=12.0,
                     help="the game's own ticks per second; 0 counts changes "
                          'instead of trusting the clock')
+    ap.add_argument('--anchor-text', type=int, default=-1,
+                    help='renumber so that the tick the level title goes '
+                         'off the bottom of the screen is this one. The '
+                         'restart flash is a frame of video and lands a '
+                         'tick either side of where it should between one '
+                         'run and the next; the title is a count the game '
+                         'itself keeps, so it says which tick is which '
+                         'exactly. Pass the port\'s own number for it.')
     a = ap.parse_args()
 
     cw, ch = (int(v) for v in a.crop.split(':')[:2])
@@ -140,6 +148,30 @@ def main():
             pics[t] = frames[min(end, len(frames) - 1)]
         base = changes[0]
         last = max(pics)
+        # The title bar is the game's own clock: it writes the level's
+        # name under the room and takes it away a fixed number of ticks
+        # later, and nothing the player does changes when. Lining the
+        # numbering up on that is exact, where lining it up on a frame of
+        # video is a tick either way.
+        shift = 0
+        if a.anchor_text >= 0:
+            held = None
+            seen_text = False
+            for t in range(0, last + 1):
+                if t in pics:
+                    held = pics[t]
+                if held is None:
+                    continue
+                strip = shrink(held, sw, sh)
+                bar = np.asarray(strip)[sh - 8:, 100:220]
+                lit = int((bar.max(axis=2) > 120).sum())
+                if lit > 0:
+                    seen_text = True
+                elif seen_text:
+                    shift = a.anchor_text - t
+                    print(f'title goes off at tick {t}; '
+                          f'renumbering by {shift:+d}')
+                    break
         written = 0
         held = None
         for t in range(0, (a.limit or last + 1)):
@@ -147,7 +179,10 @@ def main():
                 held = pics[t]
             if held is None:
                 continue
-            shrink(held, sw, sh).save(os.path.join(a.outdir, f't{t:05d}.png'))
+            if t + shift < 0:
+                continue
+            shrink(held, sw, sh).save(
+                os.path.join(a.outdir, f't{t + shift:05d}.png'))
             written += 1
         print(f'{written} ticks written to {a.outdir} '
               f'({len(changes)} changes, {last + 1} ticks spanned, '
