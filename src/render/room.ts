@@ -497,19 +497,34 @@ export class RoomRenderer {
    * sunk for the rest of the level, which is what the player saw: step
    * on it, step off, and it never comes back up.
    */
-  private pressedToFloor(type: number, modifier: number): number {
-    if (type !== TILE.opener && type !== TILE.closer) return type;
-    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 1 ? TILE.floor : type;
+  /**
+   * The modifier goes with the type. A button's modifier is an index into
+   * the level's door links and means nothing to a floor, which reads its
+   * modifier as which of four marks to put on the wall above it -- so a
+   * plate whose link happened to be numbered one, two or three hung a
+   * decoration in the air the moment a foot came down on it, and took it
+   * away again when the foot left. Rooms 12 and 20 of level 1 both have
+   * one. A plate pressed flush is a plain floor, mark and all.
+   */
+  private pressedToFloor(
+    type: number, modifier: number,
+  ): { type: number; modifier: number } {
+    if (type !== TILE.opener && type !== TILE.closer) return { type, modifier };
+    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 1
+      ? { type: TILE.floor, modifier: 0 }
+      : { type, modifier };
   }
 
   private loadCurrentAndLeftTile(): void {
     const outside = this.drawnRow === 2 ? this.opt.topLevelEdgeTile : TILE.wall;
     const curr = this.tileToDraw(this.drawnRoom, this.drawnCol, this.drawnRow, outside);
-    this.currTile = this.pressedToFloor(curr.type, curr.modifier);
-    this.currModifier = curr.modifier;
+    const here = this.pressedToFloor(curr.type, curr.modifier);
+    this.currTile = here.type;
+    this.currModifier = here.modifier;
     const left = this.tileToDraw(this.drawnRoom, this.drawnCol - 1, this.drawnRow, outside);
-    this.tileLeft = this.pressedToFloor(left.type, left.modifier);
-    this.modifierLeft = left.modifier;
+    const beside = this.pressedToFloor(left.type, left.modifier);
+    this.tileLeft = beside.type;
+    this.modifierLeft = beside.modifier;
     this.drawX = COL_X[this.drawnCol];
   }
 

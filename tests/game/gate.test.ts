@@ -131,6 +131,29 @@ describe('a gate', () => {
    * is where the capture has him, the face is the tile's own edge and he
    * is stopped properly.
    */
+  /**
+   * The way out of the right of a room is barred by whatever stands in
+   * its last column. Running right along the top of room 12 of level 1
+   * the Prince went through the shut portcullis into room 20: the face of
+   * a gate is ten units into its tile and the way out is at eleven, so a
+   * stride that ends on the face was already out of the room.
+   */
+  it('at the end of a room is not a way out of it', async () => {
+    const game = await Game.start(assets, exe, 1);
+    expect(game.scene.state.typeAt(12, 9, 0)).toBe(TILE.gate);
+    expect(game.scene.state.modifierAt(12, 9, 0), 'and it is shut').toBe(0);
+    const kid = game.kid;
+    kid.room = 12; kid.currentRow = 0; kid.currentColumn = 6;
+    kid.x = standX(6); kid.y = standY(0);
+    kid.direction = 0; kid.frame = 15; kid.action = 0;
+    kid.fallX = 0; kid.fallY = 0;
+    game.showRoom(12);
+    for (let i = 0; i < 40; i++) {
+      game.step({ x: 1, y: 0, shift: false });
+      expect(kid.room, `still in room 12 at tick ${i}`).toBe(12);
+    }
+  });
+
   it('that is shut does not stop him yet', async () => {
     expect(await runAtTheGate(0)).toBeGreaterThanOrEqual(GATE_COLUMN);
     expect(await reachesTheRoomBeyond(0)).toBe(false);

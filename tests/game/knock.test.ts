@@ -85,6 +85,43 @@ describe('a button with a foot on it', () => {
    * the last value ever written is one -- a plate that counted one as
    * pressed stayed sunk for the rest of the level.
    */
+  /**
+   * And looks like a plain floor while it is down, which means its
+   * modifier has to go with its type: a button's modifier is an index
+   * into the level's door links and a floor's is which of four marks to
+   * put on the wall above it. A plate whose link was numbered one, two or
+   * three hung a decoration in the air the moment a foot came down on it.
+   * Rooms 12 and 20 of level 1 both have one.
+   */
+  it('looks exactly like a plain floor while it is down', async () => {
+    for (const room of [12, 20]) {
+      const game = await Game.start(assets, exe, 1);
+      game.clearBottomText();
+      game.kid.room = 0;
+      game.showRoom(room);
+      const tiles = game.scene.tiles as {
+        doorLinkTimer?: (i: number) => number;
+        typeAt(r: number, c: number, row: number): number;
+        modifierAt(r: number, c: number, row: number): number;
+      };
+      const real = tiles.doorLinkTimer;
+      tiles.doorLinkTimer = () => 5;
+      const pressed = game.render().toRgb(game.scene.screenPalette.toRgba()).join(',');
+      tiles.doorLinkTimer = real;
+      // The same room with every plate replaced by a plain floor.
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 10; c++) {
+          const t = game.scene.state.typeAt(room, c, r);
+          if (t !== TILE.opener && t !== TILE.closer) continue;
+          game.scene.state.setType(room, c, r, TILE.floor);
+          game.scene.state.setModifier(room, c, r, 0);
+        }
+      }
+      const plain = game.render().toRgb(game.scene.screenPalette.toRgba()).join(',');
+      expect(pressed, `room ${room}`).toBe(plain);
+    }
+  });
+
   it('comes back up once the foot has gone', async () => {
     const game = await Game.start(assets, exe, 1);
     // Level 1's room 9: a plate at column 0 of the top row, with the way

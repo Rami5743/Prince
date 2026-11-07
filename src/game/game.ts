@@ -47,6 +47,12 @@ export class Game {
   private blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   private deadTicks = 0;
+  /**
+   * The green flask: the original lets the next fall pass without hurting
+   * him, and the byte-code's `jumpIfFeather` reads it. Nothing has been
+   * measured about how long it lasts, so it is set and read and no more.
+   */
+  featherFall = false;
   /** Ticks left of `LEVEL n` under the room. */
   private titleTicks = LEVEL_TITLE_TICKS;
   /** The game's own font, out of the executable. */
@@ -131,16 +137,20 @@ export class Game {
           if (row < 0 || row > 2) return;
           this.traps.knock(this.kid.room, row);
         },
-        // `getItem 1` is the sword being lifted off the floor; the tile it
-        // was lying on becomes plain floor behind him.
+        // `getItem 1` is whatever is under his feet being taken: the
+        // sword lifted off the floor, or a potion drunk. Both animations
+        // raise it, and the tile becomes plain floor behind him. It used
+        // to assume the sword, so every potion in the game did nothing.
         getItem: (which) => {
           if (which !== 1) return;
-          this.hasSword = true;
           const k = this.kid;
-          if (this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow)
-            === TILE_SWORD) {
-            this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
-          }
+          const tile = this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow);
+          if (tile === TILE_SWORD) this.hasSword = true;
+          else if (tile === TILE_POTION) {
+            this.drink(this.scene.state.modifierAt(k.room, k.currentColumn, k.currentRow) >> 3);
+          } else return;
+          this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
+          this.scene.state.setModifier(k.room, k.currentColumn, k.currentRow, 0);
         },
       },
     };
@@ -245,6 +255,36 @@ export class Game {
     const dead = this.guard.hitPoints === 0;
     startSequence(defender, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
     if (dead) defender.alive = 0;
+  }
+
+  /**
+   * What a flask does, by the kind it is -- the top five bits of its
+   * modifier.
+   *
+   * Level 1 has four of the small red ones and nothing else; level 2 adds
+   * the green. The two the port cannot do anything useful with are the
+   * ones that turn the picture upside down and the one that opens the way
+   * on level 13, and both are left alone rather than half done.
+   */
+  drink(kind: number): void {
+    switch (kind) {
+      case 1: // a small red one: one hit point back
+        if (this.hitPoints < this.maxHitPoints) this.hitPoints += 1;
+        break;
+      case 2: // a big red one: one more hit point for good, and a full cup
+        this.maxHitPoints += 1;
+        this.hitPoints = this.maxHitPoints;
+        break;
+      case 3: // the green one: the next fall does not hurt
+        this.featherFall = true;
+        break;
+      case 5: // the poison: one hit point, and it can be the last
+        this.damage(1);
+        if (this.hitPoints === 0) this.kid.alive = 0;
+        break;
+      default:
+        break;
+    }
   }
 
   /** Hurt the Prince. Returns true if that was the last of his hit points. */
@@ -555,6 +595,7 @@ export const RESTART_PROMPT_DELAY = 15;
 export const RESTART_DELAY = 3;
 
 const TILE_SWORD = TILE.sword;
+const TILE_POTION = TILE.potion;
 const TILE_FLOOR = TILE.floor;
 
 /** Sprite ids of the full and empty hit point markers in the Prince's group. */

@@ -72,6 +72,8 @@ export const KID_SEQ = {
   unsafeStep: 39,
   /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
   pickUpSword: 91,
+  /** Drinking a potion; its byte-code raises `getItem 1` as well. */
+  drink: 78,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47,
 } as const;
@@ -858,6 +860,25 @@ function checkPickUpSword(state: CharacterState, ctx: KidContext): void {
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
 
+/**
+ * A potion under his feet is drunk.
+ *
+ * The port had nothing here at all: the Prince walked over every flask in
+ * the game and none of them did anything, because the only thing that
+ * ever started a `getItem` was the sword. Sequence 78 is the original's
+ * own drinking animation -- he kneels, lifts the flask, swallows on the
+ * frame that raises `sound 3`, and sets it down -- and it raises
+ * `getItem 1` near the end, which is where the potion does its work.
+ */
+function checkDrink(state: CharacterState, ctx: KidContext): void {
+  if (state.alive >= 0) return;
+  if (state.frame !== FRAME.stand) return;
+  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.potion || !tile.room) return;
+  startSequence(state, KID_SEQ.drink, ctx.tables);
+}
+
 /** A chomper whose blade is down cuts whatever is standing in it. */
 function checkChomped(state: CharacterState, ctx: KidContext): void {
   if (!ctx.traps || state.alive >= 0) return;
@@ -909,6 +930,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkSpiked(state, ctx);
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
+  checkDrink(state, ctx);
 
   // Falling out of the level is fatal, as it is in the original.
   if (state.room === 0 && state.alive < 0) {
@@ -980,11 +1002,20 @@ function checkBumped(state: CharacterState, ctx: KidContext): void {
     return d < 0 ? d : 0;
   };
 
-  // The wall may be the tile the character counts as standing on, or the one
-  // it is walking towards.
+  // The wall may be the tile the character counts as standing on, or the
+  // one it is walking towards -- or the one his leading edge has already
+  // reached. `currentColumn` is the column of his weight, which lags the
+  // body: running right out of room 12 of level 1 he was in column 7 by
+  // that measure with his shoulder already in column 9, where the shut
+  // gate is, and nothing looked at column 9 at all. He walked through it
+  // into room 20.
+  const edge = tileDivModM7(
+    state.direction < 0 ? coll.xLeftColl : coll.xRightColl,
+  ).column;
   const here = penetration(state.currentColumn);
   const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
-  const push = Math.min(here, front);
+  const reached = penetration(edge);
+  const push = Math.min(here, front, reached);
   if (push === 0) return;
 
   bumpBack(state, ctx, frame, push);
@@ -1041,6 +1072,13 @@ function checkBumpedIntoFoe(state: CharacterState, ctx: KidContext): void {
   bumpBack(state, ctx, frameOf(ctx.tables, state), push);
 }
 
+/**
+ * `wallType`'s answers, by name: a gate or a tapestry has its face on the
+ * right of its tile, a wall has one on both sides.
+ */
+const WALL_ON_THE_RIGHT = 1;
+const WALL_ON_BOTH_SIDES = 4;
+
 /** Row a given height falls in, counting the row above the room as -1. */
 export function yToRow(y: number): number {
   return (Math.trunc((y + 60) / TILE_SIZE_Y) % 4) - 1;
@@ -1072,8 +1110,16 @@ function leaveDirection(state: CharacterState, ctx: KidContext): number {
     if (coll.xLeft >= 198) return 1;
     return -1;
   }
+  // The way out of the right of a room is barred by whatever stands in
+  // its last column. A tapestry was the only thing the port knew about,
+  // and a shut gate let him straight through: running right along the top
+  // of room 12 of level 1 he went through the portcullis into room 20.
+  // The bump cannot catch that one, because the face of a gate is ten
+  // units into its tile and the way out is at eleven, so a stride that
+  // ends on the face is already out of the room.
   const edge = getTile(ctx.world, state.room, 9, state.currentRow);
-  if (edge.type !== TILE.doortopWithFloor && edge.type !== TILE.doortop
+  const barred = wallTypeAt(ctx.world, edge, ctx.spriteHeight(frame.image));
+  if (barred !== WALL_ON_THE_RIGHT && barred !== WALL_ON_BOTH_SIDES
     && coll.xRight >= 201) {
     return 1;
   }

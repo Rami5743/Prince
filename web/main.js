@@ -1066,18 +1066,29 @@ var RoomRenderer = class {
    * sunk for the rest of the level, which is what the player saw: step
    * on it, step off, and it never comes back up.
    */
+  /**
+   * The modifier goes with the type. A button's modifier is an index into
+   * the level's door links and means nothing to a floor, which reads its
+   * modifier as which of four marks to put on the wall above it -- so a
+   * plate whose link happened to be numbered one, two or three hung a
+   * decoration in the air the moment a foot came down on it, and took it
+   * away again when the foot left. Rooms 12 and 20 of level 1 both have
+   * one. A plate pressed flush is a plain floor, mark and all.
+   */
   pressedToFloor(type, modifier) {
-    if (type !== TILE.opener && type !== TILE.closer) return type;
-    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 1 ? TILE.floor : type;
+    if (type !== TILE.opener && type !== TILE.closer) return { type, modifier };
+    return (this.tiles.doorLinkTimer?.(modifier) ?? 0) > 1 ? { type: TILE.floor, modifier: 0 } : { type, modifier };
   }
   loadCurrentAndLeftTile() {
     const outside = this.drawnRow === 2 ? this.opt.topLevelEdgeTile : TILE.wall;
     const curr = this.tileToDraw(this.drawnRoom, this.drawnCol, this.drawnRow, outside);
-    this.currTile = this.pressedToFloor(curr.type, curr.modifier);
-    this.currModifier = curr.modifier;
+    const here = this.pressedToFloor(curr.type, curr.modifier);
+    this.currTile = here.type;
+    this.currModifier = here.modifier;
     const left = this.tileToDraw(this.drawnRoom, this.drawnCol - 1, this.drawnRow, outside);
-    this.tileLeft = this.pressedToFloor(left.type, left.modifier);
-    this.modifierLeft = left.modifier;
+    const beside = this.pressedToFloor(left.type, left.modifier);
+    this.tileLeft = beside.type;
+    this.modifierLeft = beside.modifier;
     this.drawX = COL_X[this.drawnCol];
   }
   drawRoom() {
@@ -3100,6 +3111,8 @@ var KID_SEQ = {
   unsafeStep: 39,
   /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
   pickUpSword: 91,
+  /** Drinking a potion; its byte-code raises `getItem 1` as well. */
+  drink: 78,
   /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
   bump: 47
 };
@@ -3682,6 +3695,14 @@ function checkPickUpSword(state, ctx) {
   if (tile.type !== TILE.sword || !tile.room) return;
   startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
 }
+function checkDrink(state, ctx) {
+  if (state.alive >= 0) return;
+  if (state.frame !== FRAME.stand) return;
+  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
+  const tile = tileHere(state, ctx);
+  if (tile.type !== TILE.potion || !tile.room) return;
+  startSequence(state, KID_SEQ.drink, ctx.tables);
+}
 function checkChomped(state, ctx) {
   if (!ctx.traps || state.alive >= 0) return;
   const tile = tileHere(state, ctx);
@@ -3719,6 +3740,7 @@ function stepKid(state, controls, ctx) {
   checkSpiked(state, ctx);
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
+  checkDrink(state, ctx);
   if (state.room === 0 && state.alive < 0) {
     ctx.damage?.(100);
     state.alive = 0;
@@ -3744,9 +3766,13 @@ function checkBumped(state, ctx) {
     const d = distanceFromWallForward(state, tile.type, column, coll, wall);
     return d < 0 ? d : 0;
   };
+  const edge = tileDivModM7(
+    state.direction < 0 ? coll.xLeftColl : coll.xRightColl
+  ).column;
   const here = penetration(state.currentColumn);
   const front = penetration(DIR_FRONT[state.direction + 1] + state.currentColumn);
-  const push = Math.min(here, front);
+  const reached = penetration(edge);
+  const push = Math.min(here, front, reached);
   if (push === 0) return;
   bumpBack(state, ctx, frame, push);
 }
@@ -3772,6 +3798,8 @@ function checkBumpedIntoFoe(state, ctx) {
   if (push >= 0) return;
   bumpBack(state, ctx, frameOf(ctx.tables, state), push);
 }
+var WALL_ON_THE_RIGHT = 1;
+var WALL_ON_BOTH_SIDES = 4;
 function yToRow(y) {
   return Math.trunc((y + 60) / TILE_SIZE_Y) % 4 - 1;
 }
@@ -3795,7 +3823,8 @@ function leaveDirection(state, ctx) {
     return -1;
   }
   const edge = getTile(ctx.world, state.room, 9, state.currentRow);
-  if (edge.type !== TILE.doortopWithFloor && edge.type !== TILE.doortop && coll.xRight >= 201) {
+  const barred = wallTypeAt(ctx.world, edge, ctx.spriteHeight(frame.image));
+  if (barred !== WALL_ON_THE_RIGHT && barred !== WALL_ON_BOTH_SIDES && coll.xRight >= 201) {
     return 1;
   }
   if (coll.xRight <= 57) return 0;
@@ -4406,6 +4435,12 @@ var Game = class _Game {
   blankFrames = 0;
   /** Ticks since the Prince died, for the prompt that follows. */
   deadTicks = 0;
+  /**
+   * The green flask: the original lets the next fall pass without hurting
+   * him, and the byte-code's `jumpIfFeather` reads it. Nothing has been
+   * measured about how long it lasts, so it is set and read and no more.
+   */
+  featherFall = false;
   /** Ticks left of `LEVEL n` under the room. */
   titleTicks = LEVEL_TITLE_TICKS;
   /** The game's own font, out of the executable. */
@@ -4484,15 +4519,20 @@ var Game = class _Game {
           if (row < 0 || row > 2) return;
           this.traps.knock(this.kid.room, row);
         },
-        // `getItem 1` is the sword being lifted off the floor; the tile it
-        // was lying on becomes plain floor behind him.
+        // `getItem 1` is whatever is under his feet being taken: the
+        // sword lifted off the floor, or a potion drunk. Both animations
+        // raise it, and the tile becomes plain floor behind him. It used
+        // to assume the sword, so every potion in the game did nothing.
         getItem: (which) => {
           if (which !== 1) return;
-          this.hasSword = true;
           const k = this.kid;
-          if (this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow) === TILE_SWORD) {
-            this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
-          }
+          const tile = this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow);
+          if (tile === TILE_SWORD) this.hasSword = true;
+          else if (tile === TILE_POTION) {
+            this.drink(this.scene.state.modifierAt(k.room, k.currentColumn, k.currentRow) >> 3);
+          } else return;
+          this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
+          this.scene.state.setModifier(k.room, k.currentColumn, k.currentRow, 0);
         }
       }
     };
@@ -4580,6 +4620,35 @@ var Game = class _Game {
     const dead = this.guard.hitPoints === 0;
     startSequence(defender, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
     if (dead) defender.alive = 0;
+  }
+  /**
+   * What a flask does, by the kind it is -- the top five bits of its
+   * modifier.
+   *
+   * Level 1 has four of the small red ones and nothing else; level 2 adds
+   * the green. The two the port cannot do anything useful with are the
+   * ones that turn the picture upside down and the one that opens the way
+   * on level 13, and both are left alone rather than half done.
+   */
+  drink(kind) {
+    switch (kind) {
+      case 1:
+        if (this.hitPoints < this.maxHitPoints) this.hitPoints += 1;
+        break;
+      case 2:
+        this.maxHitPoints += 1;
+        this.hitPoints = this.maxHitPoints;
+        break;
+      case 3:
+        this.featherFall = true;
+        break;
+      case 5:
+        this.damage(1);
+        if (this.hitPoints === 0) this.kid.alive = 0;
+        break;
+      default:
+        break;
+    }
   }
   /** Hurt the Prince. Returns true if that was the last of his hit points. */
   damage(amount) {
@@ -4793,6 +4862,7 @@ var ROOM_CHANGE_BLANK = 1;
 var RESTART_PROMPT_DELAY = 15;
 var RESTART_DELAY = 3;
 var TILE_SWORD = TILE.sword;
+var TILE_POTION = TILE.potion;
 var TILE_FLOOR = TILE.floor;
 var FULL_HP_IMAGE = 217;
 var EMPTY_HP_IMAGE = 218;
