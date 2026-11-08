@@ -33,7 +33,7 @@ import { do_startpos, find_start_level_door, pos_guards, timers, dist as seg003d
 import {
   guards as guardTables, enter_guard, char_opp_dist, goto_other_room,
   autocontrol_opponent, clear_char, on_guard_killed, inc_curr_row,
-  control_guard_inactive, load_room_links,
+  control_guard_inactive, load_room_links, hp as guardHp, guardColor,
 } from './seg002.ts';
 import { control, seqtbl_offset_char, spiked, do_fall, dist as seg005dist } from './seg005.ts';
 import { clear_coll_rooms } from './seg004.ts';
@@ -44,7 +44,7 @@ import {
 } from './seg007.ts';
 import {
   play_frame, check_the_end, screen, redraw_screen, anim_tile_modif, draw_hp,
-  draw_kid_hp,
+  draw_kid_hp, draw_guard_hp,
 } from './seg000.ts';
 import { add_objtable, mark_obj_tile_redraw } from './seg008.ts';
 import { l2, l5, l6, l7, l8, out } from './link.ts';
@@ -101,6 +101,7 @@ function link(): void {
   seg003rooms.goto_other_room = goto_other_room;
   drawMobs.draw_mobs = draw_mobs;
   drawHp.draw_hp = draw_hp;
+  guardHp.draw_guard_hp = draw_guard_hp;
 }
 
 /**
@@ -203,10 +204,14 @@ export class PopGame {
       guards_color: Uint8Array.from(level.guards.map((x) => x.color)),
     };
 
+    // `chtab_addrs[chtab]->images[id]`, and the port's own banks keep a
+    // blank at index nought, so the slice is what makes `get_image`'s
+    // id and this one the same id. Getting that wrong gave
+    // `set_char_collision` the width of the frame before this one.
     g.chtab_addrs = CHTAB_NAME.map((name) => {
       if (!name) return null;
       const set = (this.scene.chtabs as unknown as Record<string, { images: readonly (unknown)[] } | undefined>)[name];
-      return set ? (set.images as never) : null;
+      return set ? (set.images.slice(1) as never) : null;
     });
 
     setPainter({
@@ -411,7 +416,36 @@ export class PopGame {
   }
 
   /** `redraw_screen(drawing_different_room)`. */
+  /**
+   * `set_chtab_palette(chtab_addrs[id_chtab_5_guard], &guard_palettes[
+   * 0x30 * curr_guard_color - 0x30], 0x10)`, at the top of
+   * `redraw_screen`: a guard's clothes are recoloured per room from the
+   * palettes PRINCE.DAT keeps. Colour nought leaves the bank as it is,
+   * as the original does.
+   */
+  private applyGuardColour(): void {
+    const colour = guardColor.value;
+    const set = this.scene.chtabs.guard;
+    const palettes = this.scene.guardPalettes;
+    if (!set) return;
+    if (!palettes || colour === 0) {
+      this.scene.screenPalette.loadBlock(set.paletteBase, set.palette.vga);
+      return;
+    }
+    const at = (colour - 1) * 0x30;
+    const colours = [];
+    for (let i = 0; i < 16; i++) {
+      colours.push({
+        r: palettes[at + i * 3] ?? 0,
+        g: palettes[at + i * 3 + 1] ?? 0,
+        b: palettes[at + i * 3 + 2] ?? 0,
+      });
+    }
+    this.scene.screenPalette.loadBlock(set.paletteBase, colours);
+  }
+
   private redrawScreen(differentRoom: boolean): void {
+    this.applyGuardColour();
     if (differentRoom) {
       // `draw_rect(&rect_top, color_0_black)`: the room, not the strip
       // of words and hit points under it.
@@ -423,6 +457,8 @@ export class PopGame {
     reset_tables();
     draw_moving();
     draw_tables();
+    // The last line of `redraw_screen`, whatever branch it took.
+    redraw_screen();
   }
 
   /** `draw_game_frame`. */

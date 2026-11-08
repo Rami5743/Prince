@@ -53,6 +53,8 @@ export const guards = {
 };
 
 export let curr_guard_color = 0;
+/** `curr_guard_color`, where the shell can read it. */
+export const guardColor = { value: 0 };
 
 // seg006:17D7
 export function char_opp_dist(): number {
@@ -128,10 +130,14 @@ export function get_guard_hp(): void {
 // seg002:0064
 export function check_shadow(): void {
   g.offguard = 0;
-  // Levels 4, 5, 6 and 12 bring the shadow out; none of them is
-  // reachable until those levels are played, so there is nothing to do
-  // here yet beyond clearing the flag the C clears.
+  // Levels 4, 5, 6 and 12 bring the shadow out and return before the
+  // last line; none of them is reachable until those levels are
+  // played, so what is left of the C here is its last line.
+  enter_guard();
 }
+
+/** `draw_guard_hp` lives in seg000; linked here to avoid a cycle. */
+export const hp = { draw_guard_hp: (_curr: number, _max: number): void => {} };
 
 // seg002:00DF
 export function enter_guard(): void {
@@ -148,6 +154,7 @@ export function enter_guard(): void {
   curr_guard_color = guards.type(g.current_level) === 0
     ? g.level.guards_color[room_minus_1] : 0;
   curr_guard_color &= 0x0f;
+  guardColor.value = curr_guard_color;
   // Level 3's guards are skeletons, and they do not die.
   g.Char.charid = guards.type(g.current_level) === 2
     ? charids.charid_4_skeleton : charids.charid_2_guard;
@@ -170,6 +177,7 @@ export function enter_guard(): void {
   if (frame === frameids.frame_185_dead || frame === frameids.frame_177_spiked
     || frame === frameids.frame_178_chomped) {
     g.Char.alive = 1;
+    hp.draw_guard_hp(0, g.guardhp_curr);
     g.guardhp_curr = 0;
   } else {
     g.Char.alive = -1;
@@ -207,6 +215,7 @@ export function check_guard_fallout(): void {
     saveshad();
     g.level.guards_tile[g.drawn_room - 1] = 0xff;
     g.Guard.direction = directions.dir_56_none;
+    hp.draw_guard_hp(0, g.guardhp_curr);
     g.guardhp_curr = 0;
   }
 }
@@ -231,6 +240,7 @@ export function leave_guard(): void {
     g.level.guards_seq_hi[room_minus_1] = g.Guard.curr_seq >> 8;
   }
   g.Guard.direction = directions.dir_56_none;
+  hp.draw_guard_hp(0, g.guardhp_curr);
   g.guardhp_curr = 0;
 }
 

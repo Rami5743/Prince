@@ -85,10 +85,10 @@ export function draw_guard_hp(curr_hp: number, max_hp: number): void {
     // The shadow has hit points only on level 12.
     && (guard_charid !== charids.charid_1_shadow || g.current_level === 12)) {
     for (let i = curr_hp; i < max_hp; ++i) {
-      paintBlit(chtabs_id_chtab_5_guard, -1, 314 - i * 7, 194, 9);
+      paintBlit(chtabs_id_chtab_5_guard, 0, 314 - i * 7, 194, 9);
     }
     for (let i = 0; i < curr_hp; ++i) {
-      paintBlit(chtabs_id_chtab_5_guard, -1, 314 - i * 7, 194, 0);
+      paintBlit(chtabs_id_chtab_5_guard, 0, 314 - i * 7, 194, 0);
     }
   }
 }
