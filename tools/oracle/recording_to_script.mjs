@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 /**
- * Turn a recording made in the browser into an emulator script, from the
- * *raw key events* rather than from the per-tick timeline.
+ * Turn a recording made in the browser into an emulator script, from
+ * the per-tick timeline.
  *
- * This is the difference that matters. The timeline is what the page
- * decided the keys were, after its own reading of the keyboard; replaying
- * that would compare the port against its own idea of the input and could
- * never show up a fault in the reading itself. The raw events are what the
- * player's fingers did, with millisecond stamps, and those are what the
- * original gets here.
+ * It used to come from the raw key events, on the grounds that the
+ * timeline is only what the page decided the keys were and replaying
+ * that could never show up a fault in the page's own reading. True,
+ * and the wrong trade: the two do not agree about which tick a press
+ * belongs to. The page reads the keyboard once a tick and writes down
+ * what was down at that moment, so an event arriving in the middle of
+ * tick T is stamped T by the recorder and first shows in the timeline
+ * at T+1 -- and T+1 is the tick the port acts on it in. Sending it for
+ * T put every such edge a whole tick early in the emulator, which in
+ * `0fbffa60` is the difference between the Prince pulling up at the
+ * lip of a floor and running over it.
+ *
+ * `--raw-ms` still replays the events themselves, with their
+ * millisecond stamps, which is what showed the difference.
  *
  * Two things make the replay keep time with the recording.
  *
@@ -58,7 +66,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { parseRecording } from '../../src/game/recording.ts';
+import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
 
 /** Browser `code` to the name xdotool knows it by. */
 const KEYS = {
@@ -155,20 +163,64 @@ lines.push('key ctrl+a', `wait ${settle.toFixed(3)}`);
  */
 const BLOCK_GAP = 0.3;
 const edges = [];
-const down = new Set();
 let sent = 0;
 let dropped = 0;
-for (const e of rec.events) {
-  const key = KEYS[e.key];
-  if (!key) continue;
-  // Auto-repeat: the browser fires keydown over and over while a key is
-  // held. The emulator needs the edges, not the repeats.
-  if (e.type === 'down' && down.has(key)) { dropped++; continue; }
-  if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
-  const want = rawMs ? e.ms / 1000 : (e.tick - 1 + shift) * TICK;
-  if (e.type === 'down') down.add(key); else down.delete(key);
-  edges.push({ want, type: e.type, key });
-  sent++;
+if (rawMs) {
+  const down = new Set();
+  for (const e of rec.events) {
+    const key = KEYS[e.key];
+    if (!key) continue;
+    if (e.type === 'down' && down.has(key)) { dropped++; continue; }
+    if (e.type === 'up' && !down.has(key)) { dropped++; continue; }
+    if (e.type === 'down') down.add(key); else down.delete(key);
+    edges.push({ want: e.ms / 1000, type: e.type, key });
+    sent++;
+  }
+} else {
+  /**
+   * The schedule comes from the *timeline*, not from the raw events.
+   *
+   * It used to come from the events, on the grounds that the timeline
+   * is only what the page decided the keys were and replaying it could
+   * never show up a fault in the page's own reading. That is true and
+   * it was the wrong trade, because the two do not agree about which
+   * tick a press belongs to. The page reads the keyboard once a tick
+   * and writes down what was down at that moment; an event that
+   * arrives in the middle of tick T is therefore stamped T by the
+   * recorder and first appears in the timeline at T+1 -- which is the
+   * tick the port acts on it in. Sending it for T put every such edge
+   * a whole tick early in the emulator.
+   *
+   * `0fbffa60` is the one that showed it: `34 up Numpad6 ms 2837`, the
+   * timeline clear at 35, and the schedule firing at 2.75. Read on 34
+   * the Prince is on frame 7 of his stride and `control_running` pulls
+   * him up at the lip of the floor in room 1; read on 35 he is on
+   * frame 8, cannot pull up, and runs over the edge. The capture
+   * scored 35 ticks of 731 against the port.
+   *
+   * The timeline is also exactly what `decodeTimeline` hands the port,
+   * so both sides of the comparison are now given the same thing.
+   */
+  const ticks = decodeTimeline(rec.timeline);
+  const held = { Left: false, Right: false, Up: false, Down: false, shift: false };
+  const wanted = (c) => ({
+    Left: c.x < 0, Right: c.x > 0, Up: c.y < 0, Down: c.y > 0, shift: c.shift,
+  });
+  for (let t = 0; t < ticks.length; t++) {
+    const now = wanted(ticks[t]);
+    for (const key of ['Left', 'Right', 'Up', 'Down', 'shift']) {
+      if (now[key] === held[key]) continue;
+      held[key] = now[key];
+      edges.push({
+        want: (t - 1 + shift) * TICK,
+        type: now[key] ? 'down' : 'up',
+        key: key === 'shift' ? 'shift' : key,
+      });
+      sent++;
+    }
+  }
+  // Nothing is scheduled before the origin.
+  for (const e of edges) if (e.want < 0) e.want = 0;
 }
 lines.push('origin');
 let at = 0;
@@ -197,7 +249,13 @@ for (let i = 0; i < edges.length; i++) {
   if (!next || next.want - e.want >= BLOCK_GAP) flush();
 }
 flush();
-for (const key of down) lines.push(`xdo keyup --window @W ${key}`);
+// Let go of anything still down at the end, so nothing is held into the
+// next run.
+for (const key of new Set(edges.filter((e) => e.type === 'down').map((e) => e.key))) {
+  if (edges.filter((e) => e.key === key).at(-1)?.type === 'down') {
+    lines.push(`xdo keyup --window @W ${key}`);
+  }
+}
 lines.push('wait 3');
 
 writeFileSync(out, lines.join('\n') + '\n');

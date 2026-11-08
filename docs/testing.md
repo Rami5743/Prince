@@ -289,6 +289,25 @@ the original and compares what the two draw on every tick of it.
         --fps 30 --rate 12 --hybrid --anchor-text 25
     python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
 
+Twice, though, the second time with `--shift 1`. Where the key
+schedule's clock sits inside one of the game's ticks is not something
+the replay can choose -- it starts when Ctrl+A has restarted the level
+and the game's own tick boundaries fall wherever that landed -- so
+about half of all captures read every key of the run a tick early. In
+`0fbffa60` that is the difference between the Prince pulling up at the
+lip of a floor and running off it. Which of the two captures to keep:
+
+    python3 tools/oracle/first_divergence.py /tmp/dos0 /tmp/dos1 rec.json
+    node --experimental-strip-types tools/dev/pick-shift.ts \
+        rec.json /tmp/dos0.json /tmp/dos1.json <that tick>
+
+The two captures are the same picture until the first key that matters
+is read; on that one tick they differ, and at most one of them can be
+the picture the port draws for it. `tools/oracle/digests/shifts.txt`
+records which was kept for each recording, and `tools/dev/phase-check.ts`
+checks a finished capture from the other end, against the level's own
+clock.
+
 The capture itself cannot go in the repository -- a thousand pictures
 and twenty-five megabytes -- so what is kept is a fingerprint of each
 tick: the screen written as indices into the capture's own palette with
