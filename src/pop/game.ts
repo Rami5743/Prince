@@ -28,6 +28,7 @@ import {
   get_room_address, mobs as drawMobs, FLIPPED, reset_tables, hp as drawHp,
   show_level, display_text_bottom, erase_bottom_text, type Peel,
 } from './seg008.ts';
+import { out as outSlots } from './link.ts';
 import { clear_tile_wipes, levelType as looseLevelType } from './seg007.ts';
 import { do_startpos, find_start_level_door, pos_guards, timers, dist as seg003dist, rooms as seg003rooms } from './seg003.ts';
 import {
@@ -104,6 +105,9 @@ function link(): void {
   guardHp.draw_guard_hp = draw_guard_hp;
 }
 
+/** How long `play_death_music` sounds, in ticks. */
+const DEATH_MUSIC_TICKS = 36;
+
 /**
  * The strip of words under the room.
  *
@@ -130,6 +134,21 @@ export class PopGame {
   private firstDraw = false;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   private roomTarget = false;
+  /**
+   * How much of the death music is left to play.
+   *
+   * `play_kid` counts `Char.alive` up a tick at a time once the Prince
+   * is dead, starts the music at six, and will not go past seven while
+   * `check_sound_playing()` says something is still sounding -- so
+   * `Press Button to Continue` comes up seven ticks after the death
+   * plus the length of the music. A replay has no sound, so this
+   * stands in for it.
+   *
+   * Measured as the gap between the tick the Prince dies and the tick
+   * the words appear in the captures: 25c4ebb8 46, 5920a8c2 47,
+   * 756b259c 47, 9b60bf3a 49, 13ab6867 52.
+   */
+  private deathMusic = 0;
   private clipRect: RectType | null = null;
   /**
    * Renders that do not count against the words under the room.
@@ -214,6 +233,10 @@ export class PopGame {
       return set ? (set.images.slice(1) as never) : null;
     });
 
+    outSlots.display_text_bottom = display_text_bottom;
+    outSlots.erase_bottom_text = erase_bottom_text;
+    outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
+    outSlots.check_sound_playing = () => (this.deathMusic > 0 ? 1 : 0);
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
       blit: (chtab, id, x, y, blit) => this.blit(chtab, id, x, y, blit),
@@ -407,6 +430,7 @@ export class PopGame {
     g.control_shift = controls.shift ? -1 : 0;
     g.guardhp_delta = 0;
     g.hitp_delta = 0;
+    if (this.deathMusic > 0) --this.deathMusic;
     timers();
     play_frame();
     if (g.is_restart_level) {
