@@ -568,7 +568,14 @@ function guardKidFar(guard: GuardState, ctx: GuardStepContext): void {
 
 function autocontrolGuardActive(guard: GuardState, ctx: GuardStepContext): void {
   const kid = ctx.kid;
-  if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
+  // `autocontrol_guard` asks only whether the *guard* is alive. A dead
+  // Prince is not a reason to stand there with the blade out: it makes
+  // `can_guard_see_kid` nought, and nought is `move_down_back`, which
+  // puts the blade down and goes to the inactive stand. The port
+  // returned here instead, so every guard in the game stood over the
+  // body en garde for as long as the death screen was up -- ninety
+  // ticks of `probeF`, and the same in every run that ends in a fight.
+  if (!kid || guard.alive >= 0) return;
   if (guard.sword !== SWORD_DRAWN) return;
   if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
   const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);

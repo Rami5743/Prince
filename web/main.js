@@ -2947,7 +2947,7 @@ function guardKidFar(guard, ctx) {
 }
 function autocontrolGuardActive(guard, ctx) {
   const kid = ctx.kid;
-  if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
+  if (!kid || guard.alive >= 0) return;
   if (guard.sword !== SWORD_DRAWN) return;
   if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
   const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);
@@ -3525,6 +3525,11 @@ var FRAME = {
   turnMid: 48,
   turnEnd: 50,
   turnLast: 52,
+  /**
+   * The two frames of the stride a runner can pull up on --
+   * `control_running` takes the key only on frame 7 or frame 11, and
+   * carries on to one of them otherwise.
+   */
   run1: 7,
   run2: 11,
   /** The body the original leaves when the Prince falls out of the level. */
@@ -5086,6 +5091,17 @@ var Game = class _Game {
    */
   guardFreeze = 0;
   /**
+   * `knock`, which the byte-code raises and `check_knock` acts on.
+   *
+   * The original does not shake anything on the spot: the opcode sets a
+   * flag and `check_knock()` -- the last line of `play_kid_frame`, after
+   * the fall, the landing and everything else -- reads it and shakes the
+   * row the character has *ended up* in. The port shook on the spot,
+   * from inside the sequence, when the row was still the one he had
+   * jumped from.
+   */
+  pendingKnock = 0;
+  /**
    * `get_tile_at_kid`: the tile of the Prince's own room and row at an
    * x, for the line of sight between a guard and him.
    */
@@ -5173,9 +5189,7 @@ var Game = class _Game {
          * in, or the one above for a knock that goes upwards.
          */
         knock: (direction) => {
-          const row = this.kid.currentRow - (direction > 0 ? 1 : 0);
-          if (row < 0 || row > 2) return;
-          this.traps.knock(this.kid.room, row);
+          this.pendingKnock = direction;
         },
         // `getItem 1` is whatever is under his feet being taken: the
         // sword lifted off the floor, or a potion drunk. Both animations
@@ -5247,6 +5261,11 @@ var Game = class _Game {
       tileAtKid: this.tileAtKid
     });
     stepKid(this.kid, controls, this.ctx);
+    if (this.pendingKnock !== 0) {
+      const row = this.kid.currentRow - (this.pendingKnock > 0 ? 1 : 0);
+      this.pendingKnock = 0;
+      if (row >= 0 && row <= 2) this.traps.knock(this.kid.room, row);
+    }
     if (!frozen) stepGuard(this.guard, {
       tables: this.tables,
       effects: this.effects,

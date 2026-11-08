@@ -133,6 +133,11 @@ export const FRAME = {
   turnMid: 48,
   turnEnd: 50,
   turnLast: 52,
+  /**
+   * The two frames of the stride a runner can pull up on --
+   * `control_running` takes the key only on frame 7 or frame 11, and
+   * carries on to one of them otherwise.
+   */
   run1: 7,
   run2: 11,
   /** The body the original leaves when the Prince falls out of the level. */

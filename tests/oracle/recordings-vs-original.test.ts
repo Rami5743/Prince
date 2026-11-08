@@ -70,24 +70,24 @@ const EXPECTED: Record<string, number> = {
   '25c4ebb8': 213,
   '33e8ace7': 295,
   '3764b76d': 184,
-  '5920a8c2': 289,
+  '5920a8c2': 366,
   '72b3522f': 175,
   '756b259c': 202,
-  '760c3e74': 1379,
+  '760c3e74': 1381,
   '848ee3c4': 188,
-  '9b60bf3a': 291,
-  'a356bdd6': 158,
-  'b4ff4672': 353,
+  '9b60bf3a': 292,
+  'a356bdd6': 167,
+  'b4ff4672': 354,
   'e209b01a': 205,
-  'ec99dc5b': 171,
-  'f6874819': 290,
+  'ec99dc5b': 174,
+  'f6874819': 293,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
   'probeC': 230,
   'probeE': 157,
-  'probeF': 359,
+  'probeF': 449,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

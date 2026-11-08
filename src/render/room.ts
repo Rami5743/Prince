@@ -130,12 +130,18 @@ const ROOM_BOTTOM_Y = 192;
  *
  * It comes out as -1 for a slab drawn through the hole it made --
  * `draw_mob` adds 192 to its y to put it back in the room above -- and
- * SDLPoP's reading of that is tile 30, which is drawn before the room
- * and therefore behind it. A capture says otherwise: the plank falling
- * past the hole in the first descent of level 1 is painted over the
- * black that `draw_tile_floorright` stamps there, not under it. So the
- * row is clamped and the slab stays in front, and where a reading of
- * the code and a capture disagree the capture wins.
+ * `get_tilepos_nominus` turns that into tile 30, which
+ * `redraw_needed_tiles` draws before the room and therefore behind it.
+ * The row is clamped here instead, so the slab stays in front.
+ *
+ * Tried the other way, on captures taken at the right phase: it fixes
+ * one of the three ticks that are out while room 1 is still on screen
+ * after its floor gives way, leaves the second as it was, and costs
+ * two ticks of `0fbffa60` that were exact. The two readings are both
+ * partly right because the original only redraws the tiles it has to,
+ * so "behind the room" means behind whatever it redrew that tick --
+ * which the port, redrawing everything, cannot say. The clamp is the
+ * closer of the two until the redraw list is there to ask.
  */
 function yToRowForMob(y: number): number {
   return Math.min(2, Math.max(0, (Math.floor((y + 60) / 63) % 4) - 1));

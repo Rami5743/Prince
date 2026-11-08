@@ -56,6 +56,28 @@ const drift = new ReplayDrift(arg('stall', 0));
 const idle = { x: 0, y: 0, shift: false };
 let drawnRoom = game.drawnRoom;
 let written = 0;
+
+/** Write one frame out, numbered the way the digests number them. */
+function writeFrame(index: number): void {
+  if (index < from || index > to) return;
+  if (stride > 1 && index % stride !== 0) return;
+  const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+  const png = new PNG({ width: W, height: H });
+  for (let i = 0; i < W * H; i++) {
+    png.data[i * 4] = rgb[i * 3];
+    png.data[i * 4 + 1] = rgb[i * 3 + 1];
+    png.data[i * 4 + 2] = rgb[i * 3 + 2];
+    png.data[i * 4 + 3] = 255;
+  }
+  writeFileSync(join(outdir, `t${String(index).padStart(5, '0')}.png`), PNG.sync.write(png));
+  written++;
+}
+
+// Frame nought is the level's own first picture, before a tick has been
+// played -- the same one `runOf` keeps, and the reason the captures are
+// numbered with `--anchor-text 25`.
+writeFrame(0);
+
 for (let t = 0; t < ticks.length; t++) {
   const now = ticks[drift.index(t)] ?? idle;
   const before = ticks[drift.index(t - 1)];
@@ -72,17 +94,6 @@ for (let t = 0; t < ticks.length; t++) {
   // reads the button and shows the new level in the same tick -- see
   // `RESTART_DELAY`.
   if (game.restartDue) game = await game.restart(assets, exe);
-  const show = t >= from && t <= to && (stride <= 1 || t % stride === 0);
-  const rgb = show ? game.render().toRgb(game.scene.screenPalette.toRgba()) : null;
-  if (!rgb) continue;
-  const png = new PNG({ width: W, height: H });
-  for (let i = 0; i < W * H; i++) {
-    png.data[i * 4] = rgb[i * 3];
-    png.data[i * 4 + 1] = rgb[i * 3 + 1];
-    png.data[i * 4 + 2] = rgb[i * 3 + 2];
-    png.data[i * 4 + 3] = 255;
-  }
-  writeFileSync(join(outdir, `t${String(t).padStart(5, '0')}.png`), PNG.sync.write(png));
-  written++;
+  writeFrame(t + 1);
 }
 console.log(`${written} frames from ${ticks.length} ticks -> ${outdir}`);

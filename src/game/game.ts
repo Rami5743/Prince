@@ -112,6 +112,18 @@ export class Game {
   private guardFreeze = 0;
 
   /**
+   * `knock`, which the byte-code raises and `check_knock` acts on.
+   *
+   * The original does not shake anything on the spot: the opcode sets a
+   * flag and `check_knock()` -- the last line of `play_kid_frame`, after
+   * the fall, the landing and everything else -- reads it and shakes the
+   * row the character has *ended up* in. The port shook on the spot,
+   * from inside the sequence, when the row was still the one he had
+   * jumped from.
+   */
+  private pendingKnock = 0;
+
+  /**
    * `get_tile_at_kid`: the tile of the Prince's own room and row at an
    * x, for the line of sight between a guard and him.
    */
@@ -200,11 +212,7 @@ export class Game {
          * The sign says which row is shaken: the one the character is
          * in, or the one above for a knock that goes upwards.
          */
-        knock: (direction) => {
-          const row = this.kid.currentRow - (direction > 0 ? 1 : 0);
-          if (row < 0 || row > 2) return;
-          this.traps.knock(this.kid.room, row);
-        },
+        knock: (direction) => { this.pendingKnock = direction; },
         // `getItem 1` is whatever is under his feet being taken: the
         // sword lifted off the floor, or a potion drunk. Both animations
         // raise it, and the tile becomes plain floor behind him. It used
@@ -288,6 +296,12 @@ export class Game {
       tables: this.tables, tileAtKid: this.tileAtKid,
     });
     stepKid(this.kid, controls, this.ctx);
+    // `check_knock()`, the last line of `play_kid_frame`.
+    if (this.pendingKnock !== 0) {
+      const row = this.kid.currentRow - (this.pendingKnock > 0 ? 1 : 0);
+      this.pendingKnock = 0;
+      if (row >= 0 && row <= 2) this.traps.knock(this.kid.room, row);
+    }
     if (!frozen) stepGuard(this.guard, {
       tables: this.tables,
       effects: this.effects,

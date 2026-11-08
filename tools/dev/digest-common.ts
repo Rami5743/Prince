@@ -72,7 +72,11 @@ export async function digestOfRun(
 ): Promise<Moved[]> {
   let game = await start();
   const out: Moved[] = [];
-  let prev: Uint8Array | null = null;
+  // The level's own first picture, before a tick has been played -- see
+  // the same thing in `runOf`.
+  let prev: Uint8Array | null =
+    game.render().toRgb(game.scene.screenPalette.toRgba());
+  out.push(null);
   for (let t = 0; t < ticks.length; t++) {
     if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
     game.step(ticks[t]);
@@ -300,6 +304,31 @@ export async function runOf(
   const hash: number[] = [];
   const moved: Moved[] = [];
   let prev: Uint8Array | null = null;
+  /**
+   * The level's own first picture, before a single tick has been
+   * played.
+   *
+   * The original draws the level as soon as it has built it and only
+   * then starts the clock, so the opening picture is on the screen for
+   * two frames: the one it was drawn on, and the one the first tick
+   * does nothing in (`pendingFirstTick`). Ending a level again mid-run
+   * shows both -- the capture of `probeF` has the restarted level's
+   * first frame twice, on ticks 431 and 432 -- but at the start of a
+   * recording this loop used to step first and draw after, so the port
+   * had only one of them and everything the level said about itself
+   * came a tick early. That was three ticks of every run scored wrong,
+   * and it was the measurement, not the game.
+   *
+   * `split_ticks --anchor-text 25` numbers the capture to match: the
+   * tick the level's number goes off the bottom of the screen is the
+   * twenty-fifth after this one.
+   */
+  {
+    const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+    hash.push(digest.palette ? fingerprint(rgb, map, mask) : 0);
+    moved.push(null);
+    prev = rgb;
+  }
   for (let t = 0; t < ticks.length; t++) {
     if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
     game.step(ticks[t]);

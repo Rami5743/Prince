@@ -286,7 +286,7 @@ the original and compares what the two draw on every tick of it.
         --out /tmp/rep --record /tmp/rep/run.mkv --fps 30 --cycles 20000
     python3 tools/oracle/split_ticks.py /tmp/rep/run.mkv /tmp/dos \
         --crop 640:400:0:0 --scale 320:200 --start 49 --after-blank \
-        --fps 30 --rate 12 --hybrid --anchor-text 24
+        --fps 30 --rate 12 --hybrid --anchor-text 25
     python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
 
 The capture itself cannot go in the repository -- a thousand pictures

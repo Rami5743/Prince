@@ -165,6 +165,29 @@ describe('a guard who can no longer see the Prince', () => {
     expect(guard.x, 'without having moved a unit').toBe(wasX);
   });
 
+  /**
+   * A dead Prince is out of sight like any other, and the guard stands
+   * down over the body. `autocontrol_guard` asks only whether the
+   * *guard* is alive; the Prince being dead makes `can_guard_see_kid`
+   * nought, and nought is `move_down_back`.
+   *
+   * The port returned early instead, so the guard stood over the body
+   * en garde for the whole of the death screen. In the capture of
+   * `probeF` that is ninety ticks, every one of them wrong, and
+   * putting it right took the run from 363 of its 1195 ticks
+   * pixel-exact to 453.
+   */
+  it('stands down over a dead Prince', async () => {
+    const game = await onGuardInRoom3();
+    const guard = game.guard;
+    // `Char.alive` of nought and up is the original's dead; it is what
+    // `check_can_guard_see_kid` reads, and what the death sequence sets.
+    game.kid.alive = 0;
+    for (let i = 0; i < 10; i++) game.step({ x: 0, y: 0, shift: false });
+    expect(guard.sword, 'the blade goes down').toBe(0);
+    expect(guard.frame, 'and he stands inactive').toBe(166);
+  });
+
   it('comes back on guard when he can see him again', async () => {
     const game = await onGuardInRoom3();
     const guard = game.guard;

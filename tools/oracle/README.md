@@ -28,13 +28,52 @@ times they were pressed, and recover the game's ticks from the grab.
   own opening. That is the same place a browser recording starts, so it is
   what the replay anchors on -- but only roughly. Which video frame that
   flash lands on moves by a tick between one run and the next, so the
-  ticks are numbered from the game's own clock instead: `--anchor-text 24`
+  ticks are numbered from the game's own clock instead: `--anchor-text 25`
   finds the tick the level title goes off the bottom of the screen and
-  calls it 24, which is what the port calls it.
+  calls it 25, which is what the port calls it.
+
+  Twenty-five and not twenty-four. The original draws the level as soon
+  as it has built it and only then starts the clock, so the opening
+  picture is on the screen twice: the frame it was drawn on, and the
+  frame the first tick does nothing in. `runOf` used to step before it
+  drew and so had only the second of them, which put everything the
+  level says about itself a tick ahead of the room it says it about --
+  three ticks of every single run scored wrong for a fault in the
+  measurement. The capture of `probeF` settles it: the level is
+  restarted mid-run at tick 431 and 431 and 432 are the same picture.
 * **A key edge goes out in the tick before the one it belongs to.** The
   game reads the keyboard once a tick, at the start of the tick, so a
   press meant for tick T has to be down before T begins. Sent at the
   middle of T itself, every press in `probeE` was read a tick late.
+* **Where the schedule's clock sits inside one of the game's ticks
+  cannot be chosen, so every recording is captured twice.** The
+  schedule starts when Ctrl+A has restarted the level, and the game's
+  own tick boundaries fall wherever that landed -- anywhere in a tick,
+  differently on every run. The margin either side is half a tick, so
+  about half of all captures come out with every key edge of the run a
+  tick early, and no value of `--settle` fixes that: the uncertainty is
+  a whole tick wide and the window is a whole tick wide.
+
+  It is not a rounding error. In `0fbffa60` the player lets go of Right
+  on tick 35. Read on 35, the Prince pulls up at the lip of the floor
+  in room 1 of level 1; read on 34 he is one frame further into his
+  stride, `control_running` will not take the key on that frame, and he
+  runs over the edge. The same capture scores 35 ticks of 731 against
+  the port one way and 326 the other.
+
+  So each recording is captured at `--shift 0` and at `--shift 1`, and
+  `tools/dev/phase-check.ts` says which to keep. It lines the capture
+  up against the port over the ticks before the player touched
+  anything, where only the level's own clock is running -- the number
+  under the room, which the keys cannot move -- and then over the ticks
+  after. If the two halves want different offsets, the keys went in at
+  the wrong moment. A fault in the port moves both halves together and
+  does not show up there, which is the point: this measures the
+  harness, not the game.
+
+  Which shift each capture was taken at is written down in
+  `tools/oracle/digests/shifts.txt`.
+
 * **Twenty thousand cycles, not three thousand.** At three thousand the
   emulator cannot redraw a room inside a tick: the screen is black for
   two of them and the game loses one. At twenty thousand there is no
@@ -47,7 +86,7 @@ times they were pressed, and recover the game's ticks from the grab.
         --record /tmp/rep/run.mkv --fps 30 --cycles 20000
     python3 tools/oracle/split_ticks.py /tmp/rep/run.mkv /tmp/dos \
         --crop 640:400:0:0 --scale 320:200 --start 49 --after-blank \
-        --fps 30 --rate 12 --hybrid --anchor-text 24
+        --fps 30 --rate 12 --hybrid --anchor-text 25
     python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
     node --experimental-strip-types tools/dev/oracle-report.ts NAME
 
