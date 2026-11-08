@@ -134,19 +134,44 @@ def main():
                 changes.append(i)
         if not changes:
             raise SystemExit('no changes found')
-        # Number the ticks by walking the changes, not by rounding each
-        # one against a fixed base: the boundaries sit 2 or 3 frames apart
-        # and a base-relative round accumulates the difference until whole
-        # ticks are duplicated and skipped. A gap of about `per` is one
-        # tick; a longer one means ticks in which nothing moved.
+        # Number the ticks against the capture's own clock, and not by
+        # adding up the gaps.
+        #
+        # A tick is 2.5 frames at 30 against 12, so the boundaries fall 2
+        # and 3 frames apart in turn, and a gap of 4 is a 3 that the
+        # emulator was late for. Rounding that gap on its own gives 2 --
+        # `round(4 / 2.5)` -- and invents a tick: the picture of the tick
+        # before is written twice and everything after it is a tick out
+        # for the rest of the run. One frame of jitter in twelve hundred
+        # ticks is enough, and it happened: of the four captures of
+        # `f6874819` taken in the third round, three have the Prince's
+        # stride at ticks 119 to 130 and the fourth has the same stride
+        # with tick 121 written twice, which cost that run its alignment
+        # from 122 to the end.
+        #
+        # Against the clock there is no such thing: tick n is where
+        # `base + n * per` says it is, and a change is given the nearest
+        # tick that is not one already taken. The rate is measured first,
+        # over the whole capture, so that `per` is the emulator's own
+        # twelfth of a second and not the nominal one -- a tenth of a per
+        # cent is a tick and a half over a long recording, which is the
+        # fault the gap-walk was written to avoid.
+        base = changes[0]
+        walked = 0
+        for n in range(1, len(changes)):
+            walked += max(1, int(round((changes[n] - changes[n - 1]) / per)))
+        fit = (changes[-1] - base) / walked if walked else per
+        # A rate that far out is not jitter, it is a broken capture.
+        if not 0.9 * per <= fit <= 1.1 * per:
+            print(f'measured {fit:.4f} frames a tick against {per:.4f}: '
+                  f'keeping the nominal rate')
+            fit = per
         pics = {}
-        t = 0
+        t = -1
         for n, f in enumerate(changes):
-            if n:
-                t += max(1, int(round((f - changes[n - 1]) / per)))
+            t = max(t + 1, int(round((f - base) / fit)))
             end = changes[n + 1] - 1 if n + 1 < len(changes) else len(frames) - 1
             pics[t] = frames[min(end, len(frames) - 1)]
-        base = changes[0]
         last = max(pics)
         # The title bar is the game's own clock: it writes the level's
         # name under the room and takes it away a fixed number of ticks
@@ -190,10 +215,7 @@ def main():
         # on the wall clock lands in the wrong tick and there is no
         # fixing that after the fact.
         spanned = changes[-1] - changes[0]
-        counted = 0
-        for n in range(1, len(changes)):
-            counted += max(1, int(round((changes[n] - changes[n - 1]) / per)))
-        rate = counted * a.fps / spanned if spanned else 0
+        rate = max(pics) * a.fps / spanned if spanned else 0
         print(f'{written} ticks written to {a.outdir} '
               f'({len(changes)} changes, {last + 1} ticks spanned, '
               f'tick 0 at video frame {base + skip_until + 1}, '
