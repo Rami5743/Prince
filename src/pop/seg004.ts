@@ -24,9 +24,11 @@ const TILE_RIGHTX = 13;
 const FIRST_ONSCREEN_COLUMN = 5;
 const SCREEN_TILECOUNTX = 10;
 
-export const EDGE_TYPE_FLOOR = 0;
-export const EDGE_TYPE_CLOSER = 1;
-export const EDGE_TYPE_WALL = 2;
+/** `types.h`: the order is closer, wall, floor, and the C compares the
+ * bare number 1 against it in `grab_up_with_floor_behind`. */
+export const EDGE_TYPE_CLOSER = 0;
+export const EDGE_TYPE_WALL = 1;
+export const EDGE_TYPE_FLOOR = 2;
 
 /** Indexed by `wall_type`. */
 const wall_dist_from_left = [0, 10, 0, -1, 0, 0];

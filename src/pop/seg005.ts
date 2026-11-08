@@ -577,7 +577,7 @@ export function hang_fall(): void {
 export function grab_up_with_floor_behind(): void {
   const distance = distance_to_edge_weight();
   const edge_distance = get_edge_distance();
-  if (distance < 4 && edge_distance < 4 && edge_type !== EDGE_TYPE_CLOSER_VALUE) {
+  if (distance < 4 && edge_distance < 4 && edge_type !== EDGE_TYPE_WALL) {
     g.Char.x = byteOf(char_dx_forward(distance));
     seqtbl_offset_char(seqids.seq_8_jump_up_and_grab_straight);
   } else {
@@ -586,8 +586,6 @@ export function grab_up_with_floor_behind(): void {
   }
 }
 
-/** The C writes `edge_type != 1` here, which is `EDGE_TYPE_CLOSER`. */
-const EDGE_TYPE_CLOSER_VALUE = 1;
 
 // seg005:0AF7
 export function run_jump(): void {
