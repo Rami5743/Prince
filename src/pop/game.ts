@@ -60,6 +60,17 @@ export interface Controls {
   shift: boolean;
 }
 
+/** What the shell can tell the game about itself. */
+export interface PopOptions {
+  readonly prefix?: string;
+  readonly effects?: PopEffects;
+}
+
+/** `play_sound`, for a shell that has a speaker. */
+export interface PopEffects {
+  sound?(which: number): void;
+}
+
 /** Which sprite bank each `chtab` id is. */
 const CHTAB_NAME = [
   'sword', 'flameSwordPotion', 'kid', null, null, 'guard', 'environment',
@@ -132,6 +143,8 @@ export class PopGame {
   private font?: Font;
   /** `draw_level_first` has still to put the hit points up. */
   private firstDraw = false;
+  /** Where `play_sound` goes, if the shell has a speaker. */
+  private effects?: PopEffects;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   private roomTarget = false;
   /**
@@ -168,18 +181,20 @@ export class PopGame {
   }
 
   static async start(
-    assets: Assets, exe: Uint8Array, levelNumber: number, prefix = 'V',
+    assets: Assets, exe: Uint8Array, levelNumber: number,
+    options: PopOptions = {},
   ): Promise<PopGame> {
     link();
-    const scene = await buildLevelScene(assets, exe, levelNumber, prefix);
+    const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? 'V');
     const game = new PopGame(scene, levelNumber);
+    game.effects = options.effects;
     game.install(exe);
     game.startLevel();
     return game;
   }
 
   async restart(assets: Assets, exe: Uint8Array): Promise<PopGame> {
-    return PopGame.start(assets, exe, this.levelNumber);
+    return PopGame.start(assets, exe, this.levelNumber, { effects: this.effects });
   }
 
   /** `start_level`: the level's data into the globals, once. */
@@ -236,6 +251,7 @@ export class PopGame {
     outSlots.display_text_bottom = display_text_bottom;
     outSlots.erase_bottom_text = erase_bottom_text;
     outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
+    outSlots.play_sound = (which: number) => { this.effects?.sound?.(which); };
     outSlots.check_sound_playing = () => (this.deathMusic > 0 ? 1 : 0);
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
@@ -287,8 +303,19 @@ export class PopGame {
 
   /** `start_level` proper: `do_startpos` and the room it opens in. */
   private startLevel(): void {
+    // `init_game`'s last few lines, which run before `do_startpos`.
+    g.united_with_shadow = 0;
+    g.flash_time = 0;
+    g.leveldoor_open = 0;
+    g.guardhp_curr = 0;
+    g.hitp_delta = 0;
+    g.Guard.charid = 2; // charid_2_guard
+    g.Guard.direction = 0x56; // dir_56_none
     loadkid();
     do_startpos();
+    // `have_sword = (level_number == 0 || level_number >= 2)`: the
+    // Prince starts every level but the first with a sword in his hand.
+    g.have_sword = (this.levelNumber === 0 || this.levelNumber >= 2) ? 1 : 0;
     g.drawn_room = g.Kid.room;
     load_room_links();
     get_room_address(g.drawn_room);
@@ -543,10 +570,62 @@ export class PopGame {
   }
 
   get kid() { return g.Kid; }
-  get guard() { return g.Guard; }
-  get drawnRoom() { return g.drawn_room; }
+  /**
+   * The guard, with his hit points beside him.
+   *
+   * The C keeps a guard's strength in `guardhp_curr` rather than in the
+   * character, and the shell reads it off the guard, so this puts the
+   * two together.
+   */
+  get guard() {
+    return Object.assign(Object.create(Object.getPrototypeOf(g.Guard) as object), g.Guard, {
+      hitPoints: g.guardhp_curr,
+      maxHitPoints: g.guardhp_max,
+    }) as typeof g.Guard & { hitPoints: number; maxHitPoints: number };
+  }
   get hitPoints() { return g.hitp_curr; }
   get maxHitPoints() { return g.hitp_max; }
+
+  /** `drawn_room`, which the shell also sets to look round the level. */
+  get drawnRoom() { return g.drawn_room; }
+  set drawnRoom(room: number) { this.showRoom(room); }
+
+  /** `Char.alive >= 0`: the death animation has begun. */
+  get isDead() { return g.Kid.alive >= 0; }
+
+  /** `Press Button to Continue` is up: `text_time_total` is its 288. */
+  get awaitingButton() { return g.text_time_total === 288 && g.text_time_remaining !== 0; }
+
+  /** The level's door has been gone through: `next_level` moved on. */
+  get levelFinished() { return g.next_level !== g.current_level; }
+
+  /** `rem_min` and `rem_tick` as one number, for the shell's clock. */
+  get remainingTicks() { return g.rem_min * 720 + g.rem_tick; }
+  set remainingTicks(ticks: number) {
+    g.rem_min = Math.max(0, Math.floor(ticks / 720));
+    g.rem_tick = Math.max(1, ticks - g.rem_min * 720);
+  }
+
+  /** `have_sword`, which the shell carries from one level to the next. */
+  get hasSword() { return g.have_sword !== 0; }
+  set hasSword(has: boolean) { g.have_sword = has ? 1 : 0; }
+
+  /**
+   * Show another room without playing: the view-the-level keys.
+   *
+   * `next_room = room` and the screen drawn whole, which is what the
+   * original's H, J, U and N do.
+   */
+  showRoom(room: number): void {
+    if (room === g.drawn_room) return;
+    g.drawn_room = room;
+    g.next_room = room;
+    load_room_links();
+    get_room_address(room);
+    anim_tile_modif();
+    start_chompers();
+    this.needFullRedraw = true;
+  }
 }
 
 export { loadkid, savekid, loadshad, saveshad, directions, chtabs, out, check_the_end };

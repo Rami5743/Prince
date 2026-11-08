@@ -200,10 +200,15 @@ describe('played in the browser', () => {
         } | null;
       };
       for (let i = 0; i < 400; i++) {
-        // Lunge on Shift, and press forward otherwise: stepping in is
-        // refused once he is already within a blade's length, so it costs
-        // nothing.
-        w.__princeStep(1, i % 2 === 0 ? { shift: true } : { x: -1 });
+        // Press forward, and lunge every twelfth tick.
+        //
+        // Not every other tick: `guard_advance` will not close the
+        // distance while `kid_sword_strike` is still counting down from
+        // the Prince's last lunge, and a lunge every other tick keeps it
+        // topped up. The two then stand a blade and a half apart for as
+        // long as the player likes. Lunging rarely enough for the count
+        // to run out lets the guard come on, and the fight ends.
+        w.__princeStep(1, i % 12 === 0 ? { shift: true } : { x: -1 });
         const s = w.__princeState();
         if (!s) return 'no state';
         if (s.dead) return 'the Prince died';

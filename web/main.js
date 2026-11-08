@@ -92,14 +92,14 @@ function to8(c6) {
   return c6 << 2 & 255;
 }
 function paletteToRgba(pal) {
-  const out = new Uint8Array(16 * 4);
+  const out2 = new Uint8Array(16 * 4);
   for (let i = 0; i < 16; i++) {
-    out[i * 4 + 0] = to8(pal.vga[i].r);
-    out[i * 4 + 1] = to8(pal.vga[i].g);
-    out[i * 4 + 2] = to8(pal.vga[i].b);
-    out[i * 4 + 3] = 255;
+    out2[i * 4 + 0] = to8(pal.vga[i].r);
+    out2[i * 4 + 1] = to8(pal.vga[i].g);
+    out2[i * 4 + 2] = to8(pal.vga[i].b);
+    out2[i * 4 + 3] = 255;
   }
-  return out;
+  return out2;
 }
 
 // src/dat/image.ts
@@ -159,7 +159,7 @@ function rleColumnMajor(dest, src, destLength, stride, height) {
   let rem = i16(destLength);
   let remHeight = i16(height);
   const back = destLength - 1;
-  const step2 = stride - 1;
+  const step = stride - 1;
   while (rem !== 0) {
     let count = i8(src[sp++]);
     const literal = count >= 0;
@@ -171,7 +171,7 @@ function rleColumnMajor(dest, src, destLength, stride, height) {
     }
     do {
       dest[dp++] = literal ? src[sp++] : value;
-      dp += step2;
+      dp += step;
       remHeight = i16(remHeight - 1);
       if (remHeight === 0) {
         dp -= back;
@@ -266,7 +266,7 @@ function lzColumnMajor(dest, src, destLength, stride, height) {
   return sp;
 }
 function unpackPixels(packed, width, height, stride, depth) {
-  const out = new Uint8Array(width * height);
+  const out2 = new Uint8Array(width * height);
   const perByte = 8 / depth;
   const mask = (1 << depth) - 1;
   for (let y = 0; y < height; y++) {
@@ -277,11 +277,11 @@ function unpackPixels(packed, width, height, stride, depth) {
       let shift = 8;
       for (let k = 0; k < perByte && x < width; k++, x++) {
         shift -= depth;
-        out[op++] = v >> shift & mask;
+        out2[op++] = v >> shift & mask;
       }
     }
   }
-  return out;
+  return out2;
 }
 function decodeImage(payload) {
   const h = readImageHeader(payload);
@@ -505,8 +505,8 @@ var Surface = class {
     }
   }
   /** Expand to RGBA for putImageData. */
-  toRgba(paletteRgba, out) {
-    const dst = out ?? new Uint8ClampedArray(this.width * this.height * 4);
+  toRgba(paletteRgba, out2) {
+    const dst = out2 ?? new Uint8ClampedArray(this.width * this.height * 4);
     for (let i = 0; i < this.pixels.length; i++) {
       const c = this.pixels[i] * 4;
       dst[i * 4] = paletteRgba[c];
@@ -698,9 +698,9 @@ var WALL_WWS = 2;
 var WALL_WWW = 3;
 function alterModifiers(fg, bg, roomLinks, roomCount) {
   const mod = bg.slice();
-  const rooms = Math.min(roomCount, 24);
+  const rooms2 = Math.min(roomCount, 24);
   const typeAt = (index) => fg[index] & TILE_TYPE_MASK;
-  for (let room = 1; room <= rooms; room++) {
+  for (let room = 1; room <= rooms2; room++) {
     const roomL = roomLinks[(room - 1) * 4 + 0];
     const roomR = roomLinks[(room - 1) * 4 + 1];
     for (let tilepos = 0; tilepos < 30; tilepos++) {
@@ -744,37 +744,8 @@ function alterModifiers(fg, bg, roomLinks, roomCount) {
 }
 
 // src/game/geometry.ts
-var TILE_SIZE_X = 14;
-var TILE_MID_X = 7;
-var FIRST_ONSCREEN_COLUMN = 5;
-var X_BUMP = [
-  -12,
-  2,
-  16,
-  30,
-  44,
-  58,
-  72,
-  86,
-  100,
-  114,
-  128,
-  142,
-  156,
-  170,
-  184,
-  198,
-  212,
-  226,
-  240,
-  254
-];
-var Y_LAND = [-8, 55, 118, 181, 244];
 function toScreenX(logicalX) {
   return Math.trunc(logicalX * 320 / 280);
-}
-function standY(row) {
-  return Y_LAND[row + 1];
 }
 
 // src/render/room.ts
@@ -788,9 +759,9 @@ function flipHorizontally(img) {
       pixels[y * img.width + (img.width - 1 - x)] = img.pixels[y * img.width + x];
     }
   }
-  const out = { width: img.width, height: img.height, pixels };
-  flipCache.set(img, out);
-  return out;
+  const out2 = { width: img.width, height: img.height, pixels };
+  flipCache.set(img, out2);
+  return out2;
 }
 var BLIT = {
   opaque: 0,
@@ -890,7 +861,7 @@ var Prng = class {
   }
 };
 function generatePalaceWallColors(room) {
-  const out = new Uint8Array(132);
+  const out2 = new Uint8Array(132);
   const prng = new Prng();
   prng.set(room);
   prng.next(1);
@@ -903,12 +874,12 @@ function generatePalaceWallColors(room) {
         do {
           color = base + prng.next(3);
         } while (color === prev);
-        out[44 * row + 11 * subrow + column] = color;
+        out2[44 * row + 11 * subrow + column] = color;
         prev = color;
       }
     }
   }
-  return out;
+  return out2;
 }
 var RoomRenderer = class {
   chtabs;
@@ -958,16 +929,16 @@ var RoomRenderer = class {
   rowBelowMods = new Uint8Array(ROOM_COLUMNS);
   prng = new Prng();
   palaceWallColors = new Uint8Array(132);
-  constructor(chtabs, tiles, opt) {
-    this.chtabs = chtabs;
-    this.tiles = tiles;
+  constructor(chtabs2, tiles2, opt) {
+    this.chtabs = chtabs2;
+    this.tiles = tiles2;
     this.opt = opt;
   }
   get isPalace() {
     return this.opt.levelType !== 0;
   }
   /** Build the draw lists for a room and paint them onto `surface`. */
-  render(surface, room, characters = [], mobs = []) {
+  render(surface, room, characters = [], mobs2 = []) {
     this.back = [];
     this.mid = [];
     this.onTop = [];
@@ -982,7 +953,7 @@ var RoomRenderer = class {
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
     this.drawRoom();
-    for (const m of mobs) this.addMob(m);
+    for (const m of mobs2) this.addMob(m);
     for (const c of characters) this.addCharacter(c);
     const clip = surface.clipBottom;
     surface.clipBottom = ROOM_BOTTOM_Y;
@@ -2101,62 +2072,56 @@ function checkExe(exe) {
   if (exe[0] !== 77 || exe[1] !== 90) {
     throw new Error("not a DOS executable (no MZ signature)");
   }
-  const levelType = exe.subarray(OFF.levelType, OFF.levelType + 16);
-  for (const v of levelType) {
+  const levelType3 = exe.subarray(OFF.levelType, OFF.levelType + 16);
+  for (const v of levelType3) {
     if (v > 1) throw new Error("level type table does not look like dungeon/palace flags");
   }
 }
 function readExeConstants(exe) {
   checkExe(exe);
   const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
-  const u162 = (o) => dv.getUint16(o, true);
-  const u82 = (o) => exe[o];
+  const u16 = (o) => dv.getUint16(o, true);
+  const u8 = (o) => exe[o];
   const vgaPalette = [];
   for (let i = 0; i < 16; i++) {
     const o = OFF.vgaPalette + i * 3;
     vgaPalette.push({ r: exe[o], g: exe[o + 1], b: exe[o + 2] });
   }
   return {
-    startMinutesLeft: u162(OFF.startMinutesLeft),
-    startTicksLeft: u162(OFF.startTicksLeft),
-    startHitPoints: u162(OFF.startHitPoints),
-    firstLevel: u162(OFF.firstLevel),
-    maxHitPointsAllowed: u162(OFF.maxHitPointsAllowed),
-    savingAllowedFirstLevel: u82(OFF.savingAllowedFirstLevel) + 1,
-    savingAllowedLastLevel: u82(OFF.savingAllowedLastLevel) - 1,
-    copyProtectionLevel: u162(OFF.copyProtectionLevel),
-    drawnTileTopLevelEdge: u82(OFF.drawnTileTopLevelEdge),
-    drawnTileLeftLevelEdge: u82(OFF.drawnTileLeftLevelEdge),
-    levelEdgeHitTile: u82(OFF.levelEdgeHitTile),
+    startMinutesLeft: u16(OFF.startMinutesLeft),
+    startTicksLeft: u16(OFF.startTicksLeft),
+    startHitPoints: u16(OFF.startHitPoints),
+    firstLevel: u16(OFF.firstLevel),
+    maxHitPointsAllowed: u16(OFF.maxHitPointsAllowed),
+    savingAllowedFirstLevel: u8(OFF.savingAllowedFirstLevel) + 1,
+    savingAllowedLastLevel: u8(OFF.savingAllowedLastLevel) - 1,
+    copyProtectionLevel: u16(OFF.copyProtectionLevel),
+    drawnTileTopLevelEdge: u8(OFF.drawnTileTopLevelEdge),
+    drawnTileLeftLevelEdge: u8(OFF.drawnTileLeftLevelEdge),
+    levelEdgeHitTile: u8(OFF.levelEdgeHitTile),
     levelType: exe.slice(OFF.levelType, OFF.levelType + 16),
     guardHitPoints: exe.slice(OFF.guardHitPoints, OFF.guardHitPoints + 16),
-    demoHitPoints: u82(OFF.demoHitPoints),
-    demoEndRoom: u82(OFF.demoEndRoom),
-    introMusicLevel: u82(OFF.introMusicLevel),
-    checkpointLevel: u82(OFF.checkpointLevel),
-    checkpointRespawnDir: u82(OFF.checkpointRespawnDir) << 24 >> 24,
-    checkpointRespawnRoom: u82(OFF.checkpointRespawnRoom),
-    checkpointRespawnTilePos: u82(OFF.checkpointRespawnTilePos),
-    skeletonLevel: u82(OFF.skeletonLevel),
-    skeletonRoom: u82(OFF.skeletonRoom),
-    skeletonColumn: u82(OFF.skeletonColumn),
-    skeletonRow: u82(OFF.skeletonRow),
-    mirrorLevel: u82(OFF.mirrorLevel),
-    mirrorRoom: u82(OFF.mirrorRoom),
+    demoHitPoints: u8(OFF.demoHitPoints),
+    demoEndRoom: u8(OFF.demoEndRoom),
+    introMusicLevel: u8(OFF.introMusicLevel),
+    checkpointLevel: u8(OFF.checkpointLevel),
+    checkpointRespawnDir: u8(OFF.checkpointRespawnDir) << 24 >> 24,
+    checkpointRespawnRoom: u8(OFF.checkpointRespawnRoom),
+    checkpointRespawnTilePos: u8(OFF.checkpointRespawnTilePos),
+    skeletonLevel: u8(OFF.skeletonLevel),
+    skeletonRoom: u8(OFF.skeletonRoom),
+    skeletonColumn: u8(OFF.skeletonColumn),
+    skeletonRow: u8(OFF.skeletonRow),
+    mirrorLevel: u8(OFF.mirrorLevel),
+    mirrorRoom: u8(OFF.mirrorRoom),
     vgaPalette,
     // The original compares against 116; anything else means the "wall
     // decoration algorithm" was enabled for palace levels too.
-    enableWdaInPalace: u82(OFF.enableWdaInPalace) !== 116
+    enableWdaInPalace: u8(OFF.enableWdaInPalace) !== 116
   };
 }
 
 // src/game/exe-tables.ts
-var FRAME_FLAG = {
-  weightX: 31,
-  thin: 32,
-  needsFloor: 64,
-  evenOddPixel: 128
-};
 var OFF2 = {
   swordTable: 114903,
   frameTableKid: 113061,
@@ -2175,27 +2140,26 @@ var COUNT = {
   sequenceBytes: 2282
 };
 function expandSequenceRuns(packed, before) {
-  const out = [];
+  const out2 = [];
   let plain = before;
   for (let i = 0; i < packed.length; i++) {
     const block = i + 6 < packed.length && packed[i + 2] === 178 && packed[i + 5] === 0 && packed[i + 6] === 176 && (packed[i] | packed[i + 1] << 8) === plain;
     if (block) {
-      for (let k = packed[i + 4]; k > 0; k--) out.push(packed[i + 3]);
+      for (let k = packed[i + 4]; k > 0; k--) out2.push(packed[i + 3]);
       i += 6;
       plain = 0;
       continue;
     }
-    out.push(packed[i]);
+    out2.push(packed[i]);
     plain += 1;
   }
-  return Uint8Array.from(out);
+  return Uint8Array.from(out2);
 }
-var SEQUENCE_BASE = 6510;
 function readFrames(exe, offset, count) {
-  const out = [];
+  const out2 = [];
   for (let i = 0; i < count; i++) {
     const o = offset + i * 5;
-    out.push({
+    out2.push({
       image: exe[o],
       sword: exe[o + 1],
       dx: exe[o + 2] << 24 >> 24,
@@ -2203,7 +2167,7 @@ function readFrames(exe, offset, count) {
       flags: exe[o + 4]
     });
   }
-  return out;
+  return out2;
 }
 function readExeTables(exe) {
   checkExe(exe);
@@ -2234,397 +2198,7 @@ function readExeTables(exe) {
   };
 }
 
-// src/game/physics.ts
-var SCREENSPACE_X = 58;
-var TILE_RIGHT_X = 13;
-var TILE_SIZE_Y = 63;
-var FALLING_SPEED_MAX = 33;
-var FALLING_SPEED_ACCEL = 3;
-var DIR_FRONT = [-1, 1];
-var DIR_BEHIND = [1, -1];
-var EDGE_TYPE = {
-  floor: 0,
-  wall: 1,
-  /** A tile the character must stop short of: a button, a sword, a potion. */
-  closer: 2
-};
-var WALL_DIST_FROM_LEFT = [0, 10, 0, -1, 0, 0];
-var WALL_DIST_FROM_RIGHT = [0, 0, 10, 13, 0, 0];
-function gateBlocks(modifier, charHeight) {
-  return (modifier >> 2) + 6 < charHeight;
-}
-function wallTypeAt(world, tile, charHeight) {
-  if (tile.type === TILE.gate) {
-    if (tile.room === 0) return 0;
-    const modifier = world.modifierAt(tile.room, tile.column, tile.row);
-    if (!gateBlocks(modifier, charHeight)) return 0;
-  }
-  return wallType(tile.type);
-}
-function wallType(tileType) {
-  switch (tileType) {
-    case TILE.gate:
-    case TILE.doortopWithFloor:
-    case TILE.doortop:
-      return 1;
-    // wall on the right
-    case TILE.mirror:
-      return 2;
-    // wall on the left
-    case TILE.chomper:
-      return 3;
-    // chomper on the left
-    case TILE.wall:
-      return 4;
-    // wall on both sides
-    default:
-      return 0;
-  }
-}
-function getTile(world, room, column, row) {
-  let r = room;
-  let col = column;
-  let line = row;
-  while (col < 0) {
-    if (r) r = world.linkOf(r, 0);
-    col += 10;
-  }
-  while (col > 9) {
-    if (r) r = world.linkOf(r, 1);
-    col -= 10;
-  }
-  while (line < 0) {
-    if (r) r = world.linkOf(r, 2);
-    line += 3;
-  }
-  while (line > 2) {
-    if (r) r = world.linkOf(r, 3);
-    line -= 3;
-  }
-  if (!r) return { type: world.levelEdgeHitTile, room: 0, column: col, row: line };
-  return { type: world.tileAt(r, col, line) & TILE_TYPE_MASK, room: r, column: col, row: line };
-}
-function tileDivMod(xpos) {
-  const x = xpos - SCREENSPACE_X;
-  let column = Math.trunc(x / TILE_SIZE_X);
-  let offset = x % TILE_SIZE_X;
-  if (offset < 0) {
-    column -= 1;
-    offset += TILE_SIZE_X;
-  }
-  return { column, offset };
-}
-function tileDivModM7(xpos) {
-  return tileDivMod(xpos - TILE_MID_X);
-}
-function weightX(state, frame) {
-  return forwardX(state, frame.dx - (frame.flags & FRAME_FLAG.weightX));
-}
-function determineColumn(state, frame) {
-  return tileDivModM7(weightX(state, frame)).column;
-}
-function distanceToEdge(state, xpos) {
-  const { offset } = tileDivModM7(xpos);
-  return state.direction === 0 ? TILE_RIGHT_X - offset : offset;
-}
-function distanceToEdgeWeight(state, frame) {
-  return distanceToEdge(state, weightX(state, frame));
-}
-function charCollision(state, frame, objX, spriteWidth) {
-  const halfWidth = Math.trunc((spriteWidth + 1) / 2);
-  let xLeft = Math.trunc(objX / 2) + SCREENSPACE_X;
-  if (state.direction >= 0) xLeft -= halfWidth;
-  const xRight = xLeft + halfWidth;
-  let xLeftColl = xLeft;
-  let xRightColl = xRight;
-  if (frame.flags & FRAME_FLAG.thin) {
-    xLeftColl += 4;
-    xRightColl -= 4;
-  }
-  return { xLeft, xRight, xLeftColl, xRightColl };
-}
-function distanceFromWallForward(state, tileType, tileColumn, coll, knownType) {
-  const type = knownType ?? wallType(tileType);
-  if (type === 0) return -1;
-  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  if (state.direction < 0) {
-    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
-  }
-  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
-}
-function distanceFromWallBehind(state, tileType, tileColumn, coll) {
-  const type = wallType(tileType);
-  if (type === 0) return 99;
-  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  if (state.direction >= 0) {
-    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
-  }
-  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
-}
-function getEdgeDistance(world, state, frame, objX, spriteWidth, spriteHeight) {
-  const coll = charCollision(state, frame, objX, spriteWidth);
-  const here = getTile(world, state.room, state.currentColumn, state.currentRow);
-  const classify = (distance) => distance <= TILE_RIGHT_X ? { distance, edgeType: EDGE_TYPE.wall } : { distance: 11, edgeType: EDGE_TYPE.floor };
-  const hereWall = wallTypeAt(world, here, spriteHeight);
-  if (hereWall !== 0) {
-    const d = distanceFromWallForward(
-      state,
-      here.type,
-      state.currentColumn,
-      coll,
-      hereWall
-    );
-    if (d >= 0) return classify(d);
-  }
-  const frontColumn = DIR_FRONT[state.direction + 1] + state.currentColumn;
-  const front = getTile(world, state.room, frontColumn, state.currentRow);
-  if (front.type === TILE.doortop && state.direction >= 0) {
-    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
-  }
-  const frontWall = wallTypeAt(world, front, spriteHeight);
-  if (frontWall !== 0) {
-    const d = distanceFromWallForward(state, front.type, frontColumn, coll, frontWall);
-    if (d >= 0) return classify(d);
-  }
-  if (front.type === TILE.loose) {
-    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.closer };
-  }
-  if (front.type === TILE.closer || front.type === TILE.sword || front.type === TILE.potion) {
-    const d = distanceToEdgeWeight(state, frame);
-    return { distance: d, edgeType: d !== 0 ? EDGE_TYPE.closer : EDGE_TYPE.floor };
-  }
-  if (!tileIsFloor(front.type)) {
-    return { distance: distanceToEdgeWeight(state, frame), edgeType: EDGE_TYPE.floor };
-  }
-  return { distance: 11, edgeType: EDGE_TYPE.floor };
-}
-function floorHeightOfRow(row) {
-  return Y_LAND[row + 1];
-}
-function newCollisionMemory() {
-  return {
-    row: -9,
-    room: new Int8Array(30).fill(-1),
-    flags: new Uint8Array(30),
-    prevFlags: new Uint8Array(10)
-  };
-}
-function collisionFlagsAt(memory, column) {
-  return {
-    now: memory.flags[ROW_HERE + column] ?? 0,
-    before: memory.prevFlags[column] ?? 0
-  };
-}
-var ROW_ABOVE = 0;
-var ROW_HERE = 10;
-var ROW_BELOW = 20;
-function xposInDrawnRoom(world, room, drawnRoom, xpos) {
-  if (room === drawnRoom) return xpos;
-  const below = world.linkOf(drawnRoom, 3);
-  if (room === world.linkOf(drawnRoom, 0) || room === world.linkOf(below, 0)) {
-    return xpos - TILE_SIZE_X * 10;
-  }
-  if (room === world.linkOf(drawnRoom, 1) || room === world.linkOf(below, 1)) {
-    return xpos + TILE_SIZE_X * 10;
-  }
-  return xpos;
-}
-function collisionRoomAt(memory, column) {
-  return memory.room[ROW_HERE + column];
-}
-function checkCollisions(world, state, coll, memory) {
-  const none = { intoLeftOfWall: -1, intoRightOfWall: -1 };
-  if (state.action === 7) return none;
-  const row = state.currentRow;
-  let was = ROW_HERE;
-  if (row === memory.row || row + 3 === memory.row || row - 3 === memory.row) {
-    was = ROW_HERE;
-  } else if (row + 1 === memory.row || row - 2 === memory.row) {
-    was = ROW_ABOVE;
-  } else {
-    was = ROW_BELOW;
-  }
-  const prevRoom = memory.room.slice(was, was + 10);
-  const prevFlags = memory.flags.slice(was, was + 10);
-  memory.prevFlags = prevFlags;
-  memory.room.fill(-1);
-  memory.flags.fill(0);
-  memory.row = row;
-  const rightChecked = Math.min(tileDivModM7(coll.xRightColl).column + 2, 11);
-  const leftChecked = tileDivModM7(coll.xLeftColl).column - 1;
-  const readRow = (which, offset) => {
-    let tileLeft = X_BUMP[leftChecked + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-    for (let column = leftChecked; column <= rightChecked; column++) {
-      const tile = getTile(world, state.room, column, which);
-      const type = wallType(tile.type);
-      const leftFace = type ? WALL_DIST_FROM_LEFT[type] + tileLeft : 255;
-      const rightFace = type ? tileLeft - WALL_DIST_FROM_RIGHT[type] + TILE_RIGHT_X : 0;
-      let flags = leftFace < coll.xRightColl ? 15 : 0;
-      if (rightFace > coll.xLeftColl) flags |= 240;
-      memory.flags[offset + tile.column] = flags;
-      memory.room[offset + tile.column] = tile.room;
-      tileLeft += TILE_SIZE_X;
-    }
-  };
-  readRow(row, ROW_HERE);
-  readRow(row + 1, ROW_BELOW);
-  readRow(row - 1, ROW_ABOVE);
-  const out = { intoLeftOfWall: -1, intoRightOfWall: -1 };
-  for (let column = 9; column >= 0; column--) {
-    const here = memory.room[ROW_HERE + column];
-    if (here < 0 || prevRoom[column] !== here) continue;
-    if ((prevFlags[column] & 15) === 0 && (memory.flags[ROW_HERE + column] & 15) !== 0) {
-      out.intoLeftOfWall = column;
-    }
-    if ((prevFlags[column] & 240) === 0 && (memory.flags[ROW_HERE + column] & 240) !== 0) {
-      out.intoRightOfWall = column;
-    }
-  }
-  return out;
-}
-
-// src/game/character.ts
-var DIRECTION = {
-  right: 0,
-  left: -1
-};
-var CHAR_ID = {
-  kid: 0,
-  shadow: 1,
-  guard: 2,
-  skeleton: 4,
-  princess: 5,
-  vizier: 6,
-  mouse: 24
-};
-function newCharacter(partial = {}) {
-  return {
-    x: 0,
-    y: 0,
-    direction: DIRECTION.left,
-    frame: 0,
-    room: 1,
-    currentColumn: 0,
-    currentRow: 0,
-    charId: CHAR_ID.kid,
-    currentSequence: 0,
-    action: 0,
-    fallX: 0,
-    fallY: 0,
-    alive: -1,
-    sword: 0,
-    repeat: 0,
-    grabTimer: 0,
-    collisions: newCollisionMemory(),
-    ...partial
-  };
-}
-function forwardX(state, deltaX) {
-  return state.x + (state.direction < 0 ? -deltaX : deltaX);
-}
-function placeCharacter(state, frame, chtab = "kid") {
-  if (frame.image === 255) return null;
-  let x = (forwardX(state, frame.dx) << 1) - 116;
-  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
-  return {
-    chtab,
-    image: frame.image + 1,
-    x,
-    y: frame.dy + state.y,
-    direction: state.direction,
-    row: state.currentRow
-  };
-}
-function placeSword(state, frame, swordTable, toScreenX2) {
-  const index = frame.sword & 63;
-  if (!index) return null;
-  const placement = swordTable[index];
-  if (!placement || placement.id === 255) return null;
-  const base = placeCharacter(state, frame);
-  if (!base) return null;
-  const dx = state.direction < 0 ? -placement.x : placement.x;
-  return {
-    chtab: "sword",
-    image: placement.id + 1,
-    x: toScreenX2(base.x) + dx,
-    y: base.y + placement.y,
-    direction: state.direction,
-    row: state.currentRow,
-    alreadyScreenX: true
-  };
-}
-var SPLASH_IMAGE = { kid: 219, guard: 2 };
-function placeHurtSplash(character, frame, chtab = "kid") {
-  if (frame === 178) return null;
-  const forward = character.direction === 0 ? 1 : -1;
-  let { x, y } = character;
-  if (frame === 185 || frame >= 106 && frame < 111) {
-    y += 4;
-    x += 5 * forward;
-  } else if (frame === 177) {
-    x -= 5 * forward;
-  } else {
-    y -= (chtab === "kid" ? 4 : 0) + 11;
-    x += 5 * forward;
-  }
-  return {
-    chtab,
-    image: SPLASH_IMAGE[chtab === "kid" ? "kid" : "guard"],
-    x,
-    y,
-    direction: character.direction,
-    row: character.row,
-    // `obj_tilepos = -1`: the splash is drawn after every tile and every
-    // other object, so nothing in the room can cover it.
-    onTop: true
-  };
-}
-
 // src/game/sequence.ts
-var SEQ_OP = {
-  dx: 251,
-  dy: 250,
-  flip: 254,
-  jumpIfFeather: 247,
-  jump: 255,
-  up: 253,
-  down: 252,
-  action: 249,
-  setFall: 248,
-  knockUp: 245,
-  knockDown: 244,
-  sound: 242,
-  endLevel: 241,
-  getItem: 243,
-  die: 246
-};
-var SEQ = {
-  startRun: 1,
-  stand: 2,
-  standJump: 3,
-  runJump: 4,
-  turn: 5,
-  runTurn: 6,
-  stepFall: 7,
-  jumpHangMedium: 8,
-  hang: 9,
-  climbUp: 10,
-  hangDrop: 11,
-  freeFall: 12,
-  runStop: 13,
-  jumpUp: 14,
-  fall: 7
-};
-var ACTION = {
-  stand: 0,
-  runJump: 1,
-  hangClimb: 2,
-  inMidair: 3,
-  inFreefall: 4,
-  bumped: 5,
-  hangStraight: 6,
-  turning: 7
-};
 var SOUND_SILENCE = -1;
 var SEQUENCE_SOUND = [
   SOUND_SILENCE,
@@ -2638,323 +2212,8 @@ var SEQUENCE_SOUND = [
   19
   // 4: the way out of the level
 ];
-var u8 = (v) => v & 255;
-var i82 = (v) => v << 24 >> 24;
-function startSequence(state, id, tables) {
-  state.currentSequence = tables.sequenceOffsets[id];
-}
-function playSequence(state, ctx) {
-  const code = ctx.tables.sequences;
-  const read = () => {
-    const at = state.currentSequence - SEQUENCE_BASE;
-    state.currentSequence = state.currentSequence + 1 & 65535;
-    return at >= 0 && at < code.length ? code[at] : 255;
-  };
-  for (let guard = 0; guard < 1e3; guard++) {
-    const at = state.currentSequence - SEQUENCE_BASE;
-    if (at < 0 || at >= code.length) return false;
-    const command = read();
-    switch (command) {
-      case SEQ_OP.dx:
-        state.x = u8(forwardX(state, i82(read())));
-        break;
-      case SEQ_OP.dy:
-        state.y = u8(state.y + i82(read()));
-        break;
-      case SEQ_OP.flip:
-        state.direction = ~state.direction;
-        break;
-      case SEQ_OP.jumpIfFeather:
-        if (!ctx.isFeatherFall) {
-          read();
-          read();
-          break;
-        }
-      // fallthrough: a feather fall takes the jump
-      case SEQ_OP.jump: {
-        const lo = read();
-        const hi = read();
-        state.currentSequence = lo | hi << 8;
-        break;
-      }
-      case SEQ_OP.up:
-        state.currentRow -= 1;
-        ctx.effects?.rowChanged?.(-1);
-        break;
-      case SEQ_OP.down:
-        state.currentRow += 1;
-        ctx.effects?.rowChanged?.(1);
-        break;
-      case SEQ_OP.action:
-        state.action = read();
-        break;
-      case SEQ_OP.setFall:
-        state.fallX = i82(read());
-        state.fallY = i82(read());
-        break;
-      case SEQ_OP.knockUp:
-        ctx.effects?.knock?.(1);
-        break;
-      case SEQ_OP.knockDown:
-        ctx.effects?.knock?.(-1);
-        break;
-      case SEQ_OP.sound: {
-        const sound = SEQUENCE_SOUND[read()] ?? SOUND_SILENCE;
-        ctx.effects?.sound?.(sound);
-        break;
-      }
-      case SEQ_OP.endLevel:
-        ctx.effects?.endLevel?.();
-        break;
-      case SEQ_OP.getItem: {
-        const item = read();
-        ctx.effects?.getItem?.(item);
-        break;
-      }
-      case SEQ_OP.die:
-        ctx.effects?.die?.();
-        break;
-      default:
-        state.frame = command;
-        return true;
-    }
-  }
-  throw new Error("sequence did not reach a frame");
-}
-
-// src/game/sword.ts
-var SWORD_SEQ = {
-  enGarde: 55,
-  advance: 86,
-  retreat: 57,
-  strike: 75,
-  turn: 60,
-  block: 62,
-  stabbed: 74,
-  /** A blow that was stopped: the striker's own recoil. */
-  parried: 69,
-  dropDead: 71,
-  /**
-   * Run through by a blade.
-   *
-   * 85, not 54. Sequence 85 is `action 5` and then a jump into the body
-   * of 71, so the Prince goes down the way a guard does: frames 179, 180,
-   * 181, 182, 183 and 185, a collapse. Sequence 54 holds frame 178 for
-   * ever, and frame 178 is the chomper's body -- which is exactly how the
-   * player described what a guard's kill looked like.
-   */
-  kidDie: 85
-};
-var SWORD_DRAWN = 2;
-var BLOCK_FRAMES = [150, 161];
-var PARRY_FRAME = 161;
-var STRIKE_PARRYABLE = 153;
-var STRIKE_CONTACT = 154;
-var READY_FRAMES = [157, 158, 165, 170, 171];
-function isReady(c) {
-  return c.sword === SWORD_DRAWN && READY_FRAMES.includes(c.frame);
-}
-function charOppDist(c, other) {
-  if (c.room !== other.room) return 999;
-  let distance = other.x - c.x;
-  if (c.direction < 0) distance = -distance;
-  if (distance >= 0 && c.direction !== other.direction) distance += 13;
-  return distance;
-}
-function checkHurting(c, other) {
-  if (c.sword !== SWORD_DRAWN) return null;
-  if (c.currentRow !== other.currentRow) return null;
-  if (c.frame !== STRIKE_PARRYABLE && c.frame !== STRIKE_CONTACT) return null;
-  const distance = charOppDist(c, other);
-  const parrying = BLOCK_FRAMES.includes(other.frame);
-  if (distance >= 0 && distance < SWORD_REACH && parrying) return "parried";
-  if (c.frame !== STRIKE_CONTACT) return null;
-  const nearest = other.sword < SWORD_DRAWN ? 8 : 12;
-  return distance >= nearest && distance < SWORD_REACH ? "hurt" : null;
-}
-var SWORD_REACH = 29;
-var SWORD_RANGE = 24;
-function withinReach(c, other) {
-  if (c.room !== other.room || c.currentRow !== other.currentRow) return false;
-  const gap = other.x - c.x;
-  const inFront = c.direction === 0 ? gap > 0 : gap < 0;
-  return inFront && Math.abs(gap) <= SWORD_RANGE;
-}
-function facingOf(c, other) {
-  return other.x > c.x ? 0 : -1;
-}
-
-// src/game/control-latch.ts
-var CONTROL = {
-  /** Pressed, and nothing has acted on it yet. */
-  held: -1,
-  released: 0,
-  /** Pressed, but already acted on: wait for the key to go up. */
-  ignore: 1
-};
-var ControlLatch = class {
-  /**
-   * The two side latches belong to the arrow keys, not to the Prince.
-   *
-   * The original keeps them that way round: `read_user_control` fills
-   * `control_forward` from the left arrow and `control_backward` from
-   * the right one, whatever way he is facing, and `user_control` calls
-   * `flip_control_x` to swap the pair over for the duration of
-   * `control()` when he is facing right -- and swaps them back after.
-   *
-   * It matters when he turns with a key still down. Run right, press
-   * Left: the run-turn takes the left arrow's latch and marks it used.
-   * He comes out of the turn facing left, and that same latch is now his
-   * forward one -- still used, so nothing he does next can be started by
-   * the Left he is still holding until he lets go of it. The port
-   * recomputed forward and backward from the direction on every tick, so
-   * the used latch stayed with `backward` and the key came up fresh as
-   * `forward` the moment he turned.
-   */
-  left = CONTROL.released;
-  right = CONTROL.released;
-  up = CONTROL.released;
-  down = CONTROL.released;
-  /** The latch over the shift key; the raw key is read separately. */
-  shift2 = CONTROL.released;
-  /** `flip_control_x`: which arrow is forward, fixed for this tick. */
-  facingRight = false;
-  get forward() {
-    return this.facingRight ? this.right : this.left;
-  }
-  set forward(value) {
-    if (this.facingRight) this.right = value;
-    else this.left = value;
-  }
-  get backward() {
-    return this.facingRight ? this.left : this.right;
-  }
-  set backward(value) {
-    if (this.facingRight) this.left = value;
-    else this.right = value;
-  }
-  /**
-   * Take in the keys that are down now. A latch that is already held is left
-   * alone -- only the move that acts on it clears it -- and one that is
-   * ignored stays ignored until its key goes up.
-   */
-  read(controls, direction) {
-    this.facingRight = direction >= 0;
-    this.left = step(this.left, controls.x < 0);
-    this.right = step(this.right, controls.x > 0);
-    this.up = step(this.up, controls.y < 0);
-    this.down = step(this.down, controls.y > 0);
-    this.shift2 = step(this.shift2, controls.shift);
-  }
-  /**
-   * The original's `release_arrows`: forget every direction, and hand back
-   * the ignored state for the caller to put on the one it has just used.
-   */
-  releaseArrows() {
-    this.left = CONTROL.released;
-    this.right = CONTROL.released;
-    this.up = CONTROL.released;
-    this.down = CONTROL.released;
-    return CONTROL.ignore;
-  }
-  /** Forget everything, as the game does when a level starts. */
-  clear() {
-    this.releaseArrows();
-    this.shift2 = CONTROL.released;
-  }
-};
-function step(latch, down) {
-  if (latch === CONTROL.held) return CONTROL.held;
-  if (!down) return CONTROL.released;
-  return latch === CONTROL.released ? CONTROL.held : latch;
-}
 
 // src/game/kid.ts
-var u16 = (v) => v & 65535;
-var SEQ_FALL_FROM_RUN = 19;
-var SEQ_FALL_AFTER_STANDING_JUMP = 18;
-var SEQ_FALL_AFTER_RUNNING_JUMP = 21;
-var SEQ_PUSHED_OFF_LEDGE = 81;
-var SEQ_START_FALL_AT_WALL = 104;
-var KID_SEQ = {
-  startRun: 1,
-  stand: 2,
-  standingJump: 3,
-  runJump: 4,
-  turn: 5,
-  runTurn: 6,
-  fall: 7,
-  /** The run a level that opens at a run starts with. */
-  runEntry: 84,
-  jumpUpAndGrabStraight: 8,
-  hang: 9,
-  climbUp: 10,
-  releaseLedgeAndLand: 11,
-  runStop: 13,
-  jumpUpIntoCeiling: 14,
-  grabLedgeMidair: 15,
-  jumpUpAndGrab: 16,
-  softLand: 17,
-  mediumLand: 20,
-  releaseLedgeAndFall: 23,
-  jumpUpAndGrabForward: 24,
-  hangAgainstWall: 25,
-  crouchWhileRunning: 26,
-  jumpUpWithNothingAbove: 28,
-  /** 29..42: step forward by 1..14 units, to stop exactly at an edge. */
-  stepBase: 28,
-  startRunAfterTurn: 43,
-  stepOnEdge: 44,
-  standUpFromCrouch: 49,
-  /** Down and forward from a crouch: a short hop forward on all fours. */
-  crouchHop: 79,
-  /** Turning to a guard behind him: the turn and the blade in one. */
-  turnDrawSword: 89,
-  crouch: 50,
-  climbDown: 68,
-  climbUpToClosedGate: 73,
-  /**
-   * The landing that kills: a fall of three rows or more.
-   *
-   * 22, not 52. Sequence 52 is one byte -- `jump 8282` -- and 8282 is
-   * where sequence 20, the hard landing, begins: `frame 108`, then frame
-   * 109 thirty times, then 110..119 and back on his feet. So `crushed:
-   * 52` was literally the survivable landing, and a fall of three rows
-   * left the Prince lying in the living crouch and then getting up with
-   * no hit points, which is what the player saw and reported as `no body,
-   * and it looks as though he survived`. Sequence 22 is the one that
-   * kills: `knockDown`, `dy -2`, `dx 3`, frame 185, `die`, frame 185 and
-   * a jump back onto itself -- the body, held for ever.
-   */
-  crushed: 22,
-  /** Landing on spikes: `knockDown`, `dx 4`, frame 177, `die`. */
-  spiked: 51,
-  /**
-   * Cut in half by a chomper: `action 1`, frame 178, `die`, frame 178 for
-   * ever. Frame 178 is the chomper's own body, and it is the one the port
-   * was using for a sword death as well -- which is how the player knew
-   * something was wrong: `that is what a body looks like after the
-   * guillotine, not after a guard`.
-   */
-  chomped: 54,
-  unsafeStep: 39,
-  /** Picking the sword up off the floor; its byte-code raises `getItem 1`. */
-  pickUpSword: 91,
-  /** Drinking a potion; its byte-code raises `getItem 1` as well. */
-  drink: 78,
-  /** Walking out of the level; its byte-code raises `endLevel`. */
-  leaveLevel: 70,
-  /** Walking into a wall. Its own byte-code reads `action 5`, `dx -4`. */
-  bump: 47,
-  /** Meeting one in mid-air: the fall frames and then a real fall. */
-  bumpFall: 45,
-  /** Meeting one at the end of a jump: hands down, then the crouch. */
-  hardBump: 46,
-  /** Bumped from behind with the sword out: shoved back a step. */
-  pushedBackWithSword: 64,
-  /** Bumped from in front with the sword out: he leans into it. */
-  bumpForwardWithSword: 65
-};
 var FRAME = {
   startRunFirst: 1,
   run7: 7,
@@ -2978,1127 +2237,9 @@ var FRAME = {
   /** The body the original leaves when the Prince falls out of the level. */
   dead: 185
 };
-function frameOf(tables, state) {
-  if (state.charId === CHAR_ID.guard || state.charId === CHAR_ID.skeleton) {
-    let add = 0;
-    if (state.frame >= 102 && state.frame < 107) add = 70;
-    const index = state.frame + add - 149;
-    const own = index >= 0 && index < tables.frameTableGuard.length ? tables.frameTableGuard[index] : void 0;
-    if (own) return own;
-  }
-  return tables.frameTableKid[state.frame] ?? tables.frameTableKid[0];
-}
-function objectX(state, frame) {
-  let x = (forwardX(state, frame.dx) << 1) - 116;
-  if ((frame.flags ^ state.direction) << 24 >> 24 >= 0) x += 1;
-  return x;
-}
-function forwardHeld(state, controls) {
-  if (controls.x === 0) return false;
-  return state.direction < 0 ? controls.x < 0 : controls.x > 0;
-}
-function backwardHeld(state, controls) {
-  if (controls.x === 0) return false;
-  return state.direction < 0 ? controls.x > 0 : controls.x < 0;
-}
-function control(state, controls, ctx) {
-  if (state.alive >= 0) return;
-  const f = state.frame;
-  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
-    ctx.latch.releaseArrows();
-    return;
-  }
-  if (controlSwordPlay(state, controls, ctx)) return;
-  if (f === FRAME.stand || f >= FRAME.turnEnd && f < 53) {
-    controlStanding(state, controls, ctx);
-  } else if (f === FRAME.turnMid) {
-    controlTurning(state, controls, ctx);
-  } else if (f < 4) {
-    controlStartRun(state, controls, ctx);
-  } else if (f >= FRAME.startJumpUp && f < FRAME.jumpHang) {
-    controlJumpUp(state, controls, ctx);
-  } else if (f < 15) {
-    controlRunning(state, controls, ctx);
-  } else if (f >= FRAME.hangingFirst && f < 100) {
-    controlHanging(state, controls, ctx);
-  } else if (f === FRAME.crouch) {
-    controlCrouched(state, controls, ctx);
-  }
-}
-var DRAW_SWORD_RANGE = 90;
-var DRAW_SWORD_BEHIND = -10;
-function controlSwordPlay(state, controls, ctx) {
-  const foe = ctx.opponent?.() ?? null;
-  const distance = foe === null ? 0 : charOppDist(state, foe);
-  const engaged = foe !== null && foe.alive < 0 && foe.sword === SWORD_DRAWN && foe.room === state.room && foe.currentRow === state.currentRow && distance >= DRAW_SWORD_BEHIND && distance < DRAW_SWORD_RANGE;
-  if (state.sword !== SWORD_DRAWN) {
-    if (ctx.hasSword && !ctx.hasSword()) return false;
-    const onFoot = state.y === floorHeightOfRow(state.currentRow) && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair && state.action !== ACTION.hangClimb && state.action !== ACTION.hangStraight;
-    if (!engaged || foe === null || !onFoot) return false;
-    state.direction = facingOf(state, foe);
-    state.sword = SWORD_DRAWN;
-    startSequence(state, SWORD_SEQ.enGarde, ctx.tables);
-    ctx.latch.forward = ctx.latch.shift2 = ctx.latch.releaseArrows();
-    return true;
-  }
-  if (!isReady(state)) return true;
-  if (!engaged || foe === null) {
-    state.sword = 0;
-    startSequence(state, SEQ.stand, ctx.tables);
-    return true;
-  }
-  const latch = ctx.latch;
-  if (latch.shift2 === CONTROL.held) {
-    latch.shift2 = CONTROL.ignore;
-    latch.releaseArrows();
-    startSequence(state, SWORD_SEQ.strike, ctx.tables);
-  } else if (latch.up === CONTROL.held) {
-    latch.up = latch.releaseArrows();
-    startSequence(state, SWORD_SEQ.block, ctx.tables);
-  } else if (state.direction !== facingOf(state, foe)) {
-    startSequence(state, SWORD_SEQ.turn, ctx.tables);
-  } else if (forwardHeld(state, controls)) {
-    if (!withinReach(state, foe)) startSequence(state, SWORD_SEQ.advance, ctx.tables);
-  } else if (backwardHeld(state, controls)) {
-    startSequence(state, SWORD_SEQ.retreat, ctx.tables);
-  }
-  return true;
-}
-function canGrab(ctx, through, target, direction, targetModifier) {
-  if (through === TILE.wall) return false;
-  if (through === TILE.doortop && direction >= 0) return false;
-  if (tileIsFloor(through)) return false;
-  if (target === TILE.loose && targetModifier !== 0) return false;
-  if (target === TILE.doortopWithFloor && direction < 0) return false;
-  if (!tileIsFloor(target)) return false;
-  return true;
-}
-function tileAbove(state, ctx) {
-  return getTile(ctx.world, state.room, state.currentColumn, state.currentRow - 1);
-}
-function tileFrontAbove(state, ctx) {
-  return getTile(
-    ctx.world,
-    state.room,
-    DIR_FRONT[state.direction + 1] + state.currentColumn,
-    state.currentRow - 1
-  );
-}
-function tileBehindAbove(state, ctx) {
-  return getTile(
-    ctx.world,
-    state.room,
-    DIR_BEHIND[state.direction + 1] + state.currentColumn,
-    state.currentRow - 1
-  );
-}
-function tileBehind(state, ctx) {
-  return getTile(
-    ctx.world,
-    state.room,
-    DIR_BEHIND[state.direction + 1] + state.currentColumn,
-    state.currentRow
-  );
-}
-function tileFront(state, ctx) {
-  return getTile(
-    ctx.world,
-    state.room,
-    DIR_FRONT[state.direction + 1] + state.currentColumn,
-    state.currentRow
-  );
-}
-function tileHere(state, ctx) {
-  return getTile(ctx.world, state.room, state.currentColumn, state.currentRow);
-}
-function modifierOf(ctx, t) {
-  return t.room ? ctx.world.modifierAt(t.room, t.column, t.row) : 0;
-}
-function controlJumpUp(state, controls, ctx) {
-  if (forwardHeld(state, controls) || ctx.latch.forward === CONTROL.held) {
-    standingJump(state, ctx);
-  }
-}
-function standingJump(state, ctx) {
-  ctx.latch.up = CONTROL.ignore;
-  ctx.latch.forward = CONTROL.ignore;
-  startSequence(state, KID_SEQ.standingJump, ctx.tables);
-}
-function upPressed(state, controls, ctx) {
-  if (goUpLevelDoor(state, ctx)) return;
-  if (forwardHeld(state, controls)) {
-    standingJump(state, ctx);
-    return;
-  }
-  checkJumpUp(state, ctx);
-}
-function checkJumpUp(state, ctx) {
-  ctx.latch.up = ctx.latch.releaseArrows();
-  const above = tileAbove(state, ctx);
-  const frontAbove = tileFrontAbove(state, ctx);
-  if (canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
-    grabUpWithFloorBehind(state, ctx);
-    return;
-  }
-  const behindAbove = tileBehindAbove(state, ctx);
-  if (canGrab(ctx, behindAbove.type, above.type, state.direction, modifierOf(ctx, above))) {
-    jumpUpOrGrab(state, ctx);
-  } else {
-    jumpUp(state, ctx);
-  }
-}
-function jumpUpOrGrab(state, ctx) {
-  const frame = frameOf(ctx.tables, state);
-  const distance = distanceToEdgeWeight(state, frame);
-  if (distance < 6) {
-    jumpUp(state, ctx);
-  } else if (!tileIsFloor(tileBehind(state, ctx).type)) {
-    state.x = forwardX(state, distanceToEdgeWeight(state, frame) - 10) & 255;
-    startSequence(state, KID_SEQ.jumpUpAndGrab, ctx.tables);
-  } else {
-    state.x = forwardX(state, distance - 14) & 255;
-    state.currentColumn = determineColumn(state, frame);
-    grabUpWithFloorBehind(state, ctx);
-  }
-}
-function grabUpWithFloorBehind(state, ctx) {
-  const frame = frameOf(ctx.tables, state);
-  const distance = distanceToEdgeWeight(state, frame);
-  const edge = getEdgeDistance(
-    ctx.world,
-    state,
-    frame,
-    objectX(state, frame),
-    ctx.spriteWidth(frame.image),
-    ctx.spriteHeight(frame.image)
-  );
-  if (distance < 4 && edge.distance < 4 && edge.edgeType !== EDGE_TYPE.wall) {
-    state.x = forwardX(state, distance) & 255;
-    startSequence(state, KID_SEQ.jumpUpAndGrabStraight, ctx.tables);
-  } else {
-    state.x = forwardX(state, distance - 4) & 255;
-    startSequence(state, KID_SEQ.jumpUpAndGrabForward, ctx.tables);
-  }
-}
-function jumpUp(state, ctx) {
-  ctx.latch.up = ctx.latch.releaseArrows();
-  const frame = frameOf(ctx.tables, state);
-  const edge = getEdgeDistance(
-    ctx.world,
-    state,
-    frame,
-    objectX(state, frame),
-    ctx.spriteWidth(frame.image),
-    ctx.spriteHeight(frame.image)
-  );
-  if (edge.distance < 4 && edge.edgeType === EDGE_TYPE.wall) {
-    state.x = forwardX(state, edge.distance - 3) & 255;
-  }
-  const column = tileDivModM7(weightX(state, frame) - 6).column;
-  const above = getTile(ctx.world, state.room, column, state.currentRow - 1);
-  if (above.type !== TILE.wall && !tileIsFloor(above.type)) {
-    startSequence(state, KID_SEQ.jumpUpWithNothingAbove, ctx.tables);
-  } else {
-    startSequence(state, KID_SEQ.jumpUpIntoCeiling, ctx.tables);
-  }
-}
-function downPressed(state, ctx) {
-  ctx.latch.down = CONTROL.ignore;
-  const frame = frameOf(ctx.tables, state);
-  const front = getTile(
-    ctx.world,
-    state.room,
-    DIR_FRONT[state.direction + 1] + state.currentColumn,
-    state.currentRow
-  );
-  if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
-    state.x = forwardX(state, 5) & 255;
-    state.currentColumn = determineColumn(state, frame);
-    return;
-  }
-  const behind = tileBehind(state, ctx);
-  const here = tileHere(state, ctx);
-  if (!tileIsFloor(behind.type) && distanceToEdgeWeight(state, frame) >= 8 && canGrab(ctx, behind.type, here.type, state.direction, modifierOf(ctx, here))) {
-    state.x = forwardX(state, distanceToEdgeWeight(state, frame) - 9) & 255;
-    startSequence(state, KID_SEQ.climbDown, ctx.tables);
-  } else {
-    startSequence(state, KID_SEQ.crouch, ctx.tables);
-    ctx.latch.down = ctx.latch.releaseArrows();
-  }
-}
-function controlCrouched(state, controls, ctx) {
-  if (ctx.latch.shift2 === CONTROL.held && checkGetItem(state, ctx)) return;
-  if (controls.y <= 0) {
-    startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
-    return;
-  }
-  if (ctx.latch.forward === CONTROL.held) {
-    ctx.latch.forward = CONTROL.ignore;
-    startSequence(state, KID_SEQ.crouchHop, ctx.tables);
-  }
-}
-function controlHanging(state, controls, ctx) {
-  if (state.alive >= 0) {
-    hangFall(state, ctx);
-    return;
-  }
-  if (state.grabTimer === 0 && controls.y < 0) {
-    canClimbUp(state, ctx);
-    return;
-  }
-  if (controls.shift) {
-    const here = tileHere(state, ctx);
-    const againstWall = here.type === TILE.wall || state.direction < 0 && (here.type === TILE.doortopWithFloor || here.type === TILE.doortop);
-    if (state.action !== ACTION.hangStraight && againstWall) {
-      startSequence(state, KID_SEQ.hangAgainstWall, ctx.tables);
-    } else if (!tileIsFloor(tileAbove(state, ctx).type)) {
-      hangFall(state, ctx);
-    }
-    return;
-  }
-  hangFall(state, ctx);
-}
-function canClimbUp(state, ctx) {
-  ctx.latch.up = ctx.latch.shift2 = ctx.latch.releaseArrows();
-  const above = tileAbove(state, ctx);
-  let seq = KID_SEQ.climbUp;
-  if ((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0 || above.type === TILE.gate && state.direction !== 0 && modifierOf(ctx, above) >> 2 < 6) {
-    seq = KID_SEQ.climbUpToClosedGate;
-  }
-  startSequence(state, seq, ctx.tables);
-}
-function hangFall(state, ctx) {
-  ctx.latch.down = ctx.latch.releaseArrows();
-  const behind = tileBehind(state, ctx);
-  const here = tileHere(state, ctx);
-  if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
-    startSequence(state, KID_SEQ.releaseLedgeAndFall, ctx.tables);
-    return;
-  }
-  if (here.type === TILE.wall || state.direction < 0 && (here.type === TILE.doortopWithFloor || here.type === TILE.doortop)) {
-    state.x = forwardX(state, -7) & 255;
-  }
-  startSequence(state, KID_SEQ.releaseLedgeAndLand, ctx.tables);
-}
-function checkGrab(state, controls, ctx) {
-  if (!controls.shift || state.fallY >= 32 || state.alive >= 0) return;
-  if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y + 25)) return;
-  const frame = frameOf(ctx.tables, state);
-  const oldX = state.x;
-  state.x = forwardX(state, -8) & 255;
-  state.currentColumn = determineColumn(state, frame);
-  const above = tileAbove(state, ctx);
-  const frontAbove = tileFrontAbove(state, ctx);
-  if (!canGrab(ctx, above.type, frontAbove.type, state.direction, modifierOf(ctx, frontAbove))) {
-    state.x = oldX;
-    state.currentColumn = determineColumn(state, frame);
-    return;
-  }
-  state.x = forwardX(state, distanceToEdgeWeight(state, frame)) & 255;
-  state.y = floorHeightOfRow(state.currentRow);
-  state.fallY = 0;
-  startSequence(state, KID_SEQ.grabLedgeMidair, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  state.grabTimer = 12;
-}
-function controlStanding(state, controls, ctx) {
-  const latch = ctx.latch;
-  if (controls.shift && latch.shift2 === CONTROL.held && checkGetItem(state, ctx)) return;
-  if (controls.shift) {
-    if (latch.backward === CONTROL.held) {
-      backPressed(state, ctx);
-    } else if (latch.up === CONTROL.held) {
-      upPressed(state, controls, ctx);
-    } else if (latch.down === CONTROL.held) {
-      downPressed(state, ctx);
-    } else if (forwardHeld(state, controls) && latch.forward === CONTROL.held) {
-      safeStep(state, ctx);
-    }
-    return;
-  }
-  if (latch.forward === CONTROL.held) {
-    if (latch.up === CONTROL.held) standingJump(state, ctx);
-    else forwardPressed(state, ctx);
-  } else if (latch.backward === CONTROL.held) {
-    backPressed(state, ctx);
-  } else if (latch.up === CONTROL.held) {
-    if (latch.forward === CONTROL.held) standingJump(state, ctx);
-    else upPressed(state, controls, ctx);
-  } else if (latch.down === CONTROL.held) {
-    downPressed(state, ctx);
-  } else if (forwardHeld(state, controls)) {
-    forwardPressed(state, ctx);
-  }
-}
-function backPressed(state, ctx) {
-  ctx.latch.backward = ctx.latch.releaseArrows();
-  const foe = ctx.opponent?.();
-  const seeing = foe != null && foe.alive < 0 && foe.sword === 2 && foe.room === state.room && foe.currentRow === state.currentRow;
-  const frame = frameOf(ctx.tables, state);
-  if ((ctx.hasSword?.() ?? false) && seeing && foe !== null && charOppDist(state, foe) <= 0 && distanceToEdgeWeight(state, frame) >= 2) {
-    state.sword = 2;
-    startSequence(state, KID_SEQ.turnDrawSword, ctx.tables);
-    return;
-  }
-  startSequence(state, KID_SEQ.turn, ctx.tables);
-}
-function controlTurning(state, controls, ctx) {
-  if (!controls.shift && forwardHeld(state, controls) && controls.y >= 0) {
-    startSequence(state, KID_SEQ.startRunAfterTurn, ctx.tables);
-  }
-}
-function controlStartRun(state, controls, ctx) {
-  if (controls.y < 0 && forwardHeld(state, controls)) standingJump(state, ctx);
-}
-function controlRunning(state, controls, ctx) {
-  const latch = ctx.latch;
-  if (controls.x === 0 && (state.frame === FRAME.run1 || state.frame === FRAME.run2)) {
-    latch.forward = latch.releaseArrows();
-    startSequence(state, KID_SEQ.runStop, ctx.tables);
-  } else if (backwardHeld(state, controls)) {
-    latch.backward = latch.releaseArrows();
-    startSequence(state, KID_SEQ.runTurn, ctx.tables);
-  } else if (controls.y < 0 && latch.up === CONTROL.held) {
-    runJump(state, ctx);
-  } else if (latch.down === CONTROL.held) {
-    latch.down = CONTROL.ignore;
-    startSequence(state, KID_SEQ.crouchWhileRunning, ctx.tables);
-  }
-}
-var SOUND_BUMPED = 8;
 var RUN_JUMP_FIRST = FRAME.run7;
-function runJump(state, ctx) {
-  if (state.frame < RUN_JUMP_FIRST) return;
-  const xpos = forwardX(state, 4);
-  let column = tileDivModM7(xpos).column;
-  for (let ahead = 0; ahead < 2; ahead++) {
-    column += DIR_FRONT[state.direction + 1];
-    const t = getTile(ctx.world, state.room, column, state.currentRow);
-    if (t.type !== TILE.spike && tileIsFloor(t.type)) continue;
-    let adjust = distanceToEdge(state, xpos) + 14 * ahead - 14;
-    if ((adjust & 65535) < 65528 || adjust >= 2) {
-      if (adjust < 128) return;
-      adjust = -3;
-    }
-    state.x = forwardX(state, adjust + 4) & 255;
-    break;
-  }
-  ctx.latch.up = ctx.latch.releaseArrows();
-  startSequence(state, KID_SEQ.runJump, ctx.tables);
-}
-function forwardPressed(state, ctx) {
-  const frame = frameOf(ctx.tables, state);
-  const objX = objectX(state, frame);
-  const { distance, edgeType } = getEdgeDistance(
-    ctx.world,
-    state,
-    frame,
-    objX,
-    ctx.spriteWidth(frame.image),
-    ctx.spriteHeight(frame.image)
-  );
-  const front = getTile(
-    ctx.world,
-    state.room,
-    DIR_FRONT[state.direction + 1] + state.currentColumn,
-    state.currentRow
-  );
-  if (edgeType === EDGE_TYPE.wall && front.type !== TILE.chomper && distance < 8) {
-    if (ctx.latch.forward !== CONTROL.held) return;
-    safeStep(state, ctx);
-  } else {
-    startSequence(state, KID_SEQ.startRun, ctx.tables);
-  }
-}
-function safeStep(state, ctx) {
-  ctx.latch.shift2 = CONTROL.ignore;
-  ctx.latch.forward = CONTROL.ignore;
-  const frame = frameOf(ctx.tables, state);
-  const objX = objectX(state, frame);
-  const { distance, edgeType } = getEdgeDistance(
-    ctx.world,
-    state,
-    frame,
-    objX,
-    ctx.spriteWidth(frame.image),
-    ctx.spriteHeight(frame.image)
-  );
-  if (distance) {
-    state.repeat = 1;
-    startSequence(state, KID_SEQ.stepBase + Math.min(distance, 14), ctx.tables);
-  } else if (edgeType !== EDGE_TYPE.wall && state.repeat !== 0) {
-    state.repeat = 0;
-    startSequence(state, KID_SEQ.stepOnEdge, ctx.tables);
-  } else {
-    startSequence(state, KID_SEQ.unsafeStep, ctx.tables);
-  }
-}
-function startFall(state, ctx) {
-  state.sword = 0;
-  const was = state.frame;
-  state.currentRow += 1;
-  ctx.traps?.startChompers(state.room, state.currentRow);
-  let seq = KID_SEQ.fall;
-  if (was === 9) seq = KID_SEQ.fall;
-  else if (was === 13) seq = SEQ_FALL_FROM_RUN;
-  else if (was === 26) seq = SEQ_FALL_AFTER_STANDING_JUMP;
-  else if (was === 44) seq = SEQ_FALL_AFTER_RUNNING_JUMP;
-  else if (was >= 81 && was < 86) {
-    seq = SEQ_FALL_FROM_RUN;
-    state.x = forwardX(state, 5) & 255;
-  } else if (was >= 150 && was < 180) {
-    if (state.direction < 0 && distanceToEdgeWeight(state, frameOf(ctx.tables, state)) <= 7) {
-      state.x = forwardX(state, -5) & 255;
-    }
-    seq = SEQ_PUSHED_OFF_LEDGE;
-  }
-  startSequence(state, seq, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  let frame = frameOf(ctx.tables, state);
-  state.currentColumn = determineColumn(state, frame);
-  if (tileHere(state, ctx).type === TILE.wall) {
-    inWall(state, ctx);
-    return;
-  }
-  if (tileFront(state, ctx).type === TILE.wall) {
-    frame = frameOf(ctx.tables, state);
-    if (was !== 44 || distanceToEdgeWeight(state, frame) >= 6) {
-      state.x = forwardX(state, -1) & 255;
-    } else {
-      startSequence(state, SEQ_START_FALL_AT_WALL, ctx.tables);
-      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-    }
-    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-  }
-}
-function inWall(state, ctx) {
-  const frame = frameOf(ctx.tables, state);
-  let delta = distanceToEdgeWeight(state, frame);
-  if (delta >= 8 || tileFront(state, ctx).type === TILE.wall) delta = 6 - delta;
-  else delta += 4;
-  state.x = forwardX(state, delta) & 255;
-  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-}
-function land(state, ctx) {
-  state.y = floorHeightOfRow(state.currentRow);
-  const frame = frameOf(ctx.tables, state);
-  const here = tileHere(state, ctx);
-  const onSpikes = here.type === TILE.spike && here.room !== 0;
-  let spikeTile = null;
-  if (onSpikes) {
-    spikeTile = here;
-  } else {
-    const front = getTile(
-      ctx.world,
-      state.room,
-      DIR_FRONT[state.direction + 1] + state.currentColumn,
-      state.currentRow
-    );
-    if (!tileIsFloor(front.type) && distanceToEdgeWeight(state, frame) < 3) {
-      state.x = forwardX(state, -3) & 255;
-    }
-    ctx.traps?.startChompers(state.room, state.currentRow);
-    if (state.alive >= 0) {
-      ctx.damage?.(100);
-      startSequence(state, KID_SEQ.crushed, ctx.tables);
-      state.fallY = 0;
-      state.fallX = 0;
-      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-      return;
-    }
-    const behind = getTile(
-      ctx.world,
-      state.room,
-      DIR_BEHIND[state.direction + 1] + state.currentColumn,
-      state.currentRow
-    );
-    if (distanceToEdgeWeight(state, frame) >= 12 && behind.type === TILE.spike && behind.room !== 0) spikeTile = behind;
-  }
-  if (spikeTile !== null) {
-    const harm = ctx.traps?.spikeHarm(
-      spikeTile.room,
-      spikeTile.row * 10 + spikeTile.column
-    ) ?? 0;
-    if (harm !== 0) {
-      impale(state, ctx, spikeTile);
-      return;
-    }
-  }
-  if (state.fallY < 22) {
-    startSequence(state, KID_SEQ.softLand, ctx.tables);
-  } else if (state.fallY < 33) {
-    if (ctx.damage?.(1)) {
-      state.alive = 0;
-      startSequence(state, KID_SEQ.crushed, ctx.tables);
-    } else {
-      startSequence(state, KID_SEQ.mediumLand, ctx.tables);
-    }
-  } else {
-    ctx.damage?.(100);
-    state.alive = 0;
-    startSequence(state, KID_SEQ.crushed, ctx.tables);
-  }
-  state.fallY = 0;
-  state.fallX = 0;
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-}
-function doFall(state, ctx) {
-  if (u16(floorHeightOfRow(state.currentRow)) > u16(state.y)) {
-    checkGrab(state, ctx.controls, ctx);
-    return;
-  }
-  if (getTile(ctx.world, state.room, state.currentColumn, state.currentRow).type === TILE.wall) {
-    inWall(state, ctx);
-  }
-  if (hasFloorAt(state, ctx)) land(state, ctx);
-  else state.currentRow += 1;
-}
-function hasFloorAt(state, ctx) {
-  const t = getTile(ctx.world, state.room, state.currentColumn, state.currentRow);
-  return tileIsFloor(t.type);
-}
-function checkOnFloor(state, ctx) {
-  const frame = frameOf(ctx.tables, state);
-  if (!(frame.flags & 64)) return;
-  if (!hasFloorAt(state, ctx)) startFall(state, ctx);
-}
-function checkAction(state, ctx) {
-  const action = state.action;
-  if (action === ACTION.hangStraight || action === ACTION.bumped) {
-    if (state.frame === 109) checkOnFloor(state, ctx);
-  } else if (action === ACTION.inFreefall) {
-    doFall(state, ctx);
-  } else if (action === ACTION.inMidair) {
-    if (state.frame >= 102 && state.frame < 106) checkGrab(state, ctx.controls, ctx);
-  } else if (action !== ACTION.hangClimb) {
-    checkOnFloor(state, ctx);
-  }
-}
-function checkPress(state, ctx) {
-  if (!ctx.traps) return;
-  const frame = frameOf(ctx.tables, state);
-  const f = state.frame;
-  let tile;
-  if (f >= FRAME.hangingFirst && f < 100 || f >= 135 && f < 141) {
-    tile = tileAbove(state, ctx);
-  } else if (state.action === ACTION.turning || state.action === ACTION.bumped || state.action < ACTION.hangClimb) {
-    if (f === 79 && tileAbove(state, ctx).type === TILE.loose) {
-      const above = tileAbove(state, ctx);
-      ctx.traps.makeLooseFall(above.room, above.row * 10 + above.column);
-      return;
-    }
-    if (!(frame.flags & 64)) return;
-    tile = tileHere(state, ctx);
-  } else {
-    return;
-  }
-  if (!tile.room) return;
-  const tilePos = tile.row * 10 + tile.column;
-  if (tile.type === TILE.opener || tile.type === TILE.closer) {
-    ctx.traps.pressButton(tile.room, tilePos);
-  } else if (tile.type === TILE.loose) {
-    ctx.effects?.sound?.(SOUND_SILENCE);
-    ctx.traps.makeLooseFall(tile.room, tilePos);
-  }
-}
-function checkSpikeBelow(state, ctx) {
-  if (!ctx.traps) return;
-  const frame = frameOf(ctx.tables, state);
-  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
-  const rightColumn = tileDivModM7(coll.xRight).column;
-  if (rightColumn < 0) return;
-  for (let column = tileDivModM7(coll.xLeft).column; column <= rightColumn; column++) {
-    let row = state.currentRow;
-    for (let guard = 0; guard < 4; guard++) {
-      const t = getTile(ctx.world, state.room, column, row);
-      if (t.type === TILE.spike) {
-        ctx.traps.startSpike(t.room, t.row * 10 + t.column);
-        break;
-      }
-      if (tileIsFloor(t.type) || t.room === 0 || row > 2) break;
-      row += 1;
-    }
-  }
-}
-function impale(state, ctx, tile) {
-  ctx.traps?.impaleOnSpikes(tile.room, tile.row * 10 + tile.column);
-  state.y = floorHeightOfRow(state.currentRow);
-  state.x = X_BUMP[tile.column + FIRST_ONSCREEN_COLUMN] + 10 & 255;
-  state.x = forwardX(state, 8) & 255;
-  state.fallY = 0;
-  state.fallX = 0;
-  state.alive = 0;
-  ctx.damage?.(100);
-  startSequence(state, KID_SEQ.spiked, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-}
-function checkSpiked(state, ctx) {
-  if (!ctx.traps || state.alive >= 0) return;
-  const t = tileHere(state, ctx);
-  if (t.type !== TILE.spike || !t.room) return;
-  const harm = ctx.traps.spikeHarm(t.room, t.row * 10 + t.column);
-  if (harm === 0) return;
-  const f = state.frame;
-  const running = f >= 7 && f < 15 || f >= 34 && f < 40;
-  const landing = f === 43 || f === 26;
-  if (harm >= 2 && running || landing) impale(state, ctx, t);
-}
-var LEVEL_DOOR_OPEN = 43;
-function goUpLevelDoor(state, ctx) {
-  const here = tileHere(state, ctx);
-  const behind = tileBehind(state, ctx);
-  const front = tileFront(state, ctx);
-  const door = here.type === TILE.levelDoorLeft ? here : behind.type === TILE.levelDoorLeft ? behind : front.type === TILE.levelDoorLeft ? front : null;
-  if (!door || !door.room) return false;
-  const drawn = ctx.drawnRoom ? ctx.drawnRoom() : state.room;
-  if (ctx.startRoom === drawn) return false;
-  if (ctx.world.modifierAt(door.room, door.column, door.row) < LEVEL_DOOR_OPEN) return false;
-  state.x = X_BUMP_START(door.column) - 4 & 255;
-  state.direction = -1;
-  startSequence(state, KID_SEQ.leaveLevel, ctx.tables);
-  return true;
-}
-function checkGetItem(state, ctx) {
-  let here = tileHere(state, ctx);
-  if (here.type === TILE.potion || here.type === TILE.sword) {
-    if (!tileIsFloor(tileBehind(state, ctx).type)) return false;
-    state.x = forwardX(state, -14) & 255;
-    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-  }
-  const front = tileFront(state, ctx);
-  if (front.type !== TILE.potion && front.type !== TILE.sword) return false;
-  here = front;
-  if (state.frame !== FRAME.crouch) {
-    const frame = frameOf(ctx.tables, state);
-    const edge = getEdgeDistance(
-      ctx.world,
-      state,
-      frame,
-      objectX(state, frame),
-      ctx.spriteWidth(frame.image),
-      ctx.spriteHeight(frame.image)
-    );
-    if (edge.edgeType !== EDGE_TYPE.floor) {
-      state.x = forwardX(state, edge.distance) & 255;
-    }
-    if (state.direction >= 0) {
-      state.x = forwardX(state, (here.type === TILE.potion ? 1 : 0) - 2) & 255;
-    }
-    startSequence(state, KID_SEQ.crouch, ctx.tables);
-    ctx.latch.down = ctx.latch.releaseArrows();
-    return true;
-  }
-  ctx.latch.shift2 = CONTROL.ignore;
-  const kind = here.type === TILE.sword ? -1 : modifierOf(ctx, here) >> 3;
-  ctx.pickUp?.(kind, here.room, here.column, here.row);
-  startSequence(
-    state,
-    here.type === TILE.sword ? KID_SEQ.pickUpSword : KID_SEQ.drink,
-    ctx.tables
-  );
-  return true;
-}
-function checkChomped(state, ctx) {
-  if (!ctx.traps || state.alive >= 0) return;
-  const tile = tileHere(state, ctx);
-  if (tile.type !== TILE.chomper || !tile.room) return;
-  const tilePos = tile.row * 10 + tile.column;
-  if (!ctx.traps.chomperHarm(tile.room, tilePos)) return;
-  ctx.traps.bloodyChomper(tile.room, tilePos);
-  state.alive = 0;
-  ctx.damage?.(100);
-  startSequence(state, KID_SEQ.chomped, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-}
-function checkGuardBumped(state, ctx) {
-  if (state.action !== ACTION.runJump || state.alive >= 0 || state.sword < 2) return;
-  const frame = frameOf(ctx.tables, state);
-  const height = ctx.spriteHeight(frame.image);
-  let tile = tileHere(state, ctx);
-  let hit = tile.type === TILE.wall || tile.type === TILE.doortopWithFloor || tile.type === TILE.gate && isObstacle(ctx, height, tile);
-  if (!hit && state.direction >= 0) {
-    tile = getTile(ctx.world, state.room, state.currentColumn - 1, state.currentRow);
-    hit = tile.type === TILE.doortopWithFloor || tile.type === TILE.gate && isObstacle(ctx, height, tile);
-  }
-  if (!hit) return;
-  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
-  if (!isObstacle(ctx, height, tile)) return;
-  const delta = distanceFromWallBehind(state, tile.type, tile.column, coll);
-  if (delta >= 0 || delta <= -13) return;
-  state.x = forwardX(state, -delta) & 255;
-  startSequence(state, KID_SEQ.bumpForwardWithSword, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-}
-function guardChecks(state, ctx) {
-  checkGuardBumped(state, ctx);
-  checkAction(state, ctx);
-  checkPress(state, ctx);
-  checkSpikeBelow(state, ctx);
-  checkSpiked(state, ctx);
-  checkChomped(state, ctx);
-}
-function stepKid(state, controls, ctx) {
-  ctx.controls = controls;
-  if (state.grabTimer > 0) state.grabTimer -= 1;
-  ctx.latch.read(controls, state.direction);
-  control(state, controls, ctx);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  if (state.action === ACTION.inFreefall) {
-    state.fallY = Math.min(state.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
-  }
-  state.y = state.y + state.fallY & 255;
-  if (state.action === ACTION.inFreefall) {
-    state.x = forwardX(state, state.fallX) & 255;
-  }
-  const frame = frameOf(ctx.tables, state);
-  state.currentColumn = determineColumn(state, frame);
-  checkBumped(state, ctx);
-  checkBumpedIntoFoe(state, ctx);
-  checkGatePush(state, ctx);
-  checkAction(state, ctx);
-  checkPress(state, ctx);
-  checkSpikeBelow(state, ctx);
-  checkSpiked(state, ctx);
-  checkChomped(state, ctx);
-}
-function checkBumped(state, ctx) {
-  const frame = frameOf(ctx.tables, state);
-  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
-  const bumps = checkCollisions(ctx.world, state, coll, state.collisions);
-  if (state.action === ACTION.hangClimb || state.action === ACTION.hangStraight) return;
-  if (state.frame >= 135 && state.frame < 149) return;
-  if (bumps.intoLeftOfWall >= 0) {
-    lookRight(state, ctx, frame, coll, bumps.intoLeftOfWall);
-  } else if (bumps.intoRightOfWall >= 0) {
-    lookLeft(state, ctx, frame, coll, bumps.intoRightOfWall);
-  }
-}
-function obstacleAtColumn(state, ctx, column) {
-  return getTile(
-    ctx.world,
-    collisionRoomAt(state.collisions, column),
-    column,
-    obstacleRow(state)
-  );
-}
-function obstacleRow(state) {
-  let row = state.currentRow;
-  if (row < 0) row += 3;
-  if (row >= 3) row -= 3;
-  return row;
-}
-function collisionTileLeft(ctx, state, tile) {
-  const drawn = ctx.drawnRoom ? ctx.drawnRoom() : state.room;
-  return xposInDrawnRoom(
-    ctx.world,
-    tile.room,
-    drawn,
-    X_BUMP[tile.column + FIRST_ONSCREEN_COLUMN]
-  ) + TILE_MID_X;
-}
-function lookRight(state, ctx, frame, coll, column) {
-  if (state.sword !== 2 && state.direction !== 0) return;
-  const tile = obstacleAtColumn(state, ctx, column);
-  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
-  const type = wallType(tile.type);
-  if (type === 0) return;
-  const tileLeft = collisionTileLeft(ctx, state, tile);
-  bumpBack(
-    state,
-    ctx,
-    frame,
-    WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl,
-    tile,
-    false
-  );
-}
-function lookLeft(state, ctx, frame, coll, column) {
-  if (state.sword !== 2 && state.direction >= 0) return;
-  const tile = obstacleAtColumn(state, ctx, column);
-  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
-  const type = wallType(tile.type);
-  if (type === 0) return;
-  const tileLeft = collisionTileLeft(ctx, state, tile);
-  bumpBack(
-    state,
-    ctx,
-    frame,
-    tileLeft - WALL_DIST_FROM_RIGHT[type] + TILE_RIGHT_X - coll.xLeftColl,
-    tile,
-    true
-  );
-}
-function isObstacle(ctx, charHeight, tile) {
-  if (tile.type === TILE.potion) return false;
-  if (tile.type === TILE.gate) {
-    const modifier = ctx.world.modifierAt(tile.room, tile.column, tile.row);
-    return (modifier >> 2) + 6 < charHeight;
-  }
-  if (tile.type === TILE.chomper) {
-    return ctx.world.modifierAt(tile.room, tile.column, tile.row) === 2;
-  }
-  return true;
-}
-function bumpBack(state, ctx, frame, deltaX, wall, pushingRight) {
-  if (state.alive >= 0 || state.frame === 177) return;
-  state.x = state.x + deltaX & 255;
-  state.currentColumn = determineColumn(state, frame);
-  ctx.latch.releaseArrows();
-  let room = wall.room;
-  let column = wall.column;
-  if (pushingRight) {
-    if (wall.type === TILE.doortop || wall.type === TILE.doortopWithFloor || wall.type === TILE.wall) {
-      column += 1;
-      if (room === 0 && column === 10) {
-        room = state.room;
-        column = 0;
-      }
-    }
-  } else if (wall.type === TILE.wall) {
-    column -= 1;
-  }
-  const under = getTile(ctx.world, room, column, obstacleRow(state));
-  if (tileIsFloor(under.type)) bumpedFloor(state, ctx, frame, pushingRight);
-  else bumpedFall(state, ctx, frame);
-}
-function bumpedFall(state, ctx, frame) {
-  state.x = forwardX(state, -4) & 255;
-  state.currentColumn = determineColumn(state, frame);
-  if (state.action === ACTION.inFreefall) {
-    state.fallX = 0;
-  } else {
-    startSequence(state, KID_SEQ.bumpFall, ctx.tables);
-    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  }
-  ctx.effects?.sound?.(SOUND_BUMPED);
-}
-function bumpedFloor(state, ctx, frame, pushingRight) {
-  if (state.sword !== 2 && u16(floorHeightOfRow(state.currentRow) - state.y) >= 15) {
-    bumpedFall(state, ctx, frame);
-    return;
-  }
-  state.y = floorHeightOfRow(state.currentRow);
-  if (state.fallY >= 22) {
-    state.x = forwardX(state, -5) & 255;
-    state.currentColumn = determineColumn(state, frame);
-    return;
-  }
-  state.fallY = 0;
-  if (state.alive === 0) return;
-  let seq;
-  if (state.sword === 2) {
-    if (pushingRight === state.direction >= 0) {
-      startSequence(state, KID_SEQ.bumpForwardWithSword, ctx.tables);
-      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-      state.x = forwardX(state, 1) & 255;
-      return;
-    }
-    seq = KID_SEQ.pushedBackWithSword;
-  } else {
-    const f = state.frame;
-    const hard = f === 24 || f === 25 || f >= 40 && f < 43 || f >= 102 && f < 107;
-    seq = hard ? KID_SEQ.hardBump : KID_SEQ.bump;
-  }
-  startSequence(state, seq, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-  ctx.effects?.sound?.(SOUND_BUMPED);
-}
-function checkGatePush(state, ctx) {
-  const f = state.frame;
-  if (!(state.action === ACTION.turning || f === FRAME.stand || f >= 108 && f < 111)) {
-    return;
-  }
-  const origColumn = state.currentColumn;
-  let tile = getTile(ctx.world, state.room, origColumn, state.currentRow);
-  let column = origColumn;
-  if (tile.type !== TILE.gate) {
-    column = origColumn - 1;
-    tile = getTile(ctx.world, state.room, column, state.currentRow);
-    if (tile.type !== TILE.gate) return;
-  }
-  if (column < 0 || column > 9) return;
-  const flags = collisionFlagsAt(state.collisions, column);
-  if ((flags.now & flags.before) !== 255) return;
-  const frame = frameOf(ctx.tables, state);
-  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
-  ctx.effects?.sound?.(SOUND_BUMPED);
-  state.x = state.x + (origColumn <= column ? -5 : 5) & 255;
-}
-var FOE_BODY = 10;
-function checkBumpedIntoFoe(state, ctx) {
-  if (state.alive >= 0) return;
-  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall || state.action === ACTION.inMidair || state.action === ACTION.hangClimb || state.action === ACTION.hangStraight) {
-    return;
-  }
-  const foe = ctx.opponent?.();
-  if (!foe || foe.alive >= 0) return;
-  if (foe.room !== state.room || foe.currentRow !== state.currentRow) return;
-  if (state.y !== floorHeightOfRow(state.currentRow)) return;
-  const gap = foe.x - state.x;
-  const inFront = state.direction === 0 ? gap > 0 : gap < 0;
-  if (!inFront) return;
-  const push = Math.abs(gap) - FOE_BODY;
-  if (push >= 0) return;
-  const here = getTile(ctx.world, state.room, state.currentColumn, obstacleRow(state));
-  bumpBack(
-    state,
-    ctx,
-    frameOf(ctx.tables, state),
-    state.direction === 0 ? push : -push,
-    here,
-    state.direction !== 0
-  );
-}
-var WALL_ON_THE_RIGHT = 1;
-var WALL_ON_BOTH_SIDES = 4;
-function yToRow(y) {
-  return Math.trunc((y + 60) / TILE_SIZE_Y) % 4 - 1;
-}
-function leaveDirection(state, ctx) {
-  const y = state.y;
-  const sy = y << 24 >> 24;
-  const f = state.frame;
-  if (state.action !== ACTION.bumped && state.action !== ACTION.inFreefall && state.action !== ACTION.inMidair && sy < 10 && sy > -16) {
-    return 2;
-  }
-  if (y >= 211) return 3;
-  if (f >= 135 && f < 150 || f >= 110 && f < 120 || f >= 150 && f < 163 || f >= 166 && f < 169 || state.action === ACTION.turning) {
-    return -1;
-  }
-  const frame = frameOf(ctx.tables, state);
-  const objX = objectX(state, frame);
-  const coll = charCollision(state, frame, objX, ctx.spriteWidth(frame.image));
-  if (state.direction !== 0) {
-    if (coll.xLeft <= 54) return 0;
-    if (coll.xLeft >= 198) return 1;
-    return -1;
-  }
-  const edge = getTile(ctx.world, state.room, 9, state.currentRow);
-  const barred = wallTypeAt(ctx.world, edge, ctx.spriteHeight(frame.image));
-  if (barred !== WALL_ON_THE_RIGHT && barred !== WALL_ON_BOTH_SIDES && coll.xRight >= 201) {
-    return 1;
-  }
-  if (coll.xRight <= 57) return 0;
-  return -1;
-}
-function exitRoom(state, ctx) {
-  const leave = leaveDirection(state, ctx);
-  if (leave < 0) return -1;
-  gotoOtherRoom(state, leave, ctx);
-  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-  if (state.room === 0 && state.alive < 0) {
-    ctx.damage?.(100);
-    state.alive = 0;
-    state.frame = FRAME.dead;
-  }
-  return leave;
-}
-function gotoOtherRoom(state, direction, ctx) {
-  state.room = ctx.world.linkOf(state.room, direction);
-  if (direction === 0) state.x = state.x + 140 & 255;
-  else if (direction === 1) state.x = state.x - 140 & 255;
-  else if (direction === 2) {
-    state.y = state.y + 189 & 255;
-    state.currentRow = yToRow(state.y);
-  } else {
-    state.y = state.y - 189 & 255;
-    state.currentRow = yToRow(state.y);
-  }
-}
-function enterLevel(state, startRoom, startPos, startDir, ctx, level = 0) {
-  state.room = startRoom;
-  state.currentColumn = startPos % 10;
-  state.currentRow = Math.floor(startPos / 10);
-  state.x = X_BUMP_START(state.currentColumn) & 255;
-  state.y = floorHeightOfRow(state.currentRow);
-  state.direction = ~startDir;
-  state.alive = -1;
-  state.fallX = 0;
-  state.fallY = 0;
-  let entry = KID_SEQ.turn;
-  if (level === ENTRY_FALL_LEVEL) {
-    entry = KID_SEQ.fall;
-    ctx.traps?.pressButton(ENTRY_BUTTON_ROOM, ENTRY_BUTTON_TILEPOS);
-  } else if (level === ENTRY_RUN_LEVEL) {
-    entry = KID_SEQ.runEntry;
-  }
-  startSequence(state, entry, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
-}
-var ENTRY_FALL_LEVEL = 1;
-var ENTRY_BUTTON_ROOM = 5;
-var ENTRY_BUTTON_TILEPOS = 2;
-var ENTRY_RUN_LEVEL = 13;
-function X_BUMP_START(column) {
-  const X_BUMP2 = [
-    -12,
-    2,
-    16,
-    30,
-    44,
-    58,
-    72,
-    86,
-    100,
-    114,
-    128,
-    142,
-    156,
-    170,
-    184,
-    198,
-    212,
-    226,
-    240,
-    254
-  ];
-  return X_BUMP2[column + 5] + 14;
-}
 
 // src/game/guard.ts
-var GUARD_SEQ = {
-  standInactive: 77,
-  activeAfterFall: 63,
-  /**
-   * Coming on guard, which is NOT the Prince's sequence 55. A guard's
-   * frames are looked up in `frameTableGuard`, which runs from 149 to 189
-   * only, and 55 opens with frames 207..210 -- the Prince's own flourish as
-   * he draws. Those indices fall off the end of the guard's table and out
-   * of its sprite set, so a guard sent through 55 is simply not drawn for
-   * the four frames it takes, which is what made one appear out of nothing
-   * a moment after the Prince walked in. Sequence 69 is the guard's: frame
-   * 167, then 155..157 and 158, 170, 171 into the stance, all of them
-   * inside his own table.
-   */
-  enGarde: 90,
-  advance: 56,
-  retreat: 57,
-  strike: 58,
-  turn: 60,
-  readyBlock: 62,
-  strikeToBlock: 61,
-  blockToStrike: 66,
-  /**
-   * `seq_87_guard_become_inactive`. A guard who cannot see the Prince
-   * any more puts his blade down and stands: `move_down_back` sets the
-   * original's `control_down`, and `swordfight` takes that before it
-   * takes the step back, so the step never happens.
-   */
-  becomeInactive: 87,
-  /** `seq_80_stand_flipped`: turning where he stands, without drawing. */
-  standFlipped: 80,
-  stabbed: 74,
-  dropDead: 71
-};
-var GUARD_TYPE = {
-  guard: 0,
-  fat: 1,
-  skeleton: 2,
-  vizier: 3,
-  shadow: 4,
-  none: -1
-};
 var GUARD_FILES = [
   "GUARD.DAT",
   "FAT.DAT",
@@ -4124,333 +2265,7 @@ var GUARD_TYPE_BY_LEVEL = [
   -1,
   -1
 ];
-var EXTRA_STRENGTH = [0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3];
-var NUM_GUARD_SKILLS = 12;
-function newGuard() {
-  return {
-    ...newCharacter({ charId: CHAR_ID.guard }),
-    skill: 0,
-    colour: 0,
-    hitPoints: 0,
-    maxHitPoints: 0,
-    waitTimer: 0,
-    // A guard that is not in the room faces nowhere.
-    direction: NO_DIRECTION
-  };
-}
 var NO_DIRECTION = 56;
-function positionGuards(level, guards) {
-  for (let room = 1; room <= 24; room++) {
-    const tile = guards.tile[room - 1];
-    if (tile >= 30) continue;
-    guards.x[room - 1] = X_BUMP[tile % 10 + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
-    guards.seqHi[room - 1] = 0;
-  }
-  void level;
-}
-function guardsFromLevel(specs) {
-  const pick = (f) => Uint8Array.from(specs.map(f));
-  return {
-    tile: pick((s) => s.tile),
-    dir: pick((s) => s.dir),
-    x: pick((s) => s.x),
-    seqLo: pick((s) => s.seqLo),
-    skill: pick((s) => s.skill),
-    seqHi: pick((s) => s.seqHi),
-    colour: pick((s) => s.color)
-  };
-}
-function enterGuard(guard, room, guards, ctx) {
-  const index = room - 1;
-  const tile = guards.tile[index];
-  if (tile >= 30) {
-    guard.direction = NO_DIRECTION;
-    return false;
-  }
-  guard.room = room;
-  guard.currentRow = Math.floor(tile / 10);
-  guard.y = Y_LAND[guard.currentRow + 1];
-  guard.x = guards.x[index];
-  guard.currentColumn = tileDivModM7(guard.x).column;
-  guard.direction = guards.dir[index] << 24 >> 24;
-  guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 15 : 0;
-  guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
-  const seqHi = guards.seqHi[index];
-  if (seqHi === 0) {
-    if (guard.charId === CHAR_ID.skeleton) {
-      guard.sword = 2;
-      startSequence(guard, GUARD_SEQ.activeAfterFall, ctx.tables);
-    } else {
-      guard.sword = 0;
-      startSequence(guard, GUARD_SEQ.standInactive, ctx.tables);
-    }
-  } else {
-    guard.currentSequence = guards.seqLo[index] + (seqHi << 8);
-  }
-  playSequence(guard, { tables: ctx.tables });
-  guard.skill = guards.skill[index];
-  if (guard.skill >= NUM_GUARD_SKILLS) guard.skill = 3;
-  const dead = guard.frame === 185 || guard.frame === 177 || guard.frame === 178;
-  guard.alive = dead ? 1 : -1;
-  guard.hitPoints = dead ? 0 : (EXTRA_STRENGTH[guard.skill] ?? 0) + ctx.levelGuardHitPoints;
-  guard.maxHitPoints = guard.hitPoints;
-  guard.fallY = 0;
-  guard.fallX = 0;
-  guard.action = 1;
-  return true;
-}
-function leaveGuard(guard, guards) {
-  if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
-  const index = guard.room - 1;
-  guards.tile[index] = guard.currentRow * 10;
-  guards.x[index] = guard.x;
-  guards.dir[index] = guard.direction & 255;
-  guards.skill[index] = guard.skill;
-  guards.colour[index] = guard.colour;
-  if (guard.alive < 0) {
-    guards.seqLo[index] = guard.currentSequence & 255;
-    guards.seqHi[index] = guard.currentSequence >> 8 & 255;
-  } else {
-    guards.seqHi[index] = 0;
-  }
-  guard.direction = NO_DIRECTION;
-}
-var SIGHT = {
-  /** Nothing: something solid is in the way. */
-  none: 0,
-  /** Him, but across something the guard will not cross. */
-  wont: 1,
-  /** Him, with a clear floor between. */
-  comes: 2
-};
-function canGuardSeeKid(guard, kid, ctx) {
-  const at = ctx.tileAtKid;
-  if (!at) return kid.room === guard.room && kid.currentRow === guard.currentRow ? SIGHT.comes : SIGHT.none;
-  if (kid.frame === 0 || kid.frame >= 219 && kid.frame < 229) return SIGHT.none;
-  if (guard.direction === NO_DIRECTION || kid.alive >= 0 || guard.alive >= 0) {
-    return SIGHT.none;
-  }
-  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return SIGHT.none;
-  let left = X_BUMP[kid.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  let right = X_BUMP[guard.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  if (left === void 0 || right === void 0) return SIGHT.none;
-  if (left > right) {
-    const t = left;
-    left = right;
-    right = t;
-  }
-  if (at(left).type === TILE.chomper) left += TILE_SIZE_X;
-  if (at(right).type === TILE.gate) right -= TILE_SIZE_X;
-  let sight = SIGHT.comes;
-  for (let x = left; x <= right; x += TILE_SIZE_X) {
-    const tile = at(x);
-    if (tile.type === TILE.wall || tile.type === TILE.doortopWithFloor || tile.type === TILE.doortop) {
-      return SIGHT.none;
-    }
-    if (tile.type === TILE.loose || tile.type === TILE.chomper || tile.type === TILE.gate && tile.modifier < 112 || !tileIsFloor(tile.type)) {
-      sight = SIGHT.wont;
-    }
-  }
-  return sight;
-}
-var GUARD_FRAME_INACTIVE = 166;
-function comeOnGuard(guard, ctx) {
-  if (guard.alive >= 0 || guard.sword !== 0) return;
-  if (guard.frame !== GUARD_FRAME_INACTIVE) return;
-  const kid = ctx.kid;
-  if (!kid || kid.alive >= 0) return;
-  const distance = charOppDist(guard, kid);
-  if (kid.currentRow !== guard.currentRow || distance >= 0 || distance <= -9) {
-    if (ctx.heard?.()) {
-      ctx.forget?.();
-      if (distance < 0) {
-        if (distance < -4) startSequence(guard, GUARD_SEQ.standFlipped, ctx.tables);
-        return;
-      }
-    } else if (distance < 0) {
-      return;
-    }
-  }
-  if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
-  guard.sword = 2;
-  startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
-}
-var STRIKE_PROB = [61, 100, 61, 61, 61, 40, 100, 220, 0, 48, 32, 48];
-var RESTRIKE_PROB = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
-var BLOCK_PROB = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
-var IMP_BLOCK_PROB = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
-var ADV_PROB = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
-var REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
-var CAN_STRIKE = [157, 158, 165, 170, 171];
-var CAN_STEP = [158, 170, 171];
-var CAN_PARRY = [158, 170, 171, 168, 165];
-var GUARD_FRAME_BLOCKED = 167;
-var PARRY_FRAMES = [150, 161];
-function moveShift(guard, ctx) {
-  if (CAN_STRIKE.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.strike, ctx.tables);
-  } else if (PARRY_FRAMES.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.blockToStrike, ctx.tables);
-  }
-}
-function moveForward(guard, ctx) {
-  if (CAN_STEP.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.advance, ctx.tables);
-  }
-}
-function moveBackward(guard, ctx) {
-  if (CAN_STEP.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.retreat, ctx.tables);
-  }
-}
-var CAN_SHEATHE = [158, 170, 171];
-function moveDownBack(guard, ctx) {
-  if (!CAN_SHEATHE.includes(guard.frame)) return;
-  guard.sword = 0;
-  startSequence(guard, GUARD_SEQ.becomeInactive, ctx.tables);
-}
-function moveUp(guard, kid, distance, ctx) {
-  if (CAN_PARRY.includes(guard.frame)) {
-    if (distance >= 32) {
-      moveBackward(guard, ctx);
-      return;
-    }
-    if (kid.frame !== 152) return;
-    startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
-    return;
-  }
-  if (guard.frame === GUARD_FRAME_BLOCKED) {
-    startSequence(guard, GUARD_SEQ.strikeToBlock, ctx.tables);
-  }
-}
-function chance(ctx, probability) {
-  return probability > (ctx.random?.() ?? 128);
-}
-function guardAdvance(guard, ctx) {
-  if (chance(ctx, ADV_PROB[guard.skill] ?? 0)) moveForward(guard, ctx);
-}
-function guardStrike(guard, kid, ctx) {
-  if (kid.frame === 169 || kid.frame === 151) return;
-  const table = PARRY_FRAMES.includes(guard.frame) ? RESTRIKE_PROB : STRIKE_PROB;
-  if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
-}
-function guardBlock(guard, kid, distance, ctx) {
-  if (kid.frame !== 152 && kid.frame !== 153 && kid.frame !== 162) return;
-  const table = ctx.justBlocked?.() ? IMP_BLOCK_PROB : BLOCK_PROB;
-  if (chance(ctx, table[guard.skill] ?? 0)) moveUp(guard, kid, distance, ctx);
-}
-function guardKidArmed(guard, kid, distance, ctx) {
-  if (distance < 10 || distance >= 29) {
-    guardAdvance(guard, ctx);
-    return;
-  }
-  guardBlock(guard, kid, distance, ctx);
-  if (guard.waitTimer !== 0) return;
-  if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
-  else guardStrike(guard, kid, ctx);
-}
-function guardKidInSight(guard, kid, distance, ctx) {
-  if (kid.sword === SWORD_DRAWN) {
-    guardKidArmed(guard, kid, distance, ctx);
-  } else if (guard.waitTimer === 0) {
-    if (distance < SWORD_REACH) moveShift(guard, ctx);
-    else moveForward(guard, ctx);
-  }
-}
-function guardKidFar(guard, ctx) {
-  const front = ctx.floorInFront?.(guard) ?? true;
-  if (front) moveForward(guard, ctx);
-  else moveBackward(guard, ctx);
-}
-function autocontrolGuardActive(guard, ctx) {
-  const kid = ctx.kid;
-  if (!kid || guard.alive >= 0) return;
-  if (guard.sword !== SWORD_DRAWN) return;
-  if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
-  const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);
-  if (sight === SIGHT.wont) return;
-  if (sight === SIGHT.none) {
-    moveDownBack(guard, ctx);
-    return;
-  }
-  const distance = charOppDist(guard, kid);
-  if (distance >= 12 && kid.frame >= 102 && kid.frame < 118 && kid.action === ACTION.bumped) {
-    return;
-  }
-  if (distance < 35) {
-    if (distance < 12) {
-      if (guard.direction === kid.direction) moveBackward(guard, ctx);
-      else moveForward(guard, ctx);
-    } else {
-      guardKidInSight(guard, kid, distance, ctx);
-    }
-    return;
-  }
-  if (guard.waitTimer !== 0) return;
-  if (guard.direction !== kid.direction) {
-    if (kid.frame >= 7 && kid.frame < 15) {
-      if (distance < 40) moveShift(guard, ctx);
-      return;
-    }
-    if (kid.frame >= 34 && kid.frame < 44) {
-      if (distance < 50) moveShift(guard, ctx);
-      return;
-    }
-  }
-  guardKidFar(guard, ctx);
-}
-function faceTheKid(guard, ctx) {
-  const kid = ctx.kid;
-  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
-  if (!isReady(guard) || kid.alive >= 0) return;
-  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
-  if (guard.direction !== facingOf(guard, kid)) {
-    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
-  }
-}
-function refractoryFor(skill) {
-  return REFRACTORY[skill] ?? 0;
-}
-function stepGuard(guard, ctx) {
-  if (guard.direction === NO_DIRECTION) return;
-  if (guard.waitTimer > 0) guard.waitTimer -= 1;
-  {
-    const frame2 = guardFrame(guard, ctx.tables);
-    if (frame2) guard.currentColumn = determineColumn(guard, frame2);
-  }
-  comeOnGuard(guard, ctx);
-  faceTheKid(guard, ctx);
-  autocontrolGuardActive(guard, ctx);
-  if (ctx.drawnRoom !== void 0 && guard.room !== ctx.drawnRoom) return;
-  playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
-  if (guard.x < 44 || guard.x >= 211) return;
-  if (guard.action === ACTION.inFreefall) {
-    guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
-    guard.x = forwardX(guard, guard.fallX) & 255;
-  }
-  guard.y = guard.y + guard.fallY & 255;
-  const frame = guardFrame(guard, ctx.tables);
-  if (frame) guard.currentColumn = determineColumn(guard, frame);
-  if (ctx.physics) guardChecks(guard, ctx.physics);
-}
-function guardFrame(guard, tables) {
-  const frame = guard.frame;
-  if (guard.charId === CHAR_ID.guard || guard.charId === CHAR_ID.skeleton) {
-    let add = 0;
-    if (frame >= 102 && frame < 107) add = 70;
-    const index = frame + add - 149;
-    if (index >= 0 && index < tables.frameTableGuard.length) {
-      return tables.frameTableGuard[index];
-    }
-  }
-  return tables.frameTableKid[frame] ?? null;
-}
-function guardDraw(guard, tables) {
-  if (guard.direction === NO_DIRECTION) return null;
-  const frame = guardFrame(guard, tables);
-  if (!frame) return null;
-  return placeCharacter(guard, frame, "guard");
-}
 
 // src/game/recording.ts
 var RECORDING_FORMAT = "prince-input-recording";
@@ -4460,7 +2275,7 @@ function tokenOf(c) {
   return s === "" ? "." : s;
 }
 function encodeTimeline(ticks) {
-  const out = [];
+  const out2 = [];
   let token = "";
   let count = 0;
   for (const c of ticks) {
@@ -4469,82 +2284,12 @@ function encodeTimeline(ticks) {
       count++;
       continue;
     }
-    if (count) out.push(`${count}${token}`);
+    if (count) out2.push(`${count}${token}`);
     token = t;
     count = 1;
   }
-  if (count) out.push(`${count}${token}`);
-  return out.join(",");
-}
-
-// src/render/font.ts
-var FONT_OFFSET = 107020;
-function looksLikeGlyph(exe, o) {
-  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
-}
-function readFont(exe, base = FONT_OFFSET) {
-  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
-  const firstChar = exe[base];
-  const lastChar = exe[base + 1];
-  const count = lastChar - firstChar + 1;
-  const glyphs = [];
-  for (let i = 0; i < count; i++) {
-    let o = base + dv.getUint16(base + 10 + i * 2, true);
-    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
-    if (!looksLikeGlyph(exe, o)) {
-      glyphs.push(null);
-      continue;
-    }
-    const height = exe[o];
-    const width = exe[o + 2];
-    const stride = Math.ceil(width / 8);
-    const pixels = new Uint8Array(width * height);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
-        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
-      }
-    }
-    glyphs.push({ width, height, sprite: { width, height, pixels } });
-  }
-  return {
-    firstChar,
-    lastChar,
-    heightAbove: dv.getInt16(base + 2, true),
-    heightBelow: dv.getInt16(base + 4, true),
-    lineSpacing: dv.getInt16(base + 6, true),
-    charSpacing: dv.getInt16(base + 8, true),
-    glyphs
-  };
-}
-function glyphOf(font, code) {
-  if (code < font.firstChar || code > font.lastChar) return null;
-  return font.glyphs[code - font.firstChar] ?? null;
-}
-function textWidth(font, text) {
-  let width = 0;
-  let drawn = 0;
-  for (const ch of text) {
-    const g = glyphOf(font, ch.charCodeAt(0));
-    if (!g) continue;
-    width += g.width;
-    drawn += 1;
-  }
-  return width + Math.max(0, drawn - 1) * font.charSpacing;
-}
-function drawText(surface, font, text, x, top, color) {
-  let at = x;
-  for (const ch of text) {
-    const g = glyphOf(font, ch.charCodeAt(0));
-    if (!g) continue;
-    surface.blitMono(g.sprite, at, top, color);
-    at += g.width + font.charSpacing;
-  }
-  return at - font.charSpacing;
-}
-function drawTextCentred(surface, font, text, left, right, top, color) {
-  const width = textWidth(font, text);
-  drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
+  if (count) out2.push(`${count}${token}`);
+  return out2.join(",");
 }
 
 // src/dat/level.ts
@@ -4569,10 +2314,10 @@ var OFF_START_DIR = 2114;
 var OFF_GUARDS = 2119;
 function normalise(payload) {
   if (payload.length >= LEVEL_PAYLOAD_SIZE) return payload;
-  const out = new Uint8Array(LEVEL_PAYLOAD_SIZE);
-  out.fill(255);
-  out.set(payload);
-  return out;
+  const out2 = new Uint8Array(LEVEL_PAYLOAD_SIZE);
+  out2.fill(255);
+  out2.set(payload);
+  return out2;
 }
 function parseLevel(payload, resourceId) {
   if (payload.length < LEVEL_PAYLOAD_SIZE - 1) {
@@ -4581,9 +2326,9 @@ function parseLevel(payload, resourceId) {
     );
   }
   const d = normalise(payload);
-  const guards = [];
+  const guards2 = [];
   for (let i = 0; i < ROOM_COUNT; i++) {
-    guards.push({
+    guards2.push({
       tile: d[OFF_GUARDS + i],
       dir: d[OFF_GUARDS + 24 + i],
       x: d[OFF_GUARDS + 48 + i],
@@ -4606,7 +2351,7 @@ function parseLevel(payload, resourceId) {
     startRoom: d[OFF_START_ROOM],
     startPos: d[OFF_START_POS],
     startDir: d[OFF_START_DIR] << 24 >> 24,
-    guards
+    guards: guards2
   };
 }
 function resourceIdOfLevel(levelNumber) {
@@ -4717,16 +2462,16 @@ var PALETTE_BASE = {
   kid: 7 * 16,
   guard: 8 * 16
 };
-function tilesetFileFor(levelType, prefix = "V") {
-  return `${prefix}${levelType ? "PALACE" : "DUNGEON"}.DAT`;
+function tilesetFileFor(levelType3, prefix = "V") {
+  return `${prefix}${levelType3 ? "PALACE" : "DUNGEON"}.DAT`;
 }
 async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   const constants = readExeConstants(exe);
   const levelsDat = await assets.dat("LEVELS.DAT");
   const resourceId = resourceIdOfLevel(levelNumber);
   const level = parseLevel(levelsDat.get(resourceId), resourceId);
-  const levelType = constants.levelType[levelNumber] ?? 0;
-  const tilesetFile = tilesetFileFor(levelType, prefix);
+  const levelType3 = constants.levelType[levelNumber] ?? 0;
+  const tilesetFile = tilesetFileFor(levelType3, prefix);
   const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
   const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
   const flameSwordPotion = await assets.group("PRINCE.DAT", 150, PALETTE_BASE.flameSwordPotion);
@@ -4737,7 +2482,7 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   let guardPalettes;
   const guardFile = GUARD_FILES[guardType];
   if (guardFile) {
-    const headerFile = guardType === 0 ? levelType ? "GUARD1.DAT" : "GUARD2.DAT" : guardFile;
+    const headerFile = guardType === 0 ? levelType3 ? "GUARD1.DAT" : "GUARD2.DAT" : guardFile;
     guard = await assets.group(guardFile, 750, PALETTE_BASE.guard, false, headerFile);
     const princeDat = await assets.dat("PRINCE.DAT");
     guardPalettes = princeDat.get(10);
@@ -4749,7 +2494,7 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   }
   if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
   const state = new LevelState(level);
-  const tiles = {
+  const tiles2 = {
     typeAt: (room, column, row) => state.typeAt(room, column, row),
     modifierAt: (room, column, row) => state.modifierAt(room, column, row),
     linkOf: (room, dir) => state.linkOf(room, dir),
@@ -4763,9 +2508,9 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
     guardType,
     guardPalettes,
     screenPalette,
-    tiles,
+    tiles: tiles2,
     options: {
-      levelType,
+      levelType: levelType3,
       topLevelEdgeTile: constants.drawnTileTopLevelEdge,
       leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
       enableWdaInPalace: constants.enableWdaInPalace,
@@ -4774,1128 +2519,6659 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   };
 }
 
-// src/game/traps.ts
-var GATE_CLOSE_SPEEDS = [0, 0, 0, 20, 40, 60, 80, 100, 120];
-var DOOR_DELTA = [-1, 4, 4];
-var LEVEL_DOOR_CLOSE_SPEEDS = [0, 5, 17, 99, 0];
-var LOOSE_SOUND = [0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0];
-var Y_LOOSE_LAND = [2, 65, 128, 191, 254];
-var Y_SOMETHING = [-1, 62, 125, 188, 25];
-var LOOSE_FLOOR_DELAY = 11;
-var CHOMPER_SPEED = 15;
-var Traps = class {
-  trobs = [];
-  mobs = [];
+// src/render/font.ts
+var FONT_OFFSET = 107020;
+function looksLikeGlyph(exe, o) {
+  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
+}
+function readFont(exe, base = FONT_OFFSET) {
+  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  const firstChar = exe[base];
+  const lastChar = exe[base + 1];
+  const count = lastChar - firstChar + 1;
+  const glyphs = [];
+  for (let i = 0; i < count; i++) {
+    let o = base + dv.getUint16(base + 10 + i * 2, true);
+    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
+    if (!looksLikeGlyph(exe, o)) {
+      glyphs.push(null);
+      continue;
+    }
+    const height = exe[o];
+    const width = exe[o + 2];
+    const stride = Math.ceil(width / 8);
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
+        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
+      }
+    }
+    glyphs.push({ width, height, sprite: { width, height, pixels } });
+  }
+  return {
+    firstChar,
+    lastChar,
+    heightAbove: dv.getInt16(base + 2, true),
+    heightBelow: dv.getInt16(base + 4, true),
+    lineSpacing: dv.getInt16(base + 6, true),
+    charSpacing: dv.getInt16(base + 8, true),
+    glyphs
+  };
+}
+function glyphOf(font, code) {
+  if (code < font.firstChar || code > font.lastChar) return null;
+  return font.glyphs[code - font.firstChar] ?? null;
+}
+function textWidth(font, text) {
+  let width = 0;
+  let drawn = 0;
+  for (const ch of text) {
+    const g2 = glyphOf(font, ch.charCodeAt(0));
+    if (!g2) continue;
+    width += g2.width;
+    drawn += 1;
+  }
+  return width + Math.max(0, drawn - 1) * font.charSpacing;
+}
+function drawText(surface, font, text, x, top, color) {
+  let at = x;
+  for (const ch of text) {
+    const g2 = glyphOf(font, ch.charCodeAt(0));
+    if (!g2) continue;
+    surface.blitMono(g2.sprite, at, top, color);
+    at += g2.width + font.charSpacing;
+  }
+  return at - font.charSpacing;
+}
+function drawTextCentred(surface, font, text, left, right, top, color) {
+  const width = textWidth(font, text);
+  drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
+}
+
+// src/pop/state.ts
+function newChar() {
+  return {
+    frame: 0,
+    x: 0,
+    y: 0,
+    direction: 0,
+    curr_col: 0,
+    curr_row: 0,
+    action: 0,
+    fall_x: 0,
+    fall_y: 0,
+    room: 0,
+    repeat: 0,
+    charid: 0,
+    sword: 0,
+    alive: 0,
+    curr_seq: 0
+  };
+}
+function copyChar(to, from) {
+  to.frame = from.frame;
+  to.x = from.x;
+  to.y = from.y;
+  to.direction = from.direction;
+  to.curr_col = from.curr_col;
+  to.curr_row = from.curr_row;
+  to.action = from.action;
+  to.fall_x = from.fall_x;
+  to.fall_y = from.fall_y;
+  to.room = from.room;
+  to.repeat = from.repeat;
+  to.charid = from.charid;
+  to.sword = from.sword;
+  to.alive = from.alive;
+  to.curr_seq = from.curr_seq;
+}
+var TABLES = 5;
+var Globals = class {
+  // -------------------------------------------------------- characters
+  Char = newChar();
+  Opp = newChar();
+  Kid = newChar();
+  Guard = newChar();
+  cur_frame = { image: 0, sword: 0, dx: 0, dy: 0, flags: 0 };
+  // -------------------------------------------------------- the level
   level;
-  prng;
-  effects;
-  lastLooseSound = -1;
-  /** The room the view is showing; some tiles only animate while visible. */
-  drawnRoom = 0;
-  /** Where the Prince is, which decides whether chompers keep snapping. */
-  kidRoom = 0;
-  kidRow = -1;
-  /** Where he was last frame, so that arriving on a row can be noticed. */
-  lastKidRoom = 0;
-  lastKidRow = -1;
-  kidAlive = -1;
-  levelType;
-  constructor(level, prng, levelType, effects = {}) {
-    this.level = level;
-    this.prng = prng;
-    this.levelType = levelType;
-    this.effects = effects;
+  current_level = 0;
+  next_level = 0;
+  start_level = 0;
+  is_restart_level = 0;
+  checkpoint = 0;
+  hitp_beg_lev = 0;
+  /** The room the screen is showing, which need not be the Prince's. */
+  drawn_room = 0;
+  next_room = 0;
+  loaded_room = 0;
+  room_L = 0;
+  room_R = 0;
+  room_A = 0;
+  room_B = 0;
+  room_AL = 0;
+  room_AR = 0;
+  room_BL = 0;
+  room_BR = 0;
+  curr_room_tiles;
+  curr_room_modif;
+  leftroom_ = [0, 1, 2].map(() => ({ tiletype: 0, modifier: 0 }));
+  row_below_left_ = Array.from({ length: 10 }, () => ({ tiletype: 0, modifier: 0 }));
+  // -------------------------------------------------------- the tile just read
+  curr_tile = 0;
+  curr_tile2 = 0;
+  curr_modifier = 0;
+  curr_tilepos = 0;
+  curr_room = 0;
+  tile_col = 0;
+  tile_row = 0;
+  tile_left = 0;
+  modifier_left = 0;
+  // -------------------------------------------------------- the character's box
+  char_x_left = 0;
+  char_x_left_coll = 0;
+  char_x_right = 0;
+  char_x_right_coll = 0;
+  char_top_y = 0;
+  char_top_row = 0;
+  char_bottom_row = 0;
+  char_col_left = 0;
+  char_col_right = 0;
+  char_width_half = 0;
+  char_height = 0;
+  prev_char_top_row = 0;
+  prev_char_col_right = 0;
+  prev_char_col_left = 0;
+  // -------------------------------------------------------- collisions
+  prev_coll_room = new Int8Array(10).fill(-1);
+  prev_coll_flags = new Uint8Array(10);
+  curr_row_coll_room = new Int8Array(10).fill(-1);
+  curr_row_coll_flags = new Uint8Array(10);
+  below_row_coll_room = new Int8Array(10).fill(-1);
+  below_row_coll_flags = new Uint8Array(10);
+  above_row_coll_room = new Int8Array(10).fill(-1);
+  above_row_coll_flags = new Uint8Array(10);
+  prev_collision_row = -1;
+  bump_col_left_of_wall = 0;
+  bump_col_right_of_wall = 0;
+  coll_tile_left_xpos = 0;
+  // -------------------------------------------------------- the object table
+  obj_direction = 0;
+  obj_chtab = 0;
+  obj_id = 0;
+  obj_x = 0;
+  obj_xh = 0;
+  obj_xl = 0;
+  obj_y = 0;
+  obj_tilepos = 0;
+  obj_clip_left = 0;
+  obj_clip_top = 0;
+  obj_clip_right = 0;
+  obj_clip_bottom = 0;
+  obj2_clip_left = 0;
+  obj2_clip_top = 0;
+  obj2_clip_right = 0;
+  obj2_clip_bottom = 0;
+  objtable = [];
+  objtable_count = 0;
+  // -------------------------------------------------------- the draw tables
+  backtable = [];
+  foretable = [];
+  midtable = [];
+  table_counts = new Int16Array(TABLES);
+  wipetable = [];
+  wipetable_count = 0;
+  /** Which of `backtable` and `foretable` `ptr_add_table` points at. */
+  ptr_add_table = "back";
+  draw_xh = 0;
+  draw_main_y = 0;
+  draw_bottom_y = 0;
+  drawn_row = 0;
+  drawn_col = 0;
+  draw_mode = 0;
+  leveldoor_open = 0;
+  leveldoor_right = 0;
+  leveldoor_ybottom = 0;
+  // -------------------------------------------------------- redraw flags
+  redraw_frames_full = new Uint8Array(30);
+  redraw_frames2 = new Uint8Array(30);
+  redraw_frames_anim = new Uint8Array(30);
+  redraw_frames_floor_overlay = new Uint8Array(30);
+  redraw_frames_above = new Uint8Array(10);
+  redraw_frames_fore = new Uint8Array(30);
+  wipe_frames = new Uint8Array(30);
+  wipe_heights = new Uint8Array(30);
+  tile_object_redraw = new Uint8Array(30);
+  redraw_height = 0;
+  need_full_redraw = 0;
+  // -------------------------------------------------------- tiles that move
+  trobs = [];
+  trobs_count = 0;
+  trob = { tilepos: 0, room: 0, type: 0 };
+  mobs = [];
+  mobs_count = 0;
+  curmob = { xh: 0, y: 0, room: 0, speed: 0, type: 0, row: 0 };
+  // -------------------------------------------------------- the player
+  control_x = 0;
+  control_y = 0;
+  control_shift = 0;
+  control_forward = 0;
+  control_backward = 0;
+  control_up = 0;
+  control_down = 0;
+  control_shift2 = 0;
+  ctrl1_forward = 0;
+  ctrl1_backward = 0;
+  ctrl1_up = 0;
+  ctrl1_down = 0;
+  ctrl1_shift2 = 0;
+  is_paused = 0;
+  // -------------------------------------------------------- hit points
+  hitp_curr = 0;
+  hitp_max = 0;
+  hitp_delta = 0;
+  guardhp_curr = 0;
+  guardhp_max = 0;
+  guardhp_delta = 0;
+  flash_color = 0;
+  flash_time = 0;
+  resurrect_time = 0;
+  // -------------------------------------------------------- the fight
+  guard_skill = 0;
+  guard_refrac = 0;
+  justblocked = 0;
+  kid_sword_strike = 0;
+  can_guard_see_kid = 0;
+  holding_sword = 0;
+  offguard = 0;
+  have_sword = 0;
+  united_with_shadow = 0;
+  guard_notice_timer = 0;
+  is_guard_notice = 0;
+  guard_refrac_timer = 0;
+  // -------------------------------------------------------- odds and ends
+  is_screaming = 0;
+  is_feather_fall = 0;
+  knock = 0;
+  exit_room_timer = 0;
+  roomleave_result = 0;
+  pickup_obj_type = 0;
+  jumped_through_mirror = 0;
+  grab_timer = 0;
+  rem_min = 0;
+  rem_tick = 0;
+  // ------------------------------------------------ the strip of words
+  /** `text_time_remaining`, `text_time_total`: how long a message stays. */
+  text_time_remaining = 0;
+  text_time_total = 0;
+  /** `is_show_time`: the clock has something to say. */
+  is_show_time = 0;
+  /** `seamless`: level 12's running exit, which shows no level number. */
+  seamless = 0;
+  /** `current_sound`: which sound is playing, or -1. */
+  current_sound = -1;
+  random_seed = 0;
+  upside_down = 0;
+  need_level1_music = 0;
+  is_blind_mode = 0;
+  torch_colors = [];
+  palace_wall_colors = new Uint8Array(44 * 3);
+  demo_index = 0;
+  demo_time = 0;
+  /** `chtab_addrs`: the sprite banks, filled in by the loader. */
+  chtab_addrs = Array.from({ length: 10 }, () => null);
+  tile_table = [];
+};
+var g = new Globals();
+var byteOf = (v) => v & 255;
+var sbyteOf = (v) => (v & 255) << 24 >> 24;
+var wordOf = (v) => v & 65535;
+
+// src/pop/types.ts
+var tiles = {
+  tiles_0_empty: 0,
+  tiles_1_floor: 1,
+  tiles_2_spike: 2,
+  tiles_3_pillar: 3,
+  tiles_4_gate: 4,
+  tiles_5_stuck: 5,
+  tiles_6_closer: 6,
+  tiles_7_doortop_with_floor: 7,
+  tiles_8_bigpillar_bottom: 8,
+  tiles_9_bigpillar_top: 9,
+  tiles_10_potion: 10,
+  tiles_11_loose: 11,
+  tiles_12_doortop: 12,
+  tiles_13_mirror: 13,
+  tiles_14_debris: 14,
+  tiles_15_opener: 15,
+  tiles_16_level_door_left: 16,
+  tiles_17_level_door_right: 17,
+  tiles_18_chomper: 18,
+  tiles_19_torch: 19,
+  tiles_20_wall: 20,
+  tiles_21_skeleton: 21,
+  tiles_22_sword: 22,
+  tiles_23_balcony_left: 23,
+  tiles_24_balcony_right: 24,
+  tiles_25_lattice_pillar: 25,
+  tiles_26_lattice_down: 26,
+  tiles_27_lattice_small: 27,
+  tiles_28_lattice_left: 28,
+  tiles_29_lattice_right: 29,
+  tiles_30_torch_with_debris: 30
+};
+var chtabs = {
+  id_chtab_0_sword: 0,
+  id_chtab_1_flameswordpotion: 1,
+  id_chtab_2_kid: 2,
+  id_chtab_3_princessinstory: 3,
+  id_chtab_4_jaffarinstory_princessincutscenes: 4,
+  id_chtab_5_guard: 5,
+  id_chtab_6_environment: 6,
+  id_chtab_7_environmentwall: 7,
+  id_chtab_8_princessroom: 8,
+  id_chtab_9_princessbed: 9
+};
+var blitters = {
+  blitters_0_no_transp: 0,
+  blitters_2_or: 2,
+  blitters_3_xor: 3,
+  blitters_white: 8,
+  blitters_9_black: 9,
+  blitters_10h_transp: 16,
+  blitters_40h_mono: 64,
+  blitters_46h_mono_6: 70,
+  blitters_4Ch_mono_12: 76
+};
+var charids = {
+  charid_0_kid: 0,
+  charid_1_shadow: 1,
+  charid_2_guard: 2,
+  charid_3: 3,
+  charid_4_skeleton: 4,
+  charid_5_princess: 5,
+  charid_6_vizier: 6,
+  charid_24_mouse: 24
+};
+var sword_status = {
+  sword_0_sheathed: 0,
+  sword_2_drawn: 2
+};
+var frame_flags = {
+  FRAME_WEIGHT_X: 31,
+  FRAME_THIN: 32,
+  FRAME_NEEDS_FLOOR: 64,
+  FRAME_EVEN_ODD_PIXEL: 128
+};
+var directions = {
+  dir_0_right: 0,
+  dir_56_none: 86,
+  dir_FF_left: -1
+};
+var actions = {
+  actions_0_stand: 0,
+  actions_1_run_jump: 1,
+  actions_2_hang_climb: 2,
+  actions_3_in_midair: 3,
+  actions_4_in_freefall: 4,
+  actions_5_bumped: 5,
+  actions_6_hang_straight: 6,
+  actions_7_turn: 7,
+  actions_99_hurt: 99
+};
+var frameids = {
+  frame_0: 0,
+  frame_1_start_run: 1,
+  frame_2_start_run: 2,
+  frame_3_start_run: 3,
+  frame_4_start_run: 4,
+  frame_5_start_run: 5,
+  frame_6_start_run: 6,
+  frame_7_run: 7,
+  frame_8_run: 8,
+  frame_9_run: 9,
+  frame_10_run: 10,
+  frame_11_run: 11,
+  frame_12_run: 12,
+  frame_13_run: 13,
+  frame_14_run: 14,
+  frame_15_stand: 15,
+  frame_16_standing_jump_1: 16,
+  frame_17_standing_jump_2: 17,
+  frame_18_standing_jump_3: 18,
+  frame_19_standing_jump_4: 19,
+  frame_20_standing_jump_5: 20,
+  frame_21_standing_jump_6: 21,
+  frame_22_standing_jump_7: 22,
+  frame_23_standing_jump_8: 23,
+  frame_24_standing_jump_9: 24,
+  frame_25_standing_jump_10: 25,
+  frame_26_standing_jump_11: 26,
+  frame_27_standing_jump_12: 27,
+  frame_28_standing_jump_13: 28,
+  frame_29_standing_jump_14: 29,
+  frame_30_standing_jump_15: 30,
+  frame_31_standing_jump_16: 31,
+  frame_32_standing_jump_17: 32,
+  frame_33_standing_jump_18: 33,
+  frame_34_start_run_jump_1: 34,
+  frame_35_start_run_jump_2: 35,
+  frame_36_start_run_jump_3: 36,
+  frame_37_start_run_jump_4: 37,
+  frame_38_start_run_jump_5: 38,
+  frame_39_start_run_jump_6: 39,
+  frame_40_running_jump_1: 40,
+  frame_41_running_jump_2: 41,
+  frame_42_running_jump_3: 42,
+  frame_43_running_jump_4: 43,
+  frame_44_running_jump_5: 44,
+  frame_45_turn: 45,
+  frame_46_turn: 46,
+  frame_47_turn: 47,
+  frame_48_turn: 48,
+  frame_49_turn: 49,
+  frame_50_turn: 50,
+  frame_51_turn: 51,
+  frame_52_turn: 52,
+  frame_53_runturn: 53,
+  frame_54_runturn: 54,
+  frame_55_runturn: 55,
+  frame_56_runturn: 56,
+  frame_57_runturn: 57,
+  frame_58_runturn: 58,
+  frame_59_runturn: 59,
+  frame_60_runturn: 60,
+  frame_61_runturn: 61,
+  frame_62_runturn: 62,
+  frame_63_runturn: 63,
+  frame_64_runturn: 64,
+  frame_65_runturn: 65,
+  frame_67_start_jump_up_1: 67,
+  frame_68_start_jump_up_2: 68,
+  frame_69_start_jump_up_3: 69,
+  frame_70_jumphang: 70,
+  frame_71_jumphang: 71,
+  frame_72_jumphang: 72,
+  frame_73_jumphang: 73,
+  frame_74_jumphang: 74,
+  frame_75_jumphang: 75,
+  frame_76_jumphang: 76,
+  frame_77_jumphang: 77,
+  frame_78_jumphang: 78,
+  frame_79_jumphang: 79,
+  frame_80_jumphang: 80,
+  frame_81_hangdrop_1: 81,
+  frame_82_hangdrop_2: 82,
+  frame_83_hangdrop_3: 83,
+  frame_84_hangdrop_4: 84,
+  frame_85_hangdrop_5: 85,
+  frame_86_test_foot: 86,
+  frame_87_hanging_1: 87,
+  frame_88_hanging_2: 88,
+  frame_89_hanging_3: 89,
+  frame_90_hanging_4: 90,
+  frame_91_hanging_5: 91,
+  frame_92_hanging_6: 92,
+  frame_93_hanging_7: 93,
+  frame_94_hanging_8: 94,
+  frame_95_hanging_9: 95,
+  frame_96_hanging_10: 96,
+  frame_97_hanging_11: 97,
+  frame_98_hanging_12: 98,
+  frame_99_hanging_13: 99,
+  frame_102_start_fall_1: 102,
+  frame_103_start_fall_2: 103,
+  frame_104_start_fall_3: 104,
+  frame_105_start_fall_4: 105,
+  frame_106_fall: 106,
+  frame_107_fall_land_1: 107,
+  frame_108_fall_land_2: 108,
+  frame_109_crouch: 109,
+  frame_110_stand_up_from_crouch_1: 110,
+  frame_111_stand_up_from_crouch_2: 111,
+  frame_112_stand_up_from_crouch_3: 112,
+  frame_113_stand_up_from_crouch_4: 113,
+  frame_114_stand_up_from_crouch_5: 114,
+  frame_115_stand_up_from_crouch_6: 115,
+  frame_116_stand_up_from_crouch_7: 116,
+  frame_117_stand_up_from_crouch_8: 117,
+  frame_118_stand_up_from_crouch_9: 118,
+  frame_119_stand_up_from_crouch_10: 119,
+  frame_121_stepping_1: 121,
+  frame_122_stepping_2: 122,
+  frame_123_stepping_3: 123,
+  frame_124_stepping_4: 124,
+  frame_125_stepping_5: 125,
+  frame_126_stepping_6: 126,
+  frame_127_stepping_7: 127,
+  frame_128_stepping_8: 128,
+  frame_129_stepping_9: 129,
+  frame_130_stepping_10: 130,
+  frame_131_stepping_11: 131,
+  frame_132_stepping_12: 132,
+  frame_133_sheathe: 133,
+  frame_134_sheathe: 134,
+  frame_135_climbing_1: 135,
+  frame_136_climbing_2: 136,
+  frame_137_climbing_3: 137,
+  frame_138_climbing_4: 138,
+  frame_139_climbing_5: 139,
+  frame_140_climbing_6: 140,
+  frame_141_climbing_7: 141,
+  frame_142_climbing_8: 142,
+  frame_143_climbing_9: 143,
+  frame_144_climbing_10: 144,
+  frame_145_climbing_11: 145,
+  frame_146_climbing_12: 146,
+  frame_147_climbing_13: 147,
+  frame_148_climbing_14: 148,
+  frame_149_climbing_15: 149,
+  frame_150_parry: 150,
+  frame_151_strike_1: 151,
+  frame_152_strike_2: 152,
+  frame_153_strike_3: 153,
+  frame_154_poking: 154,
+  frame_155_guy_7: 155,
+  frame_156_guy_8: 156,
+  frame_157_walk_with_sword: 157,
+  frame_158_stand_with_sword: 158,
+  frame_159_fighting: 159,
+  frame_160_fighting: 160,
+  frame_161_parry: 161,
+  frame_162_block_to_strike: 162,
+  frame_163_fighting: 163,
+  frame_164_fighting: 164,
+  frame_165_walk_with_sword: 165,
+  frame_166_stand_inactive: 166,
+  frame_167_blocked: 167,
+  frame_168_back: 168,
+  frame_169_begin_block: 169,
+  frame_170_stand_with_sword: 170,
+  frame_171_stand_with_sword: 171,
+  frame_172_jumpfall_2: 172,
+  frame_173_jumpfall_3: 173,
+  frame_174_jumpfall_4: 174,
+  frame_175_jumpfall_5: 175,
+  frame_177_spiked: 177,
+  frame_178_chomped: 178,
+  frame_179_collapse_1: 179,
+  frame_180_collapse_2: 180,
+  frame_181_collapse_3: 181,
+  frame_182_collapse_4: 182,
+  frame_183_collapse_5: 183,
+  frame_185_dead: 185,
+  frame_186_mouse_1: 186,
+  frame_187_mouse_2: 187,
+  frame_188_mouse_stand: 188,
+  frame_191_drink: 191,
+  frame_192_drink: 192,
+  frame_193_drink: 193,
+  frame_194_drink: 194,
+  frame_195_drink: 195,
+  frame_196_drink: 196,
+  frame_197_drink: 197,
+  frame_198_drink: 198,
+  frame_199_drink: 199,
+  frame_200_drink: 200,
+  frame_201_drink: 201,
+  frame_202_drink: 202,
+  frame_203_drink: 203,
+  frame_204_drink: 204,
+  frame_205_drink: 205,
+  frame_207_draw_1: 207,
+  frame_208_draw_2: 208,
+  frame_209_draw_3: 209,
+  frame_210_draw_4: 210,
+  frame_217_exit_stairs_1: 217,
+  frame_218_exit_stairs_2: 218,
+  frame_219_exit_stairs_3: 219,
+  frame_220_exit_stairs_4: 220,
+  frame_221_exit_stairs_5: 221,
+  frame_222_exit_stairs_6: 222,
+  frame_223_exit_stairs_7: 223,
+  frame_224_exit_stairs_8: 224,
+  frame_225_exit_stairs_9: 225,
+  frame_226_exit_stairs_10: 226,
+  frame_227_exit_stairs_11: 227,
+  frame_228_exit_stairs_12: 228,
+  frame_229_found_sword: 229,
+  frame_230_sheathe: 230,
+  frame_231_sheathe: 231,
+  frame_232_sheathe: 232,
+  frame_233_sheathe: 233,
+  frame_234_sheathe: 234,
+  frame_235_sheathe: 235,
+  frame_236_sheathe: 236,
+  frame_237_sheathe: 237,
+  frame_238_sheathe: 238,
+  frame_239_sheathe: 239,
+  frame_240_sheathe: 240
+};
+var seqids = {
+  seq_1_start_run: 1,
+  seq_2_stand: 2,
+  seq_3_standing_jump: 3,
+  seq_4_run_jump: 4,
+  seq_5_turn: 5,
+  seq_6_run_turn: 6,
+  seq_7_fall: 7,
+  seq_8_jump_up_and_grab_straight: 8,
+  seq_9_grab_while_jumping: 9,
+  seq_10_climb_up: 10,
+  seq_11_release_ledge_and_land: 11,
+  seq_13_stop_run: 13,
+  seq_14_jump_up_into_ceiling: 14,
+  seq_15_grab_ledge_midair: 15,
+  seq_16_jump_up_and_grab: 16,
+  seq_17_soft_land: 17,
+  seq_18_fall_after_standing_jump: 18,
+  seq_19_fall: 19,
+  seq_20_medium_land: 20,
+  seq_21_fall_after_running_jump: 21,
+  seq_22_crushed: 22,
+  seq_23_release_ledge_and_fall: 23,
+  seq_24_jump_up_and_grab_forward: 24,
+  seq_25_hang_against_wall: 25,
+  seq_26_crouch_while_running: 26,
+  seq_28_jump_up_with_nothing_above: 28,
+  seq_29_safe_step_1: 29,
+  seq_30_safe_step_2: 30,
+  seq_31_safe_step_3: 31,
+  seq_32_safe_step_4: 32,
+  seq_33_safe_step_5: 33,
+  seq_34_safe_step_6: 34,
+  seq_35_safe_step_7: 35,
+  seq_36_safe_step_8: 36,
+  seq_37_safe_step_9: 37,
+  seq_38_safe_step_10: 38,
+  seq_39_safe_step_11: 39,
+  seq_40_safe_step_12: 40,
+  seq_41_safe_step_13: 41,
+  seq_42_safe_step_14: 42,
+  seq_43_start_run_after_turn: 43,
+  seq_44_step_on_edge: 44,
+  seq_45_bumpfall: 45,
+  seq_46_hardbump: 46,
+  seq_47_bump: 47,
+  seq_49_stand_up_from_crouch: 49,
+  seq_50_crouch: 50,
+  seq_51_spiked: 51,
+  seq_52_loose_floor_fell_on_kid: 52,
+  seq_54_chomped: 54,
+  seq_55_draw_sword: 55,
+  seq_56_guard_forward_with_sword: 56,
+  seq_57_back_with_sword: 57,
+  seq_58_guard_strike: 58,
+  seq_60_turn_with_sword: 60,
+  seq_61_parry_after_strike: 61,
+  seq_62_parry: 62,
+  seq_63_guard_active_after_fall: 63,
+  seq_64_pushed_back_with_sword: 64,
+  seq_65_bump_forward_with_sword: 65,
+  seq_66_strike_after_parry: 66,
+  seq_68_climb_down: 68,
+  seq_69_attack_was_parried: 69,
+  seq_70_go_up_on_level_door: 70,
+  seq_71_dying: 71,
+  seq_73_climb_up_to_closed_gate: 73,
+  seq_74_hit_by_sword: 74,
+  seq_75_strike: 75,
+  seq_77_guard_stand_inactive: 77,
+  seq_78_drink: 78,
+  seq_79_crouch_hop: 79,
+  seq_80_stand_flipped: 80,
+  seq_81_kid_pushed_off_ledge: 81,
+  seq_82_guard_pushed_off_ledge: 82,
+  seq_83_guard_fall: 83,
+  seq_84_run: 84,
+  seq_85_stabbed_to_death: 85,
+  seq_86_forward_with_sword: 86,
+  seq_87_guard_become_inactive: 87,
+  seq_88_skel_wake_up: 88,
+  seq_89_turn_draw_sword: 89,
+  seq_90_en_garde: 90,
+  seq_91_get_sword: 91,
+  seq_92_put_sword_away: 92,
+  seq_93_put_sword_away_fast: 93,
+  seq_94_princess_stand_PV1: 94,
+  seq_95_Jaffar_stand_PV1: 95,
+  seq_101_mouse_stands_up: 101,
+  seq_103_princess_lying_PV2: 103,
+  seq_104_start_fall_in_front_of_wall: 104,
+  seq_105_mouse_forward: 105,
+  seq_106_mouse: 106,
+  seq_107_mouse_stand_up_and_go: 107,
+  seq_108_princess_turn_and_hug: 108,
+  seq_109_princess_stand_PV2: 109,
+  seq_110_princess_crouching_PV2: 110,
+  seq_111_princess_stand_up_PV2: 111,
+  seq_112_princess_crouch_down_PV2: 112,
+  seq_114_mouse_stand: 114
+};
+var seqtbl_instructions = {
+  SEQ_DX: 251,
+  SEQ_DY: 250,
+  SEQ_FLIP: 254,
+  SEQ_JMP_IF_FEATHER: 247,
+  SEQ_JMP: 255,
+  SEQ_UP: 253,
+  SEQ_DOWN: 252,
+  SEQ_ACTION: 249,
+  SEQ_SET_FALL: 248,
+  SEQ_KNOCK_UP: 245,
+  SEQ_KNOCK_DOWN: 244,
+  SEQ_SOUND: 242,
+  SEQ_END_LEVEL: 241,
+  SEQ_GET_ITEM: 243,
+  SEQ_DIE: 246
+};
+var seqtbl_sounds = {
+  SND_SILENT: 0,
+  SND_FOOTSTEP: 1,
+  SND_BUMP: 2,
+  SND_DRINK: 3,
+  SND_LEVEL: 4
+};
+var soundids = {
+  sound_0_fell_to_death: 0,
+  sound_1_falling: 1,
+  sound_2_tile_crashing: 2,
+  sound_3_button_pressed: 3,
+  sound_4_gate_closing: 4,
+  sound_5_gate_opening: 5,
+  sound_6_gate_closing_fast: 6,
+  sound_7_gate_stop: 7,
+  sound_8_bumped: 8,
+  sound_9_grab: 9,
+  sound_10_sword_vs_sword: 10,
+  sound_11_sword_moving: 11,
+  sound_12_guard_hurt: 12,
+  sound_13_kid_hurt: 13,
+  sound_14_leveldoor_closing: 14,
+  sound_15_leveldoor_sliding: 15,
+  sound_16_medium_land: 16,
+  sound_17_soft_land: 17,
+  sound_18_drink: 18,
+  sound_19_draw_sword: 19,
+  sound_20_loose_shake_1: 20,
+  sound_21_loose_shake_2: 21,
+  sound_22_loose_shake_3: 22,
+  sound_23_footstep: 23,
+  sound_24_death_regular: 24,
+  sound_25_presentation: 25,
+  sound_26_embrace: 26,
+  sound_27_cutscene_2_4_6_12: 27,
+  sound_28_death_in_fight: 28,
+  sound_29_meet_Jaffar: 29,
+  sound_30_big_potion: 30,
+  sound_32_shadow_music: 32,
+  sound_33_small_potion: 33,
+  sound_35_cutscene_8_9: 35,
+  sound_36_out_of_time: 36,
+  sound_37_victory: 37,
+  sound_38_blink: 38,
+  sound_39_low_weight: 39,
+  sound_40_cutscene_12_short_time: 40,
+  sound_41_end_level_music: 41,
+  sound_43_victory_Jaffar: 43,
+  sound_44_skel_alive: 44,
+  sound_45_jump_through_mirror: 45,
+  sound_46_chomped: 46,
+  sound_47_chomper: 47,
+  sound_48_spiked: 48,
+  sound_49_spikes: 49,
+  sound_50_story_2_princess: 50,
+  sound_51_princess_door_opening: 51,
+  sound_52_story_4_Jaffar_leaves: 52,
+  sound_53_story_3_Jaffar_comes: 53,
+  sound_54_intro_music: 54,
+  sound_55_story_1_absence: 55,
+  sound_56_ending_music: 56
+};
+
+// src/pop/data.ts
+var tbl_line = [0, 10, 20];
+var chtab_flip_clip = [1, 0, 1, 1, 1, 1, 0, 0, 0, 0];
+var y_land = [-8, 55, 118, 181, 244];
+var x_bump = [-12, 2, 16, 30, 44, 58, 72, 86, 100, 114, 128, 142, 156, 170, 184, 198, 212, 226, 240, 254];
+var y_clip = [-60, 3, 66, 129, 192];
+var dir_front = [-1, 1];
+var dir_behind = [1, -1];
+var tile_div_tbl = [-5, -5, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14];
+var tile_mod_tbl = [12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 1];
+var col_xh = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36];
+var doortop_fram_top = [0, 81, 83, 0];
+var door_fram_top = [60, 61, 62, 63, 64, 65, 66, 67];
+var blueline_fram1 = [0, 124, 125, 126];
+var blueline_fram_y = [0, -20, -20, 0];
+var blueline_fram3 = [44, 44, 45, 45];
+var doortop_fram_bot = [78, 80, 82, 0];
+var spikes_fram_right = [0, 134, 135, 136, 137, 138, 137, 135, 134, 0];
+var loose_fram_right = [42, 71, 42, 72, 72, 42, 42, 42, 72, 72, 72, 0];
+var wall_fram_bottom = [7, 9, 5, 3];
+var loose_fram_bottom = [43, 73, 43, 74, 74, 43, 43, 43, 74, 74, 74, 0];
+var loose_fram_left = [41, 69, 41, 70, 70, 41, 41, 41, 70, 70, 70, 0];
+var spikes_fram_left = [0, 128, 129, 130, 131, 132, 131, 129, 128, 0];
+var potion_fram_bubb = [0, 16, 17, 18, 19, 20, 21, 22];
+var chomper_fram1 = [3, 2, 0, 1, 4, 3, 3, 0];
+var chomper_fram_bot = [101, 102, 103, 104, 105, 0];
+var chomper_fram_top = [0, 0, 111, 112, 113, 0];
+var chomper_fram_y = [0, 0, 37, 47, 50];
+var spikes_fram_fore = [0, 139, 140, 141, 142, 143, 142, 140, 139, 0];
+var chomper_fram_for = [106, 107, 108, 109, 110, 0];
+var wall_fram_main = [8, 10, 6, 4];
+var door_fram_slice = [67, 59, 58, 57, 56, 55, 54, 53, 52];
+var floor_left_overlay = [32, 151, 151, 150, 150, 151, 32, 32];
+var gate_close_speeds = [0, 0, 0, 20, 40, 60, 80, 100, 120];
+var door_delta = [-1, 4, 4];
+var leveldoor_close_speeds = [0, 5, 17, 99, 0];
+var y_loose_land = [2, 65, 128, 191, 254];
+var loose_sound = [0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0];
+var y_something = [-1, 62, 125, 188, 25];
+var strikeprob = [61, 100, 61, 61, 61, 40, 100, 220, 0, 48, 32, 48];
+var restrikeprob = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
+var blockprob = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
+var impblockprob = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
+var advprob = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
+var refractimer = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
+var extrastrength = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+var tile_table = [
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 0, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 0, bottom_id: 0, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 127, floor_left: 1, base_y: 0, right_id: 133, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 92, floor_left: 1, base_y: 0, right_id: 93, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 94, bottom_id: 43, fore_id: 95, fore_x: 1, fore_y: 0 },
+  { base_id: 46, floor_left: 1, base_y: 0, right_id: 47, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 48, bottom_id: 43, fore_id: 49, fore_x: 3, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 1, right_id: 35, floor_right: 1, right_y: 3, stripe_id: 145, topright_id: 0, bottom_id: 36, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 96, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 46, floor_left: 1, base_y: 0, right_id: 0, floor_right: 0, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 43, fore_id: 49, fore_x: 3, fore_y: 0 },
+  { base_id: 86, floor_left: 1, base_y: 0, right_id: 87, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 43, fore_id: 88, fore_x: 1, fore_y: 0 },
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 89, floor_right: 0, right_y: 3, stripe_id: 0, topright_id: 90, bottom_id: 0, fore_id: 91, fore_x: 1, fore_y: 3 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 12, fore_x: 2, fore_y: -3 },
+  { base_id: 0, floor_left: 1, base_y: 0, right_id: 0, floor_right: 0, right_y: 0, stripe_id: 145, topright_id: 0, bottom_id: 0, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 0, floor_right: 0, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 85, fore_id: 49, fore_x: 3, fore_y: 0 },
+  { base_id: 75, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 43, fore_id: 77, fore_x: 0, fore_y: 0 },
+  { base_id: 97, floor_left: 1, base_y: 0, right_id: 98, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 100, fore_x: 0, fore_y: 0 },
+  { base_id: 147, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 1, stripe_id: 145, topright_id: 0, bottom_id: 149, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 37, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 38, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 39, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 40, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 1, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 2, bottom_id: 0, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 30, floor_left: 1, base_y: 0, right_id: 31, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 41, floor_left: 1, base_y: 0, right_id: 10, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 11, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 0, floor_left: 0, base_y: 0, right_id: 12, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 13, bottom_id: 43, fore_id: 0, fore_x: 0, fore_y: 0 },
+  { base_id: 92, floor_left: 1, base_y: 0, right_id: 42, floor_right: 1, right_y: 2, stripe_id: 145, topright_id: 0, bottom_id: 43, fore_id: 95, fore_x: 1, fore_y: 0 },
+  { base_id: 1, floor_left: 0, base_y: 0, right_id: 0, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 0, bottom_id: 2, fore_id: 9, fore_x: 0, fore_y: -53 },
+  { base_id: 3, floor_left: 0, base_y: -10, right_id: 0, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 0, bottom_id: 0, fore_id: 9, fore_x: 0, fore_y: -53 },
+  { base_id: 4, floor_left: 0, base_y: -10, right_id: 0, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 0, bottom_id: 0, fore_id: 9, fore_x: 0, fore_y: -53 },
+  { base_id: 5, floor_left: 0, base_y: -10, right_id: 0, floor_right: 0, right_y: 0, stripe_id: 0, topright_id: 0, bottom_id: 0, fore_id: 9, fore_x: 0, fore_y: -53 },
+  { base_id: 97, floor_left: 1, base_y: 0, right_id: 98, floor_right: 1, right_y: 2, stripe_id: 0, topright_id: 0, bottom_id: 43, fore_id: 100, fore_x: 0, fore_y: 0 }
+];
+var sword_tbl = [
+  { id: 255, x: 0, y: 0 },
+  { id: 0, x: 0, y: -9 },
+  { id: 5, x: -9, y: -29 },
+  { id: 1, x: 7, y: -25 },
+  { id: 2, x: 17, y: -26 },
+  { id: 6, x: 7, y: -14 },
+  { id: 7, x: 0, y: -5 },
+  { id: 3, x: 17, y: -16 },
+  { id: 4, x: 16, y: -19 },
+  { id: 30, x: 12, y: -9 },
+  { id: 8, x: 13, y: -34 },
+  { id: 9, x: 7, y: -25 },
+  { id: 10, x: 10, y: -16 },
+  { id: 11, x: 10, y: -11 },
+  { id: 12, x: 22, y: -21 },
+  { id: 13, x: 28, y: -23 },
+  { id: 14, x: 13, y: -35 },
+  { id: 15, x: 0, y: -38 },
+  { id: 16, x: 0, y: -29 },
+  { id: 17, x: 21, y: -19 },
+  { id: 18, x: 14, y: -23 },
+  { id: 19, x: 21, y: -22 },
+  { id: 19, x: 22, y: -23 },
+  { id: 17, x: 7, y: -13 },
+  { id: 17, x: 15, y: -18 },
+  { id: 7, x: 0, y: -8 },
+  { id: 1, x: 7, y: -27 },
+  { id: 28, x: 14, y: -28 },
+  { id: 8, x: 7, y: -27 },
+  { id: 4, x: 6, y: -23 },
+  { id: 4, x: 9, y: -21 },
+  { id: 10, x: 11, y: -18 },
+  { id: 13, x: 24, y: -23 },
+  { id: 13, x: 19, y: -23 },
+  { id: 13, x: 21, y: -23 },
+  { id: 20, x: 7, y: -32 },
+  { id: 21, x: 14, y: -32 },
+  { id: 22, x: 14, y: -31 },
+  { id: 23, x: 14, y: -29 },
+  { id: 24, x: 28, y: -28 },
+  { id: 25, x: 28, y: -28 },
+  { id: 26, x: 21, y: -25 },
+  { id: 27, x: 14, y: -22 },
+  { id: 255, x: 14, y: -25 },
+  { id: 255, x: 21, y: -25 },
+  { id: 29, x: 0, y: -16 },
+  { id: 8, x: 8, y: -37 },
+  { id: 31, x: 14, y: -24 },
+  { id: 32, x: 14, y: -24 },
+  { id: 33, x: 7, y: -14 },
+  { id: 8, x: 8, y: -37 }
+];
+
+// src/pop/link.ts
+function missing(name) {
+  throw new Error(`${name} has not been linked in`);
+}
+function slot(name) {
+  return { fn: (() => missing(name)) };
+}
+var l7 = {
+  start_chompers: slot("start_chompers"),
+  make_loose_fall: slot("make_loose_fall"),
+  trigger_button: slot("trigger_button"),
+  is_spike_harmful: slot("is_spike_harmful"),
+  start_anim_spike: slot("start_anim_spike")
+};
+var l8 = {
+  set_wipe: slot("set_wipe"),
+  set_redraw_full: slot("set_redraw_full"),
+  set_redraw_fore: slot("set_redraw_fore"),
+  set_redraw2: slot("set_redraw2"),
+  set_redraw_floor_overlay: slot("set_redraw_floor_overlay"),
+  set_redraw_anim: slot("set_redraw_anim"),
+  get_room_address: slot("get_room_address"),
+  add_objtable: slot("add_objtable"),
+  mark_obj_tile_redraw: slot("mark_obj_tile_redraw")
+};
+var l5 = {
+  do_fall: slot("do_fall"),
+  spiked: slot("spiked"),
+  control: slot("control"),
+  seqtbl_offset_char: slot("seqtbl_offset_char")
+};
+var l6 = {
+  control_guard_inactive: slot("control_guard_inactive")
+};
+var l2 = {
+  autocontrol_opponent: slot("autocontrol_opponent"),
+  clear_char: slot("clear_char"),
+  died_on_button: slot("died_on_button"),
+  set_start_pos: slot("set_start_pos"),
+  on_guard_killed: slot("on_guard_killed"),
+  inc_curr_row: slot("inc_curr_row")
+};
+var out = {
+  play_sound: (_which) => {
+  },
+  stop_sounds: () => {
+  },
+  check_sound_playing: () => 0,
+  display_text_bottom: (_text) => {
+  },
+  erase_bottom_text: (_arg) => {
+  },
+  /** `play_death_music`, which `play_kid` then waits out. */
+  play_death_music: () => {
   }
-  // ------------------------------------------------------------- the list
-  add(room, tilePos, type) {
-    const found = this.trobs.find((t) => t.tilePos === tilePos && t.room === room);
-    if (found) {
-      found.type = type;
-      return;
-    }
-    if (this.trobs.length >= 30) return;
-    this.trobs.push({ room, tilePos, type });
+};
+
+// src/pop/seg006.ts
+var TILE_SIZEY = 63;
+var TILE_RIGHTX = 13;
+var FALLING_SPEED_ACCEL2 = 3;
+var FALLING_SPEED_MAX2 = 33;
+var CONTROL_HELD = -1;
+var CONTROL_RELEASED = 0;
+var CONTROL_IGNORE = 1;
+var CONTROL_HELD_FORWARD = -1;
+var CONTROL_HELD_BACKWARD = 1;
+var CONTROL_HELD_UP = -1;
+var CONTROL_HELD_DOWN = 1;
+var obj_xl = 0;
+var infrontx = 0;
+var through_tile = 0;
+function setThroughTile(v) {
+  through_tile = v;
+}
+var fall_frame = 0;
+var droppedout = 0;
+function setDroppedout(v) {
+  droppedout = v;
+}
+var frame_table_kid = [];
+var frame_tbl_guard = [];
+var frame_tbl_cuts = [];
+var seqtbl = new Uint8Array(0);
+var seqtbl_offsets = [];
+function setFrameTables(kid, guard, cuts, table, offsets) {
+  frame_table_kid = kid;
+  frame_tbl_guard = guard;
+  frame_tbl_cuts = cuts;
+  seqtbl = table;
+  seqtbl_offsets = offsets;
+}
+function seqByte(at) {
+  return seqtbl[at - SEQTBL_BASE] ?? 0;
+}
+var SEQTBL_BASE = 6510;
+function seqOffset(index) {
+  return seqtbl_offsets[index] ?? 0;
+}
+function get_tile(room, col, row) {
+  g.curr_room = room;
+  g.tile_col = col;
+  g.tile_row = row;
+  g.curr_room = find_room_of_tile();
+  if (g.curr_room > 0) {
+    l8.get_room_address.fn(g.curr_room);
+    g.curr_tilepos = tbl_line[g.tile_row] + g.tile_col;
+    g.curr_tile2 = g.curr_room_tiles[g.curr_tilepos] & 31;
+  } else {
+    g.curr_tile2 = tiles.tiles_20_wall;
   }
-  /** Step every animated tile once. */
-  step() {
-    if (this.kidRoom !== this.lastKidRoom || this.kidRow !== this.lastKidRow) {
-      this.lastKidRoom = this.kidRoom;
-      this.lastKidRow = this.kidRow;
-      if (this.kidRoom) this.startChompers(this.kidRoom, this.kidRow);
+  return g.curr_tile2;
+}
+function find_room_of_tile() {
+  for (; ; ) {
+    if (g.tile_col < 0) {
+      g.tile_col += 10;
+      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].left;
+      continue;
     }
-    this.stepMobs();
-    for (const trob of this.trobs) this.animate(trob);
-    for (let i = this.trobs.length - 1; i >= 0; i--) {
-      if (this.trobs[i].type < 0) this.trobs.splice(i, 1);
+    if (g.tile_col >= 10) {
+      g.tile_col -= 10;
+      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].right;
+      continue;
     }
+    if (g.tile_row < 0) {
+      g.tile_row += 3;
+      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].up;
+      continue;
+    }
+    if (g.tile_row >= 3) {
+      g.tile_row -= 3;
+      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].down;
+      continue;
+    }
+    return g.curr_room;
   }
-  animate(trob) {
-    const type = this.level.typeAtPos(trob.room, trob.tilePos);
-    let modifier = this.level.modifierAtPos(trob.room, trob.tilePos);
-    switch (type) {
-      case TILE.torch:
-      case TILE.torchWithDebris:
-        modifier = this.animateTorch(trob, modifier);
+}
+function get_tilepos(tile_col, tile_row) {
+  if (tile_row < 0) return -(tile_col + 1);
+  if (tile_row >= 3 || tile_col >= 10 || tile_col < 0) return 30;
+  return tbl_line[tile_row] + tile_col;
+}
+function get_tilepos_nominus(tile_col, tile_row) {
+  const tilepos = get_tilepos(tile_col, tile_row);
+  return tilepos < 0 ? 30 : tilepos;
+}
+function load_fram_det_col() {
+  load_frame();
+  determine_col();
+}
+function determine_col() {
+  g.Char.curr_col = get_tile_div_mod_m7(dx_weight());
+}
+var BLANK_FRAME = { image: 255, sword: 0, dx: 0, dy: 0, flags: 0 };
+function get_frame(table, frame) {
+  const f = frame >= 0 && frame < table.length ? table[frame] : BLANK_FRAME;
+  g.cur_frame = { image: f.image, sword: f.sword, dx: f.dx, dy: f.dy, flags: f.flags };
+}
+function load_frame() {
+  const frame = g.Char.frame;
+  let add_frame = 0;
+  switch (g.Char.charid) {
+    case charids.charid_0_kid:
+    case charids.charid_24_mouse:
+      get_frame(frame_table_kid, frame);
+      break;
+    case charids.charid_2_guard:
+    case charids.charid_4_skeleton:
+      if (frame >= 102 && frame < 107) add_frame = 70;
+      get_frame(frame_tbl_guard, frame + add_frame - 149);
+      break;
+    case charids.charid_1_shadow:
+      if (frame < 150 || frame >= 190) get_frame(frame_table_kid, frame);
+      else get_frame(frame_tbl_guard, frame - 149);
+      break;
+    case charids.charid_5_princess:
+    case charids.charid_6_vizier:
+      get_frame(frame_tbl_cuts, frame);
+      break;
+    default:
+      get_frame(frame_table_kid, frame);
+      break;
+  }
+}
+function dx_weight() {
+  const offset = sbyteOf(g.cur_frame.dx - (g.cur_frame.flags & frame_flags.FRAME_WEIGHT_X));
+  return char_dx_forward(offset);
+}
+function char_dx_forward(delta_x) {
+  if (g.Char.direction < directions.dir_0_right) delta_x = -delta_x;
+  return delta_x + g.Char.x;
+}
+function obj_dx_forward(delta_x) {
+  if (g.obj_direction < directions.dir_0_right) delta_x = -delta_x;
+  g.obj_x += delta_x;
+  return g.obj_x;
+}
+function play_seq() {
+  for (; ; ) {
+    const command = seqByte(g.Char.curr_seq);
+    g.Char.curr_seq++;
+    switch (command) {
+      case seqtbl_instructions.SEQ_DX:
+        g.Char.x = byteOf(char_dx_forward(sbyteOf(seqByte(g.Char.curr_seq))));
+        g.Char.curr_seq++;
         break;
-      case TILE.closer:
-      case TILE.opener:
-        modifier = this.animateButton(trob, modifier);
+      case seqtbl_instructions.SEQ_DY:
+        g.Char.y = byteOf(g.Char.y + sbyteOf(seqByte(g.Char.curr_seq)));
+        g.Char.curr_seq++;
         break;
-      case TILE.spike:
-        modifier = this.animateSpike(trob, modifier);
+      case seqtbl_instructions.SEQ_FLIP:
+        g.Char.direction = ~g.Char.direction;
         break;
-      case TILE.loose:
-        modifier = this.animateLoose(trob, modifier);
+      case seqtbl_instructions.SEQ_JMP_IF_FEATHER:
+        if (!g.is_feather_fall) {
+          g.Char.curr_seq += 2;
+          break;
+        }
+      // fallthrough
+      case seqtbl_instructions.SEQ_JMP:
+        g.Char.curr_seq = seqByte(g.Char.curr_seq) | seqByte(g.Char.curr_seq + 1) << 8;
         break;
-      case TILE.empty:
-        trob.type = -1;
+      case seqtbl_instructions.SEQ_UP:
+        --g.Char.curr_row;
+        l7.start_chompers.fn();
         break;
-      case TILE.chomper:
-        modifier = this.animateChomper(trob, modifier);
+      case seqtbl_instructions.SEQ_DOWN:
+        l2.inc_curr_row.fn();
+        l7.start_chompers.fn();
         break;
-      case TILE.gate:
-        modifier = this.animateGate(trob, modifier);
+      case seqtbl_instructions.SEQ_ACTION:
+        g.Char.action = seqByte(g.Char.curr_seq);
+        g.Char.curr_seq++;
         break;
-      case TILE.levelDoorLeft:
-        modifier = this.animateLevelDoor(trob, modifier);
+      case seqtbl_instructions.SEQ_SET_FALL:
+        g.Char.fall_x = sbyteOf(seqByte(g.Char.curr_seq));
+        g.Char.curr_seq++;
+        g.Char.fall_y = sbyteOf(seqByte(g.Char.curr_seq));
+        g.Char.curr_seq++;
         break;
-      case TILE.potion:
-        modifier = this.animatePotion(trob, modifier);
+      case seqtbl_instructions.SEQ_KNOCK_UP:
+        g.knock = 1;
         break;
-      case TILE.sword:
-        modifier = this.animateSword(trob, modifier);
+      case seqtbl_instructions.SEQ_KNOCK_DOWN:
+        g.knock = -1;
+        break;
+      case seqtbl_instructions.SEQ_SOUND: {
+        const which_sound = seqByte(g.Char.curr_seq);
+        g.Char.curr_seq++;
+        switch (which_sound) {
+          case seqtbl_sounds.SND_SILENT:
+            g.is_guard_notice = 1;
+            break;
+          case seqtbl_sounds.SND_FOOTSTEP:
+            out.play_sound(soundids.sound_23_footstep);
+            g.is_guard_notice = 1;
+            break;
+          case seqtbl_sounds.SND_BUMP:
+            out.play_sound(soundids.sound_8_bumped);
+            g.is_guard_notice = 1;
+            break;
+          case seqtbl_sounds.SND_DRINK:
+            out.play_sound(soundids.sound_18_drink);
+            break;
+          case seqtbl_sounds.SND_LEVEL:
+            if (g.current_level === 4) out.play_sound(soundids.sound_32_shadow_music);
+            else if (g.current_level !== 13 && g.current_level !== 15) {
+              out.play_sound(soundids.sound_41_end_level_music);
+            }
+            break;
+          default:
+            break;
+        }
+        break;
+      }
+      case seqtbl_instructions.SEQ_END_LEVEL:
+        ++g.next_level;
+        break;
+      case seqtbl_instructions.SEQ_GET_ITEM: {
+        const which_item = seqByte(g.Char.curr_seq);
+        g.Char.curr_seq++;
+        if (which_item === 1) proc_get_object();
+        break;
+      }
+      case seqtbl_instructions.SEQ_DIE:
         break;
       default:
-        trob.type = -1;
-        break;
+        g.Char.frame = command;
+        return;
     }
-    this.level.setModifierAtPos(trob.room, trob.tilePos, modifier);
   }
-  // --------------------------------------------------------- the tile kinds
-  /**
-   * A flame picks a new frame at random, mostly moving on by one. Two
-   * torches side by side are therefore rarely in step, which is why no
-   * simulation can be expected to match a captured frame's flames.
-   */
-  animateTorch(trob, modifier) {
-    if (trob.room !== this.drawnRoom && !(trob.room === this.level.linkOf(this.drawnRoom, 0) && trob.tilePos % 10 === 9)) {
-      trob.type = -1;
-      return modifier;
-    }
-    let next = this.prng.next(255);
-    if (next !== modifier) {
-      if (next < 9) return next;
-      next = modifier;
-    }
-    next += 1;
-    if (next >= 9) next = 0;
-    return next;
+}
+function get_tile_div_mod_m7(xpos) {
+  return get_tile_div_mod(xpos - 7);
+}
+function get_tile_div_mod(xpos) {
+  const i = xpos & 255;
+  obj_xl = tile_mod_tbl[i];
+  return tile_div_tbl[i];
+}
+function y_to_row_mod4(ypos) {
+  return Math.trunc((ypos + 60) / TILE_SIZEY) % 4 - 1;
+}
+function loadkid() {
+  copyChar(g.Char, g.Kid);
+}
+function savekid() {
+  copyChar(g.Kid, g.Char);
+}
+function loadshad() {
+  copyChar(g.Char, g.Guard);
+}
+function saveshad() {
+  copyChar(g.Guard, g.Char);
+}
+function loadkid_and_opp() {
+  loadkid();
+  copyChar(g.Opp, g.Guard);
+}
+function savekid_and_opp() {
+  savekid();
+  copyChar(g.Guard, g.Opp);
+}
+function loadshad_and_opp() {
+  loadshad();
+  copyChar(g.Opp, g.Kid);
+}
+function saveshad_and_opp() {
+  saveshad();
+  copyChar(g.Kid, g.Opp);
+}
+function reset_obj_clip() {
+  g.obj_clip_left = 0;
+  g.obj_clip_top = 0;
+  g.obj_clip_right = 320;
+  g.obj_clip_bottom = 192;
+}
+function x_to_xh_and_xl(xpos) {
+  if (xpos < 0) {
+    return {
+      xh: sbyteOf(-((Math.abs(-xpos) >> 3) + 1)),
+      xl: sbyteOf(-((-xpos - 1) % 8 - 7))
+    };
   }
-  animateButton(trob, modifier) {
-    if (trob.type < 0) return modifier;
-    const timer = this.level.doorLinkTimer(modifier) - 1;
-    this.level.setDoorLinkTimer(modifier, timer);
-    if (timer < 2) trob.type = -1;
-    return modifier;
+  return { xh: sbyteOf(Math.abs(xpos) >> 3), xl: sbyteOf(xpos % 8) };
+}
+function fall_accel() {
+  if (g.Char.action === actions.actions_4_in_freefall) {
+    g.Char.fall_y += FALLING_SPEED_ACCEL2;
+    if (g.Char.fall_y > FALLING_SPEED_MAX2) g.Char.fall_y = FALLING_SPEED_MAX2;
   }
-  /** Spikes come out, stay out a while, then go back in. */
-  animateSpike(trob, modifier) {
-    if (trob.type < 0) return modifier;
-    if (modifier === 255) return modifier;
-    if (modifier & 128) {
-      modifier = modifier - 1 & 255;
-      if (modifier & 127) return modifier;
-      return 6;
-    }
-    modifier += 1;
-    if (modifier === 5) return 143;
-    if (modifier === 9) {
-      trob.type = -1;
-      return 0;
-    }
-    return modifier;
+}
+function fall_speed() {
+  g.Char.y = byteOf(g.Char.y + g.Char.fall_y);
+  if (g.Char.action === actions.actions_4_in_freefall) {
+    g.Char.x = byteOf(char_dx_forward(g.Char.fall_x));
+    load_fram_det_col();
   }
-  animateChomper(trob, modifier) {
-    if (trob.type >= 0) {
-      const blood = modifier & 128;
-      let frame = (modifier & 127) + 1;
-      if (frame > CHOMPER_SPEED) frame = 1;
-      modifier = blood | frame;
-      if (frame === 2) this.effects.sound?.(SOUND.chomper);
-      const leftRoom = trob.room !== this.drawnRoom;
-      const leftRow = Math.floor(trob.tilePos / 10) !== this.kidRow;
-      const notHere = this.kidAlive >= 0 && blood === 0;
-      if ((leftRoom || leftRow || notHere) && (modifier & 127) >= 6) trob.type = -1;
+}
+function check_action() {
+  const action = g.Char.action;
+  const frame = g.Char.frame;
+  if (action === actions.actions_6_hang_straight || action === actions.actions_5_bumped) {
+    if (frame === frameids.frame_109_crouch) check_on_floor();
+  } else if (action === actions.actions_4_in_freefall) {
+    l5.do_fall.fn();
+  } else if (action === actions.actions_3_in_midair) {
+    if (frame >= frameids.frame_102_start_fall_1 && frame < frameids.frame_106_fall) {
+      check_grab();
     }
-    return modifier;
+  } else if (action !== actions.actions_2_hang_climb) {
+    check_on_floor();
   }
-  /**
-   * A gate's modifier is how far it is open, 0 to 188. Type 0 is closing,
-   * 1 opening, 2 opening permanently, 3..8 slamming shut at rising speed.
-   */
-  animateGate(trob, modifier) {
-    if (trob.type < 0) return modifier;
-    if (trob.type >= 3) {
-      if (trob.type < 8) trob.type += 1;
-      const next = modifier - GATE_CLOSE_SPEEDS[trob.type];
-      if (next < 0) {
-        trob.type = -1;
-        this.effects.sound?.(SOUND.gateClosingFast);
-        return 0;
+}
+function tile_is_floor(tiletype) {
+  switch (tiletype) {
+    case tiles.tiles_0_empty:
+    case tiles.tiles_9_bigpillar_top:
+    case tiles.tiles_12_doortop:
+    case tiles.tiles_20_wall:
+    case tiles.tiles_26_lattice_down:
+    case tiles.tiles_27_lattice_small:
+    case tiles.tiles_28_lattice_left:
+    case tiles.tiles_29_lattice_right:
+      return false;
+    default:
+      return true;
+  }
+}
+function check_spiked() {
+  const frame = g.Char.frame;
+  if (get_tile(g.Char.room, g.Char.curr_col, g.Char.curr_row) === tiles.tiles_2_spike) {
+    const harmful = l7.is_spike_harmful.fn();
+    if (harmful >= 2 && (frame >= frameids.frame_7_run && frame < 15 || frame >= frameids.frame_34_start_run_jump_1 && frame < 40) || (frame === frameids.frame_43_running_jump_4 || frame === frameids.frame_26_standing_jump_11) && harmful !== 0) {
+      l5.spiked.fn();
+    }
+  }
+}
+function take_hp(count) {
+  let dead = 0;
+  if (g.Char.charid === charids.charid_0_kid) {
+    if (count >= g.hitp_curr) {
+      g.hitp_delta = -g.hitp_curr;
+      dead = 1;
+    } else {
+      g.hitp_delta = -count;
+    }
+  } else if (count >= g.guardhp_curr) {
+    g.guardhp_delta = -g.guardhp_curr;
+    dead = 1;
+  } else {
+    g.guardhp_delta = -count;
+  }
+  return dead;
+}
+function get_tile_at_char() {
+  return get_tile(g.Char.room, g.Char.curr_col, g.Char.curr_row);
+}
+function set_char_collision() {
+  const image = g.chtab_addrs[g.obj_chtab]?.[g.obj_id];
+  if (!image) {
+    g.char_width_half = 0;
+    g.char_height = 0;
+  } else {
+    g.char_width_half = image.width + 1 >> 1;
+    g.char_height = image.height;
+  }
+  g.char_x_left = Math.trunc(g.obj_x / 2) + 58;
+  if (g.Char.direction >= directions.dir_0_right) {
+    g.char_x_left -= g.char_width_half;
+  }
+  g.char_x_left_coll = g.char_x_left;
+  g.char_x_right = g.char_x_left + g.char_width_half;
+  g.char_x_right_coll = g.char_x_right;
+  g.char_top_y = g.obj_y - g.char_height + 1;
+  if (g.char_top_y >= 192) g.char_top_y = 0;
+  g.char_top_row = y_to_row_mod4(g.char_top_y);
+  g.char_bottom_row = y_to_row_mod4(g.obj_y);
+  if (g.char_bottom_row === -1) g.char_bottom_row = 3;
+  g.char_col_left = Math.max(get_tile_div_mod(g.char_x_left), 0);
+  g.char_col_right = Math.min(get_tile_div_mod(g.char_x_right), 9);
+  if (g.cur_frame.flags & frame_flags.FRAME_THIN) {
+    g.char_x_left_coll += 4;
+    g.char_x_right_coll -= 4;
+  }
+}
+function check_on_floor() {
+  if (g.cur_frame.flags & frame_flags.FRAME_NEEDS_FLOOR) {
+    if (get_tile_at_char() === tiles.tiles_20_wall) in_wall();
+    if (!tile_is_floor(g.curr_tile2)) {
+      if (g.current_level === 12 && g.united_with_shadow < 0 && g.Char.curr_row === 0 && (g.Char.room === 2 || g.Char.room === 13 && g.tile_col >= 6)) {
+        g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_1_floor;
+        l8.set_wipe.fn(g.curr_tilepos, 1);
+        l8.set_redraw_full.fn(g.curr_tilepos, 1);
+        ++g.curr_tilepos;
+        l8.set_wipe.fn(g.curr_tilepos, 1);
+        l8.set_redraw_full.fn(g.curr_tilepos, 1);
+      } else {
+        start_fall();
       }
-      return next;
-    }
-    if (modifier === 255) {
-      trob.type = -1;
-      return modifier;
-    }
-    modifier = modifier + DOOR_DELTA[trob.type] & 255;
-    if (trob.type === 0) {
-      if (modifier === 0) {
-        trob.type = -1;
-        this.effects.sound?.(SOUND.gateStop);
-      } else if (modifier < 188 && (modifier & 3) === 3) {
-        this.effects.sound?.(SOUND.gateClosing);
-      }
-      return modifier;
-    }
-    if (modifier < 188) {
-      if ((modifier & 7) === 0) this.effects.sound?.(SOUND.gateOpening);
-      return modifier;
-    }
-    if (trob.type < 2) {
-      trob.type = 0;
-      this.effects.sound?.(SOUND.gateStop);
-      return 238;
-    }
-    trob.type = -1;
-    return 255;
-  }
-  /**
-   * The exit door. Its modifier is how far it has risen, 0 to 43.
-   *
-   * The trob types are the gate's: `triggerOne` hands a level door a 1 when
-   * a button is pressed on it, the same 1 that means "opening" to a gate.
-   * Only 3 opened the door here, and 3 is what nothing ever asked for --
-   * `openLevelDoor` is called from nowhere -- so the button of level 1's
-   * room 9 pressed, sounded, ran its trigger list and left the door shut.
-   * No level could be finished.
-   */
-  animateLevelDoor(trob, modifier) {
-    if (trob.type < 0) return modifier;
-    if (trob.type >= 1 && trob.type <= 3) {
-      modifier += 1;
-      if (modifier >= 43) {
-        trob.type = -1;
-        return 43;
-      }
-      if ((modifier & 7) === 0) this.effects.sound?.(SOUND.gateOpening);
-      return modifier;
-    }
-    const speed = LEVEL_DOOR_CLOSE_SPEEDS[Math.min(trob.type, 4)];
-    const next = modifier - speed;
-    if (next <= 0) {
-      trob.type = -1;
-      return 0;
-    }
-    return next;
-  }
-  animatePotion(trob, modifier) {
-    if (trob.type < 0 || trob.room !== this.drawnRoom) {
-      trob.type = -1;
-      return modifier;
-    }
-    const kind = modifier & 248;
-    let bubble = (modifier & 7) + 1;
-    if (bubble >= 8) bubble = 1;
-    return kind | bubble;
-  }
-  animateSword(trob, modifier) {
-    if (trob.room !== this.drawnRoom) trob.type = -1;
-    return modifier;
-  }
-  /**
-   * A loose floor shakes when something lands on it, and after a short delay
-   * comes away and falls.
-   */
-  animateLoose(trob, modifier) {
-    if (trob.type < 0) return modifier;
-    modifier = modifier + 1 & 255;
-    if (modifier & 128) {
-      if (modifier >= 132) {
-        trob.type = -1;
-        this.looseShake(0, true);
-        return 0;
-      }
-      this.looseShake(modifier, false);
-      return modifier;
-    }
-    if (modifier < LOOSE_FLOOR_DELAY) {
-      this.looseShake(modifier, false);
-      return modifier;
-    }
-    const room = trob.room;
-    const tilePos = trob.tilePos;
-    const left = this.removeLoose(room, tilePos);
-    trob.type = -1;
-    const row = Math.floor(tilePos / 10);
-    this.mobs.push({
-      xh: tilePos % 10 << 2,
-      y: Y_LOOSE_LAND[row + 1],
-      room,
-      speed: 0,
-      type: 0,
-      row
-    });
-    return left;
-  }
-  looseShake(modifier, force) {
-    if (!force && !LOOSE_SOUND[modifier & 127]) return;
-    let id;
-    do {
-      id = this.prng.next(2) + SOUND.looseShake1;
-    } while (id === this.lastLooseSound);
-    this.prng.next(2);
-    this.lastLooseSound = id;
-    this.effects.sound?.(id);
-  }
-  /** The tile left behind depends on whether the level is dungeon or palace. */
-  removeLoose(room, tilePos) {
-    this.level.setTypeAtPos(room, tilePos, TILE.empty);
-    return this.levelType;
-  }
-  // ------------------------------------------------------- falling floors
-  stepMobs() {
-    for (const mob of this.mobs) this.moveMob(mob);
-    for (let i = this.mobs.length - 1; i >= 0; i--) {
-      if (this.mobs[i].speed === -1) this.mobs.splice(i, 1);
     }
   }
-  moveMob(mob) {
-    if (mob.type === 0) this.moveLoose(mob);
-    if (mob.speed <= 0) mob.speed += 1;
-  }
-  moveLoose(mob) {
-    if (mob.speed < 0) return;
-    if (mob.speed < 29) mob.speed += 3;
-    mob.y += mob.speed;
-    if (mob.room === 0) {
-      if (mob.y >= 210) mob.speed = -2;
-      return;
-    }
-    if (mob.y < 226 && Y_SOMETHING[mob.row + 1] <= mob.y) {
-      const column = mob.xh >> 2;
-      const type = this.level.typeAt(mob.room, column, mob.row);
-      if (type === TILE.loose) {
-        this.removeLoose(mob.room, mob.row * 10 + column);
-      }
-      if (type === TILE.empty || type === TILE.loose) {
-        this.mobDownARow(mob);
+}
+function start_fall() {
+  let seq_id;
+  const frame = g.Char.frame;
+  g.Char.sword = sword_status.sword_0_sheathed;
+  l2.inc_curr_row.fn();
+  l7.start_chompers.fn();
+  fall_frame = frame;
+  if (frame === frameids.frame_9_run) {
+    seq_id = seqids.seq_7_fall;
+  } else if (frame === frameids.frame_13_run) {
+    seq_id = seqids.seq_19_fall;
+  } else if (frame === frameids.frame_26_standing_jump_11) {
+    seq_id = seqids.seq_18_fall_after_standing_jump;
+  } else if (frame === frameids.frame_44_running_jump_5) {
+    seq_id = seqids.seq_21_fall_after_running_jump;
+  } else if (frame >= frameids.frame_81_hangdrop_1 && frame < 86) {
+    seq_id = seqids.seq_19_fall;
+    g.Char.x = byteOf(char_dx_forward(5));
+    load_fram_det_col();
+  } else if (frame >= 150 && frame < 180) {
+    if (g.Char.charid === charids.charid_2_guard) {
+      if (g.Char.curr_row === 3 && g.Char.curr_col === 10) {
+        l2.clear_char.fn();
         return;
       }
-      this.effects.sound?.(SOUND.tileCrashing);
-      this.knock(mob.room, mob.row);
-      mob.y = Y_SOMETHING[mob.row + 1];
-      mob.speed = -2;
-      this.leaveRubble(mob.room, column, mob.row);
-      this.effects.floorCrashed?.(mob.room, mob.row);
-    }
-  }
-  mobDownARow(mob) {
-    mob.row += 1;
-    if (mob.row >= 3) {
-      mob.row = 0;
-      mob.y -= 192;
-      mob.room = this.level.linkOf(mob.room, 3);
-    }
-  }
-  /**
-   * A floor that has smashed leaves its rubble where it landed. The tile set
-   * is built for it: 14 is a floor with rubble on it and 30 is a torch with
-   * rubble on it, which is the pair the original turns 1 and 19 into. Level
-   * 1 ships with a tile 14 under its first loose floor, from a fall that
-   * happened before the player arrives.
-   */
-  leaveRubble(room, column, row) {
-    const type = this.level.typeAt(room, column, row);
-    if (type === TILE.floor) this.level.setType(room, column, row, TILE.debris);
-    else if (type === TILE.torch) this.level.setType(room, column, row, TILE.torchWithDebris);
-  }
-  /** A crash shakes every loose floor on the row. */
-  knock(room, row) {
-    for (let column = 0; column < 10; column++) {
-      if (this.level.typeAt(room, column, row) === TILE.loose) {
-        this.makeLooseShake(room, row * 10 + column);
+      if (g.Char.fall_x < 0) {
+        seq_id = seqids.seq_82_guard_pushed_off_ledge;
+        if (g.Char.direction < directions.dir_0_right && distance_to_edge_weight() <= 7) {
+          g.Char.x = byteOf(char_dx_forward(-5));
+        }
+      } else {
+        droppedout = 0;
+        seq_id = seqids.seq_83_guard_fall;
       }
-    }
-  }
-  // ------------------------------------------------------------- triggers
-  /** The Prince stood on a button. */
-  pressButton(room, tilePos, buttonType = 0, modifier = -1) {
-    const type = buttonType || this.level.typeAtPos(room, tilePos);
-    const link = modifier >= 0 ? modifier : this.level.modifierAtPos(room, tilePos);
-    const timer = this.level.doorLinkTimer(link);
-    if (timer === 31) return;
-    this.level.setDoorLinkTimer(link, 5);
-    if (timer < 2) {
-      this.add(room, tilePos, 1);
-      this.effects.sound?.(SOUND.buttonPressed);
-    }
-    this.runTriggerList(link, type);
-  }
-  runTriggerList(index, buttonType) {
-    for (let i = index; i < 256; i++) {
-      const link = this.level.doorLink(i);
-      const target = this.level.typeAtPos(link.room, link.tilePos);
-      const result = this.triggerOne(target, link.room, link.tilePos, buttonType);
-      if (result >= 0) this.add(link.room, link.tilePos, result);
-      if (!link.hasNext) break;
-    }
-  }
-  triggerOne(target, room, tilePos, buttonType) {
-    if (target === TILE.gate) return this.triggerGate(room, tilePos, buttonType);
-    if (target === TILE.levelDoorLeft) {
-      return this.level.modifierAtPos(room, tilePos) !== 0 ? -1 : 1;
-    }
-    return -1;
-  }
-  triggerGate(room, tilePos, buttonType) {
-    const modifier = this.level.modifierAtPos(room, tilePos);
-    if (buttonType === TILE.opener) {
-      if (modifier === 255) return -1;
-      if (modifier >= 188) {
-        this.level.setModifierAtPos(room, tilePos, 238);
-        return -1;
+    } else {
+      droppedout = 1;
+      if (g.Char.direction < directions.dir_0_right && distance_to_edge_weight() <= 7) {
+        g.Char.x = byteOf(char_dx_forward(-5));
       }
-      this.level.setModifierAtPos(room, tilePos, modifier + 3 & 252);
-      return 1;
+      seq_id = seqids.seq_81_kid_pushed_off_ledge;
     }
-    if (buttonType === TILE.debris) {
-      if (modifier < 188) return 2;
-      this.level.setModifierAtPos(room, tilePos, 255);
-      return -1;
+  } else {
+    seq_id = seqids.seq_7_fall;
+  }
+  l5.seqtbl_offset_char.fn(seq_id);
+  play_seq();
+  load_fram_det_col();
+  if (get_tile_at_char() === tiles.tiles_20_wall) {
+    in_wall();
+    return;
+  }
+  if (get_tile_infrontof_char() === tiles.tiles_20_wall) {
+    if (fall_frame !== 44 || distance_to_edge_weight() >= 6) {
+      g.Char.x = byteOf(char_dx_forward(-1));
+    } else {
+      l5.seqtbl_offset_char.fn(seqids.seq_104_start_fall_in_front_of_wall);
+      play_seq();
     }
-    return modifier !== 0 ? 3 : -1;
+    load_fram_det_col();
   }
-  /** Something put weight on a loose floor. */
-  makeLooseFall(room, tilePos, modifier = 1) {
-    if ((this.level.rawAtPos(room, tilePos) & 32) !== 0) return;
-    const current = this.level.modifierAtPos(room, tilePos) << 24 >> 24;
-    if (current > 0) return;
-    this.level.setModifierAtPos(room, tilePos, modifier);
-    this.add(room, tilePos, 0);
-  }
-  makeLooseShake(room, tilePos) {
-    const current = this.level.modifierAtPos(room, tilePos) << 24 >> 24;
-    if (current !== 0) return;
-    this.level.setModifierAtPos(room, tilePos, 128);
-    this.add(room, tilePos, 0);
-  }
-  /** Wake the chompers on the row a character has just arrived on. */
-  startChompers(room, row) {
-    if (row < 0 || row > 2) return;
-    let timing = 15;
-    for (let column = 0; column < 10; column++) {
-      if (this.level.typeAt(room, column, row) !== TILE.chomper) continue;
-      const tilePos = row * 10 + column;
-      const modifier = this.level.modifierAtPos(room, tilePos);
-      const phase = modifier & 127;
-      if (phase !== 0 && phase < 6) continue;
-      this.level.setModifierAtPos(room, tilePos, timing | modifier & 128);
-      this.add(room, tilePos, 1);
-      timing = nextChomperTiming(timing);
-    }
-  }
-  /** Spikes come out when something walks over them. */
-  startSpike(room, tilePos) {
-    const old = this.level.modifierAtPos(room, tilePos) << 24 >> 24;
-    if (old > 0) return;
-    if (old === 0) {
-      this.add(room, tilePos, 1);
-      this.effects.sound?.(SOUND.spikes);
-      return;
-    }
-    if (old !== -1) this.level.setModifierAtPos(room, tilePos, 143);
-  }
-  /**
-   * Spikes something has fallen into. They go straight to fully out --
-   * modifier 0x8f, the state `animateSpike` reaches after four frames of
-   * coming up -- so the blades are through the body on the tick it lands
-   * rather than four ticks later.
-   */
-  impaleOnSpikes(room, tilePos) {
-    if (this.level.modifierAtPos(room, tilePos) === 255) return;
-    this.level.setModifierAtPos(room, tilePos, 143);
-    this.add(room, tilePos, 1);
-    this.effects.sound?.(SOUND.spikes);
-  }
-  /** 0 harmless, 1 out and deadly, 2 coming out and deadly to a runner. */
-  spikeHarm(room, tilePos) {
-    const modifier = this.level.modifierAtPos(room, tilePos) << 24 >> 24;
-    if (modifier === 0 || modifier === -1) return 0;
-    if (modifier < 0) return 1;
-    if (modifier < 5) return 2;
-    return 0;
-  }
-  /**
-   * Is this chomper's blade down? Phases 1 to 5 are the shut part of the
-   * cycle: `startChompers` refuses to restart a chomper that is in them
-   * because it is in the middle of a snap, and they are the ones that cut.
-   */
-  chomperHarm(room, tilePos) {
-    if (this.level.typeAtPos(room, tilePos) !== TILE.chomper) return false;
-    const phase = this.level.modifierAtPos(room, tilePos) & 127;
-    return phase >= 1 && phase <= 5;
-  }
-  /** A chomper that has caught someone keeps the mark. */
-  bloodyChomper(room, tilePos) {
-    const modifier = this.level.modifierAtPos(room, tilePos);
-    this.level.setModifierAtPos(room, tilePos, modifier | 128);
-  }
-  /** Start a level's exit door opening, as a button on it would. */
-  openLevelDoor(room, tilePos) {
-    this.add(room, tilePos, 1);
-  }
-};
-function nextChomperTiming(timing) {
-  let next = timing - 3;
-  if (next < 6) next += 10;
-  return next;
 }
-var SOUND = {
-  falling: 1,
-  tileCrashing: 2,
-  buttonPressed: 3,
-  gateClosing: 4,
-  gateOpening: 5,
-  gateClosingFast: 6,
-  gateStop: 7,
-  bumped: 8,
-  grab: 9,
-  softLand: 17,
-  drink: 18,
-  looseShake1: 20,
-  looseShake2: 21,
-  looseShake3: 22,
-  footstep: 23,
-  mediumLand: 16,
-  chomper: 47,
-  spikes: 49
-};
-
-// src/game/random.ts
-var Prng2 = class {
-  seed = 0;
-  set(value) {
-    this.seed = value >>> 0;
+function check_grab() {
+  const MAX_GRAB_FALLING_SPEED = 32;
+  if (g.control_shift === CONTROL_HELD && g.Char.fall_y < MAX_GRAB_FALLING_SPEED && g.Char.alive < 0 && wordOf(y_land[g.Char.curr_row + 1]) <= wordOf(g.Char.y + 25)) {
+    const old_x = g.Char.x;
+    g.Char.x = byteOf(char_dx_forward(-8));
+    load_fram_det_col();
+    if (!can_grab_front_above()) {
+      g.Char.x = old_x;
+    } else {
+      g.Char.x = byteOf(char_dx_forward(distance_to_edge_weight()));
+      g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+      g.Char.fall_y = 0;
+      l5.seqtbl_offset_char.fn(seqids.seq_15_grab_ledge_midair);
+      play_seq();
+      g.grab_timer = 12;
+      out.play_sound(soundids.sound_9_grab);
+      g.is_screaming = 0;
+    }
   }
-  get() {
-    return this.seed >>> 0;
+}
+function can_grab_front_above() {
+  through_tile = get_tile_above_char();
+  get_tile_front_above_char();
+  return can_grab();
+}
+function in_wall() {
+  let delta_x = distance_to_edge_weight();
+  if (delta_x >= 8 || get_tile_infrontof_char() === tiles.tiles_20_wall) {
+    delta_x = 6 - delta_x;
+  } else {
+    delta_x += 4;
   }
-  /** A number in 0..max, inclusive, as the original returns it. */
-  next(max) {
-    this.seed = Math.imul(this.seed, 214013) + 2531011 >>> 0;
-    return (this.seed >>> 16) % (max + 1);
+  g.Char.x = byteOf(char_dx_forward(delta_x));
+  load_fram_det_col();
+  get_tile_at_char();
+}
+function get_tile_infrontof_char() {
+  infrontx = dir_front[g.Char.direction + 1] + g.Char.curr_col;
+  return get_tile(g.Char.room, infrontx, g.Char.curr_row);
+}
+function get_tile_infrontof2_char() {
+  const direction = dir_front[g.Char.direction + 1];
+  infrontx = (direction << 1) + g.Char.curr_col;
+  return get_tile(g.Char.room, infrontx, g.Char.curr_row);
+}
+function get_tile_behind_char() {
+  return get_tile(g.Char.room, dir_behind[g.Char.direction + 1] + g.Char.curr_col, g.Char.curr_row);
+}
+function distance_to_edge_weight() {
+  return distance_to_edge(dx_weight());
+}
+function distance_to_edge(xpos) {
+  get_tile_div_mod_m7(xpos);
+  let distance = obj_xl;
+  if (g.Char.direction === directions.dir_0_right) distance = TILE_RIGHTX - distance;
+  return distance;
+}
+function fell_out() {
+  if (g.Char.alive < 0 && g.Char.room === 0) {
+    take_hp(100);
+    g.Char.alive = 0;
+    out.erase_bottom_text(1);
+    g.Char.frame = frameids.frame_185_dead;
   }
-};
-
-// src/game/game.ts
-var Y_CLIP = [-60, 3, 66, 129, 192];
-var HEARD_BY_GUARDS = /* @__PURE__ */ new Set([SOUND_SILENCE, 23, 8, 17, 16]);
-var GUARD_FOLLOWS_LEFT = 91;
-var GUARD_FOLLOWS_RIGHT = 165;
-var Game = class _Game {
-  scene;
-  tables;
-  kid;
-  surface = new Surface();
-  /** The room the view is showing. */
-  drawnRoom;
-  /**
-   * Frames left of the blank the original shows while it changes room.
-   * Three of the four capture sets have two or three solid black frames in
-   * them at exactly the moment the view moves; the port used to draw the
-   * new room straight away, which is why those captures were recorded as
-   * unreproduced.
-   */
-  pendingFirstTick = true;
-  blankFrames = 0;
-  /** Ticks since the Prince died, for the prompt that follows. */
-  deadTicks = 0;
-  /**
-   * The green flask: the original lets the next fall pass without hurting
-   * him, and the byte-code's `jumpIfFeather` reads it. Nothing has been
-   * measured about how long it lasts, so it is set and read and no more.
-   */
-  featherFall = false;
-  /** The tile whose sword or flask the Prince is reaching for. */
-  itemTile = null;
-  /** True once the Prince has walked out of the level. */
-  levelFinished = false;
-  /** Ticks since the level was built, for the words under the room. */
-  titleTicks = 0;
-  /**
-   * Ticks of the hour the Prince has to reach the Princess. The original
-   * gives him sixty minutes and says how many are left every time a level
-   * starts; it runs on across a death, which is the whole point of it.
-   */
-  remainingTicks = MINUTE_TICKS * 60;
-  /** The game's own font, out of the executable. */
-  font;
-  /** Ticks left before the level starts again; -1 when none is coming. */
-  restartCountdown = -1;
-  /**
-   * `justblocked`: four ticks after a blow of the guard's own has been
-   * parried. While it is running he blocks on the harder of the two
-   * tables -- see `guardBlock`.
-   */
-  justBlocked = 0;
-  hitPoints;
-  /**
-   * `hitp_delta < 0` and `guardhp_delta < 0`: hit points came off this
-   * tick, so the splash is drawn over whoever lost them.
-   */
-  kidHurt = false;
-  guardHurt = false;
-  /** `pickup_obj_type`: what `do_pickup` took, until `getItem` applies it. */
-  pickedUp = null;
-  /**
-   * `exit_room_timer`: how many more ticks nobody may change room in.
-   *
-   * The last line of `redraw_screen` is `exit_room_timer = 2`, and the
-   * first lines of `exit_room` are to decrement it and return while it
-   * is not nought. So the two ticks after the screen has been drawn
-   * whole -- a room change, or the start of a level -- are ticks in
-   * which the Prince cannot step out of the room he is in and a guard
-   * cannot follow him out of it. Everything else about those ticks
-   * happens as usual: both are played, the swordplay is settled, only
-   * the doorway is shut.
-   *
-   * The port had a guess in place of this: a guard who had just
-   * followed stood still for two ticks. That was measured, on
-   * `probeF`, and it was right about those two ticks for the wrong
-   * reason -- it froze the guard instead of shutting the door, and so
-   * it was wrong wherever a room change was not involved. With the
-   * freeze `0fbffa60` has the guard of room 2 come on two ticks late
-   * for the whole of his approach; without it `probeF` has him two
-   * ticks early.
-   */
-  exitRoomTimer = 2;
-  /**
-   * `knock`, which the byte-code raises and `check_knock` acts on.
-   *
-   * The original does not shake anything on the spot: the opcode sets a
-   * flag and `check_knock()` -- the last line of `play_kid_frame`, after
-   * the fall, the landing and everything else -- reads it and shakes the
-   * row the character has *ended up* in. The port shook on the spot,
-   * from inside the sequence, when the row was still the one he had
-   * jumped from.
-   */
-  pendingKnock = 0;
-  /** `is_guard_notice`; see the `sound` effect. */
-  guardNotice = false;
-  /**
-   * `get_tile_at_kid`: the tile of the Prince's own room and row at an
-   * x, for the line of sight between a guard and him.
-   */
-  tileAtKid = (xpos) => {
-    const t = getTile(
-      this.ctx.world,
-      this.kid.room,
-      tileDivModM7(xpos).column,
-      this.kid.currentRow
-    );
-    return {
-      type: t.type,
-      modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0
-    };
-  };
-  maxHitPoints;
-  /**
-   * Has the Prince got a sword? It lies on the floor of level 1 and he
-   * carries it from then on, so every later level starts with it -- which
-   * is also the right answer for a level picked straight off the menu.
-   */
-  hasSword;
-  traps;
-  prng = new Prng2();
-  guard = newGuard();
-  guards;
-  renderer;
-  ctx;
-  /**
-   * The same world and traps as the Prince's, with the guard's own
-   * sprites and his own hit points: what `play_guard_frame` hands to
-   * `check_action` and the four checks after it.
-   */
-  guardCtx;
-  levelNumber;
-  effects;
-  constructor(scene, tables, levelNumber, effects = {}) {
-    this.levelNumber = levelNumber;
-    this.effects = effects;
-    this.scene = scene;
-    this.tables = tables;
-    this.kid = newCharacter();
-    this.hitPoints = scene.constants.startHitPoints;
-    this.maxHitPoints = scene.constants.startHitPoints;
-    this.hasSword = levelNumber > 1;
-    const world = {
-      tileAt: (room, column, row) => scene.tiles.typeAt(room, column, row) & TILE_TYPE_MASK,
-      modifierAt: (room, column, row) => scene.tiles.modifierAt(room, column, row),
-      linkOf: (room, dir) => scene.tiles.linkOf(room, dir),
-      levelEdgeHitTile: scene.constants.levelEdgeHitTile
-    };
-    this.prng.set(1);
-    this.traps = new Traps(scene.state, this.prng, scene.options.levelType, effects);
-    const trapHooks = {
-      pressButton: (room, tilePos) => this.traps.pressButton(room, tilePos),
-      makeLooseFall: (room, tilePos) => this.traps.makeLooseFall(room, tilePos),
-      startChompers: (room, row) => this.traps.startChompers(room, row),
-      chomperHarm: (room, tilePos) => this.traps.chomperHarm(room, tilePos),
-      bloodyChomper: (room, tilePos) => this.traps.bloodyChomper(room, tilePos),
-      startSpike: (room, tilePos) => this.traps.startSpike(room, tilePos),
-      impaleOnSpikes: (room, tilePos) => this.traps.impaleOnSpikes(room, tilePos),
-      spikeHarm: (room, tilePos) => this.traps.spikeHarm(room, tilePos)
-    };
-    this.ctx = {
-      tables,
-      world,
-      spriteWidth: (image) => scene.chtabs.kid?.images[image + 1]?.width ?? 0,
-      spriteHeight: (image) => scene.chtabs.kid?.images[image + 1]?.height ?? 0,
-      controls: { x: 0, y: 0, shift: false },
-      traps: trapHooks,
-      latch: new ControlLatch(),
-      damage: (amount) => this.damage(amount),
-      opponent: () => this.guard.direction === NO_DIRECTION ? null : this.guard,
-      hasSword: () => this.hasSword,
-      markItem: (room, column, row) => {
-        this.itemTile = { room, column, row };
-      },
-      // `do_pickup`: the flask or the sword goes off the floor at
-      // once, and what it was waits for the byte-code to raise
-      // `getItem`.
-      pickUp: (kind, room, column, row) => {
-        this.pickedUp = kind;
-        this.scene.state.setType(room, column, row, TILE_FLOOR);
-        this.scene.state.setModifier(room, column, row, 0);
-      },
-      drawnRoom: () => this.drawnRoom,
-      startRoom: scene.level.startRoom,
-      effects: {
-        /**
-         * `is_guard_notice`: a noise tells a guard the Prince is there.
-         * The byte-code's `sound` opcode raises nought for a footfall
-         * that is heard but not played and one for a footstep, and
-         * both of those set it in `play_seq`; so do a hard landing and
-         * walking into a wall, which come through here as the same
-         * two codes. It is the only thing that makes a guard with his
-         * back turned look round.
-         */
-        sound: (which) => {
-          if (HEARD_BY_GUARDS.has(which)) this.guardNotice = true;
-          effects.sound?.(which);
-        },
-        /**
-         * A heavy landing shakes the loose floors around it. The
-         * sequences raise this themselves -- `knockUp` and `knockDown`
-         * are opcodes of the byte-code, on the frames where a foot comes
-         * down hard -- and nothing was listening, so a loose floor only
-         * ever moved when it was stood on. Jumping down beside one did
-         * nothing at all.
-         *
-         * The sign says which row is shaken: the one the character is
-         * in, or the one above for a knock that goes upwards.
-         */
-        knock: (direction) => {
-          this.pendingKnock = direction;
-        },
-        // `getItem 1` is whatever is under his feet being taken: the
-        // sword lifted off the floor, or a potion drunk. Both animations
-        // raise it, and the tile becomes plain floor behind him. It used
-        // to assume the sword, so every potion in the game did nothing.
-        // The byte-code of sequence 70 raises this as the Prince walks
-        // out of the level door.
-        endLevel: () => {
-          this.levelFinished = true;
-        },
-        // `proc_get_object`: what was taken, applied. The tile was
-        // emptied back when the animation started -- `do_pickup` -- so
-        // all that is left here is the effect, and `pickup_obj_type`
-        // is what says which: -1 the sword, 1 a hit point, 2 a life,
-        // 3 the floating one, 4 the poison.
-        getItem: (which) => {
-          if (which !== 1) return;
-          const kind = this.pickedUp;
-          this.pickedUp = null;
-          if (kind === null) return;
-          if (kind === -1) this.hasSword = true;
-          else this.drink(kind);
+}
+function play_kid() {
+  fell_out();
+  control_kid();
+  if (g.Char.alive >= 0 && is_dead()) {
+    if (g.resurrect_time) {
+      out.stop_sounds();
+      loadkid();
+      g.hitp_delta = g.hitp_max;
+      l5.seqtbl_offset_char.fn(seqids.seq_2_stand);
+      g.Char.x += 8;
+      play_seq();
+      load_fram_det_col();
+      l2.set_start_pos.fn();
+    }
+    if (out.check_sound_playing() && g.current_sound !== 5) return;
+    g.is_show_time = 0;
+    if (g.Char.alive < 0 || g.Char.alive >= 6) {
+      if (g.Char.alive === 6) {
+        out.play_death_music();
+      } else {
+        if (g.Char.alive !== 7 || out.check_sound_playing()) return;
+        if (g.current_level !== 0 && g.current_level !== 15) {
+          g.text_time_remaining = g.text_time_total = 288;
+          out.display_text_bottom("Press Button to Continue");
+        } else {
+          g.text_time_remaining = g.text_time_total = 36;
         }
       }
-    };
-    this.guardCtx = {
-      ...this.ctx,
-      spriteWidth: (image) => scene.chtabs.guard?.images[image + 1]?.width ?? 0,
-      spriteHeight: (image) => scene.chtabs.guard?.images[image + 1]?.height ?? 0,
-      // A guard who falls into the spikes loses his own hit points, not
-      // the Prince's, and the hundred `spiked` and `chomped` take is all
-      // of them however many he had.
-      damage: (amount) => {
-        if (this.guard.hitPoints > 0) this.guardHurt = true;
-        this.guard.hitPoints = Math.max(0, this.guard.hitPoints - amount);
-        return this.guard.hitPoints === 0;
-      },
-      opponent: () => this.kid,
-      // Nothing a guard walks over is picked up, and he has no keyboard.
-      markItem: void 0,
-      hasSword: () => true
-    };
-    enterLevel(
-      this.kid,
-      scene.level.startRoom,
-      scene.level.startPos,
-      scene.level.startDir,
-      this.ctx,
-      levelNumber
+    }
+    ++g.Char.alive;
+  }
+}
+function control_kid() {
+  if (g.Char.alive < 0 && g.hitp_curr === 0) g.Char.alive = 0;
+  if (g.grab_timer !== 0) --g.grab_timer;
+  rest_ctrl_1();
+  read_user_control();
+  user_control();
+  save_ctrl_1();
+}
+function play_guard() {
+  if (g.Char.charid === charids.charid_24_mouse) {
+    l2.autocontrol_opponent.fn();
+    return;
+  }
+  if (g.Char.alive < 0) {
+    if (g.guardhp_curr === 0) {
+      g.Char.alive = 0;
+      l2.on_guard_killed.fn();
+      return;
+    }
+  } else if (g.Char.charid === charids.charid_1_shadow) {
+    l2.clear_char.fn();
+  }
+  l2.autocontrol_opponent.fn();
+  l5.control.fn();
+}
+function user_control() {
+  if (g.Char.direction >= directions.dir_0_right) {
+    flip_control_x();
+    l5.control.fn();
+    flip_control_x();
+  } else {
+    l5.control.fn();
+  }
+}
+function flip_control_x() {
+  g.control_x = -g.control_x;
+  const temp = g.control_forward;
+  g.control_forward = g.control_backward;
+  g.control_backward = temp;
+}
+function release_arrows() {
+  g.control_backward = CONTROL_RELEASED;
+  g.control_forward = CONTROL_RELEASED;
+  g.control_up = CONTROL_RELEASED;
+  g.control_down = CONTROL_RELEASED;
+  return 1;
+}
+function save_ctrl_1() {
+  g.ctrl1_forward = g.control_forward;
+  g.ctrl1_backward = g.control_backward;
+  g.ctrl1_up = g.control_up;
+  g.ctrl1_down = g.control_down;
+  g.ctrl1_shift2 = g.control_shift2;
+}
+function rest_ctrl_1() {
+  g.control_forward = g.ctrl1_forward;
+  g.control_backward = g.ctrl1_backward;
+  g.control_up = g.ctrl1_up;
+  g.control_down = g.ctrl1_down;
+  g.control_shift2 = g.ctrl1_shift2;
+}
+function read_user_control() {
+  if (g.control_forward >= CONTROL_RELEASED) {
+    if (g.control_x === CONTROL_HELD_FORWARD) {
+      if (g.control_forward === CONTROL_RELEASED) g.control_forward = CONTROL_HELD;
+    } else {
+      g.control_forward = CONTROL_RELEASED;
+    }
+  }
+  if (g.control_backward >= CONTROL_RELEASED) {
+    if (g.control_x === CONTROL_HELD_BACKWARD) {
+      if (g.control_backward === CONTROL_RELEASED) g.control_backward = CONTROL_HELD;
+    } else {
+      g.control_backward = CONTROL_RELEASED;
+    }
+  }
+  if (g.control_up >= CONTROL_RELEASED) {
+    if (g.control_y === CONTROL_HELD_UP) {
+      if (g.control_up === CONTROL_RELEASED) g.control_up = CONTROL_HELD;
+    } else {
+      g.control_up = CONTROL_RELEASED;
+    }
+  }
+  if (g.control_down >= CONTROL_RELEASED) {
+    if (g.control_y === CONTROL_HELD_DOWN) {
+      if (g.control_down === CONTROL_RELEASED) g.control_down = CONTROL_HELD;
+    } else {
+      g.control_down = CONTROL_RELEASED;
+    }
+  }
+  if (g.control_shift2 >= CONTROL_RELEASED) {
+    if (g.control_shift === CONTROL_HELD) {
+      if (g.control_shift2 === CONTROL_RELEASED) g.control_shift2 = CONTROL_HELD;
+    } else {
+      g.control_shift2 = CONTROL_RELEASED;
+    }
+  }
+}
+function can_grab() {
+  const modifier = g.curr_room_modif[g.curr_tilepos];
+  if (through_tile === tiles.tiles_20_wall) return 0;
+  if (through_tile === tiles.tiles_12_doortop && g.Char.direction >= directions.dir_0_right) return 0;
+  if (tile_is_floor(through_tile)) return 0;
+  if (g.curr_tile2 === tiles.tiles_11_loose && modifier !== 0) return 0;
+  if (g.curr_tile2 === tiles.tiles_7_doortop_with_floor && g.Char.direction < directions.dir_0_right) return 0;
+  if (!tile_is_floor(g.curr_tile2)) return 0;
+  return 1;
+}
+function wall_type(tiletype) {
+  switch (tiletype) {
+    case tiles.tiles_4_gate:
+    case tiles.tiles_7_doortop_with_floor:
+    case tiles.tiles_12_doortop:
+      return 1;
+    // wall at right
+    case tiles.tiles_13_mirror:
+      return 2;
+    // wall at left
+    case tiles.tiles_18_chomper:
+      return 3;
+    // chomper at left
+    case tiles.tiles_20_wall:
+      return 4;
+    // wall at both sides
+    default:
+      return 0;
+  }
+}
+function get_tile_above_char() {
+  return get_tile(g.Char.room, g.Char.curr_col, g.Char.curr_row - 1);
+}
+function get_tile_behind_above_char() {
+  return get_tile(g.Char.room, dir_behind[g.Char.direction + 1] + g.Char.curr_col, g.Char.curr_row - 1);
+}
+function get_tile_front_above_char() {
+  infrontx = dir_front[g.Char.direction + 1] + g.Char.curr_col;
+  return get_tile(g.Char.room, infrontx, g.Char.curr_row - 1);
+}
+function back_delta_x(delta_x) {
+  return g.Char.direction < directions.dir_0_right ? delta_x : -delta_x;
+}
+function do_pickup(obj_type) {
+  g.pickup_obj_type = obj_type;
+  g.control_shift2 = CONTROL_IGNORE;
+  g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_1_floor;
+  g.curr_room_modif[g.curr_tilepos] = 0;
+  g.redraw_height = 35;
+  l8.set_wipe.fn(g.curr_tilepos, 1);
+  l8.set_redraw_full.fn(g.curr_tilepos, 1);
+}
+function check_press() {
+  const frame = g.Char.frame;
+  const action = g.Char.action;
+  if (frame >= frameids.frame_87_hanging_1 && frame < 100 || frame >= frameids.frame_135_climbing_1 && frame < frameids.frame_141_climbing_7) {
+    get_tile_above_char();
+  } else if (action === actions.actions_7_turn || action === actions.actions_5_bumped || action < actions.actions_2_hang_climb) {
+    if (frame === frameids.frame_79_jumphang && get_tile_above_char() === tiles.tiles_11_loose) {
+      l7.make_loose_fall.fn(1);
+      return;
+    }
+    if (!(g.cur_frame.flags & frame_flags.FRAME_NEEDS_FLOOR)) return;
+    get_tile_at_char();
+  } else {
+    return;
+  }
+  if (g.curr_tile2 === tiles.tiles_15_opener || g.curr_tile2 === tiles.tiles_6_closer) {
+    if (g.Char.alive < 0) l7.trigger_button.fn(1, 0, -1);
+    else l2.died_on_button.fn();
+  } else if (g.curr_tile2 === tiles.tiles_11_loose) {
+    g.is_guard_notice = 1;
+    l7.make_loose_fall.fn(1);
+  }
+}
+function check_spike_below() {
+  const right_col = get_tile_div_mod_m7(g.char_x_right);
+  if (right_col < 0) return;
+  const room = g.Char.room;
+  for (let col = get_tile_div_mod_m7(g.char_x_left); col <= right_col; ++col) {
+    let row = g.Char.curr_row;
+    let not_finished;
+    do {
+      not_finished = false;
+      if (get_tile(room, col, row) === tiles.tiles_2_spike) {
+        l7.start_anim_spike.fn(g.curr_room, g.curr_tilepos);
+      } else if (!tile_is_floor(g.curr_tile2) && g.curr_room !== 0 && room === g.curr_room) {
+        ++row;
+        not_finished = true;
+      }
+    } while (not_finished);
+  }
+}
+function clip_char() {
+  const frame = g.Char.frame;
+  const action = g.Char.action;
+  const room = g.Char.room;
+  const row = g.Char.curr_row;
+  reset_obj_clip();
+  if (frame >= frameids.frame_224_exit_stairs_8 && frame < 229) {
+    g.obj_clip_top = g.leveldoor_ybottom + 1;
+    g.obj_clip_right = g.leveldoor_right;
+    return;
+  }
+  if (get_tile(room, g.char_col_left, g.char_top_row) === tiles.tiles_20_wall || tile_is_floor(g.curr_tile2)) {
+    if (action === actions.actions_0_stand && (frame === frameids.frame_79_jumphang || frame === frameids.frame_81_hangdrop_1) || get_tile(room, g.char_col_right, g.char_top_row) === tiles.tiles_20_wall || tile_is_floor(g.curr_tile2)) {
+      const clip_row = row + 1;
+      const clip_y = y_clip[clip_row];
+      if (clip_row === 1 || clip_y < g.obj_y && clip_y - 15 < g.char_top_y) {
+        g.char_top_y = clip_y;
+        g.obj_clip_top = clip_y;
+      }
+    }
+  }
+  const col = get_tile_div_mod(g.char_x_left_coll - 4);
+  if (get_tile(room, col + 1, row) === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_12_doortop) {
+    g.obj_clip_right = (g.tile_col << 5) + 32;
+  } else if (get_tile(room, col, row) !== tiles.tiles_7_doortop_with_floor && g.curr_tile2 !== tiles.tiles_12_doortop || action === actions.actions_3_in_midair || action === actions.actions_4_in_freefall && frame === frameids.frame_106_fall || action === actions.actions_5_bumped && frame === frameids.frame_107_fall_land_1) {
+  } else {
+    g.obj_clip_right = (g.tile_col << 5) + 32;
+  }
+}
+function stuck_lower() {
+  if (get_tile_at_char() === tiles.tiles_5_stuck) ++g.Char.y;
+}
+function set_objtile_at_char() {
+  const char_frame = g.Char.frame;
+  const char_action = g.Char.action;
+  if (char_action === actions.actions_1_run_jump) {
+    g.tile_row = g.char_bottom_row;
+    g.tile_col = g.char_col_left;
+  } else {
+    g.tile_row = g.Char.curr_row;
+    g.tile_col = g.Char.curr_col;
+  }
+  if (char_frame >= frameids.frame_135_climbing_1 && char_frame < 149 || char_action === actions.actions_2_hang_climb || char_action === actions.actions_3_in_midair || char_action === actions.actions_4_in_freefall || char_action === actions.actions_6_hang_straight) {
+    --g.tile_col;
+  }
+  g.obj_tilepos = get_tilepos_nominus(g.tile_col, g.tile_row);
+}
+function proc_get_object() {
+  if (g.Char.charid !== charids.charid_0_kid || g.pickup_obj_type === 0) return;
+  if (g.pickup_obj_type === -1) {
+    g.have_sword = -1;
+    out.play_sound(soundids.sound_37_victory);
+    g.flash_color = 14;
+    g.flash_time = 8;
+  } else {
+    switch (g.pickup_obj_type) {
+      case 1:
+        if (g.hitp_curr !== g.hitp_max) {
+          out.stop_sounds();
+          out.play_sound(soundids.sound_33_small_potion);
+          g.hitp_delta = 1;
+          g.flash_color = 4;
+          g.flash_time = 2;
+        }
+        break;
+      case 2:
+        out.stop_sounds();
+        out.play_sound(soundids.sound_30_big_potion);
+        g.flash_color = 4;
+        g.flash_time = 4;
+        g.hitp_max++;
+        g.hitp_delta = g.hitp_max;
+        break;
+      case 3:
+        g.is_feather_fall = 1;
+        g.flash_color = 2;
+        g.flash_time = 3;
+        out.stop_sounds();
+        out.play_sound(soundids.sound_39_low_weight);
+        break;
+      case 4:
+        out.stop_sounds();
+        out.play_sound(soundids.sound_38_blink);
+        g.flash_color = 15;
+        g.flash_time = 5;
+        take_hp(1);
+        break;
+      default:
+        break;
+    }
+  }
+  g.pickup_obj_type = 0;
+}
+function is_dead() {
+  return g.Char.frame >= frameids.frame_177_spiked && (g.Char.frame <= frameids.frame_178_chomped || g.Char.frame === frameids.frame_185_dead);
+}
+function load_frame_to_obj() {
+  const chtab_base = chtabs.id_chtab_2_kid;
+  reset_obj_clip();
+  load_frame();
+  g.obj_direction = g.Char.direction;
+  g.obj_id = g.cur_frame.image;
+  g.obj_chtab = chtab_base + (g.cur_frame.sword >> 6);
+  g.obj_x = (char_dx_forward(g.cur_frame.dx) << 1) - 116;
+  g.obj_y = g.cur_frame.dy + g.Char.y;
+  if (sbyteOf(g.cur_frame.flags ^ g.obj_direction) >= 0) ++g.obj_x;
+}
+
+// src/pop/seg004.ts
+var TILE_SIZEX = 14;
+var TILE_MIDX = 7;
+var TILE_RIGHTX2 = 13;
+var FIRST_ONSCREEN_COLUMN2 = 5;
+var SCREEN_TILECOUNTX = 10;
+var EDGE_TYPE_CLOSER = 0;
+var EDGE_TYPE_WALL = 1;
+var EDGE_TYPE_FLOOR = 2;
+var wall_dist_from_left = [0, 10, 0, -1, 0, 0];
+var wall_dist_from_right = [0, 0, 10, 13, 0, 0];
+var collision_row = 0;
+var right_checked_col = 0;
+var left_checked_col = 0;
+var edge_type = 0;
+function check_collisions() {
+  g.bump_col_left_of_wall = -1;
+  g.bump_col_right_of_wall = -1;
+  if (g.Char.action === actions.actions_7_turn) return;
+  collision_row = g.Char.curr_row;
+  move_coll_to_prev();
+  g.prev_collision_row = collision_row;
+  right_checked_col = Math.min(get_tile_div_mod_m7(g.char_x_right_coll) + 2, 11);
+  left_checked_col = get_tile_div_mod_m7(g.char_x_left_coll) - 1;
+  get_row_collision_data(collision_row, g.curr_row_coll_room, g.curr_row_coll_flags);
+  get_row_collision_data(collision_row + 1, g.below_row_coll_room, g.below_row_coll_flags);
+  get_row_collision_data(collision_row - 1, g.above_row_coll_room, g.above_row_coll_flags);
+  for (let column = 9; column >= 0; --column) {
+    if (g.curr_row_coll_room[column] >= 0 && g.prev_coll_room[column] === g.curr_row_coll_room[column]) {
+      if ((g.prev_coll_flags[column] & 15) === 0 && (g.curr_row_coll_flags[column] & 15) !== 0) {
+        g.bump_col_left_of_wall = column;
+      }
+      if ((g.prev_coll_flags[column] & 240) === 0 && (g.curr_row_coll_flags[column] & 240) !== 0) {
+        g.bump_col_right_of_wall = column;
+      }
+    }
+  }
+}
+function move_coll_to_prev() {
+  let room_ptr;
+  let flags_ptr;
+  if (collision_row === g.prev_collision_row || collision_row + 3 === g.prev_collision_row || collision_row - 3 === g.prev_collision_row) {
+    room_ptr = g.curr_row_coll_room;
+    flags_ptr = g.curr_row_coll_flags;
+  } else if (collision_row + 1 === g.prev_collision_row || collision_row - 2 === g.prev_collision_row) {
+    room_ptr = g.above_row_coll_room;
+    flags_ptr = g.above_row_coll_flags;
+  } else {
+    room_ptr = g.below_row_coll_room;
+    flags_ptr = g.below_row_coll_flags;
+  }
+  const room = Array.from(room_ptr);
+  const flags = Array.from(flags_ptr);
+  for (let column = 0; column < 10; ++column) {
+    g.prev_coll_room[column] = room[column];
+    g.prev_coll_flags[column] = flags[column];
+    g.below_row_coll_room[column] = -1;
+    g.above_row_coll_room[column] = -1;
+    g.curr_row_coll_room[column] = -1;
+  }
+}
+function get_row_collision_data(row, room_ptr, flags_ptr) {
+  const room = g.Char.room;
+  g.coll_tile_left_xpos = x_bump[left_checked_col + FIRST_ONSCREEN_COLUMN2] + TILE_MIDX;
+  for (let column = left_checked_col; column <= right_checked_col; ++column) {
+    const left_wall_xpos = get_left_wall_xpos(room, column, row);
+    const right_wall_xpos = get_right_wall_xpos(room, column, row);
+    let curr_flags = (left_wall_xpos < g.char_x_right_coll ? 1 : 0) * 15;
+    curr_flags |= (right_wall_xpos > g.char_x_left_coll ? 1 : 0) * 240;
+    flags_ptr[g.tile_col] = curr_flags;
+    room_ptr[g.tile_col] = g.curr_room;
+    g.coll_tile_left_xpos += TILE_SIZEX;
+  }
+}
+function get_left_wall_xpos(room, column, row) {
+  const type = wall_type(get_tile(room, column, row));
+  if (type) return wall_dist_from_left[type] + g.coll_tile_left_xpos;
+  return 255;
+}
+function get_right_wall_xpos(room, column, row) {
+  const type = wall_type(get_tile(room, column, row));
+  if (type) return g.coll_tile_left_xpos - wall_dist_from_right[type] + TILE_RIGHTX2;
+  return 0;
+}
+function check_bumped() {
+  if (g.Char.action !== actions.actions_2_hang_climb && g.Char.action !== actions.actions_6_hang_straight && (g.Char.frame < frameids.frame_135_climbing_1 || g.Char.frame >= 149)) {
+    if (g.bump_col_left_of_wall >= 0) {
+      check_bumped_look_right();
+    } else if (g.bump_col_right_of_wall >= 0) {
+      check_bumped_look_left();
+    }
+  }
+}
+function check_bumped_look_left() {
+  if ((g.Char.sword === sword_status.sword_2_drawn || g.Char.direction < directions.dir_0_right) && is_obstacle_at_col(g.bump_col_right_of_wall)) {
+    bumped(
+      sbyteOf(get_right_wall_xpos(g.curr_room, g.tile_col, g.tile_row) - g.char_x_left_coll),
+      directions.dir_0_right
     );
-    this.drawnRoom = this.kid.room;
-    this.traps.drawnRoom = this.drawnRoom;
-    this.guards = guardsFromLevel(scene.level.guards);
-    positionGuards(scene.state, this.guards);
-    this.enterRoom(this.drawnRoom);
-    this.renderer = new RoomRenderer(scene.chtabs, scene.tiles, scene.options);
+  }
+}
+function check_bumped_look_right() {
+  if ((g.Char.sword === sword_status.sword_2_drawn || g.Char.direction === directions.dir_0_right) && is_obstacle_at_col(g.bump_col_left_of_wall)) {
+    bumped(
+      sbyteOf(get_left_wall_xpos(g.curr_room, g.tile_col, g.tile_row) - g.char_x_right_coll),
+      directions.dir_FF_left
+    );
+  }
+}
+function is_obstacle_at_col(tile_col) {
+  let tile_row = g.Char.curr_row;
+  if (tile_row < 0) tile_row += 3;
+  if (tile_row >= 3) tile_row -= 3;
+  get_tile(g.curr_row_coll_room[tile_col], tile_col, tile_row);
+  return is_obstacle();
+}
+function is_obstacle() {
+  if (g.curr_tile2 === tiles.tiles_10_potion) {
+    return 0;
+  } else if (g.curr_tile2 === tiles.tiles_4_gate) {
+    if (!can_bump_into_gate()) return 0;
+  } else if (g.curr_tile2 === tiles.tiles_18_chomper) {
+    if (g.curr_room_modif[g.curr_tilepos] !== 2) return 0;
+  } else if (g.curr_tile2 === tiles.tiles_13_mirror && g.Char.charid === charids.charid_0_kid && g.Char.frame >= frameids.frame_39_start_run_jump_6 && g.Char.frame < frameids.frame_44_running_jump_5 && g.Char.direction < directions.dir_0_right) {
+    g.curr_room_modif[g.curr_tilepos] = 86;
+    g.jumped_through_mirror = -1;
+    return 0;
+  }
+  g.coll_tile_left_xpos = xpos_in_drawn_room(x_bump[g.tile_col + FIRST_ONSCREEN_COLUMN2]) + TILE_MIDX;
+  return 1;
+}
+function xpos_in_drawn_room(xpos) {
+  if (g.curr_room !== g.drawn_room) {
+    if (g.curr_room === g.room_L || g.curr_room === g.room_BL) {
+      xpos -= TILE_SIZEX * SCREEN_TILECOUNTX;
+    } else if (g.curr_room === g.room_R || g.curr_room === g.room_BR) {
+      xpos += TILE_SIZEX * SCREEN_TILECOUNTX;
+    }
+  }
+  return xpos;
+}
+function bumped(delta_x, push_direction) {
+  if (g.Char.alive < 0 && g.Char.frame !== frameids.frame_177_spiked) {
+    g.Char.x = byteOf(g.Char.x + delta_x);
+    if (push_direction < directions.dir_0_right) {
+      if (g.curr_tile2 === tiles.tiles_20_wall) {
+        get_tile(g.curr_room, --g.tile_col, g.tile_row);
+      }
+    } else if (g.curr_tile2 === tiles.tiles_12_doortop || g.curr_tile2 === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_20_wall) {
+      ++g.tile_col;
+      if (g.curr_room === 0 && g.tile_col === 10) {
+        g.curr_room = g.Char.room;
+        g.tile_col = 0;
+      }
+      get_tile(g.curr_room, g.tile_col, g.tile_row);
+    }
+    if (tile_is_floor(g.curr_tile2)) bumped_floor(push_direction);
+    else bumped_fall();
+  }
+}
+function bumped_fall() {
+  const action = g.Char.action;
+  g.Char.x = byteOf(char_dx_forward(-4));
+  if (action === actions.actions_4_in_freefall) {
+    g.Char.fall_x = 0;
+  } else {
+    l5.seqtbl_offset_char.fn(seqids.seq_45_bumpfall);
+    play_seq();
+  }
+  bumped_sound();
+}
+function bumped_floor(push_direction) {
+  let seq_index;
+  if (g.Char.sword !== sword_status.sword_2_drawn && (y_land[g.Char.curr_row + 1] - g.Char.y & 65535) >= 15) {
+    bumped_fall();
+    return;
+  }
+  g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+  if (g.Char.fall_y >= 22) {
+    g.Char.x = byteOf(char_dx_forward(-5));
+    return;
+  }
+  g.Char.fall_y = 0;
+  if (g.Char.alive >= 0) return;
+  if (g.Char.sword === sword_status.sword_2_drawn) {
+    if (push_direction === g.Char.direction) {
+      l5.seqtbl_offset_char.fn(seqids.seq_65_bump_forward_with_sword);
+      play_seq();
+      g.Char.x = byteOf(char_dx_forward(1));
+      return;
+    }
+    seq_index = seqids.seq_64_pushed_back_with_sword;
+  } else {
+    const frame = g.Char.frame;
+    if (frame === 24 || frame === 25 || frame >= 40 && frame < 43 || frame >= frameids.frame_102_start_fall_1 && frame < 107) {
+      seq_index = seqids.seq_46_hardbump;
+    } else {
+      seq_index = seqids.seq_47_bump;
+    }
+  }
+  l5.seqtbl_offset_char.fn(seq_index);
+  play_seq();
+  bumped_sound();
+}
+function bumped_sound() {
+  g.is_guard_notice = 1;
+  out.play_sound(soundids.sound_8_bumped);
+}
+function clear_coll_rooms() {
+  g.prev_coll_room.fill(-1);
+  g.curr_row_coll_room.fill(-1);
+  g.below_row_coll_room.fill(-1);
+  g.above_row_coll_room.fill(-1);
+  g.prev_collision_row = -1;
+}
+function can_bump_into_gate() {
+  return (g.curr_room_modif[g.curr_tilepos] >> 2) + 6 < g.char_height;
+}
+function get_edge_distance() {
+  let distance = 0;
+  determine_col();
+  load_frame_to_obj();
+  set_char_collision();
+  let tiletype = get_tile_at_char();
+  let settled = false;
+  if (wall_type(tiletype) !== 0) {
+    g.tile_col = g.Char.curr_col;
+    distance = dist_from_wall_forward(tiletype);
+    if (distance >= 0) {
+      distance = fromWall(distance);
+      settled = true;
+    }
+  }
+  if (!settled) {
+    tiletype = get_tile_infrontof_char();
+    if (tiletype === tiles.tiles_12_doortop && g.Char.direction >= directions.dir_0_right) {
+      edge_type = EDGE_TYPE_CLOSER;
+      distance = distance_to_edge_weight();
+    } else {
+      let closer = false;
+      if (wall_type(tiletype) !== 0) {
+        g.tile_col = infrontx;
+        distance = dist_from_wall_forward(tiletype);
+        if (distance >= 0) {
+          distance = fromWall(distance);
+          settled = true;
+        }
+      }
+      if (!settled) {
+        if (tiletype === tiles.tiles_11_loose) {
+          closer = true;
+        } else if (tiletype === tiles.tiles_6_closer || tiletype === tiles.tiles_22_sword || tiletype === tiles.tiles_10_potion) {
+          distance = distance_to_edge_weight();
+          if (distance !== 0) {
+            edge_type = EDGE_TYPE_CLOSER;
+          } else {
+            edge_type = EDGE_TYPE_FLOOR;
+            distance = 11;
+          }
+        } else if (tile_is_floor(tiletype)) {
+          edge_type = EDGE_TYPE_FLOOR;
+          distance = 11;
+        } else {
+          closer = true;
+        }
+        if (closer) {
+          edge_type = EDGE_TYPE_CLOSER;
+          distance = distance_to_edge_weight();
+        }
+      }
+    }
+  }
+  g.curr_tile2 = tiletype;
+  return distance;
+}
+function fromWall(distance) {
+  if (distance <= TILE_RIGHTX2) {
+    edge_type = EDGE_TYPE_WALL;
+    return distance;
+  }
+  edge_type = EDGE_TYPE_FLOOR;
+  return 11;
+}
+function check_chomped_kid() {
+  const tile_row = g.Char.curr_row;
+  for (let tile_col = 0; tile_col < 10; ++tile_col) {
+    if (g.curr_row_coll_flags[tile_col] === 255 && get_tile(g.curr_row_coll_room[tile_col], tile_col, tile_row) === tiles.tiles_18_chomper && (g.curr_room_modif[g.curr_tilepos] & 127) === 2) {
+      chomped();
+    }
+  }
+}
+function chomped() {
+  g.curr_room_modif[g.curr_tilepos] |= 128;
+  if (g.Char.frame !== frameids.frame_178_chomped && g.Char.room === g.curr_room) {
+    g.Char.x = byteOf(x_bump[g.tile_col + FIRST_ONSCREEN_COLUMN2] + TILE_MIDX);
+    g.Char.x = byteOf(char_dx_forward(7 - (g.Char.direction ? 0 : 1)));
+    g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+    take_hp(100);
+    out.play_sound(soundids.sound_46_chomped);
+    l5.seqtbl_offset_char.fn(seqids.seq_54_chomped);
+    play_seq();
+  }
+}
+function check_gate_push() {
+  const frame = g.Char.frame;
+  if (g.Char.action === actions.actions_7_turn || frame === frameids.frame_15_stand || frame >= frameids.frame_108_fall_land_2 && frame < 111) {
+    get_tile_at_char();
+    const orig_col = g.tile_col;
+    if ((g.curr_tile2 === tiles.tiles_4_gate || get_tile(g.curr_room, --g.tile_col, g.tile_row) === tiles.tiles_4_gate) && (g.curr_row_coll_flags[g.tile_col] & g.prev_coll_flags[g.tile_col]) === 255 && can_bump_into_gate()) {
+      bumped_sound();
+      g.Char.x = byteOf(g.Char.x + 5 - (orig_col <= g.tile_col ? 1 : 0) * 10);
+    }
+  }
+}
+function check_guard_bumped() {
+  if (g.Char.action === actions.actions_1_run_jump && g.Char.alive < 0 && g.Char.sword >= sword_status.sword_2_drawn) {
+    if (get_tile_at_char() === tiles.tiles_20_wall || g.curr_tile2 === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_4_gate && can_bump_into_gate() || g.Char.direction >= directions.dir_0_right && (get_tile(g.curr_room, --g.tile_col, g.tile_row) === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_4_gate && can_bump_into_gate())) {
+      load_frame_to_obj();
+      set_char_collision();
+      if (is_obstacle()) {
+        const delta_x = dist_from_wall_behind(g.curr_tile2);
+        if (delta_x < 0 && delta_x > -13) {
+          g.Char.x = byteOf(char_dx_forward(-delta_x));
+          l5.seqtbl_offset_char.fn(seqids.seq_65_bump_forward_with_sword);
+          play_seq();
+          load_fram_det_col();
+        }
+      }
+    }
+  }
+}
+function check_chomped_guard() {
+  get_tile_at_char();
+  if (!check_chomped_here()) {
+    get_tile(g.curr_room, ++g.tile_col, g.tile_row);
+    check_chomped_here();
+  }
+}
+function check_chomped_here() {
+  if (g.curr_tile2 === tiles.tiles_18_chomper && (g.curr_room_modif[g.curr_tilepos] & 127) === 2) {
+    g.coll_tile_left_xpos = x_bump[g.tile_col + FIRST_ONSCREEN_COLUMN2] + TILE_MIDX;
+    if (get_left_wall_xpos(g.curr_room, g.tile_col, g.tile_row) < g.char_x_right_coll && get_right_wall_xpos(g.curr_room, g.tile_col, g.tile_row) > g.char_x_left_coll) {
+      chomped();
+      return 1;
+    }
+    return 0;
+  }
+  return 0;
+}
+function dist_from_wall_forward(tiletype) {
+  if (tiletype === tiles.tiles_4_gate && !can_bump_into_gate()) return -1;
+  g.coll_tile_left_xpos = x_bump[g.tile_col + FIRST_ONSCREEN_COLUMN2] + TILE_MIDX;
+  const type = wall_type(tiletype);
+  if (type === 0) return -1;
+  if (g.Char.direction < directions.dir_0_right) {
+    return g.char_x_left_coll - (g.coll_tile_left_xpos + TILE_RIGHTX2 - wall_dist_from_right[type]);
+  }
+  return wall_dist_from_left[type] + g.coll_tile_left_xpos - g.char_x_right_coll;
+}
+function dist_from_wall_behind(tiletype) {
+  const type = wall_type(tiletype);
+  if (type === 0) return 99;
+  if (g.Char.direction >= directions.dir_0_right) {
+    return g.char_x_left_coll - (g.coll_tile_left_xpos + TILE_RIGHTX2 - wall_dist_from_right[type]);
+  }
+  return wall_dist_from_left[type] + g.coll_tile_left_xpos - g.char_x_right_coll;
+}
+
+// src/pop/seg005.ts
+var TILE_SIZEX2 = 14;
+var FIRST_ONSCREEN_COLUMN3 = 5;
+var CONTROL_HELD2 = -1;
+var CONTROL_RELEASED2 = 0;
+var CONTROL_IGNORE2 = 1;
+var CONTROL_HELD_FORWARD2 = -1;
+var CONTROL_HELD_BACKWARD2 = 1;
+var CONTROL_HELD_UP2 = -1;
+var CONTROL_HELD_DOWN2 = 1;
+var dist = { char_opp_dist: () => 0 };
+function seqtbl_offset_char(seq_index) {
+  g.Char.curr_seq = seqOffset(seq_index);
+}
+function do_fall() {
+  if (g.is_screaming === 0 && g.Char.fall_y >= 31) {
+    out.play_sound(soundids.sound_1_falling);
+    g.is_screaming = 1;
+  }
+  if (wordOf(y_land[g.Char.curr_row + 1]) > wordOf(g.Char.y)) {
+    check_grab();
+  } else {
+    if (get_tile_at_char() === tiles.tiles_20_wall) in_wall();
+    if (tile_is_floor(g.curr_tile2)) land();
+    else l2.inc_curr_row.fn();
+  }
+}
+function land() {
+  let seq_id = 0;
+  g.is_screaming = 0;
+  g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+  let onSpikes = false;
+  if (get_tile_at_char() !== tiles.tiles_2_spike) {
+    if (!tile_is_floor(get_tile_infrontof_char()) && distance_to_edge_weight() < 3) {
+      g.Char.x = byteOf(char_dx_forward(-3));
+    }
+    l7.start_chompers.fn();
+  } else {
+    onSpikes = true;
+  }
+  if (!onSpikes && g.Char.alive >= 0) {
+    take_hp(100);
+    out.play_sound(soundids.sound_0_fell_to_death);
+    seq_id = seqids.seq_22_crushed;
+    seqtbl_offset_char(seq_id);
+    play_seq();
+    g.Char.fall_y = 0;
+    return;
+  }
+  if (onSpikes || distance_to_edge_weight() >= 12 && get_tile_behind_char() === tiles.tiles_2_spike || get_tile_at_char() === tiles.tiles_2_spike) {
+    if (l7.is_spike_harmful.fn()) {
+      spiked();
+      return;
+    }
+  }
+  const landedOneRow = () => {
+    let id;
+    if (g.Char.charid >= charids.charid_2_guard || g.Char.sword === sword_status.sword_2_drawn) {
+      g.Char.sword = sword_status.sword_2_drawn;
+      id = seqids.seq_63_guard_active_after_fall;
+    } else {
+      id = seqids.seq_17_soft_land;
+    }
+    if (g.Char.charid === charids.charid_0_kid) {
+      out.play_sound(soundids.sound_17_soft_land);
+      g.is_guard_notice = 1;
+    }
+    return id;
+  };
+  let crushed = false;
+  let crushedNoHp = false;
+  if (g.Char.fall_y < 22) {
+    seq_id = landedOneRow();
+  } else if (g.Char.fall_y < 33) {
+    if (g.Char.charid === charids.charid_1_shadow) {
+      seq_id = landedOneRow();
+    } else if (g.Char.charid === charids.charid_2_guard) {
+      crushed = true;
+    } else if (!take_hp(1)) {
+      out.play_sound(soundids.sound_16_medium_land);
+      g.is_guard_notice = 1;
+      seq_id = seqids.seq_20_medium_land;
+    } else {
+      crushedNoHp = true;
+    }
+  } else {
+    crushed = true;
+  }
+  if (crushed) take_hp(100);
+  if (crushed || crushedNoHp) {
+    out.play_sound(soundids.sound_0_fell_to_death);
+    seq_id = seqids.seq_22_crushed;
+  }
+  seqtbl_offset_char(seq_id);
+  play_seq();
+  g.Char.fall_y = 0;
+}
+function spiked() {
+  g.curr_room_modif[g.curr_tilepos] = 255;
+  g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+  g.Char.x = byteOf(x_bump[g.tile_col + FIRST_ONSCREEN_COLUMN3] + 10);
+  g.Char.x = byteOf(char_dx_forward(8));
+  g.Char.fall_y = 0;
+  out.play_sound(soundids.sound_48_spiked);
+  take_hp(100);
+  seqtbl_offset_char(seqids.seq_51_spiked);
+  play_seq();
+}
+function control() {
+  const char_frame = g.Char.frame;
+  if (g.Char.alive >= 0) {
+    if (char_frame === frameids.frame_15_stand || char_frame === frameids.frame_166_stand_inactive || char_frame === frameids.frame_158_stand_with_sword || char_frame === frameids.frame_171_stand_with_sword) {
+      seqtbl_offset_char(seqids.seq_71_dying);
+    }
+    return;
+  }
+  const char_action = g.Char.action;
+  if (char_action === actions.actions_5_bumped || char_action === actions.actions_4_in_freefall) {
+    release_arrows();
+  } else if (g.Char.sword === sword_status.sword_2_drawn) {
+    control_with_sword();
+  } else if (g.Char.charid >= charids.charid_2_guard) {
+    l6.control_guard_inactive.fn();
+  } else if (char_frame === frameids.frame_15_stand || char_frame >= frameids.frame_50_turn && char_frame < 53) {
+    control_standing();
+  } else if (char_frame === frameids.frame_48_turn) {
+    control_turning();
+  } else if (char_frame < 4) {
+    control_startrun();
+  } else if (char_frame >= frameids.frame_67_start_jump_up_1 && char_frame < frameids.frame_70_jumphang) {
+    control_jumpup();
+  } else if (char_frame < 15) {
+    control_running();
+  } else if (char_frame >= frameids.frame_87_hanging_1 && char_frame < 100) {
+    control_hanging();
+  } else if (char_frame === frameids.frame_109_crouch) {
+    control_crouched();
+  }
+}
+function control_crouched() {
+  if (g.need_level1_music !== 0 && g.current_level === 1) {
+    if (!out.check_sound_playing()) {
+      if (g.need_level1_music === 1) {
+        out.play_sound(soundids.sound_25_presentation);
+        g.need_level1_music = 2;
+      } else {
+        g.need_level1_music = 0;
+      }
+    }
+    return;
+  }
+  g.need_level1_music = 0;
+  if (g.control_shift2 === CONTROL_HELD2 && check_get_item()) return;
+  if (g.control_y !== CONTROL_HELD_DOWN2) {
+    seqtbl_offset_char(seqids.seq_49_stand_up_from_crouch);
+  } else if (g.control_forward === CONTROL_HELD2) {
+    g.control_forward = CONTROL_IGNORE2;
+    seqtbl_offset_char(seqids.seq_79_crouch_hop);
+  }
+}
+function control_standing() {
+  if (g.control_shift2 === CONTROL_HELD2 && g.control_shift === CONTROL_HELD2 && check_get_item()) {
+    return;
+  }
+  if (g.Char.charid !== charids.charid_0_kid && g.control_down === CONTROL_HELD2 && g.control_forward === CONTROL_HELD2) {
+    draw_sword();
+    return;
+  }
+  let plain = false;
+  if (g.have_sword) {
+    if (g.offguard !== 0 && g.control_shift >= CONTROL_RELEASED2) {
+      plain = true;
+    } else if (g.can_guard_see_kid >= 2) {
+      const distance = dist.char_opp_dist();
+      if (distance >= -10 && distance < 90) {
+        g.holding_sword = 1;
+        if (wordOf(distance) < wordOf(-6)) {
+          if (g.Opp.charid === charids.charid_1_shadow && (g.Opp.action === actions.actions_3_in_midair || g.Opp.frame >= frameids.frame_107_fall_land_1 && g.Opp.frame < 118)) {
+            g.offguard = 0;
+          } else {
+            draw_sword();
+            return;
+          }
+        } else {
+          back_pressed();
+          return;
+        }
+      }
+    } else {
+      g.offguard = 0;
+    }
+  }
+  if (!plain && g.control_shift === CONTROL_HELD2) {
+    if (g.control_backward === CONTROL_HELD2) back_pressed();
+    else if (g.control_up === CONTROL_HELD2) up_pressed();
+    else if (g.control_down === CONTROL_HELD2) down_pressed();
+    else if (g.control_x === CONTROL_HELD_FORWARD2 && g.control_forward === CONTROL_HELD2) {
+      safe_step();
+    }
+    return;
+  }
+  if (g.control_forward === CONTROL_HELD2) {
+    if (g.control_up === CONTROL_HELD2) standing_jump();
+    else forward_pressed();
+  } else if (g.control_backward === CONTROL_HELD2) {
+    back_pressed();
+  } else if (g.control_up === CONTROL_HELD2) {
+    if (g.control_forward === CONTROL_HELD2) standing_jump();
+    else up_pressed();
+  } else if (g.control_down === CONTROL_HELD2) {
+    down_pressed();
+  } else if (g.control_x === CONTROL_HELD_FORWARD2) {
+    forward_pressed();
+  }
+}
+function up_pressed() {
+  let leveldoor_tilepos = -1;
+  if (get_tile_at_char() === tiles.tiles_16_level_door_left) leveldoor_tilepos = g.curr_tilepos;
+  else if (get_tile_behind_char() === tiles.tiles_16_level_door_left) leveldoor_tilepos = g.curr_tilepos;
+  else if (get_tile_infrontof_char() === tiles.tiles_16_level_door_left) leveldoor_tilepos = g.curr_tilepos;
+  if (leveldoor_tilepos !== -1 && g.level.start_room !== g.drawn_room && g.leveldoor_open) {
+    go_up_leveldoor();
+    return;
+  }
+  if (g.control_x === CONTROL_HELD_FORWARD2) standing_jump();
+  else check_jump_up();
+}
+function down_pressed() {
+  g.control_down = CONTROL_IGNORE2;
+  if (!tile_is_floor(get_tile_infrontof_char()) && distance_to_edge_weight() < 3) {
+    g.Char.x = byteOf(char_dx_forward(5));
+    load_fram_det_col();
+    return;
+  }
+  if (!tile_is_floor(get_tile_behind_char()) && distance_to_edge_weight() >= 8) {
+    setThroughTile(get_tile_behind_char());
+    get_tile_at_char();
+    if (can_grab() && (g.Char.direction >= directions.dir_0_right || get_tile_at_char() !== tiles.tiles_4_gate || g.curr_room_modif[g.curr_tilepos] >> 2 >= 6)) {
+      g.Char.x = byteOf(char_dx_forward(distance_to_edge_weight() - 9));
+      seqtbl_offset_char(seqids.seq_68_climb_down);
+      return;
+    }
+  }
+  crouch();
+}
+function go_up_leveldoor() {
+  g.Char.x = byteOf(x_bump[g.tile_col + FIRST_ONSCREEN_COLUMN3] + 10);
+  g.Char.direction = directions.dir_FF_left;
+  seqtbl_offset_char(seqids.seq_70_go_up_on_level_door);
+}
+function control_turning() {
+  if (g.control_shift >= CONTROL_RELEASED2 && g.control_x === CONTROL_HELD_FORWARD2 && g.control_y >= CONTROL_RELEASED2) {
+    seqtbl_offset_char(seqids.seq_43_start_run_after_turn);
+  }
+}
+function crouch() {
+  seqtbl_offset_char(seqids.seq_50_crouch);
+  g.control_down = release_arrows();
+}
+function back_pressed() {
+  let seq_id;
+  g.control_backward = release_arrows();
+  if (g.have_sword === 0 || g.can_guard_see_kid < 2 || dist.char_opp_dist() > 0 || distance_to_edge_weight() < 2) {
+    seq_id = seqids.seq_5_turn;
+  } else {
+    g.Char.sword = sword_status.sword_2_drawn;
+    g.offguard = 0;
+    seq_id = seqids.seq_89_turn_draw_sword;
+  }
+  seqtbl_offset_char(seq_id);
+}
+function forward_pressed() {
+  const distance = get_edge_distance();
+  if (edge_type === EDGE_TYPE_WALL && g.curr_tile2 !== tiles.tiles_18_chomper && distance < 8) {
+    if (g.control_forward === CONTROL_HELD2) safe_step();
+  } else {
+    seqtbl_offset_char(seqids.seq_1_start_run);
+  }
+}
+function control_running() {
+  if (g.control_x === CONTROL_RELEASED2 && (g.Char.frame === frameids.frame_7_run || g.Char.frame === frameids.frame_11_run)) {
+    g.control_forward = release_arrows();
+    seqtbl_offset_char(seqids.seq_13_stop_run);
+  } else if (g.control_x === CONTROL_HELD_BACKWARD2) {
+    g.control_backward = release_arrows();
+    seqtbl_offset_char(seqids.seq_6_run_turn);
+  } else if (g.control_y === CONTROL_HELD_UP2 && g.control_up === CONTROL_HELD2) {
+    run_jump();
+  } else if (g.control_down === CONTROL_HELD2) {
+    g.control_down = CONTROL_IGNORE2;
+    seqtbl_offset_char(seqids.seq_26_crouch_while_running);
+  }
+}
+function safe_step() {
+  g.control_shift2 = CONTROL_IGNORE2;
+  g.control_forward = CONTROL_IGNORE2;
+  const distance = get_edge_distance();
+  if (distance) {
+    g.Char.repeat = 1;
+    seqtbl_offset_char(distance + 28);
+  } else if (edge_type !== EDGE_TYPE_WALL && g.Char.repeat !== 0) {
+    g.Char.repeat = 0;
+    seqtbl_offset_char(seqids.seq_44_step_on_edge);
+  } else {
+    seqtbl_offset_char(seqids.seq_39_safe_step_11);
+  }
+}
+function check_get_item() {
+  if (get_tile_at_char() === tiles.tiles_10_potion || g.curr_tile2 === tiles.tiles_22_sword) {
+    if (!tile_is_floor(get_tile_behind_char())) return 0;
+    g.Char.x = byteOf(char_dx_forward(-14));
+    load_fram_det_col();
+  }
+  if (get_tile_infrontof_char() === tiles.tiles_10_potion || g.curr_tile2 === tiles.tiles_22_sword) {
+    get_item();
+    return 1;
+  }
+  return 0;
+}
+function get_item() {
+  if (g.Char.frame !== frameids.frame_109_crouch) {
+    const distance = get_edge_distance();
+    if (edge_type !== EDGE_TYPE_FLOOR) {
+      g.Char.x = byteOf(char_dx_forward(distance));
+    }
+    if (g.Char.direction >= directions.dir_0_right) {
+      g.Char.x = byteOf(char_dx_forward(
+        (g.curr_tile2 === tiles.tiles_10_potion ? 1 : 0) - 2
+      ));
+    }
+    crouch();
+  } else if (g.curr_tile2 === tiles.tiles_22_sword) {
+    do_pickup(-1);
+    seqtbl_offset_char(seqids.seq_91_get_sword);
+  } else {
+    do_pickup(g.curr_room_modif[g.curr_tilepos] >> 3);
+    seqtbl_offset_char(seqids.seq_78_drink);
+  }
+}
+function control_startrun() {
+  if (g.control_y === CONTROL_HELD_UP2 && g.control_x === CONTROL_HELD_FORWARD2) {
+    standing_jump();
+  }
+}
+function control_jumpup() {
+  if (g.control_x === CONTROL_HELD_FORWARD2 || g.control_forward === CONTROL_HELD2) {
+    standing_jump();
+  }
+}
+function standing_jump() {
+  g.control_up = CONTROL_IGNORE2;
+  g.control_forward = CONTROL_IGNORE2;
+  seqtbl_offset_char(seqids.seq_3_standing_jump);
+}
+function check_jump_up() {
+  g.control_up = release_arrows();
+  setThroughTile(get_tile_above_char());
+  get_tile_front_above_char();
+  if (can_grab()) {
+    grab_up_with_floor_behind();
+    return;
+  }
+  setThroughTile(get_tile_behind_above_char());
+  get_tile_above_char();
+  if (can_grab()) jump_up_or_grab();
+  else jump_up();
+}
+function jump_up_or_grab() {
+  const distance = distance_to_edge_weight();
+  if (distance < 6) {
+    jump_up();
+  } else if (!tile_is_floor(get_tile_behind_char())) {
+    grab_up_no_floor_behind();
+  } else {
+    g.Char.x = byteOf(char_dx_forward(distance - TILE_SIZEX2));
+    load_fram_det_col();
+    grab_up_with_floor_behind();
+  }
+}
+function grab_up_no_floor_behind() {
+  get_tile_above_char();
+  g.Char.x = byteOf(char_dx_forward(distance_to_edge_weight() - 10));
+  seqtbl_offset_char(seqids.seq_16_jump_up_and_grab);
+}
+function jump_up() {
+  g.control_up = release_arrows();
+  const distance = get_edge_distance();
+  if (distance < 4 && edge_type === EDGE_TYPE_WALL) {
+    g.Char.x = byteOf(char_dx_forward(distance - 3));
+  }
+  get_tile(g.Char.room, get_tile_div_mod(back_delta_x(0) + dx_weight() - 6), g.Char.curr_row - 1);
+  if (g.curr_tile2 !== tiles.tiles_20_wall && !tile_is_floor(g.curr_tile2)) {
+    seqtbl_offset_char(seqids.seq_28_jump_up_with_nothing_above);
+  } else {
+    seqtbl_offset_char(seqids.seq_14_jump_up_into_ceiling);
+  }
+}
+function control_hanging() {
+  if (g.Char.alive >= 0) {
+    hang_fall();
+    return;
+  }
+  if (g.grab_timer === 0 && g.control_y === CONTROL_HELD2) {
+    can_climb_up();
+  } else if (g.control_shift === CONTROL_HELD2) {
+    if (g.Char.action !== actions.actions_6_hang_straight && (get_tile_at_char() === tiles.tiles_20_wall || g.Char.direction === directions.dir_FF_left && (g.curr_tile2 === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_12_doortop))) {
+      if (g.grab_timer === 0) out.play_sound(soundids.sound_8_bumped);
+      seqtbl_offset_char(seqids.seq_25_hang_against_wall);
+    } else if (!tile_is_floor(get_tile_above_char())) {
+      hang_fall();
+    }
+  } else {
+    hang_fall();
+  }
+}
+function can_climb_up() {
+  let seq_id = seqids.seq_10_climb_up;
+  g.control_up = release_arrows();
+  g.control_shift2 = g.control_up;
+  get_tile_above_char();
+  if ((g.curr_tile2 === tiles.tiles_13_mirror || g.curr_tile2 === tiles.tiles_18_chomper) && g.Char.direction === directions.dir_0_right || g.curr_tile2 === tiles.tiles_4_gate && g.Char.direction !== directions.dir_0_right && g.curr_room_modif[g.curr_tilepos] >> 2 < 6) {
+    seq_id = seqids.seq_73_climb_up_to_closed_gate;
+  }
+  seqtbl_offset_char(seq_id);
+}
+function hang_fall() {
+  g.control_down = release_arrows();
+  if (!tile_is_floor(get_tile_behind_char()) && !tile_is_floor(get_tile_at_char())) {
+    seqtbl_offset_char(seqids.seq_23_release_ledge_and_fall);
+    return;
+  }
+  if (get_tile_at_char() === tiles.tiles_20_wall || g.Char.direction < directions.dir_0_right && (g.curr_tile2 === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_12_doortop)) {
+    g.Char.x = byteOf(char_dx_forward(-7));
+  }
+  seqtbl_offset_char(seqids.seq_11_release_ledge_and_land);
+}
+function grab_up_with_floor_behind() {
+  const distance = distance_to_edge_weight();
+  const edge_distance = get_edge_distance();
+  if (distance < 4 && edge_distance < 4 && edge_type !== EDGE_TYPE_WALL) {
+    g.Char.x = byteOf(char_dx_forward(distance));
+    seqtbl_offset_char(seqids.seq_8_jump_up_and_grab_straight);
+  } else {
+    g.Char.x = byteOf(char_dx_forward(distance - 4));
+    seqtbl_offset_char(seqids.seq_24_jump_up_and_grab_forward);
+  }
+}
+function run_jump() {
+  if (g.Char.frame >= frameids.frame_7_run) {
+    const xpos = char_dx_forward(4);
+    let col = get_tile_div_mod_m7(xpos);
+    for (let tiles_forward = 0; tiles_forward < 2; ++tiles_forward) {
+      col += [-1, 1][g.Char.direction + 1];
+      get_tile(g.Char.room, col, g.Char.curr_row);
+      if (g.curr_tile2 === tiles.tiles_2_spike || !tile_is_floor(g.curr_tile2)) {
+        let pos_adjustment = distance_to_edge(xpos) + TILE_SIZEX2 * tiles_forward - TILE_SIZEX2;
+        if (wordOf(pos_adjustment) < wordOf(-8) || pos_adjustment >= 2) {
+          if (pos_adjustment < 128) return;
+          pos_adjustment = -3;
+        }
+        g.Char.x = byteOf(char_dx_forward(pos_adjustment + 4));
+        break;
+      }
+    }
+    g.control_up = release_arrows();
+    seqtbl_offset_char(seqids.seq_4_run_jump);
+  }
+}
+function back_with_sword() {
+  const frame = g.Char.frame;
+  if (frame === frameids.frame_158_stand_with_sword || frame === frameids.frame_170_stand_with_sword || frame === frameids.frame_171_stand_with_sword) {
+    g.control_backward = CONTROL_IGNORE2;
+    seqtbl_offset_char(seqids.seq_57_back_with_sword);
+  }
+}
+function forward_with_sword() {
+  const frame = g.Char.frame;
+  if (frame === frameids.frame_158_stand_with_sword || frame === frameids.frame_170_stand_with_sword || frame === frameids.frame_171_stand_with_sword) {
+    g.control_forward = CONTROL_IGNORE2;
+    if (g.Char.charid !== charids.charid_0_kid) {
+      seqtbl_offset_char(seqids.seq_56_guard_forward_with_sword);
+    } else {
+      seqtbl_offset_char(seqids.seq_86_forward_with_sword);
+    }
+  }
+}
+function draw_sword() {
+  let seq_id = seqids.seq_55_draw_sword;
+  g.control_forward = release_arrows();
+  g.control_shift2 = g.control_forward;
+  if (g.Char.charid === charids.charid_0_kid) {
+    out.play_sound(soundids.sound_19_draw_sword);
+    g.offguard = 0;
+  } else if (g.Char.charid !== charids.charid_1_shadow) {
+    seq_id = seqids.seq_90_en_garde;
+  }
+  g.Char.sword = sword_status.sword_2_drawn;
+  seqtbl_offset_char(seq_id);
+}
+function control_with_sword() {
+  if (g.Char.action >= actions.actions_2_hang_climb) return;
+  if (get_tile_at_char() === tiles.tiles_11_loose || g.can_guard_see_kid >= 2) {
+    const distance = dist.char_opp_dist();
+    if (wordOf(distance) < wordOf(90)) {
+      swordfight();
+      return;
+    }
+    if (distance < 0) {
+      if (wordOf(distance) < wordOf(-4)) {
+        seqtbl_offset_char(seqids.seq_60_turn_with_sword);
+      } else {
+        swordfight();
+      }
+      return;
+    }
+  }
+  if (g.Char.charid === charids.charid_0_kid && g.Char.alive < 0) {
+    g.holding_sword = 0;
+  }
+  if (g.Char.charid < charids.charid_2_guard) {
+    if (g.Char.frame === frameids.frame_171_stand_with_sword) {
+      g.Char.sword = sword_status.sword_0_sheathed;
+      seqtbl_offset_char(seqids.seq_92_put_sword_away);
+    }
+  } else {
+    swordfight();
+  }
+}
+function swordfight() {
+  let seq_id;
+  const frame = g.Char.frame;
+  const charid = g.Char.charid;
+  if (frame === frameids.frame_161_parry && g.control_shift2 >= 0) {
+    seqtbl_offset_char(seqids.seq_57_back_with_sword);
+    return;
+  }
+  if (g.control_shift2 === CONTROL_HELD2) {
+    if (charid === charids.charid_0_kid) g.kid_sword_strike = 15;
+    sword_strike();
+    if (g.control_shift2 === CONTROL_IGNORE2) return;
+  }
+  if (g.control_down === CONTROL_HELD2) {
+    if (frame === frameids.frame_158_stand_with_sword || frame === frameids.frame_170_stand_with_sword || frame === frameids.frame_171_stand_with_sword) {
+      g.control_down = CONTROL_IGNORE2;
+      g.Char.sword = sword_status.sword_0_sheathed;
+      if (charid === charids.charid_0_kid) {
+        g.offguard = 1;
+        g.guard_refrac = 9;
+        g.holding_sword = 0;
+        seq_id = seqids.seq_93_put_sword_away_fast;
+      } else if (charid === charids.charid_1_shadow) {
+        seq_id = seqids.seq_92_put_sword_away;
+      } else {
+        seq_id = seqids.seq_87_guard_become_inactive;
+      }
+      seqtbl_offset_char(seq_id);
+    }
+  } else if (g.control_up === CONTROL_HELD2) {
+    parry();
+  } else if (g.control_forward === CONTROL_HELD2) {
+    forward_with_sword();
+  } else if (g.control_backward === CONTROL_HELD2) {
+    back_with_sword();
+  }
+}
+function sword_strike() {
+  const frame = g.Char.frame;
+  let seq_id;
+  if (frame === frameids.frame_157_walk_with_sword || frame === frameids.frame_158_stand_with_sword || frame === frameids.frame_170_stand_with_sword || frame === frameids.frame_171_stand_with_sword || frame === frameids.frame_165_walk_with_sword) {
+    seq_id = g.Char.charid === charids.charid_0_kid ? seqids.seq_75_strike : seqids.seq_58_guard_strike;
+  } else if (frame === frameids.frame_150_parry || frame === frameids.frame_161_parry) {
+    seq_id = seqids.seq_66_strike_after_parry;
+  } else {
+    return;
+  }
+  g.control_shift2 = CONTROL_IGNORE2;
+  seqtbl_offset_char(seq_id);
+}
+function parry() {
+  const char_frame = g.Char.frame;
+  const opp_frame = g.Opp.frame;
+  const char_charid = g.Char.charid;
+  let seq_id = seqids.seq_62_parry;
+  let do_play_seq = false;
+  if (char_frame === frameids.frame_158_stand_with_sword || char_frame === frameids.frame_170_stand_with_sword || char_frame === frameids.frame_171_stand_with_sword || char_frame === frameids.frame_168_back || char_frame === frameids.frame_165_walk_with_sword) {
+    if (dist.char_opp_dist() >= 32 && char_charid !== charids.charid_0_kid) {
+      back_with_sword();
+      return;
+    }
+    if (char_charid === charids.charid_0_kid) {
+      if (opp_frame === frameids.frame_168_back) return;
+      if (opp_frame !== frameids.frame_151_strike_1 && opp_frame !== frameids.frame_152_strike_2 && opp_frame !== frameids.frame_162_block_to_strike) {
+        if (opp_frame === frameids.frame_153_strike_3) do_play_seq = true;
+      }
+    } else if (opp_frame !== frameids.frame_152_strike_2) {
+      return;
+    }
+  } else {
+    if (char_frame !== frameids.frame_167_blocked) return;
+    seq_id = seqids.seq_61_parry_after_strike;
+  }
+  g.control_up = CONTROL_IGNORE2;
+  seqtbl_offset_char(seq_id);
+  if (do_play_seq) play_seq();
+}
+
+// src/pop/seg009.ts
+function prandom(max) {
+  g.random_seed = Math.imul(g.random_seed, 214013) + 2531011 >>> 0;
+  return (g.random_seed >>> 16) % (max + 1);
+}
+function set_seed(seed) {
+  g.random_seed = seed >>> 0;
+}
+
+// src/pop/seg007.ts
+var TROBS_MAX = 30;
+var MOBS_MAX = 14;
+var last_loose_sound = 0;
+var curmob_index = 0;
+var curr_tile_temp = 0;
+var levelType = { of: (_level) => 0 };
+function process_trobs() {
+  let need_delete = false;
+  if (g.trobs_count === 0) return;
+  for (let index = 0; index < g.trobs_count; ++index) {
+    g.trob = { ...g.trobs[index] };
+    animate_tile();
+    g.trobs[index].type = g.trob.type;
+    if (g.trob.type < 0) need_delete = true;
+  }
+  if (need_delete) {
+    let new_index = 0;
+    for (let index = 0; index < g.trobs_count; ++index) {
+      if (g.trobs[index].type >= 0) {
+        g.trobs[new_index] = g.trobs[index];
+        new_index++;
+      }
+    }
+    g.trobs_count = new_index;
+  }
+}
+function animate_tile() {
+  l8.get_room_address.fn(g.trob.room);
+  switch (get_curr_tile(g.trob.tilepos)) {
+    case tiles.tiles_19_torch:
+    case tiles.tiles_30_torch_with_debris:
+      animate_torch();
+      break;
+    case tiles.tiles_6_closer:
+    case tiles.tiles_15_opener:
+      animate_button();
+      break;
+    case tiles.tiles_2_spike:
+      animate_spike();
+      break;
+    case tiles.tiles_11_loose:
+      animate_loose();
+      break;
+    case tiles.tiles_0_empty:
+      animate_empty();
+      break;
+    case tiles.tiles_18_chomper:
+      animate_chomper();
+      break;
+    case tiles.tiles_4_gate:
+      animate_door();
+      break;
+    case tiles.tiles_16_level_door_left:
+      animate_leveldoor();
+      break;
+    case tiles.tiles_10_potion:
+      animate_potion();
+      break;
+    case tiles.tiles_22_sword:
+      animate_sword();
+      break;
+    default:
+      g.trob.type = -1;
+      break;
+  }
+  g.curr_room_modif[g.trob.tilepos] = byteOf(g.curr_modifier);
+}
+function is_trob_in_drawn_room() {
+  if (g.trob.room !== g.drawn_room) {
+    g.trob.type = -1;
+    return 0;
+  }
+  return 1;
+}
+function set_redraw_anim_right() {
+  l8.set_redraw_anim.fn(get_trob_right_pos_in_drawn_room(), 1);
+}
+function set_redraw_anim_curr() {
+  l8.set_redraw_anim.fn(get_trob_pos_in_drawn_room(), 1);
+}
+function redraw_at_trob() {
+  g.redraw_height = 63;
+  const tilepos = get_trob_pos_in_drawn_room();
+  set_redraw_full(tilepos, 1);
+  set_wipe(tilepos, 1);
+}
+function redraw_21h() {
+  g.redraw_height = 33;
+  redraw_tile_height();
+}
+function redraw_11h() {
+  g.redraw_height = 17;
+  redraw_tile_height();
+}
+function redraw_20h() {
+  g.redraw_height = 32;
+  redraw_tile_height();
+}
+function draw_trob() {
+  const tilepos = get_trob_right_pos_in_drawn_room();
+  l8.set_redraw_anim.fn(tilepos, 1);
+  l8.set_redraw_fore.fn(tilepos, 1);
+  l8.set_redraw_anim.fn(get_trob_right_above_pos_in_drawn_room(), 1);
+}
+function redraw_tile_height() {
+  let tilepos = get_trob_pos_in_drawn_room();
+  set_redraw_full(tilepos, 1);
+  set_wipe(tilepos, 1);
+  tilepos = get_trob_right_pos_in_drawn_room();
+  set_redraw_full(tilepos, 1);
+  set_wipe(tilepos, 1);
+}
+function get_trob_pos_in_drawn_room() {
+  let tilepos = g.trob.tilepos;
+  if (g.trob.room === g.room_A) {
+    if (tilepos >= 20 && tilepos < 30) tilepos = 19 - tilepos;
+    else tilepos = 30;
+  } else if (g.trob.room !== g.drawn_room) {
+    tilepos = 30;
+  }
+  return tilepos;
+}
+function get_trob_right_pos_in_drawn_room() {
+  let tilepos = g.trob.tilepos;
+  if (g.trob.room === g.drawn_room) {
+    if (tilepos % 10 !== 9) ++tilepos;
+    else tilepos = 30;
+  } else if (g.trob.room === g.room_L) {
+    if (tilepos % 10 === 9) tilepos -= 9;
+    else tilepos = 30;
+  } else if (g.trob.room === g.room_A) {
+    if (tilepos >= 20 && tilepos < 29) tilepos = 18 - tilepos;
+    else tilepos = 30;
+  } else if (g.trob.room === g.room_AL && tilepos === 29) {
+    tilepos = -1;
+  } else {
+    tilepos = 30;
+  }
+  return tilepos;
+}
+function get_trob_right_above_pos_in_drawn_room() {
+  let tilepos = g.trob.tilepos;
+  if (g.trob.room === g.drawn_room) {
+    if (tilepos % 10 !== 9) {
+      if (tilepos < 10) tilepos = -(tilepos + 2);
+      else tilepos -= 9;
+    } else {
+      tilepos = 30;
+    }
+  } else if (g.trob.room === g.room_L) {
+    if (tilepos === 9) tilepos = -1;
+    else if (tilepos % 10 === 9) tilepos -= 19;
+    else tilepos = 30;
+  } else if (g.trob.room === g.room_B) {
+    if (tilepos < 9) tilepos += 21;
+    else tilepos = 30;
+  } else if (g.trob.room === g.room_BL && tilepos === 9) {
+    tilepos = 20;
+  } else {
+    tilepos = 30;
+  }
+  return tilepos;
+}
+function animate_torch() {
+  if (g.trob.room === g.drawn_room || g.trob.room === g.room_L && g.trob.tilepos % 10 === 9) {
+    g.curr_modifier = get_torch_frame(g.curr_modifier);
+    set_redraw_anim_right();
+  } else {
+    g.trob.type = -1;
+  }
+}
+function animate_potion() {
+  if (g.trob.type >= 0 && is_trob_in_drawn_room()) {
+    const type = g.curr_modifier & 248;
+    g.curr_modifier = bubble_next_frame(g.curr_modifier & 7) | type;
+    set_redraw_anim_curr();
+  }
+}
+function animate_sword() {
+  if (is_trob_in_drawn_room()) {
+    --g.curr_modifier;
+    if (g.curr_modifier === 0) g.curr_modifier = (prandom(255) & 63) + 40;
+    set_redraw_anim_curr();
+  }
+}
+function animate_chomper() {
+  if (g.trob.type >= 0) {
+    const blood = g.curr_modifier & 128;
+    let frame = (g.curr_modifier & 127) + 1;
+    if (frame > 15) frame = 1;
+    g.curr_modifier = blood | frame;
+    if (frame === 2) out.play_sound(soundids.sound_47_chomper);
+    if ((g.trob.room !== g.drawn_room || Math.trunc(g.trob.tilepos / 10) !== g.Kid.curr_row || g.Kid.alive >= 0 && blood === 0) && (g.curr_modifier & 127) >= 6) {
+      g.trob.type = -1;
+    }
+  }
+  if ((g.curr_modifier & 127) < 6) redraw_at_trob();
+}
+function animate_spike() {
+  if (g.trob.type >= 0) {
+    if (g.curr_modifier === 255) return;
+    if (g.curr_modifier & 128) {
+      --g.curr_modifier;
+      if (g.curr_modifier & 127) return;
+      g.curr_modifier = 6;
+    } else {
+      ++g.curr_modifier;
+      if (g.curr_modifier === 5) {
+        g.curr_modifier = 143;
+      } else if (g.curr_modifier === 9) {
+        g.curr_modifier = 0;
+        g.trob.type = -1;
+      }
+    }
+  }
+  redraw_21h();
+}
+function animate_door() {
+  let anim_type = g.trob.type;
+  if (anim_type >= 0) {
+    if (anim_type >= 3) {
+      if (anim_type < 8) {
+        ++anim_type;
+        g.trob.type = anim_type;
+      }
+      const new_mod = g.curr_modifier - gate_close_speeds[anim_type];
+      g.curr_modifier = new_mod;
+      if (new_mod < 0) {
+        g.curr_modifier = 0;
+        g.trob.type = -1;
+        out.play_sound(soundids.sound_6_gate_closing_fast);
+      }
+    } else if (g.curr_modifier !== 255) {
+      g.curr_modifier = byteOf(g.curr_modifier + door_delta[anim_type]);
+      if (anim_type === 0) {
+        if (g.curr_modifier !== 0) {
+          if (g.curr_modifier < 188 && (g.curr_modifier & 3) === 3) {
+            play_door_sound_if_visible(soundids.sound_4_gate_closing);
+          }
+        } else {
+          gate_stop();
+        }
+      } else if (g.curr_modifier < 188) {
+        if ((g.curr_modifier & 7) === 0) out.play_sound(soundids.sound_5_gate_opening);
+      } else if (anim_type < 2) {
+        g.curr_modifier = 238;
+        g.trob.type = 0;
+        out.play_sound(soundids.sound_7_gate_stop);
+      } else {
+        g.curr_modifier = 255;
+        gate_stop();
+      }
+    } else {
+      gate_stop();
+    }
+  }
+  draw_trob();
+}
+function gate_stop() {
+  g.trob.type = -1;
+  play_door_sound_if_visible(soundids.sound_7_gate_stop);
+}
+function animate_leveldoor() {
+  if (g.trob.type >= 0) {
+    if (g.trob.type >= 3) {
+      ++g.trob.type;
+      g.curr_modifier = byteOf(g.curr_modifier - leveldoor_close_speeds[g.trob.type - 3]);
+      if (sbyteOf(g.curr_modifier) < 0) {
+        g.curr_modifier = 0;
+        g.trob.type = -1;
+        out.play_sound(soundids.sound_14_leveldoor_closing);
+      } else if (g.trob.type === 4) {
+        out.play_sound(soundids.sound_15_leveldoor_sliding);
+      }
+    } else {
+      ++g.curr_modifier;
+      if (g.curr_modifier >= 43) {
+        g.trob.type = -1;
+        out.stop_sounds();
+        if (g.leveldoor_open === 0 || g.leveldoor_open === 2) {
+          g.leveldoor_open = 1;
+          if (g.current_level === 4) {
+            get_tile(4, 4, 0);
+            g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_13_mirror;
+          }
+        }
+      } else {
+        out.play_sound(soundids.sound_15_leveldoor_sliding);
+      }
+    }
+  }
+  set_redraw_anim_right();
+}
+function bubble_next_frame(curr) {
+  const next = curr + 1;
+  return next >= 8 ? 1 : next;
+}
+function get_torch_frame(curr) {
+  let next = prandom(255);
+  if (next !== curr) {
+    if (next < 9) return next;
+    next = curr;
+  }
+  ++next;
+  if (next >= 9) next = 0;
+  return next;
+}
+function set_redraw_anim(tilepos, frames) {
+  if (tilepos < 30) {
+    if (tilepos < 0) {
+      ++tilepos;
+      g.redraw_frames_above[-tilepos] = frames;
+    } else {
+      g.redraw_frames_anim[tilepos] = frames;
+    }
+  }
+}
+function set_redraw2(tilepos, frames) {
+  if (tilepos < 30) {
+    if (tilepos < 0) {
+      tilepos = -tilepos - 1;
+      if (tilepos > 9) tilepos = 9;
+      g.redraw_frames_above[tilepos] = frames;
+    } else {
+      g.redraw_frames2[tilepos] = frames;
+    }
+  }
+}
+function set_redraw_floor_overlay(tilepos, frames) {
+  if (tilepos < 30) {
+    if (tilepos < 0) {
+      ++tilepos;
+      g.redraw_frames_above[-tilepos] = frames;
+    } else {
+      g.redraw_frames_floor_overlay[tilepos] = frames;
+    }
+  }
+}
+function set_redraw_full(tilepos, frames) {
+  if (tilepos < 30) {
+    if (tilepos < 0) {
+      ++tilepos;
+      g.redraw_frames_above[-tilepos] = frames;
+    } else {
+      g.redraw_frames_full[tilepos] = frames;
+    }
+  }
+}
+function set_redraw_fore(tilepos, frames) {
+  if (tilepos < 30 && tilepos >= 0) g.redraw_frames_fore[tilepos] = frames;
+}
+function set_wipe(tilepos, frames) {
+  if (tilepos < 30 && tilepos >= 0) {
+    if (g.wipe_frames[tilepos] !== 0) {
+      g.redraw_height = Math.max(g.wipe_heights[tilepos], g.redraw_height);
+    }
+    g.wipe_heights[tilepos] = g.redraw_height;
+    g.wipe_frames[tilepos] = frames;
+  }
+}
+function start_anim_torch(room, tilepos) {
+  g.curr_room_modif[tilepos] = prandom(8);
+  add_trob(room, tilepos, 1);
+}
+function start_anim_potion(room, tilepos) {
+  g.curr_room_modif[tilepos] &= 248;
+  g.curr_room_modif[tilepos] |= prandom(6) + 1;
+  add_trob(room, tilepos, 1);
+}
+function start_anim_sword(room, tilepos) {
+  g.curr_room_modif[tilepos] = prandom(255) & 31;
+  add_trob(room, tilepos, 1);
+}
+function start_anim_chomper(room, tilepos, modifier) {
+  const old_modifier = g.curr_room_modif[tilepos];
+  if (old_modifier === 0 || old_modifier >= 6) {
+    g.curr_room_modif[tilepos] = byteOf(modifier);
+    add_trob(room, tilepos, 1);
+  }
+}
+function start_anim_spike(room, tilepos) {
+  const old_modifier = sbyteOf(g.curr_room_modif[tilepos]);
+  if (old_modifier <= 0) {
+    if (old_modifier === 0) {
+      add_trob(room, tilepos, 1);
+      out.play_sound(soundids.sound_49_spikes);
+    } else if (old_modifier !== -1) {
+      g.curr_room_modif[tilepos] = 143;
+    }
+  }
+}
+function trigger_gate(_room, tilepos, button_type) {
+  const modifier = g.curr_room_modif[tilepos];
+  if (button_type === tiles.tiles_15_opener) {
+    if (modifier === 255) return -1;
+    if (modifier >= 188) {
+      g.curr_room_modif[tilepos] = 238;
+      return -1;
+    }
+    g.curr_room_modif[tilepos] = modifier + 3 & 252;
+    return 1;
+  }
+  if (button_type === tiles.tiles_14_debris) {
+    if (modifier < 188) return 2;
+    g.curr_room_modif[tilepos] = 255;
+    return -1;
+  }
+  return modifier !== 0 ? 3 : -1;
+}
+function trigger_1(target_type, room, tilepos, button_type) {
+  if (target_type === tiles.tiles_4_gate) return trigger_gate(room, tilepos, button_type);
+  if (target_type === tiles.tiles_16_level_door_left) {
+    return g.curr_room_modif[tilepos] !== 0 ? -1 : 1;
+  }
+  return -1;
+}
+function do_trigger_list(index, button_type) {
+  for (; ; ) {
+    const room = get_doorlink_room(index);
+    l8.get_room_address.fn(room);
+    const tilepos = get_doorlink_tile(index);
+    const target_type = g.curr_room_tiles[tilepos] & 31;
+    const trigger_result = trigger_1(target_type, room, tilepos, button_type);
+    if (trigger_result >= 0) add_trob(room, tilepos, trigger_result);
+    if (get_doorlink_next(index) === 0) break;
+    index++;
+  }
+}
+function add_trob(room, tilepos, type) {
+  if (g.trobs_count >= TROBS_MAX) return;
+  g.trob = { room, tilepos, type };
+  const found = find_trob();
+  if (found === -1) {
+    g.trobs[g.trobs_count] = { ...g.trob };
+    g.trobs_count++;
+  } else {
+    g.trobs[found].type = g.trob.type;
+  }
+}
+function find_trob() {
+  for (let index = 0; index < g.trobs_count; ++index) {
+    if (g.trobs[index].tilepos === g.trob.tilepos && g.trobs[index].room === g.trob.room) {
+      return index;
+    }
+  }
+  return -1;
+}
+function clear_tile_wipes() {
+  g.redraw_frames_full.fill(0);
+  g.wipe_frames.fill(0);
+  g.wipe_heights.fill(0);
+  g.redraw_frames_anim.fill(0);
+  g.redraw_frames_fore.fill(0);
+  g.redraw_frames2.fill(0);
+  g.redraw_frames_floor_overlay.fill(0);
+  g.tile_object_redraw.fill(0);
+  g.redraw_frames_above.fill(0);
+}
+function get_doorlink_timer(index) {
+  return g.level.doorlinks2[index] & 31;
+}
+function set_doorlink_timer(index, value) {
+  g.level.doorlinks2[index] &= 224;
+  g.level.doorlinks2[index] |= value & 31;
+  return g.level.doorlinks2[index];
+}
+function get_doorlink_tile(index) {
+  return g.level.doorlinks1[index] & 31;
+}
+function get_doorlink_next(index) {
+  return g.level.doorlinks1[index] & 128 ? 0 : 1;
+}
+function get_doorlink_room(index) {
+  return ((g.level.doorlinks1[index] & 96) >> 5) + ((g.level.doorlinks2[index] & 224) >> 3);
+}
+function trigger_button(playsound, button_type, modifier) {
+  get_curr_tile(g.curr_tilepos);
+  if (button_type === 0) button_type = g.curr_tile;
+  if (modifier === -1) modifier = g.curr_modifier;
+  const link_timer = get_doorlink_timer(modifier);
+  if (link_timer !== 31) {
+    set_doorlink_timer(modifier, 5);
+    if (link_timer < 2) {
+      add_trob(g.curr_room, g.curr_tilepos, 1);
+      redraw_11h();
+      g.is_guard_notice = 1;
+      if (playsound) out.play_sound(soundids.sound_3_button_pressed);
+    }
+    do_trigger_list(modifier, button_type);
+  }
+}
+function died_on_button() {
+  let button_type = get_curr_tile(g.curr_tilepos);
+  const modifier = g.curr_modifier;
+  if (g.curr_tile === tiles.tiles_15_opener) {
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_1_floor;
+    g.curr_room_modif[g.curr_tilepos] = 0;
+    button_type = tiles.tiles_14_debris;
+  } else {
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_5_stuck;
+  }
+  trigger_button(1, button_type, modifier);
+}
+function animate_button() {
+  if (g.trob.type >= 0) {
+    const timer = get_doorlink_timer(g.curr_modifier) - 1;
+    set_doorlink_timer(g.curr_modifier, timer);
+    if (timer < 2) {
+      g.trob.type = -1;
+      redraw_11h();
+    }
+  }
+}
+function start_level_door(room, tilepos) {
+  g.curr_room_modif[tilepos] = 43;
+  add_trob(room, tilepos, 3);
+}
+function animate_empty() {
+  g.trob.type = -1;
+  redraw_20h();
+}
+function animate_loose() {
+  const anim_type = g.trob.type;
+  if (anim_type >= 0) {
+    ++g.curr_modifier;
+    if (g.curr_modifier & 128) {
+      if (g.current_level === 13) return;
+      if (g.curr_modifier >= 132) {
+        g.curr_modifier = 0;
+        g.trob.type = -1;
+      }
+      loose_shake(g.curr_modifier ? 0 : 1);
+    } else if (g.curr_modifier >= 11) {
+      const room = g.trob.room;
+      const tilepos = g.trob.tilepos;
+      g.curr_modifier = remove_loose(room, tilepos);
+      g.trob.type = -1;
+      const row = Math.trunc(tilepos / 10);
+      g.curmob = {
+        xh: tilepos % 10 << 2,
+        y: y_loose_land[row + 1],
+        room,
+        speed: 0,
+        type: 0,
+        row
+      };
+      add_mob();
+    } else {
+      loose_shake(0);
+    }
+  }
+  redraw_20h();
+}
+function loose_shake(arg_0) {
+  if (arg_0 || loose_sound[g.curr_modifier & 127]) {
+    let sound_id;
+    do {
+      sound_id = prandom(2) + soundids.sound_20_loose_shake_1;
+    } while (sound_id === last_loose_sound);
+    prandom(2);
+    last_loose_sound = sound_id;
+    out.play_sound(sound_id);
+  }
+}
+function remove_loose(_room, tilepos) {
+  g.curr_room_tiles[tilepos] = tiles.tiles_0_empty;
+  return levelType.of(g.current_level);
+}
+function make_loose_fall(modifier) {
+  if ((g.curr_room_tiles[g.curr_tilepos] & 32) === 0) {
+    if (sbyteOf(g.curr_room_modif[g.curr_tilepos]) <= 0) {
+      g.curr_room_modif[g.curr_tilepos] = modifier;
+      add_trob(g.curr_room, g.curr_tilepos, 0);
+      redraw_20h();
+    }
+  }
+}
+function start_chompers() {
+  let timing = 15;
+  if (byteOf(g.Char.curr_row) < 3) {
+    l8.get_room_address.fn(g.Char.room);
+    let tilepos = tbl_line[g.Char.curr_row];
+    for (let column = 0; column < 10; ++column, ++tilepos) {
+      if (get_curr_tile(tilepos) === tiles.tiles_18_chomper) {
+        const modifier = g.curr_modifier & 127;
+        if (modifier === 0 || modifier >= 6) {
+          start_anim_chomper(g.Char.room, tilepos, timing | g.curr_modifier & 128);
+          timing = next_chomper_timing(timing);
+        }
+      }
+    }
+  }
+}
+function next_chomper_timing(timing) {
+  timing -= 3;
+  if (timing < 6) timing += 10;
+  return timing;
+}
+function loose_make_shake() {
+  if (g.curr_room_modif[g.curr_tilepos] === 0 && g.current_level !== 13) {
+    g.curr_room_modif[g.curr_tilepos] = 128;
+    add_trob(g.curr_room, g.curr_tilepos, 1);
+  }
+}
+function do_knock(room, tile_row) {
+  for (let tile_col = 0; tile_col < 10; ++tile_col) {
+    if (get_tile(room, tile_col, tile_row) === tiles.tiles_11_loose) loose_make_shake();
+  }
+}
+function add_mob() {
+  if (g.mobs_count >= MOBS_MAX) return;
+  g.mobs[g.mobs_count] = { ...g.curmob };
+  g.mobs_count++;
+}
+function get_curr_tile(tilepos) {
+  g.curr_modifier = g.curr_room_modif[tilepos];
+  g.curr_tile = g.curr_room_tiles[tilepos] & 31;
+  return g.curr_tile;
+}
+function do_mobs() {
+  const n_mobs = g.mobs_count;
+  for (curmob_index = 0; n_mobs > curmob_index; ++curmob_index) {
+    g.curmob = { ...g.mobs[curmob_index] };
+    move_mob();
+    check_loose_fall_on_kid();
+    g.mobs[curmob_index] = { ...g.curmob };
+  }
+  let new_index = 0;
+  for (let index = 0; index < g.mobs_count; ++index) {
+    if (g.mobs[index].speed !== -1) {
+      g.mobs[new_index] = g.mobs[index];
+      new_index++;
+    }
+  }
+  g.mobs_count = new_index;
+}
+function move_mob() {
+  if (g.curmob.type === 0) move_loose();
+  if (g.curmob.speed <= 0) ++g.curmob.speed;
+}
+function move_loose() {
+  if (g.curmob.speed < 0) return;
+  if (g.curmob.speed < 29) g.curmob.speed += 3;
+  g.curmob.y += g.curmob.speed;
+  if (g.curmob.room === 0) {
+    if (g.curmob.y >= 210) g.curmob.speed = -2;
+    return;
+  }
+  if (g.curmob.y < 226 && y_something[g.curmob.row + 1] <= g.curmob.y) {
+    curr_tile_temp = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+    if (curr_tile_temp === tiles.tiles_11_loose) loose_fall();
+    if (curr_tile_temp === tiles.tiles_0_empty || curr_tile_temp === tiles.tiles_11_loose) {
+      mob_down_a_row();
+      return;
+    }
+    out.play_sound(soundids.sound_2_tile_crashing);
+    do_knock(g.curmob.room, g.curmob.row);
+    g.curmob.y = y_something[g.curmob.row + 1];
+    g.curmob.speed = -2;
+    loose_land();
+  }
+}
+function loose_land() {
+  let button_type = 0;
+  let tiletype = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+  if (tiletype === tiles.tiles_15_opener) {
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_14_debris;
+    button_type = tiles.tiles_14_debris;
+  }
+  if (tiletype === tiles.tiles_15_opener || tiletype === tiles.tiles_6_closer) {
+    trigger_button(1, button_type, -1);
+    tiletype = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+  }
+  if (tiletype === tiles.tiles_15_opener || tiletype === tiles.tiles_6_closer || tiletype === tiles.tiles_1_floor || tiletype === tiles.tiles_2_spike || tiletype === tiles.tiles_10_potion || tiletype === tiles.tiles_19_torch || tiletype === tiles.tiles_30_torch_with_debris) {
+    if (tiletype === tiles.tiles_19_torch || tiletype === tiles.tiles_30_torch_with_debris) {
+      g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_30_torch_with_debris;
+    } else {
+      g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_14_debris;
+    }
+    redraw_at_cur_mob();
+    if (g.tile_col !== 0) set_redraw_full(g.curr_tilepos - 1, 1);
+  }
+}
+function loose_fall() {
+  g.curr_room_modif[g.curr_tilepos] = remove_loose(g.curr_room, g.curr_tilepos);
+  g.curmob.speed >>= 1;
+  g.mobs[curmob_index] = { ...g.curmob };
+  g.curmob.y += 6;
+  mob_down_a_row();
+  add_mob();
+  g.curmob = { ...g.mobs[curmob_index] };
+  redraw_at_cur_mob();
+}
+function redraw_at_cur_mob() {
+  if (g.curmob.room === g.drawn_room) {
+    g.redraw_height = 32;
+    set_redraw_full(g.curr_tilepos, 1);
+    set_wipe(g.curr_tilepos, 1);
+    if (g.curr_tilepos % 10 + 1 < 10) {
+      set_redraw_full(g.curr_tilepos + 1, 1);
+      set_wipe(g.curr_tilepos + 1, 1);
+    }
+  }
+}
+function mob_down_a_row() {
+  ++g.curmob.row;
+  if (g.curmob.row >= 3) {
+    g.curmob.y -= 192;
+    g.curmob.row = 0;
+    g.curmob.room = g.level.roomlinks[g.curmob.room - 1].down;
+  }
+}
+function draw_mobs() {
+  for (let index = 0; index < g.mobs_count; ++index) {
+    g.curmob = { ...g.mobs[index] };
+    draw_mob();
+  }
+}
+function draw_mob() {
+  let ypos = g.curmob.y;
+  if (g.curmob.room === g.drawn_room) {
+    if (g.curmob.y >= 210) return;
+  } else if (g.curmob.room === g.room_B) {
+    if (Math.abs(sbyteOf(ypos)) >= 18) return;
+    g.curmob.y += 192;
+    ypos = g.curmob.y;
+  } else if (g.curmob.room === g.room_A) {
+    if (g.curmob.y < 174) return;
+    ypos = g.curmob.y - 189;
+  } else {
+    return;
+  }
+  let tile_col = g.curmob.xh >> 2;
+  const tile_row = y_to_row_mod4(ypos);
+  g.obj_tilepos = get_tilepos_nominus(tile_col, tile_row);
+  ++tile_col;
+  let tilepos = get_tilepos(tile_col, tile_row);
+  set_redraw2(tilepos, 1);
+  set_redraw_fore(tilepos, 1);
+  const top_row = y_to_row_mod4(ypos - 18);
+  if (top_row !== tile_row) {
+    tilepos = get_tilepos(tile_col, top_row);
+    set_redraw2(tilepos, 1);
+    set_redraw_fore(tilepos, 1);
+  }
+  add_mob_to_objtable(ypos);
+}
+function add_mob_to_objtable(ypos) {
+  g.objtable.push({
+    obj_type: g.curmob.type | 128,
+    xh: g.curmob.xh,
+    xl: 0,
+    y: ypos,
+    chtab_id: 6,
+    // id_chtab_6_environment
+    id: 10,
+    direction: 0,
+    clip: { top: 0, bottom: 0, left: 0, right: 40 },
+    tilepos: 30
+  });
+  g.objtable_count = g.objtable.length;
+  l8.mark_obj_tile_redraw.fn(g.objtable.length - 1);
+}
+function is_spike_harmful() {
+  const modifier = sbyteOf(g.curr_room_modif[g.curr_tilepos]);
+  if (modifier === 0 || modifier === -1) return 0;
+  if (modifier < 0) return 1;
+  if (modifier < 5) return 2;
+  return 0;
+}
+function check_loose_fall_on_kid() {
+  loadkid();
+  if (g.Char.room === g.curmob.room && g.Char.curr_col === g.curmob.xh >> 2 && g.curmob.y < g.Char.y && g.Char.y - 30 < g.curmob.y) {
+    fell_on_your_head();
+    savekid();
+  }
+}
+function fell_on_your_head() {
+  const frame = g.Char.frame;
+  const action = g.Char.action;
+  if ((g.current_level === 13 || frame < frameids.frame_5_start_run || frame >= 15) && (action < actions.actions_2_hang_climb || action === actions.actions_7_turn)) {
+    g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+    if (take_hp(1)) {
+      l5.seqtbl_offset_char.fn(seqids.seq_22_crushed);
+      if (frame === frameids.frame_177_spiked) {
+        g.Char.x = byteOf(char_dx_forward(-12));
+      }
+    } else if (frame !== frameids.frame_109_crouch) {
+      if (get_tile_behind_char() === 0) g.Char.x = byteOf(char_dx_forward(-2));
+      l5.seqtbl_offset_char.fn(seqids.seq_52_loose_floor_fell_on_kid);
+    }
+  }
+}
+function play_door_sound_if_visible(sound_id) {
+  const tilepos = g.trob.tilepos;
+  const gate_room = g.trob.room;
+  const has_sound = gate_room === g.room_L ? tilepos % 10 === 9 : gate_room === g.drawn_room && tilepos % 10 !== 9;
+  if (has_sound) out.play_sound(sound_id);
+}
+
+// src/pop/seg003.ts
+var TILE_SIZEX3 = 14;
+var TILE_MIDX2 = 7;
+var FIRST_ONSCREEN_COLUMN4 = 5;
+var SCREEN_TILECOUNTX2 = 10;
+var ROOMCOUNT = 24;
+var distance_mirror = 0;
+var dist2 = { char_opp_dist: () => 0 };
+var rooms = { goto_other_room: (_direction) => {
+} };
+function do_startpos() {
+  if (g.current_level === 3 && g.checkpoint) {
+    g.level.start_dir = directions.dir_FF_left;
+    g.level.start_room = 2;
+    g.level.start_pos = 6;
+    get_tile(7, 4, 0);
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_0_empty;
+  }
+  g.Char.room = g.level.start_room;
+  g.next_room = g.Char.room;
+  let x = g.level.start_pos;
+  g.Char.curr_col = x % SCREEN_TILECOUNTX2;
+  g.Char.curr_row = Math.trunc(x / SCREEN_TILECOUNTX2);
+  g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX3);
+  g.Char.direction = ~g.level.start_dir;
+  x = g.hitp_beg_lev;
+  g.hitp_max = x;
+  g.hitp_curr = x;
+  if (g.current_level === 1) {
+    get_tile(5, 2, 0);
+    trigger_button(0, 0, -1);
+    seqtbl_offset_char(seqids.seq_7_fall);
+  } else if (g.current_level === 13) {
+    seqtbl_offset_char(seqids.seq_84_run);
+  } else {
+    seqtbl_offset_char(seqids.seq_5_turn);
+  }
+  set_start_pos();
+}
+function set_start_pos() {
+  g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+  g.Char.alive = -1;
+  g.Char.charid = charids.charid_0_kid;
+  g.is_screaming = 0;
+  g.knock = 0;
+  g.upside_down = 0;
+  g.is_feather_fall = 0;
+  g.Char.fall_y = 0;
+  g.Char.fall_x = 0;
+  g.offguard = 0;
+  g.Char.sword = sword_status.sword_0_sheathed;
+  play_seq();
+  if (g.current_level === 7 && g.Char.room === 17) {
+    rooms.goto_other_room(3);
+  }
+  savekid();
+}
+function find_start_level_door() {
+  l8.get_room_address.fn(g.Kid.room);
+  for (let tilepos = 0; tilepos < 30; ++tilepos) {
+    if ((g.curr_room_tiles[tilepos] & 31) === tiles.tiles_16_level_door_left) {
+      start_level_door(g.Kid.room, tilepos);
+    }
+  }
+}
+function redraw_at_char() {
+  if (g.Char.sword >= sword_status.sword_2_drawn) {
+    if (g.Char.direction >= directions.dir_0_right) {
+      ++g.char_col_right;
+      if (g.char_col_right > 9) g.char_col_right = 9;
+    } else {
+      --g.char_col_left;
+      if (g.char_col_left < 0) g.char_col_left = 0;
+    }
+  }
+  let x_top_row;
+  let x_col_right;
+  let x_col_left;
+  if (g.Char.charid === charids.charid_0_kid) {
+    x_top_row = Math.min(g.char_top_row, g.prev_char_top_row);
+    x_col_right = Math.max(g.char_col_right, g.prev_char_col_right);
+    x_col_left = Math.min(g.char_col_left, g.prev_char_col_left);
+  } else {
+    x_top_row = g.char_top_row;
+    x_col_right = g.char_col_right;
+    x_col_left = g.char_col_left;
+  }
+  for (let tile_row = x_top_row; tile_row <= g.char_bottom_row; ++tile_row) {
+    for (let tile_col = x_col_left; tile_col <= x_col_right; ++tile_col) {
+      l8.set_redraw_fore.fn(get_tilepos(tile_col, tile_row), 1);
+    }
+  }
+  if (g.Char.charid === charids.charid_0_kid) {
+    g.prev_char_top_row = g.char_top_row;
+    g.prev_char_col_right = g.char_col_right;
+    g.prev_char_col_left = g.char_col_left;
+  }
+}
+function redraw_at_char2() {
+  const char_action = g.Char.action;
+  const char_frame = g.Char.frame;
+  let redraw_func = l8.set_redraw2.fn;
+  if (char_frame < frameids.frame_78_jumphang || char_frame >= frameids.frame_80_jumphang) {
+    if (char_frame >= frameids.frame_137_climbing_3 && char_frame < frameids.frame_145_climbing_11) {
+      redraw_func = l8.set_redraw_floor_overlay.fn;
+    } else if (char_action !== actions.actions_2_hang_climb && char_action !== actions.actions_3_in_midair && char_action !== actions.actions_4_in_freefall && char_action !== actions.actions_6_hang_straight && (char_action !== actions.actions_5_bumped || char_frame < frameids.frame_102_start_fall_1 || char_frame > frameids.frame_106_fall)) {
+      return;
+    }
+  }
+  for (g.tile_col = g.char_col_right; g.tile_col >= g.char_col_left; --g.tile_col) {
+    if (char_action !== 2) {
+      redraw_func(get_tilepos(g.tile_col, g.char_bottom_row), 1);
+    }
+    if (g.char_top_row !== g.char_bottom_row) {
+      redraw_func(get_tilepos(g.tile_col, g.char_top_row), 1);
+    }
+  }
+}
+function check_knock() {
+  if (g.knock) {
+    do_knock(g.Char.room, g.Char.curr_row - (g.knock > 0 ? 1 : 0));
+    g.knock = 0;
+  }
+}
+function timers() {
+  if (g.united_with_shadow > 0) {
+    --g.united_with_shadow;
+    if (g.united_with_shadow === 0) --g.united_with_shadow;
+  }
+  if (g.guard_notice_timer > 0) --g.guard_notice_timer;
+  if (g.resurrect_time > 0) --g.resurrect_time;
+  if (g.is_feather_fall) g.is_feather_fall++;
+  if (g.is_feather_fall && (!out.check_sound_playing() || g.is_feather_fall > 225)) {
+    g.is_feather_fall = 0;
+  }
+  if (g.current_level === 8 && g.Char.room === 16 && g.leveldoor_open) {
+    ++g.leveldoor_open;
+    if (g.leveldoor_open === 150) do_mouse();
+  }
+}
+function check_mirror() {
+  if (g.jumped_through_mirror === -1) {
+    jump_through_mirror();
+  }
+}
+function jump_through_mirror() {
+  g.jumped_through_mirror = 0;
+  loadkid();
+  check_mirror_image();
+  g.Guard.charid = charids.charid_1_shadow;
+  g.guardhp_max = g.hitp_max;
+  g.guardhp_curr = g.guardhp_max;
+  copyChar(g.Guard, g.Char);
+  loadkid();
+}
+function check_mirror_image() {
+  const xpos = x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + 10;
+  let distance = distance_to_edge_weight();
+  if (g.Char.direction >= directions.dir_0_right) {
+    distance = ~distance + TILE_SIZEX3;
+  }
+  distance_mirror = distance - 2;
+  g.Char.x = byteOf((xpos << 1) - g.Char.x);
+  g.Char.direction = ~g.Char.direction;
+}
+function bump_into_opponent() {
+  if (g.can_guard_see_kid >= 2 && g.Char.sword === sword_status.sword_0_sheathed && g.Opp.sword !== sword_status.sword_0_sheathed && g.Opp.action < 2 && g.Char.direction !== g.Opp.direction) {
+    const distance = dist2.char_opp_dist();
+    if (Math.abs(distance) <= 15) {
+      g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+      g.Char.fall_y = 0;
+      seqtbl_offset_char(seqids.seq_47_bump);
+      play_seq();
+    }
+  }
+}
+function pos_guards() {
+  for (let room1 = 0; room1 < ROOMCOUNT; ++room1) {
+    const guard_tile = g.level.guards_tile[room1];
+    if (guard_tile < 30) {
+      g.level.guards_x[room1] = byteOf(
+        x_bump[guard_tile % 10 + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX3
+      );
+      g.level.guards_seq_hi[room1] = 0;
+    }
+  }
+}
+function check_can_guard_see_kid() {
+  const kid_frame = g.Kid.frame;
+  if (g.Guard.charid === charids.charid_24_mouse) {
+    g.can_guard_see_kid = 0;
+    return;
+  }
+  if ((g.Guard.charid !== charids.charid_1_shadow || g.current_level === 12) && kid_frame !== 0 && (kid_frame < frameids.frame_219_exit_stairs_3 || kid_frame >= 229) && g.Guard.direction !== directions.dir_56_none && g.Kid.alive < 0 && g.Guard.alive < 0 && g.Kid.room === g.Guard.room && g.Kid.curr_row === g.Guard.curr_row) {
+    g.can_guard_see_kid = 2;
+    let left_pos = x_bump[g.Kid.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_MIDX2;
+    let right_pos = x_bump[g.Guard.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_MIDX2;
+    if (left_pos > right_pos) {
+      const temp = left_pos;
+      left_pos = right_pos;
+      right_pos = temp;
+    }
+    if (get_tile_at_kid(left_pos) === tiles.tiles_18_chomper) left_pos += TILE_SIZEX3;
+    if (get_tile_at_kid(right_pos) === tiles.tiles_4_gate) right_pos -= TILE_SIZEX3;
+    while (left_pos <= right_pos) {
+      if (get_tile_at_kid(left_pos) === tiles.tiles_20_wall || g.curr_tile2 === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_12_doortop) {
+        g.can_guard_see_kid = 0;
+        return;
+      }
+      if (g.curr_tile2 === tiles.tiles_11_loose || g.curr_tile2 === tiles.tiles_18_chomper || g.curr_tile2 === tiles.tiles_4_gate && g.curr_room_modif[g.curr_tilepos] < 112 || !tile_is_floor(g.curr_tile2)) {
+        g.can_guard_see_kid = 1;
+      }
+      left_pos += TILE_SIZEX3;
+    }
+  } else {
+    g.can_guard_see_kid = 0;
+  }
+}
+function get_tile_at_kid(xpos) {
+  return get_tile(g.Kid.room, get_tile_div_mod_m7(xpos), g.Kid.curr_row);
+}
+function do_mouse() {
+  loadkid();
+  g.Char.charid = charids.charid_24_mouse;
+  g.Char.x = 200;
+  g.Char.curr_row = 0;
+  g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+  g.Char.alive = -1;
+  g.Char.direction = directions.dir_FF_left;
+  g.guardhp_curr = 1;
+  seqtbl_offset_char(seqids.seq_105_mouse_forward);
+  play_seq();
+  copyChar(g.Guard, g.Char);
+  loadkid();
+}
+
+// src/pop/seg002.ts
+var TILE_MIDX3 = 7;
+var FIRST_ONSCREEN_COLUMN5 = 5;
+var SCREEN_TILECOUNTX3 = 10;
+var NUM_GUARD_SKILLS = 12;
+var CONTROL_HELD3 = -1;
+var CONTROL_IGNORE3 = 1;
+var CONTROL_RELEASED3 = 0;
+var CONTROL_HELD_FORWARD3 = -1;
+var CONTROL_HELD_BACKWARD3 = 1;
+var CONTROL_HELD_UP3 = -1;
+var CONTROL_HELD_DOWN3 = 1;
+var guards = {
+  hp: (_level) => 0,
+  type: (_level) => 0
+};
+var curr_guard_color = 0;
+var guardColor = { value: 0 };
+function char_opp_dist() {
+  if (g.Char.room !== g.Opp.room) return 999;
+  let distance = g.Opp.x - g.Char.x;
+  if (g.Char.direction < directions.dir_0_right) distance = -distance;
+  if (distance >= 0 && g.Char.direction !== g.Opp.direction) distance += 13;
+  return distance;
+}
+function clear_char() {
+  g.Char.direction = directions.dir_56_none;
+  g.Char.alive = 0;
+  g.Char.action = 0;
+  g.guardhp_curr = 0;
+}
+function inc_curr_row() {
+  ++g.Char.curr_row;
+}
+function on_guard_killed() {
+  if (g.current_level === 13) {
+    g.flash_color = 15;
+    g.flash_time = 18;
+    g.leveldoor_open = 2;
+    out.play_sound(soundids.sound_43_victory_Jaffar);
+  } else if (g.Char.charid !== charids.charid_1_shadow) {
+    out.play_sound(soundids.sound_37_victory);
+  }
+}
+function load_room_links() {
+  g.room_BR = 0;
+  g.room_BL = 0;
+  g.room_AR = 0;
+  g.room_AL = 0;
+  if (g.drawn_room) {
+    const link2 = g.level.roomlinks[g.drawn_room - 1];
+    g.room_L = link2.left;
+    g.room_R = link2.right;
+    g.room_A = link2.up;
+    g.room_B = link2.down;
+    if (g.room_A) {
+      g.room_AL = g.level.roomlinks[g.room_A - 1].left;
+      g.room_AR = g.level.roomlinks[g.room_A - 1].right;
+    }
+    if (g.room_B) {
+      g.room_BL = g.level.roomlinks[g.room_B - 1].left;
+      g.room_BR = g.level.roomlinks[g.room_B - 1].right;
+    }
+  } else {
+    g.room_L = 0;
+    g.room_R = 0;
+    g.room_A = 0;
+    g.room_B = 0;
+  }
+}
+function get_guard_hp() {
+  g.guardhp_max = extrastrength[g.guard_skill] + guards.hp(g.current_level);
+  g.guardhp_curr = g.guardhp_max;
+  g.guardhp_delta = g.guardhp_max;
+}
+function check_shadow() {
+  g.offguard = 0;
+  enter_guard();
+}
+var hp = { draw_guard_hp: (_curr, _max) => {
+} };
+function enter_guard() {
+  const room_minus_1 = g.drawn_room - 1;
+  const guard_tile = g.level.guards_tile[room_minus_1];
+  if (guard_tile >= 30) return;
+  g.Char.room = g.drawn_room;
+  g.Char.curr_row = Math.trunc(guard_tile / SCREEN_TILECOUNTX3);
+  g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+  g.Char.x = g.level.guards_x[room_minus_1];
+  g.Char.curr_col = get_tile_div_mod_m7(g.Char.x);
+  g.Char.direction = sbyteOf(g.level.guards_dir[room_minus_1]);
+  curr_guard_color = guards.type(g.current_level) === 0 ? g.level.guards_color[room_minus_1] : 0;
+  curr_guard_color &= 15;
+  guardColor.value = curr_guard_color;
+  g.Char.charid = guards.type(g.current_level) === 2 ? charids.charid_4_skeleton : charids.charid_2_guard;
+  const seq_hi = g.level.guards_seq_hi[room_minus_1];
+  if (seq_hi === 0) {
+    if (g.Char.charid === charids.charid_4_skeleton) {
+      g.Char.sword = sword_status.sword_2_drawn;
+      seqtbl_offset_char(seqids.seq_63_guard_active_after_fall);
+    } else {
+      g.Char.sword = sword_status.sword_0_sheathed;
+      seqtbl_offset_char(seqids.seq_77_guard_stand_inactive);
+    }
+  } else {
+    g.Char.curr_seq = g.level.guards_seq_lo[room_minus_1] + (seq_hi << 8);
+  }
+  play_seq();
+  g.guard_skill = g.level.guards_skill[room_minus_1];
+  if (g.guard_skill >= NUM_GUARD_SKILLS) g.guard_skill = 3;
+  const frame = g.Char.frame;
+  if (frame === frameids.frame_185_dead || frame === frameids.frame_177_spiked || frame === frameids.frame_178_chomped) {
+    g.Char.alive = 1;
+    hp.draw_guard_hp(0, g.guardhp_curr);
+    g.guardhp_curr = 0;
+  } else {
+    g.Char.alive = -1;
+    g.justblocked = 0;
+    g.guard_refrac = 0;
+    g.is_guard_notice = 0;
+    get_guard_hp();
+  }
+  g.Char.fall_y = 0;
+  g.Char.fall_x = 0;
+  g.Char.action = actions.actions_1_run_jump;
+  saveshad();
+}
+function check_guard_fallout() {
+  if (g.Guard.direction === directions.dir_56_none || g.Guard.y < 211) return;
+  if (g.Guard.charid === charids.charid_1_shadow) {
+    if (g.Guard.action !== actions.actions_4_in_freefall) return;
+    loadshad();
+    clear_char();
+    saveshad();
+  } else if (g.Guard.charid === charids.charid_4_skeleton && g.level.roomlinks[g.Guard.room - 1].down === 3) {
+    g.Guard.room = g.level.roomlinks[g.Guard.room - 1].down;
+    g.Guard.x = 133;
+    g.Guard.curr_row = 1;
+    g.Guard.direction = directions.dir_0_right;
+    g.Guard.alive = -1;
+    leave_guard();
+  } else {
+    loadshad();
+    on_guard_killed();
+    saveshad();
+    g.level.guards_tile[g.drawn_room - 1] = 255;
+    g.Guard.direction = directions.dir_56_none;
+    hp.draw_guard_hp(0, g.guardhp_curr);
+    g.guardhp_curr = 0;
+  }
+}
+function leave_guard() {
+  if (g.Guard.direction === directions.dir_56_none || g.Guard.charid === charids.charid_1_shadow || g.Guard.charid === charids.charid_24_mouse) {
+    return;
+  }
+  const room_minus_1 = g.Guard.room - 1;
+  g.level.guards_tile[room_minus_1] = get_tilepos(0, g.Guard.curr_row);
+  g.level.guards_color[room_minus_1] = curr_guard_color & 15;
+  g.level.guards_x[room_minus_1] = g.Guard.x;
+  g.level.guards_dir[room_minus_1] = byteOf(g.Guard.direction);
+  g.level.guards_skill[room_minus_1] = g.guard_skill;
+  if (g.Guard.alive < 0) {
+    g.level.guards_seq_hi[room_minus_1] = 0;
+  } else {
+    g.level.guards_seq_lo[room_minus_1] = g.Guard.curr_seq & 255;
+    g.level.guards_seq_hi[room_minus_1] = g.Guard.curr_seq >> 8;
+  }
+  g.Guard.direction = directions.dir_56_none;
+  hp.draw_guard_hp(0, g.guardhp_curr);
+  g.guardhp_curr = 0;
+}
+function follow_guard() {
+  g.level.guards_tile[g.Kid.room - 1] = 255;
+  g.level.guards_tile[g.Guard.room - 1] = 255;
+  loadshad();
+  goto_other_room(g.roomleave_result);
+  saveshad();
+}
+function exit_room() {
+  let leave = 0;
+  if (g.exit_room_timer !== 0) {
+    --g.exit_room_timer;
+    return;
+  }
+  loadkid();
+  load_frame_to_obj();
+  set_char_collision();
+  g.roomleave_result = leave_room();
+  if (g.roomleave_result < 0) return;
+  savekid();
+  g.next_room = g.Char.room;
+  if (g.Guard.direction === directions.dir_56_none) return;
+  if (g.Guard.alive < 0 && g.Guard.sword === sword_status.sword_2_drawn) {
+    const kid_room_m1 = g.Kid.room - 1;
+    if (kid_room_m1 >= 0 && kid_room_m1 <= 23 && (g.level.guards_tile[kid_room_m1] >= 30 || g.level.guards_seq_hi[kid_room_m1] !== 0)) {
+      if (g.roomleave_result === 0) {
+        if (g.Guard.x >= 91) leave = 1;
+      } else if (g.roomleave_result === 1) {
+        if (g.Guard.x < 165) leave = 1;
+      } else if (g.roomleave_result === 2) {
+        if (g.Guard.curr_row >= 0) leave = 1;
+      } else if (g.Guard.curr_row < 3) {
+        leave = 1;
+      }
+    } else {
+      leave = 1;
+    }
+  } else {
+    leave = 1;
+  }
+  if (leave) leave_guard();
+  else follow_guard();
+}
+function goto_other_room(direction) {
+  const link2 = g.level.roomlinks[g.Char.room - 1];
+  const other_room = [link2.left, link2.right, link2.up, link2.down][direction];
+  g.Char.room = other_room;
+  let opposite_dir;
+  if (direction === 0) {
+    g.Char.x = byteOf(g.Char.x + 140);
+    opposite_dir = 1;
+  } else if (direction === 1) {
+    g.Char.x = byteOf(g.Char.x - 140);
+    opposite_dir = 0;
+  } else if (direction === 2) {
+    g.Char.y = byteOf(g.Char.y + 189);
+    g.Char.curr_row = y_to_row_mod4(g.Char.y);
+    opposite_dir = 3;
+  } else {
+    g.Char.y = byteOf(g.Char.y - 189);
+    g.Char.curr_row = y_to_row_mod4(g.Char.y);
+    opposite_dir = 2;
+  }
+  return opposite_dir;
+}
+function leave_room() {
+  let leave_dir;
+  const chary = g.Char.y;
+  const action = g.Char.action;
+  const frame = g.Char.frame;
+  if (action !== actions.actions_5_bumped && action !== actions.actions_4_in_freefall && action !== actions.actions_3_in_midair && sbyteOf(chary) < 10 && sbyteOf(chary) > -16) {
+    leave_dir = 2;
+  } else if (chary >= 211) {
+    leave_dir = 3;
+  } else if (frame >= frameids.frame_135_climbing_1 && frame < 150 || frame >= frameids.frame_110_stand_up_from_crouch_1 && frame < 120 || frame >= frameids.frame_150_parry && frame < 163 || frame >= frameids.frame_166_stand_inactive && frame < 169 || action === actions.actions_7_turn) {
+    return -1;
+  } else if (g.Char.direction !== directions.dir_0_right) {
+    if (g.char_x_left <= 54) leave_dir = 0;
+    else if (g.char_x_left >= 198) leave_dir = 1;
+    else return -1;
+  } else {
+    get_tile(g.Char.room, 9, g.Char.curr_row);
+    if (g.curr_tile2 !== tiles.tiles_7_doortop_with_floor && g.curr_tile2 !== tiles.tiles_12_doortop && g.char_x_right >= 201) {
+      leave_dir = 1;
+    } else if (g.char_x_right <= 57) {
+      leave_dir = 0;
+    } else {
+      return -1;
+    }
+  }
+  if (leave_dir === 0) {
+    play_mirr_mus();
+    level3_set_chkp();
+    Jaffar_exit();
+  } else if (leave_dir === 1) {
+    sword_disappears();
+    meet_Jaffar();
+  } else if (leave_dir === 3) {
+    if (g.current_level === 6 && g.Char.room === 1) return -2;
+  }
+  goto_other_room(leave_dir);
+  return leave_dir;
+}
+function Jaffar_exit() {
+  if (g.leveldoor_open === 2) {
+    get_tile(24, 0, 0);
+    trigger_button(0, 0, -1);
+  }
+}
+function level3_set_chkp() {
+  if (g.current_level === 3 && g.Char.room === 7) {
+    g.checkpoint = 1;
+    g.hitp_beg_lev = g.hitp_max;
+  }
+}
+function sword_disappears() {
+  if (g.current_level === 12 && g.Char.room === 18) {
+    get_tile(15, 1, 0);
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_1_floor;
+    g.curr_room_modif[g.curr_tilepos] = 0;
+  }
+}
+function meet_Jaffar() {
+  if (g.current_level === 13 && g.leveldoor_open === 0 && g.Char.room === 3) {
+    out.play_sound(soundids.sound_29_meet_Jaffar);
+    g.guard_notice_timer = 28;
+  }
+}
+function play_mirr_mus() {
+  if (g.leveldoor_open !== 0 && g.leveldoor_open !== 77 && g.current_level === 4 && g.Char.curr_row === 0 && g.Char.room === 11) {
+    out.play_sound(soundids.sound_25_presentation);
+    g.leveldoor_open = 77;
+  }
+}
+function move_0_nothing() {
+  g.control_shift = CONTROL_RELEASED3;
+  g.control_y = CONTROL_RELEASED3;
+  g.control_x = CONTROL_RELEASED3;
+  g.control_shift2 = CONTROL_RELEASED3;
+  g.control_down = CONTROL_RELEASED3;
+  g.control_up = CONTROL_RELEASED3;
+  g.control_backward = CONTROL_RELEASED3;
+  g.control_forward = CONTROL_RELEASED3;
+}
+function move_1_forward() {
+  g.control_x = CONTROL_HELD_FORWARD3;
+  g.control_forward = CONTROL_HELD3;
+}
+function move_2_backward() {
+  g.control_backward = CONTROL_HELD3;
+  g.control_x = CONTROL_HELD_BACKWARD3;
+}
+function move_3_up() {
+  g.control_y = CONTROL_HELD_UP3;
+  g.control_up = CONTROL_HELD3;
+}
+function move_4_down() {
+  g.control_down = CONTROL_HELD3;
+  g.control_y = CONTROL_HELD_DOWN3;
+}
+function move_down_back() {
+  g.control_down = CONTROL_HELD3;
+  move_2_backward();
+}
+function move_down_forw() {
+  g.control_down = CONTROL_HELD3;
+  move_1_forward();
+}
+function move_6_shift() {
+  g.control_shift = CONTROL_HELD3;
+  g.control_shift2 = CONTROL_HELD3;
+}
+function autocontrol_opponent() {
+  move_0_nothing();
+  const charid = g.Char.charid;
+  if (charid === charids.charid_0_kid) {
+    autocontrol_kid();
+    return;
+  }
+  if (g.justblocked) --g.justblocked;
+  if (g.kid_sword_strike) --g.kid_sword_strike;
+  if (g.guard_refrac) --g.guard_refrac;
+  if (charid === charids.charid_24_mouse) autocontrol_mouse();
+  else if (charid === charids.charid_4_skeleton) autocontrol_skeleton();
+  else if (charid === charids.charid_1_shadow) autocontrol_shadow();
+  else if (g.current_level === 13) autocontrol_Jaffar();
+  else autocontrol_guard();
+}
+function autocontrol_mouse() {
+  if (g.Char.direction === directions.dir_56_none) return;
+  if (g.Char.action === actions.actions_0_stand) {
+    if (g.Char.x >= 200) clear_char();
+  } else if (g.Char.x < 166) {
+    seqtbl_offset_char(seqids.seq_107_mouse_stand_up_and_go);
+    play_seq();
+  }
+}
+function autocontrol_shadow() {
+}
+function autocontrol_skeleton() {
+  g.Char.sword = sword_status.sword_2_drawn;
+  autocontrol_guard();
+}
+function autocontrol_Jaffar() {
+  autocontrol_guard();
+}
+function autocontrol_kid() {
+  autocontrol_guard();
+}
+function autocontrol_guard() {
+  if (g.Char.sword < sword_status.sword_2_drawn) autocontrol_guard_inactive();
+  else autocontrol_guard_active();
+}
+function autocontrol_guard_inactive() {
+  if (g.Kid.alive >= 0) return;
+  const distance = char_opp_dist();
+  if (g.Opp.curr_row !== g.Char.curr_row || wordOf(distance) < wordOf(-8)) {
+    if (g.is_guard_notice) {
+      g.is_guard_notice = 0;
+      if (distance < 0) {
+        if (wordOf(distance) < wordOf(-4)) move_4_down();
+        return;
+      }
+    } else if (distance < 0) {
+      return;
+    }
+  }
+  if (g.can_guard_see_kid) {
+    if (g.current_level !== 13 || g.guard_notice_timer === 0) move_down_forw();
+  }
+}
+function autocontrol_guard_active() {
+  const char_frame = g.Char.frame;
+  if (char_frame === frameids.frame_166_stand_inactive || char_frame < 150 || g.can_guard_see_kid === 1) {
+    return;
+  }
+  if (g.can_guard_see_kid === 0) {
+    if (droppedout !== 0) {
+      guard_follows_kid_down();
+    } else if (g.Char.charid !== charids.charid_4_skeleton) {
+      move_down_back();
+    }
+    return;
+  }
+  const opp_frame = g.Opp.frame;
+  const distance = char_opp_dist();
+  if (distance >= 12 && opp_frame >= frameids.frame_102_start_fall_1 && opp_frame < frameids.frame_118_stand_up_from_crouch_9 && g.Opp.action === actions.actions_5_bumped) {
+    return;
+  }
+  if (distance < 35) {
+    if (g.Char.sword < sword_status.sword_2_drawn && distance < 8 || distance < 12) {
+      if (g.Char.direction === g.Opp.direction) move_2_backward();
+      else move_1_forward();
+    } else {
+      autocontrol_guard_kid_in_sight(distance);
+    }
+    return;
+  }
+  if (g.guard_refrac !== 0) return;
+  if (g.Char.direction !== g.Opp.direction) {
+    if (opp_frame >= frameids.frame_7_run && opp_frame < 15) {
+      if (distance < 40) move_6_shift();
+      return;
+    }
+    if (opp_frame >= frameids.frame_34_start_run_jump_1 && opp_frame < 44) {
+      if (distance < 50) move_6_shift();
+      return;
+    }
+  }
+  autocontrol_guard_kid_far();
+}
+function autocontrol_guard_kid_far() {
+  if (tile_is_floor(get_tile_infrontof_char()) || tile_is_floor(get_tile_infrontof2_char())) {
+    move_1_forward();
+  } else {
+    move_2_backward();
+  }
+}
+function guard_follows_kid_down() {
+  const opp_action = g.Opp.action;
+  if (opp_action === actions.actions_2_hang_climb || opp_action === actions.actions_6_hang_straight) {
+    return;
+  }
+  if (wall_type(get_tile_infrontof_char()) !== 0 || !tile_is_floor(g.curr_tile2) && (get_tile(g.curr_room, g.tile_col, ++g.tile_row) === tiles.tiles_2_spike || g.curr_tile2 === tiles.tiles_11_loose || wall_type(g.curr_tile2) !== 0 || !tile_is_floor(g.curr_tile2) || g.Char.curr_row + 1 !== g.Opp.curr_row)) {
+    setDroppedout(0);
+    move_2_backward();
+  } else {
+    move_1_forward();
+  }
+}
+function autocontrol_guard_kid_in_sight(distance) {
+  if (g.Opp.sword === sword_status.sword_2_drawn) {
+    autocontrol_guard_kid_armed(distance);
+  } else if (g.guard_refrac === 0) {
+    if (distance < 29) move_6_shift();
+    else move_1_forward();
+  }
+}
+function autocontrol_guard_kid_armed(distance) {
+  if (distance < 10 || distance >= 29) {
+    guard_advance();
+    return;
+  }
+  guard_block();
+  if (g.guard_refrac === 0) {
+    if (distance < 12 || distance >= 29) guard_advance();
+    else guard_strike();
+  }
+}
+function guard_advance() {
+  if (g.guard_skill === 0 || g.kid_sword_strike === 0) {
+    if (advprob[g.guard_skill] > prandom(255)) move_1_forward();
+  }
+}
+function guard_block() {
+  const opp_frame = g.Opp.frame;
+  if (opp_frame === frameids.frame_152_strike_2 || opp_frame === frameids.frame_153_strike_3 || opp_frame === frameids.frame_162_block_to_strike) {
+    if (g.justblocked !== 0) {
+      if (impblockprob[g.guard_skill] > prandom(255)) move_3_up();
+    } else if (blockprob[g.guard_skill] > prandom(255)) {
+      move_3_up();
+    }
+  }
+}
+function guard_strike() {
+  const opp_frame = g.Opp.frame;
+  if (opp_frame === frameids.frame_169_begin_block || opp_frame === frameids.frame_151_strike_1) {
+    return;
+  }
+  const char_frame = g.Char.frame;
+  if (char_frame === frameids.frame_161_parry || char_frame === frameids.frame_150_parry) {
+    if (restrikeprob[g.guard_skill] > prandom(255)) move_6_shift();
+  } else if (strikeprob[g.guard_skill] > prandom(255)) {
+    move_6_shift();
+  }
+}
+function hurt_by_sword() {
+  if (g.Char.alive >= 0) return;
+  let killed = false;
+  if (g.Char.sword !== sword_status.sword_2_drawn) {
+    take_hp(100);
+    seqtbl_offset_char(seqids.seq_85_stabbed_to_death);
+    killed = true;
+  } else if (g.Char.charid !== charids.charid_4_skeleton && take_hp(1)) {
+    killed = true;
+  }
+  if (killed) {
+    let distance = 0;
+    if (get_tile_behind_char() !== 0 || (distance = distance_to_edge_weight()) < 4) {
+      seqtbl_offset_char(seqids.seq_85_stabbed_to_death);
+      if (g.Char.charid !== charids.charid_0_kid && g.Char.direction < directions.dir_0_right && (g.curr_tile2 === tiles.tiles_4_gate || get_tile_at_char() === tiles.tiles_4_gate)) {
+        g.Char.x = byteOf(
+          x_bump[g.tile_col - (g.curr_tile2 !== tiles.tiles_4_gate ? 1 : 0) + FIRST_ONSCREEN_COLUMN5] + TILE_MIDX3
+        );
+        g.Char.x = byteOf(char_dx_forward(10));
+      }
+      g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+      g.Char.fall_y = 0;
+    } else {
+      g.Char.x = byteOf(char_dx_forward(distance - 20));
+      load_fram_det_col();
+      inc_curr_row();
+      seqtbl_offset_char(seqids.seq_81_kid_pushed_off_ledge);
+    }
+  } else {
+    seqtbl_offset_char(seqids.seq_74_hit_by_sword);
+    g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+    g.Char.fall_y = 0;
+  }
+  out.play_sound(g.Char.charid === charids.charid_0_kid ? soundids.sound_13_kid_hurt : soundids.sound_12_guard_hurt);
+  play_seq();
+}
+function check_sword_hurt() {
+  if (g.Guard.action === actions.actions_99_hurt) {
+    if (g.Kid.action === actions.actions_99_hurt) {
+      g.Kid.action = actions.actions_1_run_jump;
+    }
+    loadshad();
+    hurt_by_sword();
+    saveshad();
+    g.guard_refrac = refractimer[g.guard_skill];
+  } else if (g.Kid.action === actions.actions_99_hurt) {
+    loadkid();
+    hurt_by_sword();
+    savekid();
+  }
+}
+function check_sword_hurting() {
+  const kid_frame = g.Kid.frame;
+  if (kid_frame !== 0 && (kid_frame < frameids.frame_219_exit_stairs_3 || kid_frame >= 229)) {
+    loadshad_and_opp();
+    check_hurting();
+    saveshad_and_opp();
+    loadkid_and_opp();
+    check_hurting();
+    savekid_and_opp();
+  }
+}
+function check_hurting() {
+  if (g.Char.sword !== sword_status.sword_2_drawn) return;
+  if (g.Char.curr_row !== g.Opp.curr_row) return;
+  const char_frame = g.Char.frame;
+  if (char_frame !== frameids.frame_153_strike_3 && char_frame !== frameids.frame_154_poking) {
+    return;
+  }
+  let distance = char_opp_dist();
+  const opp_frame = g.Opp.frame;
+  if (distance < 0 || distance >= 29 || opp_frame !== frameids.frame_161_parry && opp_frame !== frameids.frame_150_parry) {
+    if (g.Char.frame === frameids.frame_154_poking) {
+      const min_hurt_range = g.Opp.sword < sword_status.sword_2_drawn ? 8 : 12;
+      distance = char_opp_dist();
+      if (distance >= min_hurt_range && distance < 29) {
+        g.Opp.action = actions.actions_99_hurt;
+      }
+    }
+  } else {
+    g.Opp.frame = frameids.frame_161_parry;
+    if (g.Char.charid !== charids.charid_0_kid) g.justblocked = 4;
+    seqtbl_offset_char(seqids.seq_69_attack_was_parried);
+    play_seq();
+  }
+  if (g.Char.direction === directions.dir_56_none) return;
+  if (g.Char.frame === frameids.frame_154_poking && g.Opp.frame !== frameids.frame_161_parry && g.Opp.action !== actions.actions_99_hurt) {
+    out.play_sound(soundids.sound_11_sword_moving);
+  }
+}
+function check_skel() {
+}
+function control_guard_inactive() {
+  if (g.Char.frame === frameids.frame_166_stand_inactive && g.control_down === CONTROL_HELD3) {
+    if (g.control_forward === CONTROL_HELD3) {
+      draw_sword();
+    } else {
+      g.control_down = CONTROL_IGNORE3;
+      seqtbl_offset_char(seqids.seq_80_stand_flipped);
+    }
+  }
+}
+
+// src/pop/seg008.ts
+var paint;
+function setPainter(p) {
+  paint = p;
+}
+function paintBlit(chtab, id, x, y, blit) {
+  paint.blit(chtab, id, x, y, blit);
+}
+var peels_table = [];
+function add_peel(left, right, top, height) {
+  if (peels_table.length >= 50) return;
+  peels_table.push(paint.readPeel(left, top, right, top + height));
+}
+function restore_peels() {
+  while (peels_table.length) paint.restorePeel(peels_table.pop());
+}
+function free_peels() {
+  peels_table.length = 0;
+}
+var hp2 = { draw_hp: () => {
+} };
+var levelType2 = { of: (_level) => 0 };
+var n_curr_objs = 0;
+var curr_objs = [];
+var gate_top_y = 0;
+var gate_openness = 0;
+var gate_bottom_y = 0;
+function reset_tables() {
+  g.table_counts.fill(0);
+  g.backtable.length = 0;
+  g.foretable.length = 0;
+  g.midtable.length = 0;
+  g.wipetable.length = 0;
+  g.wipetable_count = 0;
+  g.objtable.length = 0;
+  g.objtable_count = 0;
+}
+function redraw_room() {
+  free_peels();
+  reset_tables();
+  reset_obj_clip();
+  draw_room();
+  clear_tile_wipes();
+}
+function draw_room() {
+  load_leftroom();
+  for (g.drawn_row = 2; g.drawn_row >= 0; g.drawn_row--) {
+    load_rowbelow();
+    g.draw_bottom_y = 63 * g.drawn_row + 65;
+    g.draw_main_y = g.draw_bottom_y - 3;
+    for (g.drawn_col = 0; g.drawn_col < 10; g.drawn_col++) {
+      load_curr_and_left_tile();
+      draw_tile();
+    }
+  }
+  const saved_room = g.drawn_room;
+  g.drawn_room = g.room_A;
+  load_room_links();
+  load_leftroom();
+  g.drawn_row = 2;
+  load_rowbelow();
+  for (g.drawn_col = 0; g.drawn_col < 10; ++g.drawn_col) {
+    load_curr_and_left_tile();
+    g.draw_main_y = -1;
+    g.draw_bottom_y = 2;
+    draw_tile_aboveroom();
+  }
+  g.drawn_room = saved_room;
+  load_room_links();
+}
+function draw_tile() {
+  draw_tile_floorright();
+  draw_tile_anim_topright();
+  draw_tile_right();
+  draw_tile_anim_right();
+  draw_tile_bottom(0);
+  draw_loose(0);
+  draw_tile_base();
+  draw_tile_anim();
+  draw_tile_fore();
+}
+function draw_tile_aboveroom() {
+  draw_tile_floorright();
+  draw_tile_anim_topright();
+  draw_tile_right();
+  draw_tile_bottom(0);
+  draw_loose(0);
+  draw_tile_fore();
+}
+function redraw_needed(tilepos) {
+  if (g.wipe_frames[tilepos]) {
+    --g.wipe_frames[tilepos];
+    draw_tile_wipe(g.wipe_heights[tilepos]);
+  }
+  if (g.redraw_frames_full[tilepos]) {
+    --g.redraw_frames_full[tilepos];
+    draw_tile();
+  } else if (g.redraw_frames_anim[tilepos]) {
+    --g.redraw_frames_anim[tilepos];
+    draw_tile_anim_topright();
+    draw_tile_anim_right();
+    draw_tile_anim();
+  }
+  if (g.redraw_frames2[tilepos]) {
+    --g.redraw_frames2[tilepos];
+    draw_other_overlay();
+  } else if (g.redraw_frames_floor_overlay[tilepos]) {
+    --g.redraw_frames_floor_overlay[tilepos];
+    draw_floor_overlay();
+  }
+  if (g.tile_object_redraw[tilepos]) {
+    if (g.tile_object_redraw[tilepos] === 255) {
+      draw_objtable_items_at_tile(tilepos - 1);
+    }
+    draw_objtable_items_at_tile(tilepos);
+    g.tile_object_redraw[tilepos] = 0;
+  }
+  if (g.redraw_frames_fore[tilepos]) {
+    --g.redraw_frames_fore[tilepos];
+    draw_tile_fore();
+  }
+}
+function redraw_needed_above(column) {
+  if (g.redraw_frames_above[column] !== 0) {
+    --g.redraw_frames_above[column];
+    draw_tile_wipe(3);
+    draw_tile_floorright();
+    draw_tile_anim_topright();
+    draw_tile_right();
+    draw_tile_bottom(1);
+    draw_loose(1);
+    draw_tile_fore();
+  }
+}
+function get_tile_to_draw(room, column, row, tile_room0) {
+  const tilepos = tbl_line[row] + column;
+  let tiletype;
+  let modifier;
+  if (column === -1) {
+    tiletype = g.leftroom_[row].tiletype;
+    modifier = g.leftroom_[row].modifier;
+  } else if (room) {
+    tiletype = g.curr_room_tiles[tilepos] & 31;
+    modifier = g.curr_room_modif[tilepos];
+  } else {
+    modifier = 0;
+    tiletype = tile_room0;
+  }
+  const type = tiletype & 31;
+  if (type === tiles.tiles_6_closer) {
+    if (get_doorlink_timer(modifier) > 1) tiletype = tiles.tiles_5_stuck;
+  } else if (type === tiles.tiles_15_opener) {
+    if (get_doorlink_timer(modifier) > 1) {
+      modifier = 0;
+      tiletype = tiles.tiles_1_floor;
+    }
+  }
+  return { tiletype, modifier };
+}
+function load_curr_and_left_tile() {
+  const outside = g.drawn_row === 2 ? tiles.tiles_1_floor : tiles.tiles_20_wall;
+  const here = get_tile_to_draw(g.drawn_room, g.drawn_col, g.drawn_row, outside);
+  g.curr_tile = here.tiletype;
+  g.curr_modifier = here.modifier;
+  const left = get_tile_to_draw(g.drawn_room, g.drawn_col - 1, g.drawn_row, outside);
+  g.tile_left = left.tiletype;
+  g.modifier_left = left.modifier;
+  g.draw_xh = col_xh[g.drawn_col];
+}
+function load_leftroom() {
+  get_room_address(g.room_L);
+  for (let row = 0; row < 3; ++row) {
+    const t = get_tile_to_draw(g.room_L, 9, row, tiles.tiles_20_wall);
+    g.leftroom_[row].tiletype = t.tiletype;
+    g.leftroom_[row].modifier = t.modifier;
+  }
+}
+function load_rowbelow() {
+  let row_below;
+  let room;
+  let room_left;
+  if (g.drawn_row === 2) {
+    room = g.room_B;
+    room_left = g.room_BL;
+    row_below = 0;
+  } else {
+    room = g.drawn_room;
+    room_left = g.room_L;
+    row_below = g.drawn_row + 1;
+  }
+  get_room_address(room);
+  for (let column = 1; column < 10; ++column) {
+    const t2 = get_tile_to_draw(room, column - 1, row_below, tiles.tiles_0_empty);
+    g.row_below_left_[column].tiletype = t2.tiletype;
+    g.row_below_left_[column].modifier = t2.modifier;
+  }
+  get_room_address(room_left);
+  const t = get_tile_to_draw(room_left, 9, row_below, tiles.tiles_20_wall);
+  g.row_below_left_[0].tiletype = t.tiletype;
+  g.row_below_left_[0].modifier = t.modifier;
+  get_room_address(g.drawn_room);
+}
+function draw_tile_floorright() {
+  if (!can_see_bottomleft()) return;
+  draw_tile_topright();
+  if (tile_table[g.tile_left].floor_right === 0) return;
+  add_backtable(
+    chtabs.id_chtab_6_environment,
+    42,
+    g.draw_xh,
+    0,
+    tile_table[tiles.tiles_1_floor].right_y + g.draw_main_y,
+    blitters.blitters_9_black,
+    1
+  );
+}
+function can_see_bottomleft() {
+  return g.curr_tile === tiles.tiles_0_empty || g.curr_tile === tiles.tiles_9_bigpillar_top || g.curr_tile === tiles.tiles_12_doortop || g.curr_tile === tiles.tiles_26_lattice_down;
+}
+function draw_tile_topright() {
+  const tiletype = g.row_below_left_[g.drawn_col].tiletype;
+  if (tiletype === tiles.tiles_7_doortop_with_floor || tiletype === tiles.tiles_12_doortop) {
+    if (levelType2.of(g.current_level) === 0) return;
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      doortop_fram_top[g.row_below_left_[g.drawn_col].modifier],
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_2_or,
+      0
+    );
+  } else if (tiletype === tiles.tiles_20_wall) {
+    add_backtable(
+      chtabs.id_chtab_7_environmentwall,
+      2,
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_2_or,
+      0
+    );
+  } else {
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      tile_table[tiletype].topright_id,
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_2_or,
+      0
+    );
+  }
+}
+function draw_tile_anim_topright() {
+  if ((g.curr_tile === tiles.tiles_0_empty || g.curr_tile === tiles.tiles_9_bigpillar_top || g.curr_tile === tiles.tiles_12_doortop) && g.row_below_left_[g.drawn_col].tiletype === tiles.tiles_4_gate) {
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      68,
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_40h_mono,
+      0
+    );
+    let modifier = g.row_below_left_[g.drawn_col].modifier;
+    if (modifier > 188) modifier = 188;
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      door_fram_top[(modifier >> 2) % 8],
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_2_or,
+      0
+    );
+  }
+}
+function draw_tile_right() {
+  if (g.curr_tile === tiles.tiles_20_wall) return;
+  switch (g.tile_left) {
+    case tiles.tiles_0_empty:
+      if (g.modifier_left > 3) return;
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        blueline_fram1[g.modifier_left],
+        g.draw_xh,
+        0,
+        blueline_fram_y[g.modifier_left] + g.draw_main_y,
+        blitters.blitters_2_or,
+        0
+      );
+      break;
+    case tiles.tiles_1_floor: {
+      ptr_add_table(
+        chtabs.id_chtab_6_environment,
+        42,
+        g.draw_xh,
+        0,
+        tile_table[g.tile_left].right_y + g.draw_main_y,
+        blitters.blitters_10h_transp,
+        0
+      );
+      let num = g.modifier_left;
+      if (num > 3) num = 0;
+      if (num === (levelType2.of(g.current_level) ? 1 : 0)) return;
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        blueline_fram3[num],
+        g.draw_xh,
+        0,
+        g.draw_main_y - 20,
+        blitters.blitters_0_no_transp,
+        0
+      );
+      break;
+    }
+    case tiles.tiles_7_doortop_with_floor:
+    case tiles.tiles_12_doortop:
+      if (levelType2.of(g.current_level) === 0) return;
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        doortop_fram_bot[g.modifier_left],
+        g.draw_xh,
+        0,
+        tile_table[g.tile_left].right_y + g.draw_main_y,
+        blitters.blitters_2_or,
+        0
+      );
+      break;
+    case tiles.tiles_20_wall:
+      if (levelType2.of(g.current_level) && (g.modifier_left & 128) === 0) {
+        add_backtable(
+          chtabs.id_chtab_6_environment,
+          84,
+          g.draw_xh + 3,
+          0,
+          g.draw_main_y - 27,
+          blitters.blitters_0_no_transp,
+          0
+        );
+      }
+      add_backtable(
+        chtabs.id_chtab_7_environmentwall,
+        1,
+        g.draw_xh,
+        0,
+        tile_table[g.tile_left].right_y + g.draw_main_y,
+        blitters.blitters_2_or,
+        0
+      );
+      break;
+    default: {
+      let id = tile_table[g.tile_left].right_id;
+      if (id) {
+        let blit;
+        if (g.tile_left === tiles.tiles_5_stuck) {
+          blit = blitters.blitters_10h_transp;
+          if (g.curr_tile === tiles.tiles_0_empty || g.curr_tile === tiles.tiles_5_stuck || !tile_is_floor(g.curr_tile)) {
+            id = 42;
+          }
+        } else {
+          blit = blitters.blitters_2_or;
+        }
+        add_backtable(
+          chtabs.id_chtab_6_environment,
+          id,
+          g.draw_xh,
+          0,
+          tile_table[g.tile_left].right_y + g.draw_main_y,
+          blit,
+          0
+        );
+      }
+      if (levelType2.of(g.current_level) !== 0) {
+        add_backtable(
+          chtabs.id_chtab_6_environment,
+          tile_table[g.tile_left].stripe_id,
+          g.draw_xh,
+          0,
+          g.draw_main_y - 27,
+          blitters.blitters_2_or,
+          0
+        );
+      }
+      if (g.tile_left === tiles.tiles_19_torch || g.tile_left === tiles.tiles_30_torch_with_debris) {
+        add_backtable(
+          chtabs.id_chtab_6_environment,
+          146,
+          g.draw_xh,
+          0,
+          g.draw_bottom_y - 28,
+          blitters.blitters_0_no_transp,
+          0
+        );
+      }
+      break;
+    }
+  }
+}
+function get_spike_frame(modifier) {
+  return modifier & 128 ? 5 : modifier;
+}
+function draw_tile_anim_right() {
+  switch (g.tile_left) {
+    case tiles.tiles_2_spike:
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        spikes_fram_right[get_spike_frame(g.modifier_left)],
+        g.draw_xh,
+        0,
+        g.draw_main_y - 7,
+        blitters.blitters_10h_transp,
+        0
+      );
+      break;
+    case tiles.tiles_4_gate:
+      draw_gate_back();
+      break;
+    case tiles.tiles_11_loose:
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        loose_fram_right[get_loose_frame(g.modifier_left)],
+        g.draw_xh,
+        0,
+        g.draw_bottom_y - 1,
+        blitters.blitters_2_or,
+        0
+      );
+      break;
+    case tiles.tiles_16_level_door_left:
+      draw_leveldoor();
+      break;
+    case tiles.tiles_19_torch:
+    case tiles.tiles_30_torch_with_debris:
+      if (g.modifier_left < 9) {
+        add_backtable(
+          chtabs.id_chtab_1_flameswordpotion,
+          g.modifier_left + 1,
+          g.draw_xh + 1,
+          0,
+          g.draw_main_y - 40,
+          blitters.blitters_0_no_transp,
+          0
+        );
+      }
+      break;
+    default:
+      break;
+  }
+}
+function draw_tile_bottom(arg_0) {
+  let id = 0;
+  let blit = blitters.blitters_0_no_transp;
+  let chtab_id = chtabs.id_chtab_6_environment;
+  if (g.curr_tile === tiles.tiles_20_wall) {
+    if (levelType2.of(g.current_level) === 0) {
+      id = wall_fram_bottom[g.curr_modifier & 127];
+    }
+    chtab_id = chtabs.id_chtab_7_environmentwall;
+  } else {
+    if (g.curr_tile === tiles.tiles_12_doortop) blit = blitters.blitters_2_or;
+    id = tile_table[g.curr_tile].bottom_id;
+  }
+  if (ptr_add_table(chtab_id, id, g.draw_xh, 0, g.draw_bottom_y, blit, 0) && arg_0) {
+    add_foretable(chtab_id, id, g.draw_xh, 0, g.draw_bottom_y, blit, 0);
+  }
+  if (chtab_id === chtabs.id_chtab_7_environmentwall) wall_pattern(0, 0);
+}
+function draw_loose(_arg_0) {
+  if (g.curr_tile === tiles.tiles_11_loose) {
+    const id = loose_fram_bottom[get_loose_frame(g.curr_modifier)];
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      id,
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_0_no_transp,
+      0
+    );
+    add_foretable(
+      chtabs.id_chtab_6_environment,
+      id,
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_0_no_transp,
+      0
+    );
+  }
+}
+function draw_tile_base() {
+  let id;
+  let ybottom = g.draw_main_y;
+  if (g.tile_left === tiles.tiles_26_lattice_down && g.curr_tile === tiles.tiles_12_doortop) {
+    id = 6;
+    ybottom += 3;
+  } else if (g.curr_tile === tiles.tiles_11_loose) {
+    id = loose_fram_left[get_loose_frame(g.curr_modifier)];
+  } else if (g.curr_tile === tiles.tiles_15_opener && g.tile_left === tiles.tiles_0_empty && levelType2.of(g.current_level) === 0) {
+    id = 148;
+  } else {
+    id = tile_table[g.curr_tile].base_id;
+  }
+  ptr_add_table(
+    chtabs.id_chtab_6_environment,
+    id,
+    g.draw_xh,
+    0,
+    tile_table[g.curr_tile].base_y + ybottom,
+    blitters.blitters_10h_transp,
+    0
+  );
+}
+function draw_tile_anim() {
+  let pot_size = 0;
+  let color = 12;
+  switch (g.curr_tile) {
+    case tiles.tiles_2_spike:
+      ptr_add_table(
+        chtabs.id_chtab_6_environment,
+        spikes_fram_left[get_spike_frame(g.curr_modifier)],
+        g.draw_xh,
+        0,
+        g.draw_main_y - 2,
+        blitters.blitters_10h_transp,
+        0
+      );
+      break;
+    case tiles.tiles_10_potion:
+      switch ((g.curr_modifier & 248) >> 3) {
+        case 0:
+          return;
+        // empty
+        case 5:
+        case 6:
+          color = 9;
+          break;
+        case 3:
+        case 4:
+          color = 10;
+          pot_size = 1;
+          break;
+        case 2:
+          pot_size = 1;
+          break;
+        default:
+          break;
+      }
+      add_backtable(
+        chtabs.id_chtab_1_flameswordpotion,
+        23,
+        g.draw_xh + 3,
+        1,
+        g.draw_main_y - (pot_size << 2) - 14,
+        blitters.blitters_40h_mono,
+        0
+      );
+      add_foretable(
+        chtabs.id_chtab_1_flameswordpotion,
+        potion_fram_bubb[g.curr_modifier & 7],
+        g.draw_xh + 3,
+        1,
+        g.draw_main_y - (pot_size << 2) - 14,
+        color + blitters.blitters_40h_mono,
+        0
+      );
+      break;
+    case tiles.tiles_22_sword:
+      add_midtable(
+        chtabs.id_chtab_1_flameswordpotion,
+        (g.curr_modifier === 1 ? 1 : 0) + 10,
+        g.draw_xh,
+        0,
+        g.draw_main_y - 3,
+        blitters.blitters_10h_transp,
+        g.curr_modifier === 1 ? 1 : 0
+      );
+      break;
+    case tiles.tiles_18_chomper: {
+      const chomper_num = chomper_fram1[Math.min(g.curr_modifier & 127, 6)];
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        chomper_fram_bot[chomper_num],
+        g.draw_xh,
+        0,
+        g.draw_main_y,
+        blitters.blitters_10h_transp,
+        0
+      );
+      if (g.curr_modifier & 128) {
+        add_backtable(
+          chtabs.id_chtab_6_environment,
+          chomper_num + 114,
+          g.draw_xh + 1,
+          4,
+          g.draw_main_y - 6,
+          blitters.blitters_4Ch_mono_12,
+          0
+        );
+      }
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        chomper_fram_top[chomper_num],
+        g.draw_xh,
+        0,
+        g.draw_main_y - chomper_fram_y[chomper_num],
+        blitters.blitters_10h_transp,
+        0
+      );
+      break;
+    }
+    default:
+      break;
+  }
+}
+function draw_tile_fore() {
+  if (g.tile_left === tiles.tiles_4_gate && g.Kid.curr_row === g.drawn_row && g.Kid.curr_col === g.drawn_col - 1 && g.Kid.room !== g.room_R) {
+    draw_gate_fore();
+  }
+  switch (g.curr_tile) {
+    case tiles.tiles_2_spike:
+      add_foretable(
+        chtabs.id_chtab_6_environment,
+        spikes_fram_fore[get_spike_frame(g.curr_modifier)],
+        g.draw_xh,
+        0,
+        g.draw_main_y - 2,
+        blitters.blitters_10h_transp,
+        0
+      );
+      return;
+    case tiles.tiles_18_chomper: {
+      const chomper_num = chomper_fram1[Math.min(g.curr_modifier & 127, 6)];
+      add_foretable(
+        chtabs.id_chtab_6_environment,
+        chomper_fram_for[chomper_num],
+        g.draw_xh,
+        0,
+        g.draw_main_y,
+        blitters.blitters_10h_transp,
+        0
+      );
+      if (g.curr_modifier & 128) {
+        add_foretable(
+          chtabs.id_chtab_6_environment,
+          chomper_num + 119,
+          g.draw_xh + 1,
+          4,
+          g.draw_main_y - 6,
+          blitters.blitters_4Ch_mono_12,
+          0
+        );
+      }
+      return;
+    }
+    case tiles.tiles_20_wall:
+      if (levelType2.of(g.current_level) === 0) {
+        add_foretable(
+          chtabs.id_chtab_7_environmentwall,
+          wall_fram_main[g.curr_modifier & 127],
+          g.draw_xh,
+          0,
+          g.draw_main_y,
+          blitters.blitters_0_no_transp,
+          0
+        );
+      }
+      wall_pattern(1, 1);
+      return;
+    default:
+      break;
+  }
+  let id = tile_table[g.curr_tile].fore_id;
+  if (id === 0) return;
+  if (g.curr_tile === tiles.tiles_10_potion) {
+    const potion_type = (g.curr_modifier & 248) >> 3;
+    if (potion_type < 5 && potion_type >= 2) id = 13;
+  }
+  const xh = tile_table[g.curr_tile].fore_x + g.draw_xh;
+  const ybottom = tile_table[g.curr_tile].fore_y + g.draw_main_y;
+  if (g.curr_tile === tiles.tiles_10_potion) {
+    if (levelType2.of(g.current_level) !== 0) id += 2;
+    add_foretable(
+      chtabs.id_chtab_1_flameswordpotion,
+      id,
+      xh,
+      6,
+      ybottom,
+      blitters.blitters_10h_transp,
+      0
+    );
+  } else if (g.curr_tile === tiles.tiles_3_pillar && levelType2.of(g.current_level) === 0 || g.curr_tile >= tiles.tiles_27_lattice_small && g.curr_tile < tiles.tiles_30_torch_with_debris) {
+    add_foretable(
+      chtabs.id_chtab_6_environment,
+      id,
+      xh,
+      0,
+      ybottom,
+      blitters.blitters_0_no_transp,
+      0
+    );
+  } else {
+    add_foretable(
+      chtabs.id_chtab_6_environment,
+      id,
+      xh,
+      0,
+      ybottom,
+      blitters.blitters_10h_transp,
+      0
+    );
+  }
+}
+function get_loose_frame(modifier) {
+  if (modifier & 128) {
+    modifier &= 127;
+    if (modifier > 10) return 1;
+  }
+  return modifier;
+}
+function ptr_add_table(chtab_id, id, xh, xl, ybottom, blit, peel) {
+  if (g.ptr_add_table === "mid") return add_midtable(chtab_id, id, xh, xl, ybottom, blit, peel);
+  if (g.ptr_add_table === "fore") return add_foretable(chtab_id, id, xh, xl, ybottom, blit, peel);
+  return add_backtable(chtab_id, id, xh, xl, ybottom, blit, peel);
+}
+function add_backtable(chtab_id, id, xh, xl, ybottom, blit, _peel) {
+  if (id === 0) return 0;
+  if (g.backtable.length >= 200) return 0;
+  const image = paint.image(chtab_id, id - 1);
+  if (image === null) return 0;
+  g.backtable.push({
+    xh,
+    xl,
+    chtab_id,
+    id: id - 1,
+    y: ybottom - image.height + 1,
+    blit
+  });
+  g.table_counts[0] = g.backtable.length;
+  return 1;
+}
+function add_foretable(chtab_id, id, xh, xl, ybottom, blit, _peel) {
+  if (id === 0) return 0;
+  if (g.foretable.length >= 200) return 0;
+  const image = paint.image(chtab_id, id - 1);
+  if (image === null) return 0;
+  g.foretable.push({
+    xh,
+    xl,
+    chtab_id,
+    id: id - 1,
+    y: ybottom - image.height + 1,
+    blit
+  });
+  g.table_counts[1] = g.foretable.length;
+  return 1;
+}
+function add_midtable(chtab_id, id, xh, xl, ybottom, blit, peel) {
+  if (id === 0) return 0;
+  if (g.midtable.length >= 50) return 0;
+  const image = paint.image(chtab_id, id - 1);
+  if (image === null) return 0;
+  if (g.obj_direction === directions.dir_0_right && chtab_flip_clip[chtab_id] !== 0) {
+    blit += 128;
+  }
+  g.midtable.push({
+    xh,
+    xl,
+    chtab_id,
+    id: id - 1,
+    y: ybottom - image.height + 1,
+    blit,
+    peel,
+    clip: {
+      left: g.obj_clip_left,
+      right: g.obj_clip_right,
+      top: g.obj_clip_top,
+      bottom: g.obj_clip_bottom
+    }
+  });
+  g.table_counts[3] = g.midtable.length;
+  return 1;
+}
+function add_wipetable(layer, left, bottom, height, width, color) {
+  if (g.wipetable.length >= 300) return;
+  g.wipetable.push({ left, bottom: bottom + 1, height, width, color, layer });
+  g.wipetable_count = g.wipetable.length;
+}
+function draw_table(which_table) {
+  const count = g.table_counts[which_table];
+  for (let index = 0; index < count; ++index) {
+    if (which_table === 3) draw_mid(index);
+    else draw_back_fore(which_table, index);
+  }
+}
+function draw_wipes(which) {
+  for (let index = 0; index < g.wipetable.length; ++index) {
+    if (which === g.wipetable[index].layer) draw_wipe(index);
+  }
+}
+function draw_back_fore(which_table, index) {
+  const entry = which_table === 0 ? g.backtable[index] : g.foretable[index];
+  if (!entry) return;
+  draw_image(entry.chtab_id, entry.id, entry.xh * 8 + entry.xl, entry.y, entry.blit);
+}
+function draw_mid(index) {
+  const entry = g.midtable[index];
+  if (!entry) return;
+  const chtab_id = entry.chtab_id;
+  let xpos = entry.xh * 8 + entry.xl;
+  const ypos = entry.y;
+  let blit = entry.blit;
+  let blit_flip = false;
+  if (blit & 128) {
+    blit_flip = true;
+    blit &= 127;
+  }
+  if (chtab_flip_clip[chtab_id]) {
+    paint.clip(entry.clip);
+    if (chtab_id !== chtabs.id_chtab_0_sword) xpos = calc_screen_x_coord(xpos);
+  }
+  if (blit_flip) {
+    const image = paint.image(chtab_id, entry.id);
+    xpos -= image ? image.width : 0;
+    blit |= FLIPPED;
+  }
+  if (entry.peel) {
+    const image = paint.image(chtab_id, entry.id);
+    if (image) add_peel(xpos, xpos + image.width, ypos, image.height);
+  }
+  draw_image(chtab_id, entry.id, xpos, ypos, blit);
+  if (chtab_flip_clip[chtab_id]) paint.clip(null);
+}
+var FLIPPED = 32768;
+function draw_image(chtab_id, id, xpos, ypos, blit) {
+  paint.blit(chtab_id, id, xpos, ypos, blit);
+}
+function draw_wipe(index) {
+  const w = g.wipetable[index];
+  paint.rect(w.left, w.bottom - w.height, w.left + w.width, w.bottom, w.color);
+}
+function calc_gate_pos() {
+  gate_top_y = g.draw_bottom_y - 62;
+  gate_openness = (Math.min(g.modifier_left, 188) >> 2) + 1;
+  gate_bottom_y = g.draw_main_y - gate_openness;
+}
+function draw_gate_back() {
+  calc_gate_pos();
+  if (gate_bottom_y + 12 < g.draw_main_y) {
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      50,
+      g.draw_xh,
+      0,
+      gate_bottom_y,
+      blitters.blitters_0_no_transp,
+      0
+    );
+  } else {
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      tile_table[tiles.tiles_4_gate].right_id,
+      g.draw_xh,
+      0,
+      tile_table[tiles.tiles_4_gate].right_y + g.draw_main_y,
+      blitters.blitters_0_no_transp,
+      0
+    );
+    if (can_see_bottomleft()) draw_tile_topright();
+    draw_tile_bottom(0);
+    draw_loose(0);
+    draw_tile_base();
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      51,
+      g.draw_xh,
+      0,
+      gate_bottom_y - 2,
+      blitters.blitters_10h_transp,
+      0
+    );
+  }
+  let ybottom = gate_bottom_y - 12;
+  if (ybottom < 192) {
+    for (; ybottom >= 0 && ybottom > 7 && ybottom - 7 > gate_top_y; ybottom -= 8) {
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        52,
+        g.draw_xh,
+        0,
+        ybottom,
+        blitters.blitters_0_no_transp,
+        0
+      );
+    }
+  }
+  const gate_frame = ybottom - gate_top_y + 1;
+  if (gate_frame > 0 && gate_frame < 9) {
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      door_fram_slice[gate_frame],
+      g.draw_xh,
+      0,
+      ybottom,
+      blitters.blitters_0_no_transp,
+      0
+    );
+  }
+}
+function draw_gate_fore() {
+  calc_gate_pos();
+  add_foretable(
+    chtabs.id_chtab_6_environment,
+    51,
+    g.draw_xh,
+    0,
+    gate_bottom_y - 2,
+    blitters.blitters_10h_transp,
+    0
+  );
+  let ybottom = gate_bottom_y - 12;
+  if (ybottom < 192) {
+    for (; ybottom >= 0 && ybottom > 7 && ybottom - 7 > gate_top_y; ybottom -= 8) {
+      add_foretable(
+        chtabs.id_chtab_6_environment,
+        52,
+        g.draw_xh,
+        0,
+        ybottom,
+        blitters.blitters_10h_transp,
+        0
+      );
+    }
+  }
+}
+function draw_moving() {
+  draw_mobs2();
+  draw_people();
+  redraw_needed_tiles();
+}
+function redraw_needed_tiles() {
+  load_leftroom();
+  draw_objtable_items_at_tile(30);
+  for (g.drawn_row = 2; g.drawn_row >= 0; g.drawn_row--) {
+    load_rowbelow();
+    g.draw_bottom_y = 63 * g.drawn_row + 65;
+    g.draw_main_y = g.draw_bottom_y - 3;
+    for (g.drawn_col = 0; g.drawn_col < 10; ++g.drawn_col) {
+      load_curr_and_left_tile();
+      redraw_needed(tbl_line[g.drawn_row] + g.drawn_col);
+    }
+  }
+  const saved_drawn_room = g.drawn_room;
+  g.drawn_room = g.room_A;
+  load_room_links();
+  load_leftroom();
+  g.drawn_row = 2;
+  load_rowbelow();
+  for (g.drawn_col = 0; g.drawn_col < 10; ++g.drawn_col) {
+    load_curr_and_left_tile();
+    g.draw_main_y = -1;
+    g.draw_bottom_y = 2;
+    redraw_needed_above(g.drawn_col);
+  }
+  g.drawn_room = saved_drawn_room;
+  load_room_links();
+  draw_objtable_items_at_tile(-1);
+}
+function draw_tile_wipe(height) {
+  add_wipetable(0, g.draw_xh * 8, g.draw_bottom_y, height, 4 * 8, 0);
+}
+function draw_tables() {
+  paint.target(true);
+  restore_peels();
+  draw_wipes(0);
+  draw_table(0);
+  draw_table(3);
+  draw_wipes(1);
+  draw_table(1);
+  paint.target(false);
+}
+function draw_leveldoor() {
+  const ybottom = g.draw_main_y - 13;
+  g.leveldoor_right = (g.draw_xh << 3) + 48;
+  if (levelType2.of(g.current_level)) g.leveldoor_right += 8;
+  add_backtable(
+    chtabs.id_chtab_6_environment,
+    99,
+    g.draw_xh + 1,
+    0,
+    ybottom,
+    blitters.blitters_0_no_transp,
+    0
+  );
+  if (g.modifier_left) {
+    if (g.level.start_room !== g.drawn_room) {
+      add_backtable(
+        chtabs.id_chtab_6_environment,
+        144,
+        g.draw_xh + 1,
+        0,
+        ybottom - 4,
+        blitters.blitters_0_no_transp,
+        0
+      );
+    } else {
+      const leveldoor_width = levelType2.of(g.current_level) === 0 ? 39 : 48;
+      const x_low = levelType2.of(g.current_level) === 0 ? 2 : 0;
+      add_wipetable(0, 8 * (g.draw_xh + 1) + x_low, ybottom - 4, 45, leveldoor_width, 0);
+    }
+  }
+  g.leveldoor_ybottom = ybottom - (g.modifier_left & 3) - 48;
+  const y = ybottom - g.modifier_left;
+  for (; ; ) {
+    add_backtable(
+      chtabs.id_chtab_6_environment,
+      33,
+      g.draw_xh + 1,
+      0,
+      g.leveldoor_ybottom,
+      blitters.blitters_0_no_transp,
+      0
+    );
+    if (y > g.leveldoor_ybottom) g.leveldoor_ybottom += 4;
+    else break;
+  }
+  add_backtable(
+    chtabs.id_chtab_6_environment,
+    34,
+    g.draw_xh + 1,
+    0,
+    g.draw_main_y - 64,
+    blitters.blitters_0_no_transp,
+    0
+  );
+}
+function get_room_address(room) {
+  g.loaded_room = room;
+  if (room) {
+    g.curr_room_tiles = g.level.fg.subarray((room - 1) * 30, room * 30);
+    g.curr_room_modif = g.level.bg.subarray((room - 1) * 30, room * 30);
+  }
+}
+function draw_floor_overlay() {
+  if (g.tile_left !== tiles.tiles_0_empty) return;
+  if (g.curr_tile === tiles.tiles_1_floor || g.curr_tile === tiles.tiles_3_pillar || g.curr_tile === tiles.tiles_5_stuck || g.curr_tile === tiles.tiles_19_torch) {
+    if (g.Kid.frame >= frameids.frame_137_climbing_3 && g.Kid.frame <= frameids.frame_144_climbing_10) {
+      add_midtable(
+        chtabs.id_chtab_6_environment,
+        floor_left_overlay[g.Kid.frame - 137],
+        g.draw_xh,
+        0,
+        (g.curr_tile === tiles.tiles_5_stuck ? 1 : 0) + g.draw_main_y,
+        blitters.blitters_10h_transp,
+        0
+      );
+    }
+    g.ptr_add_table = "mid";
+    draw_tile_bottom(0);
+    g.ptr_add_table = "back";
+  } else {
+    draw_other_overlay();
+  }
+}
+function draw_other_overlay() {
+  if (g.tile_left === tiles.tiles_0_empty) {
+    g.ptr_add_table = "mid";
+    draw_tile2();
+  } else if (g.curr_tile !== tiles.tiles_0_empty && g.drawn_col > 0 && get_tile_to_draw(
+    g.drawn_room,
+    g.drawn_col - 2,
+    g.drawn_row,
+    tiles.tiles_0_empty
+  ).tiletype === tiles.tiles_0_empty) {
+    g.ptr_add_table = "mid";
+    draw_tile2();
+    g.ptr_add_table = "back";
+    draw_tile2();
+    g.tile_object_redraw[tbl_line[g.drawn_row] + g.drawn_col] = 255;
+  }
+  g.ptr_add_table = "back";
+}
+function draw_tile2() {
+  draw_tile_right();
+  draw_tile_anim_right();
+  draw_tile_base();
+  draw_tile_anim();
+  draw_tile_bottom(0);
+  draw_loose(0);
+}
+function draw_objtable_items_at_tile(tilepos) {
+  const obj_count = g.objtable.length;
+  if (!obj_count) return;
+  n_curr_objs = 0;
+  curr_objs.length = 0;
+  for (let obj_index = obj_count - 1; obj_index >= 0; --obj_index) {
+    if (g.objtable[obj_index].tilepos === tilepos) {
+      curr_objs[n_curr_objs] = obj_index;
+      n_curr_objs++;
+    }
+  }
+  if (n_curr_objs) {
+    sort_curr_objs();
+    for (let obj_index = 0; obj_index < n_curr_objs; ++obj_index) {
+      draw_objtable_item(curr_objs[obj_index]);
+    }
+  }
+}
+function sort_curr_objs() {
+  const last = n_curr_objs - 1;
+  let swapped;
+  do {
+    swapped = false;
+    for (let index = 0; index < last; ++index) {
+      if (compare_curr_objs(index, index + 1)) {
+        const temp = curr_objs[index];
+        curr_objs[index] = curr_objs[index + 1];
+        curr_objs[index + 1] = temp;
+        swapped = true;
+      }
+    }
+  } while (swapped);
+}
+function compare_curr_objs(index1, index2) {
+  const obj_index1 = curr_objs[index1];
+  if (g.objtable[obj_index1].obj_type === 1) return true;
+  const obj_index2 = curr_objs[index2];
+  if (g.objtable[obj_index2].obj_type === 1) return false;
+  if (g.objtable[obj_index1].obj_type === 128 && g.objtable[obj_index2].obj_type === 128) {
+    return g.objtable[obj_index1].y < g.objtable[obj_index2].y;
+  }
+  return g.objtable[obj_index1].y > g.objtable[obj_index2].y;
+}
+function draw_objtable_item(index) {
+  const obj_type = load_obj_from_objtable(index);
+  switch (obj_type) {
+    case 0:
+    // the Prince
+    case 4:
+      if (g.obj_id === 255) return;
+      if (g.united_with_shadow && g.united_with_shadow % 2 === 0) {
+        drawShadow();
+        return;
+      }
+    // fallthrough
+    case 2:
+    // a guard
+    case 3:
+    // a sword
+    case 5:
+      add_midtable(
+        g.obj_chtab,
+        g.obj_id + 1,
+        g.obj_xh,
+        g.obj_xl,
+        g.obj_y,
+        blitters.blitters_10h_transp,
+        1
+      );
+      break;
+    case 1:
+      drawShadow();
+      break;
+    case 128:
+      g.obj_direction = directions.dir_FF_left;
+      add_midtable(
+        g.obj_chtab,
+        loose_fram_left[g.obj_id],
+        g.obj_xh,
+        g.obj_xl,
+        g.obj_y - 3,
+        blitters.blitters_10h_transp,
+        1
+      );
+      add_midtable(
+        g.obj_chtab,
+        loose_fram_bottom[g.obj_id],
+        g.obj_xh,
+        g.obj_xl,
+        g.obj_y,
+        0,
+        1
+      );
+      add_midtable(
+        g.obj_chtab,
+        loose_fram_right[g.obj_id],
+        g.obj_x + 4,
+        g.obj_xl,
+        g.obj_y - 1,
+        blitters.blitters_10h_transp,
+        1
+      );
+      break;
+    default:
+      break;
+  }
+}
+function drawShadow() {
+  if (g.united_with_shadow === 2) out.play_sound(soundids.sound_41_end_level_music);
+  add_midtable(
+    g.obj_chtab,
+    g.obj_id + 1,
+    g.obj_xh,
+    g.obj_xl,
+    g.obj_y,
+    blitters.blitters_2_or,
+    1
+  );
+  add_midtable(
+    g.obj_chtab,
+    g.obj_id + 1,
+    g.obj_xh,
+    g.obj_xl + 1,
+    g.obj_y,
+    blitters.blitters_3_xor,
+    1
+  );
+}
+function load_obj_from_objtable(index) {
+  const curr_obj = g.objtable[index];
+  g.obj_x = curr_obj.xh;
+  g.obj_xh = curr_obj.xh;
+  g.obj_xl = curr_obj.xl;
+  g.obj_y = curr_obj.y;
+  g.obj_id = curr_obj.id;
+  g.obj_chtab = curr_obj.chtab_id;
+  g.obj_direction = curr_obj.direction;
+  g.obj_clip_top = curr_obj.clip.top;
+  g.obj_clip_bottom = curr_obj.clip.bottom;
+  g.obj_clip_left = curr_obj.clip.left;
+  g.obj_clip_right = curr_obj.clip.right;
+  return curr_obj.obj_type;
+}
+function draw_people() {
+  check_mirror();
+  draw_kid();
+  draw_guard();
+  reset_obj_clip();
+  hp2.draw_hp();
+}
+function draw_kid() {
+  if (g.Kid.room !== 0 && g.Kid.room === g.drawn_room) {
+    add_kid_to_objtable();
+    if (g.hitp_delta < 0) draw_hurt_splash();
+    add_sword_to_objtable();
+  }
+}
+function draw_guard() {
+  if (g.Guard.direction !== directions.dir_56_none && g.Guard.room === g.drawn_room) {
+    add_guard_to_objtable();
+    if (g.guardhp_delta < 0) draw_hurt_splash();
+    add_sword_to_objtable();
+  }
+}
+function add_kid_to_objtable() {
+  loadkid();
+  load_fram_det_col();
+  load_frame_to_obj();
+  stuck_lower();
+  set_char_collision();
+  set_objtile_at_char();
+  redraw_at_char();
+  redraw_at_char2();
+  clip_char();
+  add_objtable(0);
+}
+function add_guard_to_objtable() {
+  loadshad();
+  load_fram_det_col();
+  load_frame_to_obj();
+  stuck_lower();
+  set_char_collision();
+  set_objtile_at_char();
+  redraw_at_char();
+  redraw_at_char2();
+  clip_char();
+  add_objtable(g.Char.charid === charids.charid_1_shadow ? 1 : 2);
+}
+function add_objtable(obj_type) {
+  if (g.objtable.length >= 50) return;
+  const { xh, xl } = x_to_xh_and_xl(g.obj_x);
+  g.objtable.push({
+    obj_type,
+    xh,
+    xl,
+    y: g.obj_y,
+    clip: {
+      top: g.obj_clip_top,
+      bottom: g.obj_clip_bottom,
+      left: g.obj_clip_left,
+      right: g.obj_clip_right
+    },
+    chtab_id: g.obj_chtab,
+    id: g.obj_id,
+    direction: g.obj_direction,
+    tilepos: 30
+  });
+  g.objtable_count = g.objtable.length;
+  mark_obj_tile_redraw(g.objtable.length - 1);
+}
+function mark_obj_tile_redraw(index) {
+  g.objtable[index].tilepos = g.obj_tilepos;
+  if (g.obj_tilepos < 30 && g.obj_tilepos >= 0) {
+    g.tile_object_redraw[g.obj_tilepos] = 1;
+  }
+}
+function draw_hurt_splash() {
+  const frame = g.Char.frame;
+  if (frame === frameids.frame_178_chomped) return;
+  const saved = {
+    x: g.obj_x,
+    y: g.obj_y,
+    id: g.obj_id,
+    chtab: g.obj_chtab,
+    tilepos: g.obj_tilepos,
+    direction: g.obj_direction
+  };
+  g.obj_tilepos = -1;
+  if (frame === frameids.frame_185_dead || frame >= frameids.frame_106_fall && frame < 111) {
+    g.obj_y += 4;
+    obj_dx_forward(5);
+  } else if (frame === frameids.frame_177_spiked) {
+    obj_dx_forward(-5);
+  } else {
+    g.obj_y -= ((g.Char.charid === charids.charid_0_kid ? 1 : 0) << 2) + 11;
+    obj_dx_forward(5);
+  }
+  if (g.Char.charid === charids.charid_0_kid) {
+    g.obj_chtab = chtabs.id_chtab_2_kid;
+    g.obj_id = 218;
+  } else {
+    g.obj_chtab = chtabs.id_chtab_5_guard;
+    g.obj_id = 1;
+  }
+  reset_obj_clip();
+  add_objtable(5);
+  g.obj_x = saved.x;
+  g.obj_y = saved.y;
+  g.obj_id = saved.id;
+  g.obj_chtab = saved.chtab;
+  g.obj_tilepos = saved.tilepos;
+  g.obj_direction = saved.direction;
+}
+function add_sword_to_objtable() {
+  const frame = g.Char.frame;
+  if (frame >= frameids.frame_229_found_sword && frame < 238 || g.Char.sword !== 0 || g.Char.charid === charids.charid_2_guard && g.Char.alive < 0) {
+    const sword_frame = g.cur_frame.sword & 63;
+    if (sword_frame) {
+      const entry = sword_tbl[sword_frame];
+      if (entry && entry.id !== 255) {
+        g.obj_id = entry.id;
+        g.obj_x = calc_screen_x_coord(g.obj_x);
+        obj_dx_forward(entry.x);
+        g.obj_y += entry.y;
+        g.obj_chtab = chtabs.id_chtab_0_sword;
+        add_objtable(3);
+      }
+    }
+  }
+}
+function calc_screen_x_coord(logical_x) {
+  return Math.trunc(logical_x * 320 / 280);
+}
+function wall_pattern(which_part, which_table) {
+  const saved_sim = g.ptr_add_table;
+  g.ptr_add_table = which_table === 0 ? "back" : "fore";
+  const saved_prng_state = g.random_seed;
+  g.random_seed = g.drawn_room + tbl_line[g.drawn_row] + g.drawn_col;
+  prandom(1);
+  const middle_divider = prandom(1);
+  const middle_divider_offset = prandom(4);
+  const bottom_divider = prandom(1);
+  const bottom_divider_offset = prandom(4);
+  const RSET_WALL = chtabs.id_chtab_7_environmentwall;
+  const RES_WALL_DIVIDER1 = 11;
+  const RES_WALL_RNDBLOCK = 13;
+  const BLIT_TRANS = blitters.blitters_10h_transp;
+  const BLIT_NO_TRANS = blitters.blitters_0_no_transp;
+  const bg_modifier = g.curr_modifier & 127;
+  if (bg_modifier === 3) {
+    if (which_part !== 0) {
+      if (prandom(4) === 0) {
+        ptr_add_table(
+          RSET_WALL,
+          RES_WALL_RNDBLOCK,
+          g.draw_xh,
+          0,
+          g.draw_bottom_y - 42,
+          BLIT_NO_TRANS,
+          0
+        );
+      }
+      ptr_add_table(
+        RSET_WALL,
+        RES_WALL_DIVIDER1 + middle_divider,
+        g.draw_xh + 1,
+        middle_divider_offset,
+        g.draw_bottom_y - 21,
+        BLIT_TRANS,
+        0
+      );
+    }
+    ptr_add_table(
+      RSET_WALL,
+      RES_WALL_DIVIDER1 + bottom_divider,
+      g.draw_xh,
+      bottom_divider_offset,
+      g.draw_bottom_y,
+      BLIT_TRANS,
+      0
+    );
+    if (which_part !== 0) {
+      if (prandom(4) === 0) draw_right_mark(prandom(3), middle_divider_offset);
+      if (prandom(4) === 0) {
+        draw_left_mark(
+          prandom(4),
+          middle_divider_offset - middle_divider,
+          bottom_divider_offset - bottom_divider
+        );
+      }
+    }
+  } else if (bg_modifier === 0) {
+    if (which_part !== 0 && prandom(6) === 0) {
+      draw_left_mark(
+        prandom(1),
+        middle_divider_offset - middle_divider,
+        bottom_divider_offset - bottom_divider
+      );
+    }
+  } else if (bg_modifier === 1) {
+    if (which_part !== 0) {
+      if (prandom(4) === 0) {
+        ptr_add_table(
+          RSET_WALL,
+          RES_WALL_RNDBLOCK,
+          g.draw_xh,
+          0,
+          g.draw_bottom_y - 42,
+          BLIT_NO_TRANS,
+          0
+        );
+      }
+      ptr_add_table(
+        RSET_WALL,
+        RES_WALL_DIVIDER1 + middle_divider,
+        g.draw_xh + 1,
+        middle_divider_offset,
+        g.draw_bottom_y - 21,
+        BLIT_TRANS,
+        0
+      );
+      if (prandom(4) === 0) draw_right_mark(prandom(3), middle_divider_offset);
+      if (prandom(4) === 0) {
+        draw_left_mark(
+          prandom(3),
+          middle_divider_offset - middle_divider,
+          bottom_divider_offset - bottom_divider
+        );
+      }
+    }
+  } else if (bg_modifier === 2) {
+    if (which_part !== 0) {
+      ptr_add_table(
+        RSET_WALL,
+        RES_WALL_DIVIDER1 + middle_divider,
+        g.draw_xh + 1,
+        middle_divider_offset,
+        g.draw_bottom_y - 21,
+        BLIT_TRANS,
+        0
+      );
+    }
+    ptr_add_table(
+      RSET_WALL,
+      RES_WALL_DIVIDER1 + bottom_divider,
+      g.draw_xh,
+      bottom_divider_offset,
+      g.draw_bottom_y,
+      BLIT_TRANS,
+      0
+    );
+    if (which_part !== 0) {
+      if (prandom(4) === 0) draw_right_mark(prandom(1) + 2, middle_divider_offset);
+      if (prandom(4) === 0) {
+        draw_left_mark(
+          prandom(4),
+          middle_divider_offset - middle_divider,
+          bottom_divider_offset - bottom_divider
+        );
+      }
+    }
+  }
+  g.random_seed = saved_prng_state;
+  g.ptr_add_table = saved_sim;
+}
+var LPOS = [58, 41, 37, 20, 16];
+var RPOS = [52, 42, 31, 21];
+var RES_WALL_MARK_TL = 14;
+var RES_WALL_MARK_BL = 15;
+var RES_WALL_MARK_TR = 16;
+var RES_WALL_MARK_BR = 17;
+function draw_left_mark(decal_variant, arg2, arg1) {
+  let image_id = RES_WALL_MARK_TL;
+  let lv2 = 0;
+  if (decal_variant % 2) image_id = RES_WALL_MARK_BL;
+  if (decal_variant > 3) lv2 = arg1 + 6;
+  else if (decal_variant > 1) lv2 = arg2 + 6;
+  ptr_add_table(
+    chtabs.id_chtab_7_environmentwall,
+    image_id,
+    g.draw_xh + (decal_variant === 2 || decal_variant === 3 ? 1 : 0),
+    lv2,
+    g.draw_bottom_y - LPOS[decal_variant],
+    blitters.blitters_10h_transp,
+    0
+  );
+}
+function draw_right_mark(decal_variant, arg1) {
+  let image_id = RES_WALL_MARK_TR;
+  if (decal_variant % 2) image_id = RES_WALL_MARK_BR;
+  if (decal_variant < 2) arg1 = 24;
+  else arg1 -= 3;
+  ptr_add_table(
+    chtabs.id_chtab_7_environmentwall,
+    image_id,
+    g.draw_xh + (decal_variant > 1 ? 1 : 0),
+    arg1,
+    g.draw_bottom_y - RPOS[decal_variant],
+    blitters.blitters_10h_transp,
+    0
+  );
+}
+function display_text_bottom(text) {
+  paint.text(text);
+}
+function erase_bottom_text(arg_0) {
+  paint.text(null);
+  if (arg_0) {
+    g.text_time_total = 0;
+    g.text_time_remaining = 0;
+  }
+}
+function show_time() {
+  if (g.Kid.alive < 0 && g.rem_min !== 0 && g.current_level < 13 && g.current_level < 15) {
+    --g.rem_tick;
+    if (g.rem_tick === 0) {
+      g.rem_tick = 719;
+      --g.rem_min;
+      if (g.rem_min !== 0 && (g.rem_min <= 5 || g.rem_min % 5 === 0)) {
+        g.is_show_time = 1;
+      }
+    } else if (g.rem_min === 1 && g.rem_tick % 12 === 0) {
+      g.is_show_time = 1;
+      g.text_time_remaining = 0;
+    }
+  }
+  if (g.is_show_time && g.text_time_remaining === 0) {
+    g.text_time_remaining = g.text_time_total = 24;
+    if (g.rem_min > 0) {
+      if (g.rem_min === 1) {
+        const rem_sec = Math.floor((g.rem_tick + 1) / 12);
+        if (rem_sec === 1) {
+          g.text_time_remaining = g.text_time_total = 12;
+          display_text_bottom("1 SECOND LEFT");
+        } else {
+          display_text_bottom(`${rem_sec} SECONDS LEFT`);
+        }
+      } else {
+        display_text_bottom(`${g.rem_min} MINUTES LEFT`);
+      }
+    } else {
+      display_text_bottom("TIME HAS EXPIRED!");
+    }
+    g.is_show_time = 0;
+  }
+}
+function show_level() {
+  const disp_level = g.current_level;
+  if (disp_level !== 0 && disp_level < 14 && g.seamless === 0) {
+    g.text_time_remaining = g.text_time_total = 24;
+    display_text_bottom(`LEVEL ${disp_level === 13 ? 12 : disp_level}`);
+    g.is_show_time = 1;
+  }
+  g.seamless = 0;
+}
+var mobs = { draw_mobs: () => {
+} };
+function draw_mobs2() {
+  mobs.draw_mobs();
+}
+
+// src/pop/seg000.ts
+var screen = { different_room: 0 };
+function play_frame() {
+  do_mobs();
+  process_trobs();
+  check_skel();
+  check_can_guard_see_kid();
+  if (play_kid_frame()) return;
+  play_guard_frame();
+  if (g.resurrect_time === 0) {
+    check_sword_hurting();
+    check_sword_hurt();
+  }
+  check_sword_vs_sword();
+  do_delta_hp();
+  exit_room();
+  check_the_end();
+  check_guard_fallout();
+  show_time();
+}
+function draw_kid_hp(curr_hp, max_hp) {
+  for (let i = curr_hp; i < max_hp; ++i) {
+    paintBlit(chtabs_id_chtab_2_kid, 217, i * 7, 194, 0);
+  }
+  for (let i = 0; i < curr_hp; ++i) {
+    paintBlit(chtabs_id_chtab_2_kid, 216, i * 7, 194, 0);
+  }
+}
+function draw_guard_hp(curr_hp, max_hp) {
+  if (!g.chtab_addrs[chtabs_id_chtab_5_guard]) return;
+  const guard_charid = g.Guard.charid;
+  if (guard_charid !== charids.charid_4_skeleton && guard_charid !== charids.charid_24_mouse && (guard_charid !== charids.charid_1_shadow || g.current_level === 12)) {
+    for (let i = curr_hp; i < max_hp; ++i) {
+      paintBlit(chtabs_id_chtab_5_guard, 0, 314 - i * 7, 194, 9);
+    }
+    for (let i = 0; i < curr_hp; ++i) {
+      paintBlit(chtabs_id_chtab_5_guard, 0, 314 - i * 7, 194, 0);
+    }
+  }
+}
+function draw_hp() {
+  if (g.hitp_delta) draw_kid_hp(g.hitp_curr, g.hitp_max);
+  const blink_state = g.rem_tick & 1;
+  if (g.hitp_curr === 1 && g.current_level !== 15) {
+    if (blink_state) draw_kid_hp(1, 0);
+    else draw_kid_hp(0, 1);
+  }
+  if (g.guardhp_delta) draw_guard_hp(g.guardhp_curr, g.guardhp_max);
+  if (g.guardhp_curr === 1) {
+    if (blink_state) draw_guard_hp(1, 0);
+    else draw_guard_hp(0, 1);
+  }
+}
+var chtabs_id_chtab_2_kid = 2;
+var chtabs_id_chtab_5_guard = 5;
+function play_kid_frame() {
+  loadkid_and_opp();
+  load_fram_det_col();
+  check_killed_shadow();
+  play_kid();
+  if (g.is_restart_level) return 1;
+  if (g.Char.room !== 0) {
+    play_seq();
+    fall_accel();
+    fall_speed();
+    load_frame_to_obj();
+    load_fram_det_col();
+    set_char_collision();
+    bump_into_opponent();
+    check_collisions();
+    check_bumped();
+    check_gate_push();
+    check_action();
+    check_press();
+    check_spike_below();
+    if (g.resurrect_time === 0) {
+      check_spiked();
+      check_chomped_kid();
+    }
+    check_knock();
+  }
+  savekid_and_opp();
+  return 0;
+}
+function play_guard_frame() {
+  if (g.Guard.direction !== directions.dir_56_none) {
+    loadshad_and_opp();
+    load_fram_det_col();
+    check_killed_shadow();
+    play_guard();
+    if (g.Char.room === g.drawn_room) {
+      play_seq();
+      if (g.Char.x >= 44 && g.Char.x < 211) {
+        fall_accel();
+        fall_speed();
+        load_frame_to_obj();
+        load_fram_det_col();
+        set_char_collision();
+        check_guard_bumped();
+        check_action();
+        check_press();
+        check_spike_below();
+        check_spiked();
+        check_chomped_guard();
+      }
+    }
+    saveshad_and_opp();
+  }
+}
+function check_the_end() {
+  if (g.next_room !== 0 && g.next_room !== g.drawn_room) {
+    g.drawn_room = g.next_room;
+    load_room_links();
+    screen.different_room = 1;
+    loadkid();
+    anim_tile_modif();
+    start_chompers();
+    check_fall_flo();
+    check_shadow();
+  }
+}
+function check_fall_flo() {
+  if (g.current_level === 13 && (g.drawn_room === 23 || g.drawn_room === 16)) {
+    g.curr_room = g.room_A;
+    get_room_address(g.curr_room);
+    for (g.curr_tilepos = 22; g.curr_tilepos <= 27; ++g.curr_tilepos) {
+      make_loose_fall(-(prandom(255) & 15));
+    }
+  }
+}
+function anim_tile_modif() {
+  for (let tilepos = 0; tilepos < 30; ++tilepos) {
+    switch (get_curr_tile(tilepos)) {
+      case tiles.tiles_10_potion:
+        start_anim_potion(g.drawn_room, tilepos);
+        break;
+      case tiles.tiles_19_torch:
+      case tiles.tiles_30_torch_with_debris:
+        start_anim_torch(g.drawn_room, tilepos);
+        break;
+      case tiles.tiles_22_sword:
+        start_anim_sword(g.drawn_room, tilepos);
+        break;
+      default:
+        break;
+    }
+  }
+  for (let row = 0; row <= 2; row++) {
+    const t = get_tile(g.room_L, 9, row);
+    if (t === tiles.tiles_19_torch || t === tiles.tiles_30_torch_with_debris) {
+      start_anim_torch(g.room_L, row * 10 + 9);
+    }
+  }
+}
+function check_sword_vs_sword() {
+  if (g.Kid.frame === 167 || g.Guard.frame === 167) {
+    out.play_sound(soundids.sound_10_sword_vs_sword);
+  }
+}
+function do_delta_hp() {
+  if (g.Opp.charid === charids.charid_1_shadow && g.current_level === 12 && g.guardhp_delta !== 0) {
+    g.hitp_delta = g.guardhp_delta;
+  }
+  g.hitp_curr = Math.min(Math.max(g.hitp_curr + g.hitp_delta, 0), g.hitp_max);
+  g.guardhp_curr = Math.min(Math.max(g.guardhp_curr + g.guardhp_delta, 0), g.guardhp_max);
+}
+function check_killed_shadow() {
+  if (g.current_level === 12) {
+    if ((g.Char.charid | g.Opp.charid) === charids.charid_1_shadow && g.Char.alive < 0 && g.Opp.alive >= 0) {
+      g.flash_color = 15;
+      g.flash_time = 5;
+      take_hp(100);
+    }
+  }
+}
+function redraw_screen() {
+  g.exit_room_timer = 2;
+}
+
+// src/pop/game.ts
+var CHTAB_NAME = [
+  "sword",
+  "flameSwordPotion",
+  "kid",
+  null,
+  null,
+  "guard",
+  "environment",
+  "environmentWall",
+  null,
+  null
+];
+var linked = false;
+function link() {
+  if (linked) return;
+  linked = true;
+  l7.start_chompers.fn = start_chompers;
+  l7.make_loose_fall.fn = make_loose_fall;
+  l7.trigger_button.fn = trigger_button;
+  l7.is_spike_harmful.fn = is_spike_harmful;
+  l7.start_anim_spike.fn = start_anim_spike;
+  l8.set_wipe.fn = set_wipe;
+  l8.set_redraw_full.fn = set_redraw_full;
+  l8.set_redraw_fore.fn = set_redraw_fore;
+  l8.set_redraw2.fn = set_redraw2;
+  l8.set_redraw_floor_overlay.fn = set_redraw_floor_overlay;
+  l8.set_redraw_anim.fn = set_redraw_anim;
+  l8.get_room_address.fn = get_room_address;
+  l8.add_objtable.fn = add_objtable;
+  l8.mark_obj_tile_redraw.fn = mark_obj_tile_redraw;
+  l5.do_fall.fn = do_fall;
+  l5.spiked.fn = spiked;
+  l5.control.fn = control;
+  l5.seqtbl_offset_char.fn = seqtbl_offset_char;
+  l6.control_guard_inactive.fn = control_guard_inactive;
+  l2.autocontrol_opponent.fn = autocontrol_opponent;
+  l2.clear_char.fn = clear_char;
+  l2.died_on_button.fn = died_on_button;
+  l2.set_start_pos.fn = () => {
+  };
+  l2.on_guard_killed.fn = on_guard_killed;
+  l2.inc_curr_row.fn = inc_curr_row;
+  dist2.char_opp_dist = char_opp_dist;
+  dist.char_opp_dist = char_opp_dist;
+  rooms.goto_other_room = goto_other_room;
+  mobs.draw_mobs = draw_mobs;
+  hp2.draw_hp = draw_hp;
+  hp.draw_guard_hp = draw_guard_hp;
+}
+var DEATH_MUSIC_TICKS = 36;
+var TEXT_RECT = { top: 193, left: 70, bottom: 202, right: 250 };
+var TEXT_WHITE = 15;
+var PopGame = class _PopGame {
+  scene;
+  surface = new Surface();
+  levelNumber;
+  /** `is_restart_level`, which the shell acts on between ticks. */
+  restartDue = false;
+  /** The first tick of a level does nothing, as the original's does. */
+  pendingFirstTick = true;
+  /** The screen has to be drawn whole: `need_full_redraw`. */
+  needFullRedraw = true;
+  /** The game's own font, out of the executable. */
+  font;
+  /** `draw_level_first` has still to put the hit points up. */
+  firstDraw = false;
+  /** Where `play_sound` goes, if the shell has a speaker. */
+  effects;
+  /** `current_target_surface`: the room's 192 rows, or the whole screen. */
+  roomTarget = false;
+  /**
+   * How much of the death music is left to play.
+   *
+   * `play_kid` counts `Char.alive` up a tick at a time once the Prince
+   * is dead, starts the music at six, and will not go past seven while
+   * `check_sound_playing()` says something is still sounding -- so
+   * `Press Button to Continue` comes up seven ticks after the death
+   * plus the length of the music. A replay has no sound, so this
+   * stands in for it.
+   *
+   * Measured as the gap between the tick the Prince dies and the tick
+   * the words appear in the captures: 25c4ebb8 46, 5920a8c2 47,
+   * 756b259c 47, 9b60bf3a 49, 13ab6867 52.
+   */
+  deathMusic = 0;
+  clipRect = null;
+  /**
+   * Renders that do not count against the words under the room.
+   *
+   * The level's opening picture is on the screen for two frames: the
+   * one `draw_level_first` drew it on, and the one the level's first
+   * tick does nothing in -- see `pendingFirstTick`. Neither is a
+   * `draw_game_frame`, so neither spends one of `LEVEL 1`'s twenty-four
+   * ticks. Measured: the capture has `LEVEL 1` on ticks 0 to 24,
+   * nothing on 25, and `60 MINUTES LEFT` from 26 to 48.
+   */
+  textTicksToSkip = 0;
+  constructor(scene, levelNumber) {
+    this.scene = scene;
+    this.levelNumber = levelNumber;
   }
   static async start(assets, exe, levelNumber, options = {}) {
+    link();
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? "V");
-    const game = new _Game(scene, readExeTables(exe), levelNumber, options.effects);
-    game.font = readFont(exe);
+    const game = new _PopGame(scene, levelNumber);
+    game.effects = options.effects;
+    game.install(exe);
+    game.startLevel();
     return game;
   }
+  async restart(assets, exe) {
+    return _PopGame.start(assets, exe, this.levelNumber, { effects: this.effects });
+  }
+  /** `start_level`: the level's data into the globals, once. */
+  install(exe) {
+    const tables = readExeTables(exe);
+    this.font = readFont(exe);
+    setFrameTables(
+      tables.frameTableKid,
+      tables.frameTableGuard,
+      tables.frameTableCutscene,
+      tables.sequences,
+      Array.from(tables.sequenceOffsets)
+    );
+    const constants = readExeConstants(exe);
+    const level = this.scene.level;
+    const type = this.scene.options.levelType;
+    levelType2.of = () => type;
+    levelType.of = () => type;
+    guards.hp = (n) => constants.guardHitPoints[n] ?? 0;
+    guards.type = () => this.scene.guardType === 4 ? 2 : 0;
+    g.level = {
+      fg: this.scene.state.fg,
+      bg: this.scene.state.modifiers,
+      doorlinks1: Uint8Array.from(level.doorLinks1),
+      doorlinks2: Uint8Array.from(level.doorLinks2),
+      roomlinks: Array.from({ length: 24 }, (_, i) => ({
+        left: level.roomLinks[i * 4],
+        right: level.roomLinks[i * 4 + 1],
+        up: level.roomLinks[i * 4 + 2],
+        down: level.roomLinks[i * 4 + 3]
+      })),
+      start_room: level.startRoom,
+      start_pos: level.startPos,
+      start_dir: level.startDir,
+      guards_tile: Uint8Array.from(level.guards.map((x) => x.tile)),
+      guards_dir: Uint8Array.from(level.guards.map((x) => x.dir & 255)),
+      guards_x: Uint8Array.from(level.guards.map((x) => x.x)),
+      guards_seq_lo: Uint8Array.from(level.guards.map((x) => x.seqLo)),
+      guards_skill: Uint8Array.from(level.guards.map((x) => x.skill)),
+      guards_seq_hi: Uint8Array.from(level.guards.map((x) => x.seqHi)),
+      guards_color: Uint8Array.from(level.guards.map((x) => x.color))
+    };
+    g.chtab_addrs = CHTAB_NAME.map((name) => {
+      if (!name) return null;
+      const set = this.scene.chtabs[name];
+      return set ? set.images.slice(1) : null;
+    });
+    out.display_text_bottom = display_text_bottom;
+    out.erase_bottom_text = erase_bottom_text;
+    out.play_death_music = () => {
+      this.deathMusic = DEATH_MUSIC_TICKS;
+    };
+    out.play_sound = (which) => {
+      this.effects?.sound?.(which);
+    };
+    out.check_sound_playing = () => this.deathMusic > 0 ? 1 : 0;
+    setPainter({
+      image: (chtab, id) => this.imageOf(chtab, id),
+      blit: (chtab, id, x, y, blit) => this.blit(chtab, id, x, y, blit),
+      rect: (left, top, right, bottom, color) => {
+        const floor = this.roomTarget ? 192 : 200;
+        const low = Math.min(bottom, floor);
+        if (low > top) this.surface.fillRect(left, top, right - left, low - top, color);
+      },
+      clip: (rect) => this.setClip(rect),
+      text: (text) => this.drawBottomText(text),
+      readPeel: (left, top, right, bottom) => this.readPeel(left, top, right, bottom),
+      restorePeel: (peel) => this.restorePeel(peel),
+      target: (room) => {
+        this.roomTarget = room;
+        this.setClip(this.clipRect);
+      }
+    });
+    g.current_level = this.levelNumber;
+    g.next_level = this.levelNumber;
+    set_seed(1);
+    g.hitp_beg_lev = constants.startHitPoints ?? 3;
+    g.rem_min = 60;
+    g.rem_tick = 719;
+    g.text_time_remaining = 0;
+    g.text_time_total = 0;
+    g.is_show_time = 0;
+    g.seamless = 0;
+    g.Kid = newChar();
+    g.Guard = newChar();
+    g.Char = newChar();
+    g.Opp = newChar();
+    g.objtable = [];
+    g.trobs = [];
+    g.trobs_count = 0;
+    g.mobs = [];
+    g.mobs_count = 0;
+    g.wipetable = [];
+    g.wipetable_count = 0;
+    g.leveldoor_open = 0;
+    g.exit_room_timer = 0;
+    g.have_sword = 0;
+    clear_coll_rooms();
+    clear_tile_wipes();
+  }
+  /** `start_level` proper: `do_startpos` and the room it opens in. */
+  startLevel() {
+    g.united_with_shadow = 0;
+    g.flash_time = 0;
+    g.leveldoor_open = 0;
+    g.guardhp_curr = 0;
+    g.hitp_delta = 0;
+    g.Guard.charid = 2;
+    g.Guard.direction = 86;
+    loadkid();
+    do_startpos();
+    g.have_sword = this.levelNumber === 0 || this.levelNumber >= 2 ? 1 : 0;
+    g.drawn_room = g.Kid.room;
+    load_room_links();
+    get_room_address(g.drawn_room);
+    find_start_level_door();
+    pos_guards();
+    anim_tile_modif();
+    loadkid();
+    start_chompers();
+    enter_guard();
+    redraw_screen();
+    this.surface.clear(0);
+    show_level();
+    this.firstDraw = true;
+    this.textTicksToSkip = 1;
+  }
   /**
-   * Advance one frame of the game: first the room reacts, then the Prince
-   * moves, which is the order the original uses.
+   * `show_text(&rect_bottom_text, halign_center, valign_bottom, ...)`,
+   * and `draw_rect(&rect_bottom_text, color_0_black)` before it.
    */
+  drawBottomText(text) {
+    this.surface.fillRect(
+      TEXT_RECT.left,
+      TEXT_RECT.top,
+      TEXT_RECT.right - TEXT_RECT.left,
+      TEXT_RECT.bottom - TEXT_RECT.top,
+      0
+    );
+    if (text === null || !this.font) return;
+    drawTextCentred(
+      this.surface,
+      this.font,
+      text,
+      TEXT_RECT.left,
+      TEXT_RECT.right - 1,
+      TEXT_RECT.top,
+      TEXT_WHITE
+    );
+  }
+  imageOf(chtab, id) {
+    const name = CHTAB_NAME[chtab];
+    if (!name) return null;
+    const set = this.scene.chtabs[name];
+    return set?.images[id + 1] ?? null;
+  }
+  spriteOf(chtab, id) {
+    const name = CHTAB_NAME[chtab];
+    if (!name) return null;
+    const set = this.scene.chtabs[name];
+    const image = set?.images[id + 1];
+    return image ? { image, base: set.paletteBase } : null;
+  }
+  setClip(rect) {
+    this.clipRect = rect;
+    const floor = this.roomTarget ? 192 : 200;
+    if (rect) {
+      this.surface.clipTop = rect.top;
+      this.surface.clipBottom = Math.min(rect.bottom, floor);
+    } else {
+      this.surface.clipTop = 0;
+      this.surface.clipBottom = floor;
+    }
+  }
+  blit(chtab, id, x, y, blit) {
+    const found = this.spriteOf(chtab, id);
+    if (!found) return;
+    let sprite = found.image;
+    if (blit & FLIPPED) {
+      sprite = flipHorizontally(sprite);
+      blit &= ~FLIPPED;
+    }
+    if (blit === blitters.blitters_9_black) {
+      this.surface.blitMono(sprite, x, y, 0);
+      return;
+    }
+    if (blit === blitters.blitters_3_xor) {
+      this.surface.blitXor(sprite, x, y, found.base);
+      return;
+    }
+    if (blit >= blitters.blitters_40h_mono) {
+      this.surface.blitMono(sprite, x, y, blit & 15);
+      return;
+    }
+    if (blit === blitters.blitters_10h_transp || blit === blitters.blitters_2_or) {
+      this.surface.blitTransparent(sprite, x, y, found.base);
+      return;
+    }
+    this.surface.blitOpaque(sprite, x, y, found.base);
+  }
+  /**
+   * `read_peel_from_screen` and `restore_peel`.
+   *
+   * How the original rubs out a moving thing: before a character is
+   * drawn, the rectangle it is about to cover is read off the screen,
+   * and at the top of the next frame's `draw_tables` it is put back.
+   * Nothing else erases a character -- `redraw_at_char` only marks the
+   * tiles whose *foreground* has to go on again -- so without this the
+   * Prince leaves a copy of himself behind on every tick.
+   */
+  readPeel(left, top, right, bottom) {
+    const x0 = Math.max(0, Math.min(320, left));
+    const x1 = Math.max(x0, Math.min(320, right));
+    const y0 = Math.max(0, Math.min(200, top));
+    const y1 = Math.max(y0, Math.min(200, bottom));
+    const width = x1 - x0;
+    const height = y1 - y0;
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      pixels.set(
+        this.surface.pixels.subarray((y0 + y) * 320 + x0, (y0 + y) * 320 + x1),
+        y * width
+      );
+    }
+    return { left: x0, top: y0, width, height, pixels };
+  }
+  restorePeel(peel) {
+    for (let y = 0; y < peel.height; y++) {
+      this.surface.pixels.set(
+        peel.pixels.subarray(y * peel.width, (y + 1) * peel.width),
+        (peel.top + y) * 320 + peel.left
+      );
+    }
+  }
+  /** The player pressing the button after a death. */
+  pressButton() {
+    if (g.Kid.alive >= 0) this.restartDue = true;
+  }
   step(controls) {
     if (this.pendingFirstTick) {
       this.pendingFirstTick = false;
       return;
     }
-    this.kidHurt = false;
-    this.guardHurt = false;
-    const wasDrawing = this.drawnRoom;
-    this.traps.drawnRoom = this.drawnRoom;
-    this.traps.kidRoom = this.kid.room;
-    this.traps.kidRow = this.kid.currentRow;
-    this.traps.kidAlive = this.kid.alive;
-    this.traps.step();
-    const canGuardSee = canGuardSeeKid(this.guard, this.kid, {
-      tables: this.tables,
-      tileAtKid: this.tileAtKid
-    });
-    stepKid(this.kid, controls, this.ctx);
-    if (this.pendingKnock !== 0) {
-      const row = this.kid.currentRow - (this.pendingKnock > 0 ? 1 : 0);
-      this.pendingKnock = 0;
-      if (row >= 0 && row <= 2) this.traps.knock(this.kid.room, row);
-    }
-    stepGuard(this.guard, {
-      tables: this.tables,
-      effects: this.effects,
-      drawnRoom: this.drawnRoom,
-      kidRoom: this.kid.room,
-      kidRow: this.kid.currentRow,
-      kidX: this.kid.x,
-      kid: this.kid,
-      kidArmed: this.hasSword,
-      // The world and the traps, so a guard falls off a ledge, stands
-      // on a plate, dies on spikes and is cut in half by a chomper --
-      // all of which `play_guard_frame` runs and the port did not.
-      physics: this.guardCtx,
-      // `prandom(255)`. It was `next(8)`, which is not the same roll at
-      // all: every one of the original's probabilities is a number out
-      // of 255, so against a nought-to-eight roll anything over eight
-      // always wins. A guard of level 1 strikes on 61 and advances on
-      // 255, so he struck every tick he could and never missed a chance
-      // to close -- which is why he killed a Prince who stood still in
-      // a dozen ticks and the capture's did not.
-      random: () => this.prng.next(255),
-      justBlocked: () => this.justBlocked !== 0,
-      heard: () => this.guardNotice,
-      forget: () => {
-        this.guardNotice = false;
-      },
-      // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
-      // follow the room links: a guard who has come through a door is
-      // standing a tile or two outside the room he is walking into, and
-      // asking his own room for column eleven answers nothing.
-      // `get_tile_at_kid`: the tile of the Prince's own room and row at
-      // an x, for the line of sight between a guard and him.
-      tileAtKid: this.tileAtKid,
-      canGuardSee,
-      floorInFront: (guard) => {
-        const ahead = guard.direction < 0 ? -1 : 1;
-        for (const step2 of [1, 2]) {
-          const t = getTile(
-            this.ctx.world,
-            guard.room,
-            guard.currentColumn + ahead * step2,
-            guard.currentRow
-          );
-          if (t.room !== 0 && tileIsFloor(t.type)) return true;
-        }
-        return false;
-      }
-    });
-    this.resolveSwordplay();
-    if (this.exitRoomTimer !== 0) {
-      this.exitRoomTimer -= 1;
-    } else if (this.kid.room !== 0) {
-      exitRoom(this.kid, this.ctx);
-    }
-    if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
-    if (this.drawnRoom !== wasDrawing) {
-      this.enterRoom(this.drawnRoom);
-      this.blankFrames = ROOM_CHANGE_BLANK;
-      this.exitRoomTimer = 2;
-    } else if (this.blankFrames > 0) {
-      this.blankFrames -= 1;
-    }
-    if (this.isDead) this.deadTicks += 1;
-    if (this.justBlocked > 0) this.justBlocked -= 1;
-    this.titleTicks += 1;
-    if (this.remainingTicks > 0) this.remainingTicks -= 1;
-    if (this.acceptsButton && controls.shift) {
-      this.pressButton();
-    }
-    if (this.restartCountdown >= 0) this.restartCountdown -= 1;
-  }
-  /**
-   * A lunge that reaches an opponent who is not blocking costs him a hit
-   * point, and the last of them kills him.
-   *
-   * Both characters are stepped before this runs, so each has already
-   * reached this frame's pose: the one lunging is on the contact frame or
-   * it is not, and the other is holding his blade up or he is not.
-   */
-  resolveSwordplay() {
-    if (this.guard.direction === NO_DIRECTION) return;
-    const atGuard = checkHurting(this.kid, this.guard);
-    const atKid = checkHurting(this.guard, this.kid);
-    if (atGuard === "parried") this.parried(this.kid, this.guard);
-    if (atKid === "parried") this.parried(this.guard, this.kid);
-    if (atGuard === "hurt") this.hurtBySword(this.guard);
-    else if (atKid === "hurt") this.hurtBySword(this.kid);
-  }
-  /** A blade stopped by a raised one: the striker recoils. */
-  parried(striker, blocker) {
-    blocker.frame = PARRY_FRAME;
-    startSequence(striker, SWORD_SEQ.parried, this.tables);
-    if (striker === this.guard) this.justBlocked = 4;
-  }
-  /**
-   * The original's `hurt_by_sword`. A character caught without his blade
-   * up dies of it whatever his hit points are; one with it up loses one,
-   * and the last of them kills him.
-   */
-  hurtBySword(hit) {
-    if (hit.alive >= 0) return;
-    hit.y = standY(hit.currentRow);
-    hit.fallY = 0;
-    hit.fallX = 0;
-    if (hit === this.kid) {
-      const dead2 = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
-      startSequence(hit, dead2 ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
-      if (dead2) hit.alive = 0;
-      playSequence(hit, { tables: this.tables, effects: this.effects });
-      return;
-    }
-    if (this.guard.hitPoints > 0) this.guardHurt = true;
-    this.guard.hitPoints = Math.max(0, this.guard.hitPoints - 1);
-    const dead = this.guard.hitPoints === 0;
-    startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
-    if (dead) hit.alive = 0;
-    playSequence(hit, { tables: this.tables, effects: this.effects });
-    this.guard.waitTimer = refractoryFor(this.guard.skill);
-  }
-  /**
-   * What a flask does, by the kind it is -- the top five bits of its
-   * modifier.
-   *
-   * Level 1 has four of the small red ones and nothing else; level 2 adds
-   * the green. The two the port cannot do anything useful with are the
-   * ones that turn the picture upside down and the one that opens the way
-   * on level 13, and both are left alone rather than half done.
-   */
-  drink(kind) {
-    switch (kind) {
-      case 1:
-        if (this.hitPoints < this.maxHitPoints) this.hitPoints += 1;
-        break;
-      case 2:
-        this.maxHitPoints += 1;
-        this.hitPoints = this.maxHitPoints;
-        break;
-      case 3:
-        this.featherFall = true;
-        break;
-      case 5:
-        this.damage(1);
-        if (this.hitPoints === 0) this.kid.alive = 0;
-        break;
-      default:
-        break;
+    g.control_x = controls.x < 0 ? -1 : controls.x > 0 ? 1 : 0;
+    g.control_y = controls.y < 0 ? -1 : controls.y > 0 ? 1 : 0;
+    g.control_shift = controls.shift ? -1 : 0;
+    g.guardhp_delta = 0;
+    g.hitp_delta = 0;
+    if (this.deathMusic > 0) --this.deathMusic;
+    timers();
+    play_frame();
+    if (g.is_restart_level) {
+      g.is_restart_level = 0;
+      this.restartDue = true;
     }
   }
-  /** Hurt the Prince. Returns true if that was the last of his hit points. */
-  damage(amount) {
-    if (amount > 0 && this.hitPoints > 0) this.kidHurt = true;
-    this.hitPoints = Math.max(0, this.hitPoints - amount);
-    return this.hitPoints === 0;
-  }
-  /** True once the Prince is dead and the level is waiting to be restarted. */
-  get isDead() {
-    return this.hitPoints === 0 || this.kid.alive >= 0;
-  }
+  /** `redraw_screen(drawing_different_room)`. */
   /**
-   * True once the original would be showing `Press Button to Continue`.
-   * Forty-six ticks after the death: see `RESTART_PROMPT_DELAY`.
-   */
-  get awaitingButton() {
-    return this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && this.restartCountdown < 0;
-  }
-  /**
-   * True once Shift will start the level again, which is seven ticks
-   * after the death and not the forty-six the words take: the original's
-   * test is `Kid.alive > 6`, and `Char.alive` is nought on the tick he
-   * dies. The two are different things and the port had only one of
-   * them, so a player who pressed Shift while the body was still
-   * settling was ignored until the words came up.
-   *
-   * Measured on `b4ff4672`: the Prince goes onto the spikes of room 6 on
-   * tick 282, Shift goes down on 297, and the capture has the level's
-   * title back on the screen by 304 -- twenty-five ticks before the
-   * words would have appeared at all.
-   */
-  get acceptsButton() {
-    return this.isDead && this.deadTicks > RESTART_BUTTON_DELAY && this.restartCountdown < 0;
-  }
-  /**
-   * The button was pressed under `Press Button to Continue`. The level
-   * does not come back at once: the original takes six ticks over it, the
-   * room still on screen for three and then black for two. Measured off
-   * the grabbed video -- Shift at tick 297, black at 301 and 302, the
-   * level running again at 303.
-   */
-  pressButton() {
-    if (!this.acceptsButton) return;
-    this.restartCountdown = RESTART_DELAY;
-  }
-  /** True on the tick the level should be built again. */
-  get restartDue() {
-    return this.restartCountdown === 0;
-  }
-  /**
-   * Put the level back as it was and the Prince back at its start, which is
-   * what the original does after a death.
-   */
-  async restart(assets, exe) {
-    const game = await _Game.start(assets, exe, this.levelNumber, { effects: this.effects });
-    game.remainingTicks = this.remainingTicks;
-    return game;
-  }
-  /** Show a different room without playing: for looking around. */
-  showRoom(room) {
-    if (room === this.drawnRoom) return;
-    this.drawnRoom = room;
-    this.enterRoom(room);
-  }
-  /**
-   * Show a different room: the guard of the room being left goes back into
-   * the level, the guard of the room being entered comes out of it, and the
-   * new room's torches and exit door start up.
-   */
-  enterRoom(room) {
-    if (!this.guardFollows(room)) {
-      leaveGuard(this.guard, this.guards);
-      enterGuard(this.guard, room, this.guards, {
-        tables: this.tables,
-        guardType: this.scene.guardType,
-        levelGuardHitPoints: this.scene.constants.guardHitPoints[this.levelNumber] ?? 0
-      });
-      this.applyGuardColour();
-    }
-    this.traps.drawnRoom = room;
-    this.startRoomTiles(room);
-  }
-  /**
-   * A guard with his sword out comes after the Prince through the door.
-   *
-   * Every room keeps its own guard, and until now changing room always
-   * put that room's guard on the screen and the old one back in his box.
-   * So the Prince could walk out of a fight and the guard would stand
-   * where he was left, which is not what the original does and is what
-   * the player meant by `at that distance he should follow me to the
-   * next screen`.
-   *
-   * This is `exit_room` and `follow_guard` of the original, which
-   * SDLPoP has as C. He follows sideways only -- the up and down cases
-   * there always fall through to leaving him behind -- and only if the
-   * room the Prince is going to has no guard of its own, and only if he
-   * is near the door: `Guard.x < 91` going left, `>= 165` going right.
-   * Then he is shifted by the width of a room exactly the way the
-   * Prince is, and his box in both rooms is emptied.
-   *
-   * The distance test is the whole of it, and the port had it missing.
-   * Shifting a guard who is ten tiles from the door puts him three
-   * tiles beyond the far side of the room he is going to; x is one byte,
-   * it wraps, and he turns up at the opposite end. The player's
-   * recording `33e8ace7` has that: the guard of room 3 was at column 6,
-   * arrived in room 2 at column 19, then at -2, walked the wrong way
-   * along the bottom of the room and killed the Prince from three tiles
-   * off.
-   *
-   * With the test in place he can still land outside the room -- at
-   * x 90 going left he arrives at 230, two tiles past the right edge --
-   * and that is right. A grabbed video of the original replaying
-   * `e209b01a` has the guard vanish with the room change and walk back
-   * into view from the right twenty-four ticks later. His x when the
-   * Prince left was 90 or 91, measured from the width of his tunic on
-   * the screen, which is the threshold to the unit.
-   */
-  guardFollows(room) {
-    const guard = this.guard;
-    if (guard.direction === NO_DIRECTION) return false;
-    if (guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return false;
-    if (room === guard.room || room === 0) return false;
-    const toTheLeft = this.scene.state.linkOf(guard.room, 0) === room;
-    const toTheRight = this.scene.state.linkOf(guard.room, 1) === room;
-    if (!toTheLeft && !toTheRight) return false;
-    if ((this.guards.tile[room - 1] ?? 255) < 30 && this.guards.seqHi[room - 1] === 0) {
-      return false;
-    }
-    if (toTheLeft ? guard.x >= GUARD_FOLLOWS_LEFT : guard.x < GUARD_FOLLOWS_RIGHT) {
-      return false;
-    }
-    this.guards.tile[guard.room - 1] = 255;
-    this.guards.tile[room - 1] = 255;
-    guard.room = room;
-    guard.x = guard.x + (toTheLeft ? 140 : -140) & 255;
-    return true;
-  }
-  /**
-   * A guard's clothes are recoloured per room, from the seven palettes the
-   * game keeps in PRINCE.DAT. Colour 0 leaves the sprite's own colours alone.
+   * `set_chtab_palette(chtab_addrs[id_chtab_5_guard], &guard_palettes[
+   * 0x30 * curr_guard_color - 0x30], 0x10)`, at the top of
+   * `redraw_screen`: a guard's clothes are recoloured per room from the
+   * palettes PRINCE.DAT keeps. Colour nought leaves the bank as it is,
+   * as the original does.
    */
   applyGuardColour() {
+    const colour = guardColor.value;
     const set = this.scene.chtabs.guard;
     const palettes = this.scene.guardPalettes;
     if (!set) return;
-    if (!palettes || this.guard.colour === 0) {
+    if (!palettes || colour === 0) {
       this.scene.screenPalette.loadBlock(set.paletteBase, set.palette.vga);
       return;
     }
-    const at = (this.guard.colour - 1) * 48;
+    const at = (colour - 1) * 48;
     const colours = [];
     for (let i = 0; i < 16; i++) {
       colours.push({
@@ -5906,342 +9182,143 @@ var Game = class _Game {
     }
     this.scene.screenPalette.loadBlock(set.paletteBase, colours);
   }
-  /**
-   * Entering a room sets its torches going and, on a level that is not the
-   * one the Prince started on, its exit door. The original does this when it
-   * draws a room for the first time.
-   */
-  startRoomTiles(room) {
-    for (let tilePos = 0; tilePos < 30; tilePos++) {
-      const type = this.scene.state.typeAt(room, tilePos % 10, Math.trunc(tilePos / 10));
-      if (type === 19 || type === 30) {
-        this.startAnimTorch(room, tilePos);
-      } else if (type === 10) {
-        const was = this.scene.state.modifierAt(room, tilePos % 10, Math.trunc(tilePos / 10));
-        this.scene.state.setModifierAtPos(
-          room,
-          tilePos,
-          was & 248 | this.prng.next(6) + 1
-        );
-        this.traps.add(room, tilePos, 1);
-      } else if (type === 22) {
-        this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(255) & 31);
-        this.traps.add(room, tilePos, 1);
+  redrawScreen(differentRoom) {
+    this.applyGuardColour();
+    if (differentRoom) {
+      this.surface.fillRect(0, 0, 320, 192, 0);
+    }
+    screen.different_room = 0;
+    redraw_room();
+    draw_tables();
+    reset_tables();
+    draw_moving();
+    draw_tables();
+    redraw_screen();
+  }
+  /** `draw_game_frame`. */
+  render() {
+    if (this.needFullRedraw) {
+      this.needFullRedraw = false;
+      this.redrawScreen(false);
+      if (this.firstDraw) {
+        this.firstDraw = false;
+        draw_kid_hp(g.hitp_curr, g.hitp_max);
+        return this.surface;
       }
+    } else if (screen.different_room) {
+      g.drawn_room = g.next_room;
+      this.redrawScreen(true);
+    } else {
+      reset_tables();
+      draw_moving();
+      draw_tables();
     }
-    const left = this.scene.state.linkOf(room, 0);
-    if (left) {
-      for (let row = 0; row < 3; row++) {
-        const type = this.scene.state.typeAt(left, 9, row);
-        if (type === 19 || type === 30) this.startAnimTorch(left, row * 10 + 9);
-      }
-    }
-  }
-  /** `start_anim_torch`: `prandom(8)`, not `prandom(255)`. */
-  startAnimTorch(room, tilePos) {
-    this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(8));
-    this.traps.add(room, tilePos, 1);
-  }
-  /** What to draw for the Prince, if he is in the room being shown. */
-  kidDraw() {
-    if (this.kid.room !== this.drawnRoom) return null;
-    const frame = this.tables.frameTableKid[this.kid.frame];
-    if (!frame) return null;
-    const draw = placeCharacter(this.kid, frame);
-    if (!draw) return null;
-    const overlay = this.overlayOf(this.kid, frame, "kid");
-    const clipTop = this.clipTopOf(this.kid, frame, "kid");
-    const tile = this.objTileOf(this.kid, frame, "kid");
-    return {
-      ...draw,
-      objColumn: tile.column,
-      objRow: tile.row,
-      ...overlay ? { overlay } : {},
-      ...clipTop ? { clipTop } : {}
-    };
-  }
-  /**
-   * `set_objtile_at_char`: which tile a character's object sits at.
-   *
-   * A running jump takes the tile under the leading foot; anything
-   * else the tile he is standing in -- and a character who is
-   * climbing, hanging or in the air takes the one to its *left*.
-   *
-   * It decides where he comes in the painting, because the room is
-   * painted row 2, row 1, row 0, each row left to right, with every
-   * object slotted in at its own tile. The left step is why a falling
-   * Prince goes behind the slab that fell with him and behind the
-   * floors of his own column: they are painted after him.
-   */
-  objTileOf(state, frame, chtab) {
-    const f = state.frame;
-    const a = state.action;
-    let row = state.currentRow;
-    let column = state.currentColumn;
-    if (a === ACTION.runJump) {
-      const set = chtab === "kid" ? this.scene.chtabs.kid : this.scene.chtabs.guard;
-      const image = set?.images[frame.image + 1];
-      if (image) {
-        const coll = charCollision(state, frame, objectX(state, frame), image.width);
-        const objY = frame.dy + state.y;
-        let bottomRow = Math.trunc((objY + 60) / 63) % 4 - 1;
-        if (bottomRow === -1) bottomRow = 3;
-        row = bottomRow;
-        column = Math.max(tileDivMod(coll.xLeft).column, 0);
-      }
-    }
-    if (f >= 135 && f < 149 || a === ACTION.hangClimb || a === ACTION.inMidair || a === ACTION.inFreefall || a === ACTION.hangStraight) {
-      column -= 1;
-    }
-    return { column, row };
-  }
-  /**
-   * `clip_char`, the part of it that matters: a character with a floor
-   * or a wall over his head is not drawn above the row he is in.
-   *
-   * The original clips him at `y_clip[row + 1]`, the top of his own
-   * row, when the tile over his left shoulder is a wall or a floor and
-   * the tile over his right is too -- or he is on the two frames of a
-   * jump that reach up into it. Without it the arm of a Prince
-   * dropping into a room is drawn straight through the floor he has
-   * just come through: `ec99dc5b` tick 78, and every fall into a room
-   * below.
-   *
-   * The rest of `clip_char` -- the level door, the doortops and the
-   * mirror, all of which clip on the right -- is not here yet.
-   */
-  clipTopOf(state, frame, chtab) {
-    const set = chtab === "kid" ? this.scene.chtabs.kid : this.scene.chtabs.guard;
-    const image = set?.images[frame.image + 1];
-    if (!image) return 0;
-    const coll = charCollision(state, frame, objectX(state, frame), image.width);
-    const objY = frame.dy + state.y;
-    let topY = objY - image.height + 1;
-    if (topY >= 192) topY = 0;
-    const rowOf = (y) => Math.trunc((y + 60) / 63) % 4 - 1;
-    const topRow = rowOf(topY);
-    const colLeft = Math.max(tileDivMod(coll.xLeft).column, 0);
-    const colRight = Math.min(tileDivMod(coll.xRight).column, 9);
-    const above = (col) => getTile(
-      this.ctx.world,
-      state.room,
-      col,
-      topRow
-    ).type;
-    const blocks = (t) => t === TILE.wall || tileIsFloor(t);
-    if (!blocks(above(colLeft))) return 0;
-    const jumping = state.action === ACTION.stand && (state.frame === 79 || state.frame === 81);
-    if (!jumping && !blocks(above(colRight))) return 0;
-    const clipRow = state.currentRow + 1;
-    const clipY = Y_CLIP[clipRow];
-    if (clipY === void 0) return 0;
-    if (clipRow === 1 || clipY < objY && clipY - 15 < topY) return clipY;
-    return 0;
-  }
-  /**
-   * `redraw_at_char2`: which tiles are drawn again over this character.
-   *
-   * A character who is in the air, hanging, grabbing or climbing marks
-   * the tiles his box covers, and `redraw_needed` draws those tiles
-   * into the mid table -- where the ones past his own come down over
-   * him. Climbing, frames 137 to 144, it is the floor's lip instead of
-   * the whole tile. Anything else marks nothing.
-   */
-  overlayOf(state, frame, chtab) {
-    const f = state.frame;
-    const a = state.action;
-    let climbFrame;
-    if (f < 78 || f >= 80) {
-      if (f >= 137 && f < 145) {
-        climbFrame = f;
-      } else if (a !== ACTION.hangClimb && a !== ACTION.inMidair && a !== ACTION.inFreefall && a !== ACTION.hangStraight && !(a === ACTION.bumped && f >= 102 && f <= 106)) {
-        return void 0;
-      }
-    }
-    const set = chtab === "kid" ? this.scene.chtabs.kid : this.scene.chtabs.guard;
-    const image = set?.images[frame.image + 1];
-    if (!image) return void 0;
-    const coll = charCollision(state, frame, objectX(state, frame), image.width);
-    const objY = frame.dy + state.y;
-    let topY = objY - image.height + 1;
-    if (topY >= 192) topY = 0;
-    const rowOf = (y) => Math.trunc((y + 60) / 63) % 4 - 1;
-    let bottomRow = rowOf(objY);
-    if (bottomRow === -1) bottomRow = 3;
-    const colLeft = Math.max(tileDivMod(coll.xLeft).column, 0);
-    const ownTile = this.objTileOf(state, frame, chtab);
-    return {
-      colLeft,
-      colRight: Math.min(tileDivMod(coll.xRight).column, 9),
-      topRow: rowOf(topY),
-      bottomRow,
-      skipBottomRow: a === ACTION.hangClimb,
-      ownColumn: ownTile.column,
-      ownRow: ownTile.row,
-      climbFrame
-    };
-  }
-  /**
-   * The star at the point of impact, if hit points came off the Prince
-   * this tick. `draw_hurt_splash`, called from `draw_kid` when
-   * `hitp_delta < 0`.
-   */
-  hurtSplashDraw() {
-    if (!this.kidHurt) return null;
-    const kid = this.kidDraw();
-    return kid ? placeHurtSplash(kid, this.kid.frame, "kid") : null;
-  }
-  /** The same for the guard, from `draw_guard`. */
-  guardHurtSplashDraw() {
-    if (!this.guardHurt) return null;
-    if (this.guard.room !== this.drawnRoom || this.guard.direction === NO_DIRECTION) return null;
-    const draw = guardDraw(this.guard, this.tables);
-    return draw ? placeHurtSplash(draw, this.guard.frame, "guard") : null;
-  }
-  /**
-   * Draw the tick.
-   *
-   * `showBlank: false` draws the room the game has even on the ticks the
-   * original is holding a black screen over it while it redraws. That is
-   * what a screenshot of the original catches -- it saves the finished
-   * buffer, not what the monitor is showing -- and it is what the
-   * pixel-exact captures in `tests/game/run.test.ts` and
-   * `run-jump.test.ts` are of. A video grab of the same moment is black:
-   * see `ROOM_CHANGE_BLANK`.
-   */
-  render(options = {}) {
-    const showBlank = options.showBlank ?? true;
-    this.surface.clear();
-    if (showBlank && this.blankFrames > 0) {
-      this.drawStatusBar();
-      return this.surface;
-    }
-    const characters = [];
-    if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
-      const frame = guardFrame(this.guard, this.tables);
-      const at = frame ? this.objTileOf(this.guard, frame, "guard") : void 0;
-      const tile = at ? { objColumn: at.column, objRow: at.row } : {};
-      const draw = guardDraw(this.guard, this.tables);
-      if (draw) characters.push({ ...draw, ...tile });
-      const guardSplash = this.guardHurtSplashDraw();
-      if (guardSplash) characters.push(guardSplash);
-      if (frame && this.guard.alive < 0) {
-        const sword = placeSword(this.guard, frame, this.tables.swordTable, toScreenX);
-        if (sword) characters.push({ ...sword, ...tile });
-      }
-    }
-    const kid = this.kidDraw();
-    if (kid) characters.push(kid);
-    const kidSplash = this.hurtSplashDraw();
-    if (kidSplash) characters.push(kidSplash);
-    const kidFrame = this.tables.frameTableKid[this.kid.frame];
-    if (kid && kidFrame && this.kid.sword !== 0) {
-      const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);
-      if (sword) {
-        characters.push({
-          ...sword,
-          objColumn: kid.objColumn,
-          objRow: kid.objRow
-        });
-      }
-    }
-    const mobs = this.traps.mobs.map((m) => ({
-      room: m.room,
-      column: m.xh >> 2,
-      y: m.y,
-      row: m.row
-    }));
-    this.renderer.render(this.surface, this.drawnRoom, characters, mobs);
-    this.drawStatusBar();
+    this.tickBottomText();
     return this.surface;
   }
   /**
-   * The strip below the room. The original draws the Prince's hit points
-   * there as small sprites from his own group: a full one for each point he
-   * has, an empty one for each he has lost.
+   * The tail of `draw_game_frame`: a message counts down and is rubbed
+   * out, and `Press Button to Continue` blinks for its last six
+   * seconds.
    */
-  drawStatusBar() {
-    this.drawBottomText();
-    const kid = this.scene.chtabs.kid;
-    if (!kid) return;
-    const full = kid.images[FULL_HP_IMAGE];
-    const empty = kid.images[EMPTY_HP_IMAGE];
-    for (let i = this.hitPoints; i < this.maxHitPoints; i++) {
-      if (empty) this.surface.blitOpaque(empty, i * 7, HP_TOP_Y, kid.paletteBase);
+  tickBottomText() {
+    if (this.textTicksToSkip > 0) {
+      --this.textTicksToSkip;
+      return;
     }
-    for (let i = 0; i < this.hitPoints; i++) {
-      if (full) this.surface.blitOpaque(full, i * 7, HP_TOP_Y, kid.paletteBase);
+    if (g.text_time_remaining === 1) {
+      if (g.text_time_total === 36 || g.text_time_total === 288) {
+        erase_bottom_text(1);
+      } else {
+        erase_bottom_text(1);
+      }
+      return;
     }
-    const guardSet = this.scene.chtabs.guard;
-    const marker = guardSet?.images[1];
-    if (!marker || this.guard.direction === NO_DIRECTION) return;
-    for (let i = this.guard.hitPoints; i < this.guard.maxHitPoints; i++) {
-      this.surface.blitMono(marker, 314 - i * 7, HP_TOP_Y, 0);
+    if (g.text_time_remaining !== 0 && g.text_time_total !== 1188) {
+      --g.text_time_remaining;
+      if (g.text_time_total === 288 && g.text_time_remaining < 72) {
+        const blink_frame = g.text_time_remaining % 12;
+        if (blink_frame > 3) {
+          erase_bottom_text(0);
+        } else if (blink_frame === 3) {
+          display_text_bottom("Press Button to Continue");
+        }
+      }
     }
-    for (let i = 0; i < this.guard.hitPoints; i++) {
-      this.surface.blitOpaque(marker, 314 - i * 7, HP_TOP_Y, guardSet.paletteBase);
-    }
+  }
+  get kid() {
+    return g.Kid;
   }
   /**
-   * Forget the level's number, as the original does once it has been up
-   * its forty-nine ticks.
+   * The guard, with his hit points beside him.
    *
-   * Every capture the tests match against was taken after a wait long
-   * enough for that -- `tools/oracle/scripts/level-starts.txt` waits eight
-   * seconds before the first frame -- so a harness that builds a level and
-   * starts stepping has to do the same, or every frame differs by the
-   * hundred and twenty-five pixels of `LEVEL n`.
+   * The C keeps a guard's strength in `guardhp_curr` rather than in the
+   * character, and the shell reads it off the guard, so this puts the
+   * two together.
    */
-  clearBottomText() {
-    this.titleTicks = LEVEL_TITLE_TICKS * 2 + 2;
+  get guard() {
+    return Object.assign(Object.create(Object.getPrototypeOf(g.Guard)), g.Guard, {
+      hitPoints: g.guardhp_curr,
+      maxHitPoints: g.guardhp_max
+    });
+  }
+  get hitPoints() {
+    return g.hitp_curr;
+  }
+  get maxHitPoints() {
+    return g.hitp_max;
+  }
+  /** `drawn_room`, which the shell also sets to look round the level. */
+  get drawnRoom() {
+    return g.drawn_room;
+  }
+  set drawnRoom(room) {
+    this.showRoom(room);
+  }
+  /** `Char.alive >= 0`: the death animation has begun. */
+  get isDead() {
+    return g.Kid.alive >= 0;
+  }
+  /** `Press Button to Continue` is up: `text_time_total` is its 288. */
+  get awaitingButton() {
+    return g.text_time_total === 288 && g.text_time_remaining !== 0;
+  }
+  /** The level's door has been gone through: `next_level` moved on. */
+  get levelFinished() {
+    return g.next_level !== g.current_level;
+  }
+  /** `rem_min` and `rem_tick` as one number, for the shell's clock. */
+  get remainingTicks() {
+    return g.rem_min * 720 + g.rem_tick;
+  }
+  set remainingTicks(ticks) {
+    g.rem_min = Math.max(0, Math.floor(ticks / 720));
+    g.rem_tick = Math.max(1, ticks - g.rem_min * 720);
+  }
+  /** `have_sword`, which the shell carries from one level to the next. */
+  get hasSword() {
+    return g.have_sword !== 0;
+  }
+  set hasSword(has) {
+    g.have_sword = has ? 1 : 0;
   }
   /**
-   * What a level says about itself when it starts: its number for
-   * twenty-four ticks, nothing for one, and then how much of the hour is
-   * left for twenty-four more.
+   * Show another room without playing: the view-the-level keys.
    *
-   * Measured off all ten grabbed runs, which agree to the tick: `LEVEL 1`
-   * from tick 0 to 23, nothing on 24, `60 MINUTES LEFT` from 25 to 47,
-   * and nothing from 48; and the same again from the tick the level is
-   * started afresh after a death. The second message is a tick shorter
-   * than the first, which looks like an oversight in the original and is
-   * what every capture shows.
+   * `next_room = room` and the screen drawn whole, which is what the
+   * original's H, J, U and N do.
    */
-  levelText() {
-    if (this.restartCountdown >= 0) return `LEVEL ${this.levelNumber}`;
-    const t = this.titleTicks;
-    if (t < LEVEL_TITLE_TICKS) return `LEVEL ${this.levelNumber}`;
-    if (t === LEVEL_TITLE_TICKS) return null;
-    if (t < LEVEL_TITLE_TICKS * 2) {
-      const left = Math.max(0, Math.ceil(this.remainingTicks / MINUTE_TICKS));
-      return `${left} MINUTE${left === 1 ? "" : "S"} LEFT`;
-    }
-    return null;
-  }
-  /** `Press Button to Continue`, or what the level says about itself. */
-  drawBottomText() {
-    if (!this.font) return;
-    const blanking = this.restartCountdown >= 0 && this.restartCountdown <= 1;
-    const asking = this.isDead && this.deadTicks >= RESTART_PROMPT_DELAY && !blanking;
-    const text = asking ? "Press Button to Continue" : this.levelText();
-    if (!text) return;
-    drawTextCentred(this.surface, this.font, text, 0, 319, TEXT_TOP_Y, TEXT_WHITE);
+  showRoom(room) {
+    if (room === g.drawn_room) return;
+    g.drawn_room = room;
+    g.next_room = room;
+    load_room_links();
+    get_room_address(room);
+    anim_tile_modif();
+    start_chompers();
+    this.needFullRedraw = true;
   }
 };
-var TEXT_TOP_Y = 193;
-var TEXT_WHITE = 15;
-var LEVEL_TITLE_TICKS = 24;
-var MINUTE_TICKS = 720;
-var ROOM_CHANGE_BLANK = 0;
-var RESTART_PROMPT_DELAY = 46;
-var RESTART_BUTTON_DELAY = 6;
-var RESTART_DELAY = 1;
-var TILE_SWORD = TILE.sword;
-var TILE_POTION = TILE.potion;
-var TILE_FLOOR = TILE.floor;
-var FULL_HP_IMAGE = 217;
-var EMPTY_HP_IMAGE = 218;
-var HP_TOP_Y = 194;
 
 // src/dat/sound.ts
 var SOUND_RESOURCE_BASE = 1e4;
@@ -6384,6 +9461,28 @@ var SoundPlayer = class {
   }
 };
 
+// src/game/traps.ts
+var SOUND = {
+  falling: 1,
+  tileCrashing: 2,
+  buttonPressed: 3,
+  gateClosing: 4,
+  gateOpening: 5,
+  gateClosingFast: 6,
+  gateStop: 7,
+  bumped: 8,
+  grab: 9,
+  softLand: 17,
+  drink: 18,
+  looseShake1: 20,
+  looseShake2: 21,
+  looseShake3: 22,
+  footstep: 23,
+  mediumLand: 16,
+  chomper: 47,
+  spikes: 49
+};
+
 // web/main.ts
 var DATA_URL = window.__princeDataUrl ?? "../original/prince1";
 var FRAMES_PER_SECOND = 12;
@@ -6499,7 +9598,7 @@ async function boot() {
       return;
     }
     roomSel.disabled = false;
-    game = await Game.start(assets, exe, v.level, { effects });
+    game = await PopGame.start(assets, exe, v.level, { effects });
     watchRoom = null;
     roomSel.value = String(game.drawnRoom);
   }
@@ -6532,20 +9631,20 @@ async function boot() {
         key: code
       });
     },
-    tick(c, g) {
+    tick(c, g2) {
       if (!this.on || this.ticks.length >= MAX_RECORDED_TICKS) return;
       this.ticks.push({ ...c });
       this.states.push({
         tick: this.ticks.length - 1,
-        frame: g.kid.frame,
-        room: g.kid.room,
-        x: g.kid.x,
-        y: g.kid.y,
-        hitPoints: g.hitPoints
+        frame: g2.kid.frame,
+        room: g2.kid.room,
+        x: g2.kid.x,
+        y: g2.kid.y,
+        hitPoints: g2.hitPoints
       });
     },
     toJson() {
-      const out = {
+      const out2 = {
         format: RECORDING_FORMAT,
         version: RECORDING_VERSION,
         recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -6555,7 +9654,7 @@ async function boot() {
         events: this.events,
         states: this.states
       };
-      return JSON.stringify(out);
+      return JSON.stringify(out2);
     }
   };
   const MAX_RECORDED_TICKS = 12 * 60 * 20;
