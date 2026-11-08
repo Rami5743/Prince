@@ -65,29 +65,29 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
 /** How many ticks of each run the port draws exactly as the original. */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 0,
-  '13ab6867': 0,
-  '25c4ebb8': 0,
-  '33e8ace7': 0,
-  '3764b76d': 0,
-  '5920a8c2': 0,
-  '72b3522f': 0,
-  '756b259c': 0,
-  '760c3e74': 0,
-  '848ee3c4': 0,
-  '9b60bf3a': 0,
-  'a356bdd6': 0,
-  'b4ff4672': 0,
-  'e209b01a': 0,
-  'ec99dc5b': 0,
-  'f6874819': 0,
+  '0fbffa60': 35,
+  '13ab6867': 527,
+  '25c4ebb8': 213,
+  '33e8ace7': 295,
+  '3764b76d': 184,
+  '5920a8c2': 289,
+  '72b3522f': 175,
+  '756b259c': 202,
+  '760c3e74': 1379,
+  '848ee3c4': 188,
+  '9b60bf3a': 291,
+  'a356bdd6': 158,
+  'b4ff4672': 353,
+  'e209b01a': 205,
+  'ec99dc5b': 171,
+  'f6874819': 290,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
-  'probeC': 0,
-  'probeE': 0,
-  'probeF': 0,
+  'probeC': 230,
+  'probeE': 157,
+  'probeF': 359,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
