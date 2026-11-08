@@ -63,7 +63,72 @@ generator is only needed when the C moves.
 
 ## How it is kept honest
 
-The same way the port was: `node --experimental-strip-types
-tools/dev/oracle-report.ts` after every piece. The translation is not
-finished until it beats 10380 of 11094, and the number is the only thing
-that says whether it does.
+The same way the port was, with `tools/dev/pop-report.ts` -- the same
+digests, the same masks, the same scoring as `oracle-report.ts`, with
+`src/pop` in place of `src/game` -- after every piece.
+
+## Where it got to
+
+**10559 of 11094 ticks drawn exactly, against the hand-written port's
+10380.** `web/main.ts` starts `PopGame`, so that is what `game.js` and
+the page carry, and `tests/oracle/recordings-vs-original.test.ts` pins
+the translation's numbers. Ten of the nineteen runs are exact or within
+one tick: 25c4ebb8, 33e8ace7, 3764b76d, 72b3522f, 756b259c, a356bdd6,
+e209b01a, ec99dc5b, probeC, probeE.
+
+The eight faults the measurement found, in the order it found them, are
+in the commit messages. Six of the eight were a line of the C that the
+translation had dropped or written round:
+
+* `draw_right_mark` lost the offset the C passes it and put the chip on
+  every brick at the wrong side of the mortar line.
+* Nothing drew the strip under the room: `show_level`, `show_time`,
+  `draw_hp` and the rest were missing.
+* Nothing rubbed a character out: the original does it with *peels*,
+  which `draw_mid` takes and the next frame's `draw_tables` puts back.
+* The room is drawn into a surface made from `rect_top`, 320 by 192, so
+  nothing the tables draw can reach the hit points.
+* `check_shadow` ends in `enter_guard`, and without that last line no
+  guard ever entered a room.
+* `control_kid` brackets the player's turn with `rest_ctrl_1` and
+  `save_ctrl_1`, and without them the guard's `autocontrol_` left its
+  own key presses in the globals for the Prince to act on.
+* `edge_type`'s three values were in the wrong order, which the C's one
+  bare `edge_type != 1` noticed.
+* `control_standing` jumps when forward and up are both held.
+
+## What is left
+
+`tools/dev/pop-apart.ts` sorts the 535 ticks that still differ into two
+kinds: a picture the translation draws somewhere else in the run (43 of
+them, a timing difference) and a picture it never draws at all (492).
+
+The second number is not as bad as it reads. A picture is the whole
+screen, so a tick where the Prince is exactly right and a gate two
+rooms away is one frame further open counts as never drawn. Every one
+looked at so far has been of that shape:
+
+* `b4ff4672` 251: the Prince is at a gate that is opening off-screen in
+  the room to his left. At a modifier of 140 `can_bump_into_gate` lets
+  him through and he starts to run; in the capture he is still standing.
+  The gate is not on the screen, so nothing before that tick can say
+  which of the two is a frame ahead.
+* `9b60bf3a` 83: the Prince's own picture is exactly the capture's --
+  one tick later. The loose floor falling across the room is not. No
+  single alignment can match both.
+* `13ab6867` 571: a run along the bottom of room 1 where the port is one
+  tick behind the capture from well before, so the running jump at 573
+  is pressed a tick after he has stepped off the edge, and he falls
+  where the original jumps.
+
+All three are the same shape: the keys go into DOSBox on a wall clock
+and the game reads them at the top of its own tick, so where a key edge
+lands inside a tick is wherever it landed. `tools/dev/pick-shift.ts`
+resolves that to a whole tick and no further, and the remaining half is
+not something a port can be right or wrong about. Feeding the whole
+recording a tick earlier scores 10060 rather than 10559, so the phase
+that is there is the better of the two.
+
+That is not a proof that nothing is left to fix, and it should not be
+read as one. It is a reason to look at the ticks that differ one at a
+time rather than at the total.
