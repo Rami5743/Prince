@@ -66,7 +66,28 @@ const RECORDINGS = join(REPO, 'tools', 'oracle', 'recordings');
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-/** How many ticks of each run the port draws exactly as the original. */
+/**
+ * How many ticks of each run the port draws exactly as the original.
+ *
+ * Two of these are *down* from where they were, which is normally not
+ * allowed. They are `e209b01a` (205 to 192) and `probeF` (455 to 420),
+ * and they went down when the port stopped standing a guard still for
+ * two ticks after he follows the Prince through a door and started
+ * doing what the original does instead: `exit_room_timer`, which
+ * `redraw_screen` sets to 2, shuts the doorway for the two ticks after
+ * the screen is drawn whole, and nothing is frozen.
+ *
+ * The freeze was measured, on `probeF`, and it was right about those
+ * two ticks for the wrong reason, so it was wrong everywhere a room
+ * change was not involved. Against the captures of the third round --
+ * the first ones taken with the key schedule read off the timeline --
+ * the change is worth seventy ticks of `0fbffa60` and costs
+ * thirty-nine of `probeF`, which is the same recording as `f6874819`
+ * sent twice and so counts once. These digests are the old captures,
+ * whose keys are all a tick early; they are being replaced one at a
+ * time as the round finishes, and every number here moves when that
+ * is done.
+ */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 35,
   '13ab6867': 527,
@@ -81,7 +102,7 @@ const EXPECTED: Record<string, number> = {
   '9b60bf3a': 292,
   'a356bdd6': 173,
   'b4ff4672': 354,
-  'e209b01a': 205,
+  'e209b01a': 192,
   'ec99dc5b': 174,
   'f6874819': 293,
   // Probes: the same machinery, with a timeline written here rather
@@ -90,7 +111,7 @@ const EXPECTED: Record<string, number> = {
   // `probeF` is the whole of `f6874819` sent again.
   'probeC': 230,
   'probeE': 157,
-  'probeF': 455,
+  'probeF': 420,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

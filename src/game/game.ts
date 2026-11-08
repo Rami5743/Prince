@@ -10,7 +10,9 @@ import { readExeTables, type ExeTables } from './exe-tables.ts';
 import {
   newCharacter, placeCharacter, placeHurtSplash, placeSword, type CharacterState,
 } from './character.ts';
-import { stepKid, enterLevel, type Controls, type KidContext, type TrapHooks } from './kid.ts';
+import {
+  stepKid, exitRoom, enterLevel, type Controls, type KidContext, type TrapHooks,
+} from './kid.ts';
 import { getTile, tileDivModM7, type World } from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
 import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS, tileIsFloor } from './tiles.ts';
@@ -106,22 +108,27 @@ export class Game {
   private guardHurt = false;
 
   /**
-   * How many more ticks a guard who has just followed the Prince through
-   * a door stands still for.
+   * `exit_room_timer`: how many more ticks nobody may change room in.
    *
-   * `play_guard_frame` runs the guard's byte-code only while
-   * `Char.room == drawn_room`, and a guard who has just been moved into
-   * the room the Prince left for is in a room the screen has not caught
-   * up with yet. Two ticks of him go by with nothing played.
+   * The last line of `redraw_screen` is `exit_room_timer = 2`, and the
+   * first lines of `exit_room` are to decrement it and return while it
+   * is not nought. So the two ticks after the screen has been drawn
+   * whole -- a room change, or the start of a level -- are ticks in
+   * which the Prince cannot step out of the room he is in and a guard
+   * cannot follow him out of it. Everything else about those ticks
+   * happens as usual: both are played, the swordplay is settled, only
+   * the doorway is shut.
    *
-   * Measured, not reasoned. In the capture of `probeF` the guard follows
-   * out of room 3 into room 2 at tick 190 and walks back on from the
-   * right-hand edge; his sprites are the port's exactly, pixel for pixel,
-   * but every one of them is two ticks late. Freezing him for two ticks
-   * put 37 more ticks of that run pixel-exact and moved the first
-   * difference from 205 to 261.
+   * The port had a guess in place of this: a guard who had just
+   * followed stood still for two ticks. That was measured, on
+   * `probeF`, and it was right about those two ticks for the wrong
+   * reason -- it froze the guard instead of shutting the door, and so
+   * it was wrong wherever a room change was not involved. With the
+   * freeze `0fbffa60` has the guard of room 2 come on two ticks late
+   * for the whole of his approach; without it `probeF` has him two
+   * ticks early.
    */
-  private guardFreeze = 0;
+  private exitRoomTimer = 2;
 
   /**
    * `knock`, which the byte-code raises and `check_knock` acts on.
@@ -307,8 +314,6 @@ export class Game {
     // only thing that puts the hurt splash on the screen.
     this.kidHurt = false;
     this.guardHurt = false;
-    const frozen = this.guardFreeze > 0;
-    if (frozen) this.guardFreeze -= 1;
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;
@@ -329,9 +334,10 @@ export class Game {
       this.pendingKnock = 0;
       if (row >= 0 && row <= 2) this.traps.knock(this.kid.room, row);
     }
-    if (!frozen) stepGuard(this.guard, {
+    stepGuard(this.guard, {
       tables: this.tables,
       effects: this.effects,
+      drawnRoom: this.drawnRoom,
       kidRoom: this.kid.room,
       kidRow: this.kid.currentRow,
       kidX: this.kid.x,
@@ -369,6 +375,24 @@ export class Game {
       },
     });
     this.resolveSwordplay();
+    // `exit_room()`, after the guard's frame and after the hit points:
+    // see `exitRoomTimer`.
+    if (this.exitRoomTimer !== 0) {
+      this.exitRoomTimer -= 1;
+    } else if (this.kid.room !== 0) {
+      exitRoom(this.kid, this.ctx);
+    }
+    // `check_the_end()`, which takes the screen to the room the Prince
+    // has just stepped into, and `redraw_screen`, which shuts the
+    // doorway for the two ticks after it.
+    if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
+    if (this.drawnRoom !== wasDrawing) {
+      this.enterRoom(this.drawnRoom);
+      this.blankFrames = ROOM_CHANGE_BLANK;
+      this.exitRoomTimer = 2;
+    } else if (this.blankFrames > 0) {
+      this.blankFrames -= 1;
+    }
     if (this.isDead) this.deadTicks += 1;
     if (this.justBlocked > 0) this.justBlocked -= 1;
     this.titleTicks += 1;
@@ -393,13 +417,6 @@ export class Game {
     // Down to -1, not to 0: `restartDue` is then true for exactly the one
     // tick the level is to be built on.
     if (this.restartCountdown >= 0) this.restartCountdown -= 1;
-    if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
-    if (this.drawnRoom !== wasDrawing) {
-      this.enterRoom(this.drawnRoom);
-      this.blankFrames = ROOM_CHANGE_BLANK;
-    } else if (this.blankFrames > 0) {
-      this.blankFrames -= 1;
-    }
   }
 
   /**
@@ -654,7 +671,6 @@ export class Game {
     guard.room = room;
     guard.x = (guard.x + (toTheLeft ? 140 : -140)) & 0xff;
     guard.currentColumn += toTheLeft ? 10 : -10;
-    this.guardFreeze = 2;
     return true;
   }
 

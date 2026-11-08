@@ -200,48 +200,53 @@ describe('a guard who can no longer see the Prince', () => {
 });
 
 /**
- * A guard who has just followed the Prince through a door is in a room
- * the screen has not caught up with, and `play_guard_frame` runs his
- * byte-code only while `Char.room == drawn_room`. Two of his ticks go by
- * unplayed.
+ * `play_guard_frame` is two halves. `play_guard` decides what the
+ * guard is to do and runs wherever he is; `play_seq` and the physics
+ * under it run only for a guard in the room on the screen, and the
+ * physics only while his x is between 44 and 211.
  *
- * Measured against the capture of `probeF`, where the guard follows out
- * of room 3 at tick 190 and walks back on from the right-hand edge of
- * room 2: every sprite of his is the port's exactly, and every one of
- * them two ticks late.
+ * Both gates matter the moment he follows the Prince through a door:
+ * he is shifted by the width of a room, which puts him outside it, and
+ * for a tick he is in a room the screen has not caught up with.
+ *
+ * The port used to stand him still for two ticks instead, which was
+ * measured on `probeF` and was the right answer there for the wrong
+ * reason. What really shuts the door for two ticks is
+ * `exit_room_timer`, which `redraw_screen` sets to 2 and `exit_room`
+ * counts down -- so for two ticks after the screen is drawn whole
+ * nobody changes room at all, while everything else about those ticks
+ * goes on as usual.
  */
-describe('a guard who has just followed the Prince', () => {
-  it('stands still for two ticks and then walks on', async () => {
+describe('a guard outside the room on the screen', () => {
+  it('is decided about but not played', async () => {
     const game = await Game.start(assets, exe, 1);
     game.clearBottomText();
     game.showRoom(ROOM);
     const guard = game.guard;
-    const kid = game.kid;
-    kid.room = ROOM;
-    kid.currentRow = guard.currentRow;
-    kid.currentColumn = guard.currentColumn - 4;
-    kid.x = standX(kid.currentColumn);
-    for (let i = 0; i < 40 && guard.frame !== 158; i++) {
-      game.step({ x: 0, y: 0, shift: false });
+    const before = { x: guard.x, y: guard.y, frame: guard.frame };
+    for (let i = 0; i < 4; i++) {
+      stepGuard(guard, { tables: game.tables, kid: game.kid, drawnRoom: guard.room + 1 });
     }
-    expect(guard.frame).toBe(158);
-    // Near enough to the left-hand door to come through it after him.
-    guard.currentColumn = 1;
-    guard.x = 88;
+    expect({ x: guard.x, y: guard.y, frame: guard.frame }).toEqual(before);
+  });
 
-    game.showRoom(LEFT);
-    expect(guard.room, 'he came through the door').toBe(LEFT);
-    // The Prince comes with him, or the guard loses sight and stands down.
-    kid.room = LEFT;
-    kid.currentColumn = 9;
-    kid.x = standX(9);
-    const frozen = { x: guard.x, frame: guard.frame };
-    game.step({ x: 0, y: 0, shift: false });
-    expect({ x: guard.x, frame: guard.frame }, 'first tick, nothing').toEqual(frozen);
-    game.step({ x: 0, y: 0, shift: false });
-    expect({ x: guard.x, frame: guard.frame }, 'second tick, nothing').toEqual(frozen);
-    game.step({ x: 0, y: 0, shift: false });
-    expect({ x: guard.x, frame: guard.frame }, 'and then he moves')
-      .not.toEqual(frozen);
+  it('is played, but not moved by the floors, once past the edge', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(ROOM);
+    const guard = game.guard;
+    // Where following the Prince out of the left-hand door puts him:
+    // a room's width to the right of a guard who was beside it.
+    guard.x = 226;
+    // `determine_column` is inside the gate, so it does not run: the
+    // column stays whatever it was, wrong or not. The control below is
+    // the same guard a few pixels nearer, inside the room.
+    guard.currentColumn = 99;
+    stepGuard(guard, { tables: game.tables, kid: game.kid, drawnRoom: guard.room });
+    expect(guard.currentColumn, 'nothing puts him on a tile').toBe(99);
+
+    guard.x = 200;
+    stepGuard(guard, { tables: game.tables, kid: game.kid, drawnRoom: guard.room });
+    expect(guard.currentColumn, 'and inside the room it does').not.toBe(99);
   });
 });

@@ -3021,7 +3021,9 @@ function stepGuard(guard, ctx) {
   comeOnGuard(guard, ctx);
   faceTheKid(guard, ctx);
   autocontrolGuardActive(guard, ctx);
+  if (ctx.drawnRoom !== void 0 && guard.room !== ctx.drawnRoom) return;
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
+  if (guard.x < 44 || guard.x >= 211) return;
   if (guard.action === ACTION.inFreefall) {
     guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
     guard.x = forwardX(guard, guard.fallX) & 255;
@@ -4249,11 +4251,6 @@ function stepKid(state, controls, ctx) {
   checkBumped(state, ctx);
   checkBumpedIntoFoe(state, ctx);
   checkAction(state, ctx);
-  const leave = leaveDirection(state, ctx);
-  if (leave >= 0) {
-    gotoOtherRoom(state, leave, ctx);
-    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-  }
   checkPress(state, ctx);
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
@@ -4450,6 +4447,13 @@ function leaveDirection(state, ctx) {
   }
   if (coll.xRight <= 57) return 0;
   return -1;
+}
+function exitRoom(state, ctx) {
+  const leave = leaveDirection(state, ctx);
+  if (leave < 0) return -1;
+  gotoOtherRoom(state, leave, ctx);
+  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  return leave;
 }
 function gotoOtherRoom(state, direction, ctx) {
   state.room = ctx.world.linkOf(state.room, direction);
@@ -5096,22 +5100,27 @@ var Game = class _Game {
   kidHurt = false;
   guardHurt = false;
   /**
-   * How many more ticks a guard who has just followed the Prince through
-   * a door stands still for.
+   * `exit_room_timer`: how many more ticks nobody may change room in.
    *
-   * `play_guard_frame` runs the guard's byte-code only while
-   * `Char.room == drawn_room`, and a guard who has just been moved into
-   * the room the Prince left for is in a room the screen has not caught
-   * up with yet. Two ticks of him go by with nothing played.
+   * The last line of `redraw_screen` is `exit_room_timer = 2`, and the
+   * first lines of `exit_room` are to decrement it and return while it
+   * is not nought. So the two ticks after the screen has been drawn
+   * whole -- a room change, or the start of a level -- are ticks in
+   * which the Prince cannot step out of the room he is in and a guard
+   * cannot follow him out of it. Everything else about those ticks
+   * happens as usual: both are played, the swordplay is settled, only
+   * the doorway is shut.
    *
-   * Measured, not reasoned. In the capture of `probeF` the guard follows
-   * out of room 3 into room 2 at tick 190 and walks back on from the
-   * right-hand edge; his sprites are the port's exactly, pixel for pixel,
-   * but every one of them is two ticks late. Freezing him for two ticks
-   * put 37 more ticks of that run pixel-exact and moved the first
-   * difference from 205 to 261.
+   * The port had a guess in place of this: a guard who had just
+   * followed stood still for two ticks. That was measured, on
+   * `probeF`, and it was right about those two ticks for the wrong
+   * reason -- it froze the guard instead of shutting the door, and so
+   * it was wrong wherever a room change was not involved. With the
+   * freeze `0fbffa60` has the guard of room 2 come on two ticks late
+   * for the whole of his approach; without it `probeF` has him two
+   * ticks early.
    */
-  guardFreeze = 0;
+  exitRoomTimer = 2;
   /**
    * `knock`, which the byte-code raises and `check_knock` acts on.
    *
@@ -5284,8 +5293,6 @@ var Game = class _Game {
     }
     this.kidHurt = false;
     this.guardHurt = false;
-    const frozen = this.guardFreeze > 0;
-    if (frozen) this.guardFreeze -= 1;
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;
@@ -5302,9 +5309,10 @@ var Game = class _Game {
       this.pendingKnock = 0;
       if (row >= 0 && row <= 2) this.traps.knock(this.kid.room, row);
     }
-    if (!frozen) stepGuard(this.guard, {
+    stepGuard(this.guard, {
       tables: this.tables,
       effects: this.effects,
+      drawnRoom: this.drawnRoom,
       kidRoom: this.kid.room,
       kidRow: this.kid.currentRow,
       kidX: this.kid.x,
@@ -5346,6 +5354,19 @@ var Game = class _Game {
       }
     });
     this.resolveSwordplay();
+    if (this.exitRoomTimer !== 0) {
+      this.exitRoomTimer -= 1;
+    } else if (this.kid.room !== 0) {
+      exitRoom(this.kid, this.ctx);
+    }
+    if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
+    if (this.drawnRoom !== wasDrawing) {
+      this.enterRoom(this.drawnRoom);
+      this.blankFrames = ROOM_CHANGE_BLANK;
+      this.exitRoomTimer = 2;
+    } else if (this.blankFrames > 0) {
+      this.blankFrames -= 1;
+    }
     if (this.isDead) this.deadTicks += 1;
     if (this.justBlocked > 0) this.justBlocked -= 1;
     this.titleTicks += 1;
@@ -5354,13 +5375,6 @@ var Game = class _Game {
       this.pressButton();
     }
     if (this.restartCountdown >= 0) this.restartCountdown -= 1;
-    if (this.kid.room !== 0) this.drawnRoom = this.kid.room;
-    if (this.drawnRoom !== wasDrawing) {
-      this.enterRoom(this.drawnRoom);
-      this.blankFrames = ROOM_CHANGE_BLANK;
-    } else if (this.blankFrames > 0) {
-      this.blankFrames -= 1;
-    }
   }
   /**
    * A lunge that reaches an opponent who is not blocking costs him a hit
@@ -5574,7 +5588,6 @@ var Game = class _Game {
     guard.room = room;
     guard.x = guard.x + (toTheLeft ? 140 : -140) & 255;
     guard.currentColumn += toTheLeft ? 10 : -10;
-    this.guardFreeze = 2;
     return true;
   }
   /**

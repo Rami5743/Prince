@@ -248,6 +248,13 @@ export function leaveGuard(guard: GuardState, guards: GuardsData): void {
 export interface GuardStepContext {
   readonly tables: ExeTables;
   readonly effects?: SequenceEffects;
+  /**
+   * The room on the screen. `play_guard_frame` runs `play_seq` only
+   * while `Char.room == drawn_room`, so a guard in a room the screen
+   * has not got to is decided about but never played: his byte-code
+   * does not advance and he does not move.
+   */
+  readonly drawnRoom?: number;
   /** Where the Prince is, which is all a guard reacts to so far. */
   readonly kidRoom?: number;
   readonly kidRow?: number;
@@ -686,7 +693,16 @@ export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
   comeOnGuard(guard, ctx);
   faceTheKid(guard, ctx);
   autocontrolGuardActive(guard, ctx);
+  // `play_guard_frame`: everything above is `play_guard`, which decides
+  // what the guard is to do, and happens wherever he is. Everything
+  // below is only for a guard in the room on the screen.
+  if (ctx.drawnRoom !== undefined && guard.room !== ctx.drawnRoom) return;
   playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
+  // And the fall and the collisions only between x 44 and x 211: a
+  // guard who has been shifted out past the edge of the room by
+  // following the Prince through a door is not pulled about by the
+  // floors of a room he is not in yet.
+  if (guard.x < 44 || guard.x >= 211) return;
   if (guard.action === ACTION.inFreefall) {
     guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
     guard.x = forwardX(guard, guard.fallX) & 0xff;

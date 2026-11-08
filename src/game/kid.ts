@@ -1158,12 +1158,6 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkBumpedIntoFoe(state, ctx);
   checkAction(state, ctx);
 
-  const leave = leaveDirection(state, ctx);
-  if (leave >= 0) {
-    gotoOtherRoom(state, leave, ctx);
-    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
-  }
-
   checkPress(state, ctx);
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
@@ -1502,6 +1496,29 @@ function leaveDirection(state: CharacterState, ctx: KidContext): number {
   }
   if (coll.xRight <= 57) return 0;
   return -1;
+}
+
+/**
+ * `exit_room`: the Prince steps over the edge of the room into the next.
+ *
+ * This is not part of `play_kid_frame`. The original's `play_frame`
+ * plays the Prince, then the guard, then settles the swordplay and the
+ * hit points, and only then calls `exit_room`, so a tick in which the
+ * Prince leaves a room is a tick the guard has already been played in,
+ * in the room the Prince is leaving. The port had it inside `stepKid`,
+ * which put the room change before the guard's frame instead of after
+ * it.
+ *
+ * `game.ts` owns the call, because `exit_room` is also where the guard
+ * decides whether to follow, and because of the two-tick gate on it --
+ * see `exitRoomTimer`.
+ */
+export function exitRoom(state: CharacterState, ctx: KidContext): number {
+  const leave = leaveDirection(state, ctx);
+  if (leave < 0) return -1;
+  gotoOtherRoom(state, leave, ctx);
+  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  return leave;
 }
 
 /** Move the character into the neighbouring room. */
