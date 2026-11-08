@@ -69,12 +69,13 @@ digests, the same masks, the same scoring as `oracle-report.ts`, with
 
 ## Where it got to
 
-**10559 of 11094 ticks drawn exactly, against the hand-written port's
+**10605 of 11094 ticks drawn exactly, against the hand-written port's
 10380.** `web/main.ts` starts `PopGame`, so that is what `game.js` and
 the page carry, and `tests/oracle/recordings-vs-original.test.ts` pins
 the translation's numbers. Ten of the nineteen runs are exact or within
-one tick: 25c4ebb8, 33e8ace7, 3764b76d, 72b3522f, 756b259c, a356bdd6,
-e209b01a, ec99dc5b, probeC, probeE.
+one tick: 25c4ebb8, 33e8ace7, 3764b76d, 5920a8c2, 72b3522f, 756b259c,
+a356bdd6, e209b01a, ec99dc5b, f6874819, probeC, probeE, probeF --
+thirteen of the nineteen.
 
 The eight faults the measurement found, in the order it found them, are
 in the commit messages. Six of the eight were a line of the C that the
@@ -97,11 +98,27 @@ translation had dropped or written round:
   bare `edge_type != 1` noticed.
 * `control_standing` jumps when forward and up are both held.
 
+Two more came of the clock, and the second is the only place so far
+where the C and the capture disagree:
+
+* `init_game` resets the hour and is called once; the restart after a
+  death happens inside `play_level`'s own loop and never goes back out
+  to it, so an hour is an hour for the whole game. The adapter's
+  `restart` started it again.
+* `show_time` guards the countdown with `Kid.alive < 0` as well as the
+  rest, which stops the clock while the Prince is dead. The original
+  does not stop it: `probeF` dies twice and its words at tick 735 are
+  `59 MINUTES LEFT`, which needs seven hundred and nineteen ticks of
+  clock inside seven hundred and thirty-five. Dropping the guard is
+  worth twenty-three ticks of `probeF` and twenty-three of `f6874819`
+  -- both now exact -- and costs nothing: no other run's clock crosses
+  a minute.
+
 ## What is left
 
-`tools/dev/pop-apart.ts` sorts the 535 ticks that still differ into two
+`tools/dev/pop-apart.ts` sorts the 489 ticks that still differ into two
 kinds: a picture the translation draws somewhere else in the run (43 of
-them, a timing difference) and a picture it never draws at all (492).
+them, a timing difference) and a picture it never draws at all.
 
 The second number is not as bad as it reads. A picture is the whole
 screen, so a tick where the Prince is exactly right and a gate two
@@ -126,7 +143,8 @@ and the game reads them at the top of its own tick, so where a key edge
 lands inside a tick is wherever it landed. `tools/dev/pick-shift.ts`
 resolves that to a whole tick and no further, and the remaining half is
 not something a port can be right or wrong about. Feeding the whole
-recording a tick earlier scores 10060 rather than 10559, so the phase
+recording a tick earlier scores 10060 rather than 10559 (measured before
+the two clock fixes), so the phase
 that is there is the better of the two.
 
 That is not a proof that nothing is left to fix, and it should not be

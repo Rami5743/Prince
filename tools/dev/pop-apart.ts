@@ -13,8 +13,8 @@
  * * If it does not, the translation draws something the original never
  *   draws, which is a difference in the game.
  *
- * As of the translation's 10559 of 11094: 43 of the 535 ticks apart are
- * the first kind and 492 the second. That number is worth reading with
+ * As of the translation's 10605 of 11094, most of what is left is the
+ * second kind. That number is worth reading with
  * care, though. A picture is the whole screen, so a tick where the
  * Prince is right and a gate two rooms away is one frame further open
  * counts as "never drawn" -- and that is what the ones looked at so far

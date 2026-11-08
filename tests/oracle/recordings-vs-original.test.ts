@@ -123,14 +123,14 @@ const EXPECTED: Record<string, number> = {
   'b4ff4672': 393,
   'e209b01a': 214,
   'ec99dc5b': 237,
-  'f6874819': 1166,
+  'f6874819': 1189,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
   'probeC': 235,
   'probeE': 166,
-  'probeF': 1170,
+  'probeF': 1193,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

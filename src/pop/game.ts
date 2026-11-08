@@ -194,8 +194,34 @@ export class PopGame {
     return game;
   }
 
+  /**
+   * The level again, as the original restarts it after a death.
+   *
+   * `init_game` resets the clock and the hit points the level starts
+   * with, and it is called once: the restart happens inside
+   * `play_level`'s own loop, which never goes back out to it. So an
+   * hour is an hour for the whole game, however many times the Prince
+   * dies, and the capture of `probeF` says `59 MINUTES LEFT` where a
+   * port that started the clock again says `60`.
+   */
   async restart(assets: Assets, exe: Uint8Array): Promise<PopGame> {
-    return PopGame.start(assets, exe, this.levelNumber, { effects: this.effects });
+    const carried = {
+      rem_min: g.rem_min,
+      rem_tick: g.rem_tick,
+      hitp_beg_lev: g.hitp_beg_lev,
+      checkpoint: g.checkpoint,
+    };
+    const game = await PopGame.start(assets, exe, this.levelNumber, { effects: this.effects });
+    g.rem_min = carried.rem_min;
+    g.rem_tick = carried.rem_tick;
+    g.checkpoint = carried.checkpoint;
+    if (carried.hitp_beg_lev !== g.hitp_beg_lev) {
+      g.hitp_beg_lev = carried.hitp_beg_lev;
+      g.hitp_max = carried.hitp_beg_lev;
+      g.hitp_curr = carried.hitp_beg_lev;
+      g.hitp_delta = 1;
+    }
+    return game;
   }
 
   /** `start_level`: the level's data into the globals, once. */

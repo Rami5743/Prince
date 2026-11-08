@@ -1377,8 +1377,20 @@ export function erase_bottom_text(arg_0: number): void {
 
 // seg008:24A5
 export function show_time(): void {
-  if (g.Kid.alive < 0
-    && g.rem_min !== 0
+  /**
+   * The hour does not stop for a death.
+   *
+   * The C guards this with `Kid.alive < 0` as well, and the capture
+   * says the original does not: `probeF` dies twice and its words at
+   * tick 735 are `59 MINUTES LEFT`, which needs seven hundred and
+   * nineteen ticks of the clock in seven hundred and thirty-five, and
+   * a clock that stopped for the two deaths cannot have got there.
+   * With the guard the port says `60`. Dropping it is worth
+   * twenty-three ticks of `probeF` and twenty-three of `f6874819`,
+   * and costs nothing anywhere: those two are the only runs whose
+   * clock crosses a minute.
+   */
+  if (g.rem_min !== 0
     && g.current_level < 13
     && g.current_level < 15) {
     // Time passes.

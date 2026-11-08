@@ -10,13 +10,14 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 nineteen captures of a real PRINCE.EXE:
 
-* the translation draws **10559 of 11094** ticks exactly;
+* the translation draws **10605 of 11094** ticks exactly;
 * the hand-written port, which it replaced, drew 10380. That port is
   still in `src/game` and on `backup/handwritten-port`; nothing but
   its own unit tests uses it now.
-* Ten of the nineteen runs are exact or within one tick. What is left
-  is mostly `9b60bf3a` (104), `0fbffa60` (94), `13ab6867` (158) and
-  `b4ff4672` (35).
+* Thirteen of the nineteen runs are exact or within one tick. What is
+  left is mostly `13ab6867` (158), `9b60bf3a` (104), `0fbffa60` (94),
+  `760c3e74` (63) and `b4ff4672` (35); tasks 35, 37 and 38 say what is
+  known about three of them.
 
 **Do not stop while ticks are still different.** The tools:
 

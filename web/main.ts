@@ -15,7 +15,7 @@ import {
  * The game the player plays is the translation of SDLPoP in `src/pop`,
  * not the hand-written port in `src/game`. It is measured against the
  * same nineteen captures of a real PRINCE.EXE and draws more of them
- * exactly -- 10559 of 11094 ticks against 10380 -- see
+ * exactly -- 10605 of 11094 ticks against 10380 -- see
  * `tools/dev/pop-report.ts` and `docs/sdlpop-translation.md`.
  */
 import { PopGame as Game } from '../src/pop/game.ts';
