@@ -54,6 +54,11 @@ export const l5 = {
   seqtbl_offset_char: slot<(seq_index: number) => void>('seqtbl_offset_char'),
 };
 
+/** `seg006.c`'s guard half, which seg002 fills in. */
+export const l6 = {
+  control_guard_inactive: slot<() => void>('control_guard_inactive'),
+};
+
 /** `seg002.c`. */
 export const l2 = {
   autocontrol_opponent: slot<() => void>('autocontrol_opponent'),

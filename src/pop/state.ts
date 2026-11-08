@@ -249,6 +249,7 @@ class Globals {
   drawn_row = 0;
   drawn_col = 0;
   draw_mode = 0;
+  leveldoor_open = 0;
   leveldoor_right = 0;
   leveldoor_ybottom = 0;
 

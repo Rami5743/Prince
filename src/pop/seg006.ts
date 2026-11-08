@@ -43,6 +43,7 @@ const CONTROL_HELD_DOWN = 1;
 export let obj_xl = 0;
 export let infrontx = 0;
 export let through_tile = 0;
+export function setThroughTile(v: number): void { through_tile = v; }
 export let fall_frame = 0;
 export let droppedout = 0;
 
