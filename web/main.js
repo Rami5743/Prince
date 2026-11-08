@@ -5359,6 +5359,7 @@ var Game = class _Game {
       const dead2 = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
       startSequence(hit, dead2 ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
       if (dead2) hit.alive = 0;
+      playSequence(hit, { tables: this.tables, effects: this.effects });
       return;
     }
     if (this.guard.hitPoints > 0) this.guardHurt = true;
@@ -5366,6 +5367,7 @@ var Game = class _Game {
     const dead = this.guard.hitPoints === 0;
     startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
     if (dead) hit.alive = 0;
+    playSequence(hit, { tables: this.tables, effects: this.effects });
     this.guard.waitTimer = refractoryFor(this.guard.skill);
   }
   /**

@@ -25,7 +25,7 @@ import { SWORD_SEQ, SWORD_DRAWN, checkHurting, PARRY_FRAME } from './sword.ts';
  */
 const GUARD_FOLLOWS_LEFT = 91;
 const GUARD_FOLLOWS_RIGHT = 165;
-import { startSequence } from './sequence.ts';
+import { startSequence, playSequence } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
   guardFrame, stepGuard, refractoryFor, NO_DIRECTION, canGuardSeeKid, type GuardState,
@@ -421,6 +421,11 @@ export class Game {
       const dead = this.hasSword ? this.damage(1) : this.damage(this.hitPoints);
       startSequence(hit, dead ? SWORD_SEQ.kidDie : SWORD_SEQ.stabbed, this.tables);
       if (dead) hit.alive = 0;
+      // `hurt_by_sword` ends with `play_seq()`: the first frame of being
+      // run through is drawn in the tick the blade lands, not the tick
+      // after. The port left it for the next one, so the whole of the
+      // death came a tick late -- six ticks of `probeF`.
+      playSequence(hit, { tables: this.tables, effects: this.effects });
       return;
     }
     if (this.guard.hitPoints > 0) this.guardHurt = true;
@@ -428,6 +433,7 @@ export class Game {
     const dead = this.guard.hitPoints === 0;
     startSequence(hit, dead ? SWORD_SEQ.dropDead : SWORD_SEQ.stabbed, this.tables);
     if (dead) hit.alive = 0;
+    playSequence(hit, { tables: this.tables, effects: this.effects });
     // `check_sword_hurt`: a guard who has been hit holds off for a while,
     // the while being his skill's own number. The port had the timer and
     // the table and never set it, so a guard came straight back at the

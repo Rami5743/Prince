@@ -70,13 +70,13 @@ const EXPECTED: Record<string, number> = {
   '25c4ebb8': 213,
   '33e8ace7': 295,
   '3764b76d': 184,
-  '5920a8c2': 366,
+  '5920a8c2': 372,
   '72b3522f': 175,
   '756b259c': 202,
   '760c3e74': 1381,
   '848ee3c4': 188,
   '9b60bf3a': 292,
-  'a356bdd6': 167,
+  'a356bdd6': 173,
   'b4ff4672': 354,
   'e209b01a': 205,
   'ec99dc5b': 174,
@@ -87,7 +87,7 @@ const EXPECTED: Record<string, number> = {
   // `probeF` is the whole of `f6874819` sent again.
   'probeC': 230,
   'probeE': 157,
-  'probeF': 449,
+  'probeF': 455,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

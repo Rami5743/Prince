@@ -238,3 +238,37 @@ describe('a guard left to himself', () => {
     expect(Math.abs(STAND - game.guard.x)).toBeLessThanOrEqual(GUARD_REACH);
   });
 });
+
+/**
+ * `hurt_by_sword` ends with `play_seq()`, so the first frame of being run
+ * through is drawn in the tick the blade lands, not the tick after. The
+ * port set the sequence and left the frame for the next tick, which put
+ * the whole of the Prince's death a tick behind the original's: six
+ * ticks of the capture of `probeF`, from the blow to the body coming to
+ * rest.
+ */
+describe('a blow that lands', () => {
+  it('changes the frame in the tick it lands in', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(3);
+    const guard = game.guard;
+    const kid = game.kid;
+    kid.room = 3;
+    kid.currentRow = guard.currentRow;
+    kid.currentColumn = guard.currentColumn - 4;
+    kid.x = standX(kid.currentColumn);
+    kid.y = standY(kid.currentRow);
+    const was = kid.frame;
+    let hit = -1;
+    for (let i = 0; i < 120 && hit < 0; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+      if (game.hitPoints < 3) hit = i;
+    }
+    expect(hit, 'the guard gets him in the end').toBeGreaterThan(0);
+    // The tick the hit points come off is the tick he is already on his
+    // way down -- not still standing as he was.
+    expect(kid.frame).not.toBe(was);
+    expect(kid.frame).toBeGreaterThanOrEqual(170);
+  });
+});
