@@ -53,7 +53,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR, REPO } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
-import { Game } from '../../src/game/game.ts';
+import { PopGame as Game } from '../../src/pop/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
 import {
   runOf, exactAgreement, inputChanges, type Digest,
@@ -101,30 +101,36 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * drawn exactly all the same; what the mark means is that the capture
  * could be a tick better placed, not that the port is wrong.
  */
+/**
+ * The numbers are the translation's. The hand-written port in
+ * `src/game`, which these pins used to measure, drew 10380 of the
+ * 11094 ticks exactly; `src/pop` draws 10559, and is what the page and
+ * `game.js` now run -- see `docs/sdlpop-translation.md`.
+ */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 625,
-  '13ab6867': 562,
-  '25c4ebb8': 375,
+  '0fbffa60': 630,
+  '13ab6867': 569,
+  '25c4ebb8': 388,
   '33e8ace7': 308,
-  '3764b76d': 216,
-  '5920a8c2': 412,
+  '3764b76d': 218,
+  '5920a8c2': 413,
   '72b3522f': 384,
-  '756b259c': 494,
-  '760c3e74': 1490,
-  '848ee3c4': 1411,
-  '9b60bf3a': 453,
+  '756b259c': 508,
+  '760c3e74': 1502,
+  '848ee3c4': 1420,
+  '9b60bf3a': 454,
   'a356bdd6': 184,
   'b4ff4672': 393,
-  'e209b01a': 210,
+  'e209b01a': 214,
   'ec99dc5b': 237,
-  'f6874819': 1112,
+  'f6874819': 1166,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
-  'probeC': 232,
+  'probeC': 235,
   'probeE': 166,
-  'probeF': 1116,
+  'probeF': 1170,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
