@@ -175,6 +175,29 @@ describe('dying', () => {
    * the blades really do is pinned in tests/game/spikes.test.ts.
    */
 
+  /**
+   * The tick Shift is read on is the tick the level is built again --
+   * there is nothing in between, and in particular no black screen.
+   *
+   * The capture of `probeF` has the death screen on tick 430, the
+   * player's Shift read on 431, and 431 already showing the new level's
+   * first frame; 432 is the same picture again, which is the level's own
+   * opening tick. The port used to take three ticks over it and show two
+   * black ones, which came from a capture at three thousand cycles where
+   * the black is DOSBox redrawing -- see `ROOM_CHANGE_BLANK`.
+   */
+  it('starts the level again on the tick the button is read', async () => {
+    const game = await Game.start(assets, exe, 3);
+    const none = { x: 0, y: 0, shift: false };
+    game.step(none);
+    game.damage(100);
+    for (let i = 0; i < RESTART_PROMPT_DELAY; i++) game.step(none);
+    expect(game.awaitingButton).toBe(true);
+    expect(game.restartDue, 'not before').toBe(false);
+    game.step({ x: 0, y: 0, shift: true });
+    expect(game.restartDue, 'on the very tick Shift is read').toBe(true);
+  });
+
   it('is not waiting for the button while he is alive', async () => {
     const game = await Game.start(assets, exe, 3);
     for (let i = 0; i < RESTART_PROMPT_DELAY * 2; i++) {

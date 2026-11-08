@@ -5604,7 +5604,7 @@ var Game = class _Game {
   render(options = {}) {
     const showBlank = options.showBlank ?? true;
     this.surface.clear();
-    if (showBlank && (this.blankFrames > 0 || this.restartCountdown >= 0 && this.restartCountdown <= 1)) {
+    if (showBlank && this.blankFrames > 0) {
       this.drawStatusBar();
       return this.surface;
     }
@@ -5719,7 +5719,7 @@ var MINUTE_TICKS = 720;
 var ROOM_CHANGE_BLANK = 0;
 var RESTART_PROMPT_DELAY = 46;
 var RESTART_BUTTON_DELAY = 6;
-var RESTART_DELAY = 3;
+var RESTART_DELAY = 1;
 var TILE_SWORD = TILE.sword;
 var TILE_POTION = TILE.potion;
 var TILE_FLOOR = TILE.floor;

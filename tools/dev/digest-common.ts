@@ -76,9 +76,11 @@ export async function digestOfRun(
   for (let t = 0; t < ticks.length; t++) {
     if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
     game.step(ticks[t]);
-    const due = game.restartDue;
+    // The level is built again *before* the tick is drawn: the original
+    // reads the button and shows the new level in the same tick -- see
+    // `RESTART_DELAY`.
+    if (game.restartDue) game = await restart(game);
     const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
-    if (due) game = await restart(game);
     out.push(prev === null ? null : movedBetween(prev, rgb));
     prev = rgb;
   }
@@ -301,9 +303,11 @@ export async function runOf(
   for (let t = 0; t < ticks.length; t++) {
     if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
     game.step(ticks[t]);
-    const due = game.restartDue;
+    // The level is built again *before* the tick is drawn: the original
+    // reads the button and shows the new level in the same tick -- see
+    // `RESTART_DELAY`.
+    if (game.restartDue) game = await restart(game);
     const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
-    if (due) game = await restart(game);
     hash.push(digest.palette ? fingerprint(rgb, map, mask) : 0);
     moved.push(prev === null ? null : movedBetween(prev, rgb));
     prev = rgb;

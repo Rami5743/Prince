@@ -703,11 +703,10 @@ export class Game {
     const showBlank = options.showBlank ?? true;
     this.surface.clear();
     // While the view is changing room the original shows no room -- but it
-    // keeps the hit points below it. The captures of those frames are black
-    // everywhere except the bottom few rows.
-    if (showBlank
-      && (this.blankFrames > 0
-        || (this.restartCountdown >= 0 && this.restartCountdown <= 1))) {
+    // keeps the hit points below it. Only a slow DOSBox does that, and
+    // `ROOM_CHANGE_BLANK` is nought, so this is dead unless it is put
+    // back; a level restart does not blank at all.
+    if (showBlank && this.blankFrames > 0) {
       this.drawStatusBar();
       return this.surface;
     }
@@ -912,13 +911,20 @@ export const RESTART_PROMPT_DELAY = 46;
 export const RESTART_BUTTON_DELAY = 6;
 
 /**
- * Ticks from the button being pressed to the level running again. Three,
- * of which the middle two are black: the words up on tick 298 of the
- * grabbed video with Left already held, black on 299 and 300, the level
- * running again on 301. The words are on screen for the tick the button
- * is pressed on, which is why this is three and not two.
+ * Ticks from the button being pressed to the level running again. One:
+ * the tick the button is read on is the tick the new level is drawn.
+ *
+ * It was three, read off a capture at three thousand cycles where the
+ * words were up on tick 298 with Left already held, the screen was black
+ * on 299 and 300, and the level was running again on 301. The two black
+ * ticks are DOSBox redrawing, not the game -- see `ROOM_CHANGE_BLANK`.
+ *
+ * At twenty thousand cycles there is nothing between: in `probeF` the
+ * death screen is on tick 430, the player's Shift is read on 431, and
+ * 431 is already the new level's first frame. The frame after it is the
+ * same picture again, which is the level's own opening tick.
  */
-export const RESTART_DELAY = 3;
+export const RESTART_DELAY = 1;
 
 const TILE_SWORD = TILE.sword;
 const TILE_POTION = TILE.potion;

@@ -68,13 +68,12 @@ for (let t = 0; t < ticks.length; t++) {
     drawnRoom = game.drawnRoom;
     drift.roomChanged();
   }
-  // The picture of this tick comes from the game that played it, and only
-  // then is the level built again: the tick the restart falls due is one
-  // of the black ones, and rendering the new level into it would lose it.
-  const due = game.restartDue;
+  // The level is built again before the tick is drawn: the original
+  // reads the button and shows the new level in the same tick -- see
+  // `RESTART_DELAY`.
+  if (game.restartDue) game = await game.restart(assets, exe);
   const show = t >= from && t <= to && (stride <= 1 || t % stride === 0);
   const rgb = show ? game.render().toRgb(game.scene.screenPalette.toRgba()) : null;
-  if (due) game = await game.restart(assets, exe);
   if (!rgb) continue;
   const png = new PNG({ width: W, height: H });
   for (let i = 0; i < W * H; i++) {
