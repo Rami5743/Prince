@@ -61,9 +61,15 @@ times they were pressed, and recover the game's ticks from the grab.
   runs over the edge. The same capture scores 35 ticks of 731 against
   the port one way and 326 the other.
 
-  So each recording is captured at `--shift 0` and at `--shift 1`, and
-  `tools/dev/pick-shift.ts` says which to keep: whichever of the two
-  the port draws more of exactly.
+  So each recording is captured at `--shift -1`, `--shift 0` and
+  `--shift 1`, and `tools/dev/pick-shift.ts` says which to keep:
+  whichever of them the port draws more of exactly. Two was not
+  enough. In `0fbffa60` the player lets go of Left at tick 283 and
+  both the shift-0 and the shift-1 capture have the Prince run on and
+  off the left of the room, because the emulator read the release a
+  tick after its own tick 283 either way -- and one tick there costs
+  four, since `control_running` can only stop him on frames 7 and 11
+  and the next one is four ticks away.
 
   Deciding it on one tick was tried first and does not work. The two
   captures are the same picture until the first key that matters is
