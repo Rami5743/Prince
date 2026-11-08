@@ -509,8 +509,11 @@ export class RoomRenderer {
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
     this.drawRoom();
-    for (const c of characters) this.addCharacter(c);
+    // `do_mobs()` is the first line of `play_frame` and `draw_kid` is
+    // in the drawing after it, so a slab is in the object table before
+    // any character and comes first where the two sort equal.
     for (const m of mobs) this.addMob(m);
+    for (const c of characters) this.addCharacter(c);
     // `reset_obj_clip`: everything drawn in the room is clipped to the
     // room's own 192 rows. Without it a Prince stepping off the bottom
     // row of a room has his feet drawn across the hit points below.

@@ -982,8 +982,8 @@ var RoomRenderer = class {
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
     this.loadRoomLinks();
     this.drawRoom();
-    for (const c of characters) this.addCharacter(c);
     for (const m of mobs) this.addMob(m);
+    for (const c of characters) this.addCharacter(c);
     const clip = surface.clipBottom;
     surface.clipBottom = ROOM_BOTTOM_Y;
     this.paint(surface);
