@@ -442,11 +442,19 @@ var Surface = class {
    * the screen on the way out.
    */
   clipBottom;
+  /**
+   * `obj_clip_top`, which `clip_char` sets to the top of the row a
+   * character is in when there is a floor or a wall over him: that is
+   * how the original keeps the arm of a Prince falling into a room
+   * from being drawn through the floor he came through.
+   */
+  clipTop;
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
     this.clipBottom = height;
+    this.clipTop = 0;
   }
   clear(color = 0) {
     this.pixels.fill(color);
@@ -487,7 +495,7 @@ var Surface = class {
   }
   each(src, x, y, fn) {
     const sx0 = Math.max(0, -x);
-    const sy0 = Math.max(0, -y);
+    const sy0 = Math.max(Math.max(0, -y), this.clipTop - y);
     const sx1 = Math.min(src.width, this.width - x);
     const sy1 = Math.min(src.height, this.clipBottom - y);
     for (let sy = sy0; sy < sy1; sy++) {
@@ -1181,6 +1189,8 @@ var RoomRenderer = class {
     }
     this.drawnRoom = saved;
     this.loadRoomLinks();
+    this.fore.unshift(...this.back.filter((p) => p.order === ROW_ABOVE_ORDER));
+    this.back = this.back.filter((p) => p.order !== ROW_ABOVE_ORDER);
   }
   drawTile() {
     this.drawTileFloorRight();
@@ -1893,6 +1903,7 @@ var RoomRenderer = class {
       screenX: c.alreadyScreenX === true,
       order: row,
       overlay: c.overlay,
+      clipTop: c.clipTop,
       col: c.overlay ? c.overlay.ownColumn : void 0
     });
   }
@@ -2027,7 +2038,10 @@ var RoomRenderer = class {
         x -= img.width;
         sprite = flipHorizontally(img);
       }
+      const clip = surface.clipTop;
+      if (p.clipTop !== void 0) surface.clipTop = p.clipTop;
       surface.blitTransparent(sprite, x, y, base);
+      surface.clipTop = clip;
       return;
     }
     const blit = p.blit;
@@ -5137,6 +5151,7 @@ var Prng2 = class {
 };
 
 // src/game/game.ts
+var Y_CLIP = [-60, 3, 66, 129, 192];
 var HEARD_BY_GUARDS = /* @__PURE__ */ new Set([SOUND_SILENCE, 23, 8, 17, 16]);
 var GUARD_FOLLOWS_LEFT = 91;
 var GUARD_FOLLOWS_RIGHT = 165;
@@ -5741,7 +5756,51 @@ var Game = class _Game {
     const draw = placeCharacter(this.kid, frame);
     if (!draw) return null;
     const overlay = this.overlayOf(this.kid, frame, "kid");
-    return overlay ? { ...draw, overlay } : draw;
+    const clipTop = this.clipTopOf(this.kid, frame, "kid");
+    return { ...draw, ...overlay ? { overlay } : {}, ...clipTop ? { clipTop } : {} };
+  }
+  /**
+   * `clip_char`, the part of it that matters: a character with a floor
+   * or a wall over his head is not drawn above the row he is in.
+   *
+   * The original clips him at `y_clip[row + 1]`, the top of his own
+   * row, when the tile over his left shoulder is a wall or a floor and
+   * the tile over his right is too -- or he is on the two frames of a
+   * jump that reach up into it. Without it the arm of a Prince
+   * dropping into a room is drawn straight through the floor he has
+   * just come through: `ec99dc5b` tick 78, and every fall into a room
+   * below.
+   *
+   * The rest of `clip_char` -- the level door, the doortops and the
+   * mirror, all of which clip on the right -- is not here yet.
+   */
+  clipTopOf(state, frame, chtab) {
+    const set = chtab === "kid" ? this.scene.chtabs.kid : this.scene.chtabs.guard;
+    const image = set?.images[frame.image + 1];
+    if (!image) return 0;
+    const coll = charCollision(state, frame, objectX(state, frame), image.width);
+    const objY = frame.dy + state.y;
+    let topY = objY - image.height + 1;
+    if (topY >= 192) topY = 0;
+    const rowOf = (y) => Math.trunc((y + 60) / 63) % 4 - 1;
+    const topRow = rowOf(topY);
+    const colLeft = Math.max(tileDivMod(coll.xLeft).column, 0);
+    const colRight = Math.min(tileDivMod(coll.xRight).column, 9);
+    const above = (col) => getTile(
+      this.ctx.world,
+      state.room,
+      col,
+      topRow
+    ).type;
+    const blocks = (t) => t === TILE.wall || tileIsFloor(t);
+    if (!blocks(above(colLeft))) return 0;
+    const jumping = state.action === ACTION.stand && (state.frame === 79 || state.frame === 81);
+    if (!jumping && !blocks(above(colRight))) return 0;
+    const clipRow = state.currentRow + 1;
+    const clipY = Y_CLIP[clipRow];
+    if (clipY === void 0) return 0;
+    if (clipRow === 1 || clipY < objY && clipY - 15 < topY) return clipY;
+    return 0;
   }
   /**
    * `redraw_at_char2`: which tiles are drawn again over this character.

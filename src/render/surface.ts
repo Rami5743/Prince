@@ -72,11 +72,19 @@ export class Surface {
    * the screen on the way out.
    */
   clipBottom: number;
+  /**
+   * `obj_clip_top`, which `clip_char` sets to the top of the row a
+   * character is in when there is a floor or a wall over him: that is
+   * how the original keeps the arm of a Prince falling into a room
+   * from being drawn through the floor he came through.
+   */
+  clipTop: number;
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
     this.clipBottom = height;
+    this.clipTop = 0;
   }
 
   clear(color = 0): void {
@@ -125,7 +133,7 @@ export class Surface {
 
   private each(src: Sprite, x: number, y: number, fn: (dp: number, v: number) => void): void {
     const sx0 = Math.max(0, -x);
-    const sy0 = Math.max(0, -y);
+    const sy0 = Math.max(Math.max(0, -y), this.clipTop - y);
     const sx1 = Math.min(src.width, this.width - x);
     const sy1 = Math.min(src.height, this.clipBottom - y);
     for (let sy = sy0; sy < sy1; sy++) {

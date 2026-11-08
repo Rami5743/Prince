@@ -154,6 +154,8 @@ export interface CharacterDraw {
   readonly onTop?: boolean;
   /** Which tiles go back over him: see `CharacterOverlay`. */
   readonly overlay?: CharacterOverlay;
+  /** `obj_clip_top`: nothing of him is drawn above this row. */
+  readonly clipTop?: number;
 }
 
 /** The strip of the room above, drawn after every row of this one. */
@@ -221,6 +223,8 @@ interface Piece {
   leftEmpty?: boolean;
   /** For a character: which tiles go back over him. */
   overlay?: CharacterOverlay;
+  /** `obj_clip_top`. */
+  clipTop?: number;
   /**
    * A falling slab, which the tiles to its right in its own row cover.
    *
@@ -732,6 +736,14 @@ export class RoomRenderer {
     }
     this.drawnRoom = saved;
     this.loadRoomLinks();
+    // `redraw_needed_above` runs after every row of the room and after
+    // the objects in them, and the original paints as it goes, so the
+    // strip of the room above is painted over anybody standing in the
+    // top row -- which the port, painting the room and then the
+    // characters, had the wrong way round. Moving the strip to the
+    // front of the queue is the same thing.
+    this.fore.unshift(...this.back.filter((p) => p.order === ROW_ABOVE_ORDER));
+    this.back = this.back.filter((p) => p.order !== ROW_ABOVE_ORDER);
   }
 
   private drawTile(): void {
@@ -1438,6 +1450,7 @@ export class RoomRenderer {
       screenX: c.alreadyScreenX === true,
       order: row,
       overlay: c.overlay,
+      clipTop: c.clipTop,
       col: c.overlay ? c.overlay.ownColumn : undefined,
     });
   }
@@ -1606,7 +1619,10 @@ export class RoomRenderer {
         x -= img.width;
         sprite = flipHorizontally(img);
       }
+      const clip = surface.clipTop;
+      if (p.clipTop !== undefined) surface.clipTop = p.clipTop;
       surface.blitTransparent(sprite, x, y, base);
+      surface.clipTop = clip;
       return;
     }
     const blit = p.blit;

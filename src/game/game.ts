@@ -9,6 +9,9 @@ import {
 } from '../render/room.ts';
 import { buildLevelScene, type LevelScene } from './scene.ts';
 import { readExeTables, type ExeTables, type Frame } from './exe-tables.ts';
+
+/** `y_clip`: the top row of each of the room's rows, and of the one below. */
+const Y_CLIP = [-60, 3, 66, 129, 192];
 import {
   newCharacter, placeCharacter, placeHurtSplash, placeSword, type CharacterState,
 } from './character.ts';
@@ -742,7 +745,52 @@ export class Game {
     const draw = placeCharacter(this.kid, frame);
     if (!draw) return null;
     const overlay = this.overlayOf(this.kid, frame, 'kid');
-    return overlay ? { ...draw, overlay } : draw;
+    const clipTop = this.clipTopOf(this.kid, frame, 'kid');
+    return { ...draw, ...(overlay ? { overlay } : {}), ...(clipTop ? { clipTop } : {}) };
+  }
+
+  /**
+   * `clip_char`, the part of it that matters: a character with a floor
+   * or a wall over his head is not drawn above the row he is in.
+   *
+   * The original clips him at `y_clip[row + 1]`, the top of his own
+   * row, when the tile over his left shoulder is a wall or a floor and
+   * the tile over his right is too -- or he is on the two frames of a
+   * jump that reach up into it. Without it the arm of a Prince
+   * dropping into a room is drawn straight through the floor he has
+   * just come through: `ec99dc5b` tick 78, and every fall into a room
+   * below.
+   *
+   * The rest of `clip_char` -- the level door, the doortops and the
+   * mirror, all of which clip on the right -- is not here yet.
+   */
+  private clipTopOf(
+    state: CharacterState, frame: Frame, chtab: 'kid' | 'guard',
+  ): number {
+    const set = chtab === 'kid' ? this.scene.chtabs.kid : this.scene.chtabs.guard;
+    const image = set?.images[frame.image + 1];
+    if (!image) return 0;
+    const coll = charCollision(state, frame, objectX(state, frame), image.width);
+    const objY = frame.dy + state.y;
+    let topY = objY - image.height + 1;
+    if (topY >= 192) topY = 0;
+    const rowOf = (y: number): number => (Math.trunc((y + 60) / 63) % 4) - 1;
+    const topRow = rowOf(topY);
+    const colLeft = Math.max(tileDivMod(coll.xLeft).column, 0);
+    const colRight = Math.min(tileDivMod(coll.xRight).column, 9);
+    const above = (col: number): number => getTile(
+      this.ctx.world, state.room, col, topRow,
+    ).type;
+    const blocks = (t: number): boolean => t === TILE.wall || tileIsFloor(t);
+    if (!blocks(above(colLeft))) return 0;
+    const jumping = state.action === ACTION.stand
+      && (state.frame === 79 || state.frame === 81);
+    if (!jumping && !blocks(above(colRight))) return 0;
+    const clipRow = state.currentRow + 1;
+    const clipY = Y_CLIP[clipRow];
+    if (clipY === undefined) return 0;
+    if (clipRow === 1 || (clipY < objY && clipY - 15 < topY)) return clipY;
+    return 0;
   }
 
   /**
