@@ -66,6 +66,15 @@ function findTile(game: Game, type: number): [number, number, number] | null {
   return null;
 }
 
+/**
+ * Shift held. `check_get_item` is the only way anything is picked up:
+ * the original asks for it in `control_standing` and again in
+ * `control_crouched`, and a Prince who walks over a flask with his
+ * hands empty leaves it where it is. The port used to drink by
+ * standing there.
+ */
+const SHIFT = { x: 0, y: 0, shift: true } as const;
+
 describe('a potion', () => {
   /** Level 1 keeps one in room 5, on the floor of the bottom row. */
   const ROOM = 5; const COLUMN = 3; const ROW = 2;
@@ -79,7 +88,7 @@ describe('a potion', () => {
     const game = await Game.start(assets, exe, 1);
     stand(game, ROOM, COLUMN, ROW);
     for (let i = 0; i < 40; i++) {
-      game.step(NOTHING);
+      game.step(SHIFT);
       if (game.scene.state.typeAt(ROOM, COLUMN, ROW) !== TILE.potion) break;
     }
     expect(game.scene.state.typeAt(ROOM, COLUMN, ROW), 'the flask is emptied')
@@ -93,7 +102,7 @@ describe('a potion', () => {
     game.damage(1);
     expect(game.hitPoints).toBe(2);
     stand(game, ROOM, COLUMN, ROW);
-    for (let i = 0; i < 60 && game.hitPoints < 3; i++) game.step(NOTHING);
+    for (let i = 0; i < 60 && game.hitPoints < 3; i++) game.step(SHIFT);
     expect(game.hitPoints, 'the Prince is one better off').toBe(3);
   });
 
@@ -115,7 +124,7 @@ describe('a potion', () => {
     kid.x = standX(COLUMN) + 5;
     let drank = -1;
     for (let i = 0; i < 80 && drank < 0; i++) {
-      game.step(NOTHING);
+      game.step(SHIFT);
       if (game.scene.state.typeAt(ROOM, COLUMN, ROW) !== TILE.potion) drank = i;
     }
     expect(drank, 'the flask he drank from is the one that empties')
@@ -136,11 +145,11 @@ describe('the sword', () => {
   /** Level 1 leaves it on the floor of room 15. */
   const ROOM = 15; const COLUMN = 2; const ROW = 2;
 
-  it('is picked up by a Prince standing on it', async () => {
+  it('is picked up by a Prince who crouches for it', async () => {
     const game = await Game.start(assets, exe, 1);
     expect(game.scene.state.typeAt(ROOM, COLUMN, ROW)).toBe(TILE.sword);
     stand(game, ROOM, COLUMN, ROW);
-    for (let i = 0; i < 40 && !game.hasSword; i++) game.step(NOTHING);
+    for (let i = 0; i < 40 && !game.hasSword; i++) game.step(SHIFT);
     expect(game.hasSword).toBe(true);
     expect(game.scene.state.typeAt(ROOM, COLUMN, ROW)).toBe(TILE.floor);
   });

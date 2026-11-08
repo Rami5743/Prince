@@ -3227,6 +3227,7 @@ function downPressed(state, ctx) {
   }
 }
 function controlCrouched(state, controls, ctx) {
+  if (ctx.latch.shift2 === CONTROL.held && checkGetItem(state, ctx)) return;
   if (controls.y <= 0) {
     startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
     return;
@@ -3302,6 +3303,7 @@ function checkGrab(state, controls, ctx) {
 }
 function controlStanding(state, controls, ctx) {
   const latch = ctx.latch;
+  if (controls.shift && latch.shift2 === CONTROL.held && checkGetItem(state, ctx)) return;
   if (controls.shift) {
     if (latch.backward === CONTROL.held) {
       backPressed(state, ctx);
@@ -3641,14 +3643,6 @@ function checkSpiked(state, ctx) {
   const landing = f === 43 || f === 26;
   if (harm >= 2 && running || landing) impale(state, ctx, t);
 }
-function checkPickUpSword(state, ctx) {
-  if (state.alive >= 0 || !ctx.hasSword || ctx.hasSword()) return;
-  if (state.frame !== FRAME.stand) return;
-  const tile = tileHere(state, ctx);
-  if (tile.type !== TILE.sword || !tile.room) return;
-  ctx.markItem?.(tile.room, tile.column, tile.row);
-  startSequence(state, KID_SEQ.pickUpSword, ctx.tables);
-}
 var LEVEL_DOOR_OPEN = 43;
 function goUpLevelDoor(state, ctx) {
   const here = tileHere(state, ctx);
@@ -3664,14 +3658,45 @@ function goUpLevelDoor(state, ctx) {
   startSequence(state, KID_SEQ.leaveLevel, ctx.tables);
   return true;
 }
-function checkDrink(state, ctx) {
-  if (state.alive >= 0) return;
-  if (state.frame !== FRAME.stand) return;
-  if (state.action === ACTION.inFreefall || state.action === ACTION.inMidair) return;
-  const tile = tileHere(state, ctx);
-  if (tile.type !== TILE.potion || !tile.room) return;
-  ctx.markItem?.(tile.room, tile.column, tile.row);
-  startSequence(state, KID_SEQ.drink, ctx.tables);
+function checkGetItem(state, ctx) {
+  let here = tileHere(state, ctx);
+  if (here.type === TILE.potion || here.type === TILE.sword) {
+    if (!tileIsFloor(tileBehind(state, ctx).type)) return false;
+    state.x = forwardX(state, -14) & 255;
+    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  }
+  const front = tileFront(state, ctx);
+  if (front.type !== TILE.potion && front.type !== TILE.sword) return false;
+  here = front;
+  if (state.frame !== FRAME.crouch) {
+    const frame = frameOf(ctx.tables, state);
+    const edge = getEdgeDistance(
+      ctx.world,
+      state,
+      frame,
+      objectX(state, frame),
+      ctx.spriteWidth(frame.image),
+      ctx.spriteHeight(frame.image)
+    );
+    if (edge.edgeType !== EDGE_TYPE.floor) {
+      state.x = forwardX(state, edge.distance) & 255;
+    }
+    if (state.direction >= 0) {
+      state.x = forwardX(state, (here.type === TILE.potion ? 1 : 0) - 2) & 255;
+    }
+    startSequence(state, KID_SEQ.crouch, ctx.tables);
+    ctx.latch.down = ctx.latch.releaseArrows();
+    return true;
+  }
+  ctx.latch.shift2 = CONTROL.ignore;
+  const kind = here.type === TILE.sword ? -1 : modifierOf(ctx, here) >> 3;
+  ctx.pickUp?.(kind, here.room, here.column, here.row);
+  startSequence(
+    state,
+    here.type === TILE.sword ? KID_SEQ.pickUpSword : KID_SEQ.drink,
+    ctx.tables
+  );
+  return true;
 }
 function checkChomped(state, ctx) {
   if (!ctx.traps || state.alive >= 0) return;
@@ -3736,8 +3761,6 @@ function stepKid(state, controls, ctx) {
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
   checkChomped(state, ctx);
-  checkPickUpSword(state, ctx);
-  checkDrink(state, ctx);
 }
 function checkBumped(state, ctx) {
   const frame = frameOf(ctx.tables, state);
@@ -5334,6 +5357,8 @@ var Game = class _Game {
    */
   kidHurt = false;
   guardHurt = false;
+  /** `pickup_obj_type`: what `do_pickup` took, until `getItem` applies it. */
+  pickedUp = null;
   /**
    * `exit_room_timer`: how many more ticks nobody may change room in.
    *
@@ -5447,6 +5472,14 @@ var Game = class _Game {
       markItem: (room, column, row) => {
         this.itemTile = { room, column, row };
       },
+      // `do_pickup`: the flask or the sword goes off the floor at
+      // once, and what it was waits for the byte-code to raise
+      // `getItem`.
+      pickUp: (kind, room, column, row) => {
+        this.pickedUp = kind;
+        this.scene.state.setType(room, column, row, TILE_FLOOR);
+        this.scene.state.setModifier(room, column, row, 0);
+      },
       drawnRoom: () => this.drawnRoom,
       startRoom: scene.level.startRoom,
       effects: {
@@ -5486,19 +5519,18 @@ var Game = class _Game {
         endLevel: () => {
           this.levelFinished = true;
         },
+        // `proc_get_object`: what was taken, applied. The tile was
+        // emptied back when the animation started -- `do_pickup` -- so
+        // all that is left here is the effect, and `pickup_obj_type`
+        // is what says which: -1 the sword, 1 a hit point, 2 a life,
+        // 3 the floating one, 4 the poison.
         getItem: (which) => {
           if (which !== 1) return;
-          const at = this.itemTile;
-          this.itemTile = null;
-          if (!at) return;
-          const k = { room: at.room, currentColumn: at.column, currentRow: at.row };
-          const tile = this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow);
-          if (tile === TILE_SWORD) this.hasSword = true;
-          else if (tile === TILE_POTION) {
-            this.drink(this.scene.state.modifierAt(k.room, k.currentColumn, k.currentRow) >> 3);
-          } else return;
-          this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
-          this.scene.state.setModifier(k.room, k.currentColumn, k.currentRow, 0);
+          const kind = this.pickedUp;
+          this.pickedUp = null;
+          if (kind === null) return;
+          if (kind === -1) this.hasSword = true;
+          else this.drink(kind);
         }
       }
     };

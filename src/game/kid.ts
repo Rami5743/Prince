@@ -199,6 +199,12 @@ export interface KidContext {
    * wrong tile and left the flask where it was.
    */
   markItem?(room: number, column: number, row: number): void;
+  /**
+   * `do_pickup`: the tile is emptied here and now, and `kind` -- -1
+   * for the sword, else the flask's `modifier >> 3` -- is held until
+   * the byte-code's `getItem 1` applies it.
+   */
+  pickUp?(kind: number, room: number, column: number, row: number): void;
   /** Which room is on the screen; x is measured in its coordinates. */
   drawnRoom?(): number;
   /** The room the level starts in; the level door there is not a way out. */
@@ -535,6 +541,8 @@ function downPressed(state: CharacterState, ctx: KidContext): void {
 }
 
 function controlCrouched(state: CharacterState, controls: Controls, ctx: KidContext): void {
+  // Crouched, the raw Shift key is not asked about -- only the latch.
+  if (ctx.latch.shift2 === CONTROL.held && checkGetItem(state, ctx)) return;
   if (controls.y <= 0) {
     startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
     return;
@@ -642,6 +650,8 @@ function checkGrab(state: CharacterState, controls: Controls, ctx: KidContext): 
 
 function controlStanding(state: CharacterState, controls: Controls, ctx: KidContext): void {
   const latch = ctx.latch;
+  // `control_standing` asks this first, before any of the moves.
+  if (controls.shift && latch.shift2 === CONTROL.held && checkGetItem(state, ctx)) return;
   if (controls.shift) {
     if (latch.backward === CONTROL.held) {
       backPressed(state, ctx);
@@ -1189,6 +1199,63 @@ function goUpLevelDoor(state: CharacterState, ctx: KidContext): boolean {
 
 
 /**
+ * `check_get_item`: Shift at a flask or a sword on the floor.
+ *
+ * Two stages, and the port had neither. He has to be *crouching* to
+ * take anything up: pressing Shift while he stands over it moves him
+ * to the edge of the tile and crouches him, and the second press --
+ * or the same key still held, because `control_crouched` asks again
+ * every tick -- is the one that drinks or picks the sword up.
+ *
+ * And the tile is emptied the moment the animation starts, not when
+ * the byte-code raises `getItem` a dozen frames later: `do_pickup`
+ * writes plain floor over it there and then, and the opcode only
+ * applies what was taken. The port left the flask on the floor until
+ * the opcode, which is the last eight frames of the drink drawn with
+ * a flask still standing in them -- `0fbffa60` 473 onwards.
+ */
+function checkGetItem(state: CharacterState, ctx: KidContext): boolean {
+  let here = tileHere(state, ctx);
+  if (here.type === TILE.potion || here.type === TILE.sword) {
+    // Standing on it rather than in front of it: he backs off a tile
+    // first, and only if there is floor behind him to back onto.
+    if (!tileIsFloor(tileBehind(state, ctx).type)) return false;
+    state.x = forwardX(state, -14) & 0xff;
+    state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  }
+  const front = tileFront(state, ctx);
+  if (front.type !== TILE.potion && front.type !== TILE.sword) return false;
+  here = front;
+  if (state.frame !== FRAME.crouch) {
+    // Not crouching yet: line him up on the tile and go down.
+    const frame = frameOf(ctx.tables, state);
+    const edge = getEdgeDistance(
+      ctx.world, state, frame, objectX(state, frame),
+      ctx.spriteWidth(frame.image), ctx.spriteHeight(frame.image),
+    );
+    if (edge.edgeType !== EDGE_TYPE.floor) {
+      state.x = forwardX(state, edge.distance) & 0xff;
+    }
+    if (state.direction >= 0) {
+      state.x = forwardX(state, (here.type === TILE.potion ? 1 : 0) - 2) & 0xff;
+    }
+    // `crouch()`: sequence 50, and Down is marked used.
+    startSequence(state, KID_SEQ.crouch, ctx.tables);
+    ctx.latch.down = ctx.latch.releaseArrows();
+    return true;
+  }
+  // Crouching over it: take it.
+  ctx.latch.shift2 = CONTROL.ignore;
+  const kind = here.type === TILE.sword
+    ? -1 : modifierOf(ctx, here) >> 3;
+  ctx.pickUp?.(kind, here.room, here.column, here.row);
+  startSequence(
+    state, here.type === TILE.sword ? KID_SEQ.pickUpSword : KID_SEQ.drink, ctx.tables,
+  );
+  return true;
+}
+
+/**
  * A potion under his feet is drunk.
  *
  * The port had nothing here at all: the Prince walked over every flask in
@@ -1317,8 +1384,6 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkSpikeBelow(state, ctx);
   checkSpiked(state, ctx);
   checkChomped(state, ctx);
-  checkPickUpSword(state, ctx);
-  checkDrink(state, ctx);
 }
 
 /**

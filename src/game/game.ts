@@ -114,6 +114,8 @@ export class Game {
    */
   private kidHurt = false;
   private guardHurt = false;
+  /** `pickup_obj_type`: what `do_pickup` took, until `getItem` applies it. */
+  private pickedUp: number | null = null;
 
   /**
    * `exit_room_timer`: how many more ticks nobody may change room in.
@@ -233,6 +235,14 @@ export class Game {
       opponent: () => (this.guard.direction === NO_DIRECTION ? null : this.guard),
       hasSword: () => this.hasSword,
       markItem: (room, column, row) => { this.itemTile = { room, column, row }; },
+      // `do_pickup`: the flask or the sword goes off the floor at
+      // once, and what it was waits for the byte-code to raise
+      // `getItem`.
+      pickUp: (kind, room, column, row) => {
+        this.pickedUp = kind;
+        this.scene.state.setType(room, column, row, TILE_FLOOR);
+        this.scene.state.setModifier(room, column, row, 0);
+      },
       drawnRoom: () => this.drawnRoom,
       startRoom: scene.level.startRoom,
       effects: {
@@ -268,19 +278,18 @@ export class Game {
         // The byte-code of sequence 70 raises this as the Prince walks
         // out of the level door.
         endLevel: () => { this.levelFinished = true; },
+        // `proc_get_object`: what was taken, applied. The tile was
+        // emptied back when the animation started -- `do_pickup` -- so
+        // all that is left here is the effect, and `pickup_obj_type`
+        // is what says which: -1 the sword, 1 a hit point, 2 a life,
+        // 3 the floating one, 4 the poison.
         getItem: (which) => {
           if (which !== 1) return;
-          const at = this.itemTile;
-          this.itemTile = null;
-          if (!at) return;
-          const k = { room: at.room, currentColumn: at.column, currentRow: at.row };
-          const tile = this.scene.state.typeAt(k.room, k.currentColumn, k.currentRow);
-          if (tile === TILE_SWORD) this.hasSword = true;
-          else if (tile === TILE_POTION) {
-            this.drink(this.scene.state.modifierAt(k.room, k.currentColumn, k.currentRow) >> 3);
-          } else return;
-          this.scene.state.setType(k.room, k.currentColumn, k.currentRow, TILE_FLOOR);
-          this.scene.state.setModifier(k.room, k.currentColumn, k.currentRow, 0);
+          const kind = this.pickedUp;
+          this.pickedUp = null;
+          if (kind === null) return;
+          if (kind === -1) this.hasSword = true;
+          else this.drink(kind);
         },
       },
     };

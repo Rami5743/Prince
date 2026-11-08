@@ -102,7 +102,7 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * could be a tick better placed, not that the port is wrong.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 467,
+  '0fbffa60': 625,
   '13ab6867': 562,
   '25c4ebb8': 375,
   '33e8ace7': 308,
