@@ -328,6 +328,38 @@ which prints the same numbers and, for each run, the ranges of ticks
 that are not exact. The pins say a run has not got worse; the ranges
 say what is still wrong with it.
 
+### Taking one of those ranges apart
+
+    node --experimental-strip-types tools/dev/tick-diff.ts \
+        <name> <capture-dir> --from 208 --to 230 --slip 2 --rows
+
+prints, for each tick, how many pixels differ and where -- in the
+digest's own terms, so a tick it calls equal is a tick the suite calls
+equal. Do not compare the PNGs by hand: the capture's colours are a
+frame grab of a VGA signal and the port's come from the palette, so
+the same wall is (120,131,143) in one and (120,132,148) in the other,
+and every tile edge reads as a difference. `--slip n` also says which
+of the port's nearby ticks is the nearest match, which is how a run
+that has gained or lost a tick shows itself -- and a run can gain one
+without the game being at fault, because a capture can have a tick in
+it that the game never drew.
+
+    node --experimental-strip-types tools/dev/recording-trace.ts <rec.json>
+
+prints the Prince's room, tile, x, y, frame and action whenever they
+change, which ties a difference in the pictures to a piece of state.
+Its tick numbers are the *indexes* of the recording, and the frame
+`replay-frames.ts` writes for index n is `t<n+1>.png`, because the
+first file is the level's opening picture before any tick is played.
+
+    node --experimental-strip-types tools/dev/replay-what-if.ts \
+        <rec.json> <outdir> <from> <to>
+
+replays with one axis forced for a stretch, which answers the question
+a divergence at a key release always raises: is the port wrong, or did
+the emulator not get the key? If holding it four ticks longer makes
+the port draw the capture exactly, the capture is the thing to fix.
+
 ## 5. The port, in a real browser
 
 `tests/browser/render.test.ts` serves the repository, opens the page in
