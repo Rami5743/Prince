@@ -95,6 +95,17 @@ times they were pressed, and recover the game's ticks from the grab.
   Which shift each capture was taken at is written down in
   `tools/oracle/digests/shifts.txt`.
 
+* **Nothing else may run on the machine while a capture runs.** The
+  schedule is a wall clock: `dosbox_oracle.py` sleeps to each block's
+  absolute time and fires an `xdotool`. A busy machine makes that late,
+  and a key edge that is late is a key the game reads in the wrong
+  tick. It is not theoretical -- in the third round's capture of
+  `0fbffa60` the player lets go of Left at tick 283 and the original
+  runs on for four more ticks and off the left of the room, and
+  `tools/dev/replay-what-if.ts` shows the port draws those four ticks
+  exactly when the key is held for them. Run anything you must run
+  under `nice -n 19`, and nothing at all if it can wait.
+
 * **Twenty thousand cycles, not three thousand.** At three thousand the
   emulator cannot redraw a room inside a tick: the screen is black for
   two of them and the game loses one. At twenty thousand there is no
