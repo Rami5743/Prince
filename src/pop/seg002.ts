@@ -7,10 +7,12 @@
  * the ones about guards who walk off the edge of a room, which SDLPoP
  * fixes and the original does not.
  *
- * The shadow and the mouse are here because the C has them here, but
- * only as far as the levels the port can reach: `autocontrol_shadow`
- * dispatches and the four level-specific minds behind it are stubs
- * that do nothing until those levels are played.
+ * The shadow and the mouse are here because the C has them here. All
+ * four of the shadow's minds -- the mirror image of level 4, the one
+ * that drinks the potion on level 5, the one that steps across the gap
+ * on level 6 and the one the Prince unites with on level 12 -- are
+ * translated; no capture reaches those levels, so what stands behind
+ * them is `tests/pop/levels-smoke.test.ts` and playing it.
  */
 import { g, byteOf, sbyteOf, wordOf } from './state.ts';
 import {
@@ -31,7 +33,7 @@ import {
 import { seqtbl_offset_char, draw_sword } from './seg005.ts';
 import { trigger_button } from './seg007.ts';
 import { prandom } from './seg009.ts';
-import { out } from './link.ts';
+import { l8, out } from './link.ts';
 
 const TILE_SIZEX = 14;
 const TILE_MIDX = 7;
@@ -953,7 +955,40 @@ export function check_hurting(): void {
 
 // seg002:0E1F
 export function check_skel(): void {
-  // Special event: the skeleton of level 3 wakes up. Not reachable yet.
+  // Special event: the skeleton of level 3 wakes up.
+  if (g.current_level === 3
+    && g.Guard.direction === directions.dir_56_none
+    && g.drawn_room === 1
+    && g.leveldoor_open !== 0
+    && (g.Kid.curr_col === 2 || g.Kid.curr_col === 3)) {
+    get_tile(g.drawn_room, 5, 1);
+    if (g.curr_tile2 !== tiles.tiles_21_skeleton) return;
+    // Rub the skeleton out of the floor and stand him up.
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_1_floor;
+    g.redraw_height = 24;
+    l8.set_redraw_full.fn(g.curr_tilepos, 1);
+    l8.set_wipe.fn(g.curr_tilepos, 1);
+    ++g.curr_tilepos;
+    l8.set_redraw_full.fn(g.curr_tilepos, 1);
+    l8.set_wipe.fn(g.curr_tilepos, 1);
+    g.Char.room = g.drawn_room;
+    g.Char.curr_row = 1;
+    g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+    g.Char.curr_col = 5;
+    g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN] + TILE_SIZEX);
+    g.Char.direction = directions.dir_FF_left;
+    seqtbl_offset_char(seqids.seq_88_skel_wake_up);
+    play_seq();
+    out.play_sound(soundids.sound_44_skel_alive);
+    g.guard_skill = 2;
+    g.Char.alive = -1;
+    g.guardhp_max = g.guardhp_curr = 3;
+    g.Char.fall_x = g.Char.fall_y = 0;
+    g.is_guard_notice = g.guard_refrac = 0;
+    g.Char.sword = sword_status.sword_2_drawn;
+    g.Char.charid = charids.charid_4_skeleton;
+    saveshad();
+  }
 }
 
 // seg006:1816

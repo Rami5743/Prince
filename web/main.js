@@ -6409,6 +6409,7 @@ function do_mouse() {
 }
 
 // src/pop/seg002.ts
+var TILE_SIZEX4 = 14;
 var TILE_MIDX3 = 7;
 var FIRST_ONSCREEN_COLUMN5 = 5;
 var SCREEN_TILECOUNTX3 = 10;
@@ -7171,6 +7172,34 @@ function check_hurting() {
   }
 }
 function check_skel() {
+  if (g.current_level === 3 && g.Guard.direction === directions.dir_56_none && g.drawn_room === 1 && g.leveldoor_open !== 0 && (g.Kid.curr_col === 2 || g.Kid.curr_col === 3)) {
+    get_tile(g.drawn_room, 5, 1);
+    if (g.curr_tile2 !== tiles.tiles_21_skeleton) return;
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_1_floor;
+    g.redraw_height = 24;
+    l8.set_redraw_full.fn(g.curr_tilepos, 1);
+    l8.set_wipe.fn(g.curr_tilepos, 1);
+    ++g.curr_tilepos;
+    l8.set_redraw_full.fn(g.curr_tilepos, 1);
+    l8.set_wipe.fn(g.curr_tilepos, 1);
+    g.Char.room = g.drawn_room;
+    g.Char.curr_row = 1;
+    g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
+    g.Char.curr_col = 5;
+    g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN5] + TILE_SIZEX4);
+    g.Char.direction = directions.dir_FF_left;
+    seqtbl_offset_char(seqids.seq_88_skel_wake_up);
+    play_seq();
+    out.play_sound(soundids.sound_44_skel_alive);
+    g.guard_skill = 2;
+    g.Char.alive = -1;
+    g.guardhp_max = g.guardhp_curr = 3;
+    g.Char.fall_x = g.Char.fall_y = 0;
+    g.is_guard_notice = g.guard_refrac = 0;
+    g.Char.sword = sword_status.sword_2_drawn;
+    g.Char.charid = charids.charid_4_skeleton;
+    saveshad();
+  }
 }
 function control_guard_inactive() {
   if (g.Char.frame === frameids.frame_166_stand_inactive && g.control_down === CONTROL_HELD3) {
