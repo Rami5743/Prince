@@ -578,6 +578,11 @@ describe('a guard with his sword out', () => {
     // grabbed video of the original doing exactly this has him out of
     // sight for twenty-four ticks and then coming in from the right.
     expect(game.guard.x, 'a door is a room\'s width').toBe((88 + 140) & 0xff);
+    // His column is not touched by the move -- `goto_other_room` sets x
+    // and nothing else for a sideways door -- and is read off the new x
+    // by `load_fram_det_col` at the top of his next frame.
+    game.step({ x: 0, y: 0, shift: false });
+    game.step({ x: 0, y: 0, shift: false });
     expect(game.guard.currentColumn, 'at or just past the side room 3 is on')
       .toBeGreaterThanOrEqual(9);
     expect(game.guard.currentColumn).toBeLessThanOrEqual(12);

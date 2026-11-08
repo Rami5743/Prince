@@ -3018,6 +3018,10 @@ function refractoryFor(skill) {
 function stepGuard(guard, ctx) {
   if (guard.direction === NO_DIRECTION) return;
   if (guard.waitTimer > 0) guard.waitTimer -= 1;
+  {
+    const frame2 = guardFrame(guard, ctx.tables);
+    if (frame2) guard.currentColumn = determineColumn(guard, frame2);
+  }
   comeOnGuard(guard, ctx);
   faceTheKid(guard, ctx);
   autocontrolGuardActive(guard, ctx);
@@ -5587,7 +5591,6 @@ var Game = class _Game {
     this.guards.tile[room - 1] = 255;
     guard.room = room;
     guard.x = guard.x + (toTheLeft ? 140 : -140) & 255;
-    guard.currentColumn += toTheLeft ? 10 : -10;
     return true;
   }
   /**

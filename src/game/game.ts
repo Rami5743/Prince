@@ -670,7 +670,10 @@ export class Game {
     this.guards.tile[room - 1] = 0xff;
     guard.room = room;
     guard.x = (guard.x + (toTheLeft ? 140 : -140)) & 0xff;
-    guard.currentColumn += toTheLeft ? 10 : -10;
+    // And nothing to his column. `goto_other_room` moves x and, for up
+    // and down, y and the row; it leaves `curr_col` alone, and
+    // `load_fram_det_col` reads it off the new x at the top of the
+    // guard's next frame.
     return true;
   }
 

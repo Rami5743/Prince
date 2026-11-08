@@ -236,17 +236,16 @@ describe('a guard outside the room on the screen', () => {
     game.showRoom(ROOM);
     const guard = game.guard;
     // Where following the Prince out of the left-hand door puts him:
-    // a room's width to the right of a guard who was beside it.
+    // a room's width to the right of a guard who was beside it. His
+    // column is read off that x -- `load_fram_det_col` is above the
+    // gate -- so it says a tile past the end of the room.
     guard.x = 226;
-    // `determine_column` is inside the gate, so it does not run: the
-    // column stays whatever it was, wrong or not. The control below is
-    // the same guard a few pixels nearer, inside the room.
-    guard.currentColumn = 99;
+    guard.y = 118;
+    const y = guard.y;
     stepGuard(guard, { tables: game.tables, kid: game.kid, drawnRoom: guard.room });
-    expect(guard.currentColumn, 'nothing puts him on a tile').toBe(99);
-
-    guard.x = 200;
-    stepGuard(guard, { tables: game.tables, kid: game.kid, drawnRoom: guard.room });
-    expect(guard.currentColumn, 'and inside the room it does').not.toBe(99);
+    expect(guard.currentColumn, 'his column is read off his x')
+      .toBeGreaterThanOrEqual(9);
+    // And nothing under the gate ran: no floor pulled him down.
+    expect(guard.y, 'but no floor touched him').toBe(y);
   });
 });

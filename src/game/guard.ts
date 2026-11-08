@@ -690,6 +690,16 @@ export function refractoryFor(skill: number): number {
 export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
   if (guard.direction === NO_DIRECTION) return;
   if (guard.waitTimer > 0) guard.waitTimer -= 1;
+  // `load_fram_det_col()`, the second line of `play_guard_frame` and
+  // before anything decides anything. The column a guard is standing
+  // in is read off his x every tick, not carried along: a guard who
+  // has just followed the Prince through a door has had a room's
+  // width added to his x, and what tile that is is a question for
+  // `determine_col`, not arithmetic on the column he was in.
+  {
+    const frame = guardFrame(guard, ctx.tables);
+    if (frame) guard.currentColumn = determineColumn(guard, frame);
+  }
   comeOnGuard(guard, ctx);
   faceTheKid(guard, ctx);
   autocontrolGuardActive(guard, ctx);
