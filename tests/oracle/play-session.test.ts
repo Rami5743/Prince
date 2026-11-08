@@ -43,7 +43,10 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // hard and nothing was listening to it; 43 since bumping into a wall
   // became the original's own `check_collisions`, which took most of the
   // tail with it -- s039 to s046 are now exact.
-  { name: 'level1-open', reproduces: 43 },
+  // 41 since the port stopped blanking the screen on a room change,
+  // which the original does not do: s036 and s037 are the emulator
+  // redrawing and are now left out rather than reproduced.
+  { name: 'level1-open', reproduces: 41 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
   // 36 of 54. All three careful steps are reproduced exactly, and so is

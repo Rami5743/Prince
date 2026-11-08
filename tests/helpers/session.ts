@@ -42,6 +42,22 @@ export function loadSession(name: string): Session {
   return parseSession(readFileSync(path, 'utf8'), name);
 }
 
+/**
+ * Is this capture the emulator redrawing rather than the game?
+ *
+ * These sessions were grabbed from DOSBox at three thousand cycles,
+ * where redrawing a room takes longer than one of the game's ticks and
+ * the screen is black while it does. At twenty thousand cycles the same
+ * room change has no black frame at all, so the blank is the slow
+ * machine's and the port has nothing to put in its place -- see
+ * `ROOM_CHANGE_BLANK`. The hit points along the bottom eight rows stay
+ * lit through it, so only the room's own 192 rows are looked at.
+ */
+function isRedrawBlank(rgb: Uint8Array): boolean {
+  for (let i = 0; i < WIDTH * 192 * 3; i++) if (rgb[i] > 20) return false;
+  return true;
+}
+
 function captureRgb(dir: string, name: string): Uint8Array | null {
   const path = join(dir, `${name}.png`);
   if (!existsSync(path)) return null;
@@ -72,6 +88,11 @@ export interface Match {
   bestDiff: number;
   bestTick: number;
   state: string;
+  /**
+   * A capture the port cannot be expected to have: the emulator's own
+   * black screen while it redraws a room. Not counted either way.
+   */
+  skipped?: boolean;
 }
 
 export interface SessionResult {
@@ -81,6 +102,8 @@ export interface SessionResult {
   reproduced: number;
   /** Indices of the captures that were not. */
   failures: number[];
+  /** Indices of the captures left out -- see `Match.skipped`. */
+  skipped: number[];
 }
 
 export interface AlignOptions {
@@ -145,10 +168,12 @@ export async function alignSession(
     for (let i = 0; i < names.length && !restart; i++) {
       const want = wanted[i];
       const controls = controlsFor(i);
-      if (!want) {
+      if (!want || isRedrawBlank(want)) {
         matches[i] = {
           index: i, name: names[i], phase: session.phases[phaseOf[i]].spec,
-          tick: null, bestDiff: -1, bestTick: tick, state: 'capture missing',
+          tick: null, bestDiff: -1, bestTick: tick,
+          state: want ? 'the emulator redrawing' : 'capture missing',
+          skipped: Boolean(want),
         };
         chosen[i] = tick;
         continue;
@@ -202,11 +227,13 @@ export async function alignSession(
     if (!restart) break;
   }
 
-  const failures = matches.filter((m) => m.tick === null).map((m) => m.index);
+  const failures = matches
+    .filter((m) => m.tick === null && !m.skipped).map((m) => m.index);
   return {
     session, matches,
-    reproduced: matches.length - failures.length,
+    reproduced: matches.filter((m) => m.tick !== null).length,
     failures,
+    skipped: matches.filter((m) => m.skipped).map((m) => m.index),
   };
 }
 

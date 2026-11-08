@@ -28,7 +28,7 @@ const GUARD_FOLLOWS_RIGHT = 165;
 import { startSequence } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
-  guardFrame, stepGuard, refractoryFor, NO_DIRECTION, type GuardState,
+  guardFrame, stepGuard, refractoryFor, NO_DIRECTION, canGuardSeeKid, type GuardState,
   type GuardsData,
 } from './guard.ts';
 
@@ -110,6 +110,21 @@ export class Game {
    * difference from 205 to 261.
    */
   private guardFreeze = 0;
+
+  /**
+   * `get_tile_at_kid`: the tile of the Prince's own room and row at an
+   * x, for the line of sight between a guard and him.
+   */
+  private readonly tileAtKid = (xpos: number): { type: number; modifier: number } => {
+    const t = getTile(
+      this.ctx.world, this.kid.room,
+      tileDivModM7(xpos).column, this.kid.currentRow,
+    );
+    return {
+      type: t.type,
+      modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0,
+    };
+  };
   maxHitPoints: number;
   /**
    * Has the Prince got a sword? It lies on the floor of level 1 and he
@@ -265,6 +280,13 @@ export class Game {
     this.traps.kidRow = this.kid.currentRow;
     this.traps.kidAlive = this.kid.alive;
     this.traps.step();
+    // `check_can_guard_see_kid()` sits on the line above
+    // `play_kid_frame()` in the original's `play_frame`, so the sight a
+    // guard acts on this tick is the Prince as he was at the end of the
+    // last one.
+    const canGuardSee = canGuardSeeKid(this.guard, this.kid, {
+      tables: this.tables, tileAtKid: this.tileAtKid,
+    });
     stepKid(this.kid, controls, this.ctx);
     if (!frozen) stepGuard(this.guard, {
       tables: this.tables,
@@ -289,16 +311,8 @@ export class Game {
       // asking his own room for column eleven answers nothing.
       // `get_tile_at_kid`: the tile of the Prince's own room and row at
       // an x, for the line of sight between a guard and him.
-      tileAtKid: (xpos) => {
-        const t = getTile(
-          this.ctx.world, this.kid.room,
-          tileDivModM7(xpos).column, this.kid.currentRow,
-        );
-        return {
-          type: t.type,
-          modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0,
-        };
-      },
+      tileAtKid: this.tileAtKid,
+      canGuardSee,
       floorInFront: (guard) => {
         const ahead = guard.direction < 0 ? -1 : 1;
         for (const step of [1, 2]) {
@@ -846,35 +860,29 @@ export const MINUTE_TICKS = 720;
 /**
  * How many ticks the screen stays blank when the view changes room.
  *
- * One, and it is a compromise between two captures of the same thing at
- * two speeds of machine.
+ * None. The original does not blank at all.
  *
- * At three thousand cycles -- a 286 at about eight megahertz, which is
- * the machine the game was written for -- DOSBox cannot redraw a room
- * inside one of the game's ticks. The screen is black for the two ticks
- * the redraw takes, and the game loses one of them: the port and the
- * capture come out of every room change a tick further apart. Every
+ * It looked as though it did. At three thousand cycles -- a 286 at about
+ * eight megahertz, which is the machine the game was written for --
+ * DOSBox cannot redraw a room inside one of the game's ticks, and the
+ * grabbed video is black for the two ticks the redraw takes. Every
  * session capture in tests/golden was taken at that speed, and three of
  * the thirteen frames of the run-jump are that blank.
  *
- * At twenty thousand cycles the same room change in the same recording
- * has no black frame at all -- not one -- and the game loses no tick.
+ * At twenty thousand cycles not one frame of any capture is black:
+ * neither at a room change nor at a level restart, which is the harder
+ * case because the whole level is built again. `probeF` changes room at
+ * tick 190 and restarts the level at 431, and the capture goes straight
+ * from the one room to the next and from the death screen to the new
+ * level, with nothing between. So the blank is the slow machine's, not
+ * the game's, and the port -- which redraws in no time -- should have
+ * none of it.
  *
- * So the blank is the machine's, and how much of it there is depends on
- * how slow the machine is. The port redraws in no time, so the honest
- * answer is none; the honest answer costs the session captures, which
- * stop at the first frame they cannot reproduce and would stop at the
- * blank. Measured against captures at twenty thousand cycles, dropping
- * it would take `probeC` from 200 of its 239 ticks exact to 226,
- * `probeE` from 159 to 161 and `probeF` from 206 to 209 -- twenty-six
- * ticks -- and cost ten leading captures of `level1-open` and two of
- * `level2-guard`.
- *
- * One keeps both halves of that roughly honest: the room change costs a
- * tick against the fast captures and a tick against the slow ones,
- * rather than nothing against one and two against the other.
+ * Measured against the captures at twenty thousand cycles, dropping it
+ * takes `probeC` from 228 of its 236 ticks pixel-exact to 230, `probeE`
+ * from 155 of 163 to 157, and `probeF` from 741 of 1194 to 745.
  */
-export const ROOM_CHANGE_BLANK = 1;
+export const ROOM_CHANGE_BLANK = 0;
 
 /**
  * Ticks between the Prince dying and `Press Button to Continue`.

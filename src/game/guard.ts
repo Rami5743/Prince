@@ -265,6 +265,21 @@ export interface GuardStepContext {
   readonly tileAtKid?: (xpos: number) => { type: number; modifier: number };
   /** `justblocked`: his own last blow was parried, within four ticks. */
   readonly justBlocked?: () => boolean;
+  /**
+   * `can_guard_see_kid`, worked out *before* the Prince was stepped.
+   *
+   * The original computes it in `play_frame`, on the line above
+   * `play_kid_frame`, so what the guard reacts to this tick is where the
+   * Prince was at the end of the last one. The port worked it out inside
+   * the guard's own step, which is after the Prince has moved, and so
+   * every decision that turns on sight came a tick early -- a guard came
+   * on guard the moment the Prince stepped into his row rather than the
+   * tick after.
+   *
+   * Left out, it is worked out here from the state as it stands, which
+   * is what the tests that drive a guard by hand want.
+   */
+  readonly canGuardSee?: number;
 }
 
 /** What a guard can see of the Prince. */
@@ -368,7 +383,7 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
   // the Prince being in the room. Across a hole in the floor or behind a
   // gate he still draws -- `can_guard_see_kid` of one is enough for that
   // -- but behind a wall he does not.
-  if (canGuardSeeKid(guard, kid, ctx) === SIGHT.none) return;
+  if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
@@ -556,7 +571,7 @@ function autocontrolGuardActive(guard: GuardState, ctx: GuardStepContext): void 
   if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
   if (guard.sword !== SWORD_DRAWN) return;
   if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
-  const sight = canGuardSeeKid(guard, kid, ctx);
+  const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);
   // He can see him but will not cross what is between them: he stands.
   if (sight === SIGHT.wont) return;
   if (sight === SIGHT.none) {

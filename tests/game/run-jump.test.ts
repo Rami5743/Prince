@@ -108,11 +108,16 @@ function matchingStep(file: string): Step | null {
  * Which simulated frame reproduces each capture. Pinned, so that a change to
  * the engine that shifts the timing shows up here.
  *
- * jump05, jump06 and jump07 are the blank the original shows while it
- * changes room -- black everywhere but the hit points along the bottom.
- * All three fall inside one tick of the port's clock, which is why they
- * reproduce on the same frame: at the speed these were captured, three
- * captures can land inside a single tick.
+ * jump05, jump06 and jump07 are black everywhere but the hit points
+ * along the bottom, and they are not reproduced at all -- `null`.
+ *
+ * They are the emulator's, not the game's. These thirteen frames were
+ * grabbed at four hundred cycles, where DOSBox cannot redraw a room
+ * inside one of the game's ticks and the screen stays black while it
+ * does. Captured at twenty thousand cycles the same room change has no
+ * black frame at all, and neither has a level restart -- see
+ * `ROOM_CHANGE_BLANK`. The port redraws in no time and has nothing to
+ * put here.
  */
 const EXPECTED: Record<string, number | null> = {
   'jump00.png': 8,
@@ -120,9 +125,9 @@ const EXPECTED: Record<string, number | null> = {
   'jump02.png': 18,
   'jump03.png': 21,
   'jump04.png': 24,
-  'jump05.png': 27,
-  'jump06.png': 27,
-  'jump07.png': 27,
+  'jump05.png': null,
+  'jump06.png': null,
+  'jump07.png': null,
   'jump08.png': 28,
   'jump09.png': 31,
   'jump10.png': 35,
@@ -141,11 +146,9 @@ describe('the running jump, against the original', () => {
   });
 
   it('the frames of the jump are reproduced in the order they were captured', () => {
-    // The three blank frames share a tick, so they are compared as a group
-    // rather than against each other.
+    // The three blank frames are the emulator's and are left out.
     const order = [
-      'jump02.png', 'jump03.png', 'jump04.png', 'jump05.png', 'jump08.png',
-      'jump09.png',
+      'jump02.png', 'jump03.png', 'jump04.png', 'jump08.png', 'jump09.png',
     ].map((f) => matchingStep(f)?.step ?? -1);
     for (let i = 1; i < order.length; i++) {
       expect(order[i]).toBeGreaterThan(order[i - 1]);

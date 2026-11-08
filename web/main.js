@@ -2854,7 +2854,7 @@ function comeOnGuard(guard, ctx) {
   if (guard.frame !== GUARD_FRAME_INACTIVE) return;
   const kid = ctx.kid;
   if (!kid || kid.alive >= 0) return;
-  if (canGuardSeeKid(guard, kid, ctx) === SIGHT.none) return;
+  if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
 }
@@ -2950,7 +2950,7 @@ function autocontrolGuardActive(guard, ctx) {
   if (!kid || guard.alive >= 0 || kid.alive >= 0) return;
   if (guard.sword !== SWORD_DRAWN) return;
   if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
-  const sight = canGuardSeeKid(guard, kid, ctx);
+  const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);
   if (sight === SIGHT.wont) return;
   if (sight === SIGHT.none) {
     moveDownBack(guard, ctx);
@@ -5085,6 +5085,22 @@ var Game = class _Game {
    * difference from 205 to 261.
    */
   guardFreeze = 0;
+  /**
+   * `get_tile_at_kid`: the tile of the Prince's own room and row at an
+   * x, for the line of sight between a guard and him.
+   */
+  tileAtKid = (xpos) => {
+    const t = getTile(
+      this.ctx.world,
+      this.kid.room,
+      tileDivModM7(xpos).column,
+      this.kid.currentRow
+    );
+    return {
+      type: t.type,
+      modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0
+    };
+  };
   maxHitPoints;
   /**
    * Has the Prince got a sword? It lies on the floor of level 1 and he
@@ -5226,6 +5242,10 @@ var Game = class _Game {
     this.traps.kidRow = this.kid.currentRow;
     this.traps.kidAlive = this.kid.alive;
     this.traps.step();
+    const canGuardSee = canGuardSeeKid(this.guard, this.kid, {
+      tables: this.tables,
+      tileAtKid: this.tileAtKid
+    });
     stepKid(this.kid, controls, this.ctx);
     if (!frozen) stepGuard(this.guard, {
       tables: this.tables,
@@ -5250,18 +5270,8 @@ var Game = class _Game {
       // asking his own room for column eleven answers nothing.
       // `get_tile_at_kid`: the tile of the Prince's own room and row at
       // an x, for the line of sight between a guard and him.
-      tileAtKid: (xpos) => {
-        const t = getTile(
-          this.ctx.world,
-          this.kid.room,
-          tileDivModM7(xpos).column,
-          this.kid.currentRow
-        );
-        return {
-          type: t.type,
-          modifier: t.room ? this.scene.state.modifierAt(t.room, t.column, t.row) : 0
-        };
-      },
+      tileAtKid: this.tileAtKid,
+      canGuardSee,
       floorInFront: (guard) => {
         const ahead = guard.direction < 0 ? -1 : 1;
         for (const step2 of [1, 2]) {
@@ -5706,7 +5716,7 @@ var TEXT_TOP_Y = 193;
 var TEXT_WHITE = 15;
 var LEVEL_TITLE_TICKS = 24;
 var MINUTE_TICKS = 720;
-var ROOM_CHANGE_BLANK = 1;
+var ROOM_CHANGE_BLANK = 0;
 var RESTART_PROMPT_DELAY = 46;
 var RESTART_BUTTON_DELAY = 6;
 var RESTART_DELAY = 3;
