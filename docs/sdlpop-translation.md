@@ -147,6 +147,29 @@ recording a tick earlier scores 10060 rather than 10559 (measured before
 the two clock fixes), so the phase
 that is there is the better of the two.
 
+### A third kind: the press the emulator took late
+
+`gate1`, captured after the nineteen, turned out to be a kind of its
+own, and the worst-looking difference in the set: exact for 591 ticks
+and nothing after. The port starts a run at 592 and falls into room 2
+at 599; the capture's Prince stands at the lip until 605, runs, and
+reaches room 2 at 610. Seven ticks from the start of the run to the
+room change on both sides -- the same run, fourteen ticks later.
+
+The timeline has Right down at 591 and up at 593. `tools/dev/late-key.ts`
+moves that tap on by n ticks and scores the result: n of 0 to 13 gives
+591 to 644 of 796, and n of 14 gives **790 of 796**. So the capture is
+the port's own run with the tap delivered at 605 -- which is the tick
+Shift comes up, and exactly when the C's `control_standing` lets a held
+`control_forward` through.
+
+`tools/oracle/README` already said a press shorter than four ticks is a
+coin toss in DOSBox. What it did not say is that a late press does not
+read as lateness: it reads as the original doing something else, and
+every tick after it is marked wrong. `tools/dev/short-presses.ts` lists
+them -- `b4ff4672`, thirty-five ticks apart, has none at all, so those
+thirty-five are real; `9b60bf3a` has two and `0fbffa60` a dozen.
+
 That is not a proof that nothing is left to fix, and it should not be
 read as one. It is a reason to look at the ticks that differ one at a
 time rather than at the total.
