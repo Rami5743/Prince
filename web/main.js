@@ -4276,6 +4276,7 @@ function checkPress(state, ctx) {
   if (tile.type === TILE.opener || tile.type === TILE.closer) {
     ctx.traps.pressButton(tile.room, tilePos);
   } else if (tile.type === TILE.loose) {
+    ctx.effects?.sound?.(SOUND_SILENCE);
     ctx.traps.makeLooseFall(tile.room, tilePos);
   }
 }

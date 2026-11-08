@@ -15,7 +15,9 @@
 import type { CharacterState } from './character.ts';
 import { forwardX } from './character.ts';
 import type { ExeTables, Frame } from './exe-tables.ts';
-import { startSequence, playSequence, SEQ, ACTION, type SequenceEffects } from './sequence.ts';
+import {
+  startSequence, playSequence, SEQ, ACTION, SOUND_SILENCE, type SequenceEffects,
+} from './sequence.ts';
 import {
   type World, EDGE_TYPE, getEdgeDistance, getTile, determineColumn,
   distanceToEdgeWeight, floorHeightOfRow, FALLING_SPEED_ACCEL, FALLING_SPEED_MAX,
@@ -987,6 +989,11 @@ function checkPress(state: CharacterState, ctx: KidContext): void {
   if (tile.type === TILE.opener || tile.type === TILE.closer) {
     ctx.traps.pressButton(tile.room, tilePos);
   } else if (tile.type === TILE.loose) {
+    // `is_guard_notice = 1; make_loose_fall(1);` -- a slab giving way
+    // under him is a noise, and a guard with his back turned looks
+    // round at it. `SOUND_SILENCE` is the byte-code's own way of
+    // saying "no sound, but the guards still hear it".
+    ctx.effects?.sound?.(SOUND_SILENCE);
     ctx.traps.makeLooseFall(tile.room, tilePos);
   }
 }
