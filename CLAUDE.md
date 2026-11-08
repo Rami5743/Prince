@@ -1,25 +1,38 @@
 # Read this first
 
-## THE JOB IN HAND: finish the translation, and do not stop
+## THE JOB IN HAND: close the last of the difference
 
-`src/game` is being replaced by `src/pop`, a direct translation of
-https://github.com/NagyD/SDLPoP. The plan is `docs/sdlpop-translation.md`.
+`src/pop` is a direct translation of https://github.com/NagyD/SDLPoP
+and it is now the game the player plays: `web/main.ts` starts
+`PopGame`, and `game.js` carries it. The plan and what was kept is
+`docs/sdlpop-translation.md`.
 
-**Do not stop until the whole of it is translated and every test
-passes.** Not when a segment is done, not when it typechecks, not when
-the context is getting long -- when `npm test` is green on the
-translated game and `tools/dev/oracle-report.ts` has been run against
-the nineteen recordings.
+Where it stands, measured by `tools/dev/pop-report.ts` against the
+nineteen captures of a real PRINCE.EXE:
 
-Translated so far: `data`, `types`, `state`, `link`, `seg009`,
-`seg006`, `seg004`, `seg005`, `seg007`.
-Still to do: `seg003`, `seg002`, `seg008`, `seg000`, and the adapter
-that gives the shell and the tests the interface they already use.
+* the translation draws **10559 of 11094** ticks exactly;
+* the hand-written port, which it replaced, drew 10380. That port is
+  still in `src/game` and on `backup/handwritten-port`; nothing but
+  its own unit tests uses it now.
+* Ten of the nineteen runs are exact or within one tick. What is left
+  is mostly `9b60bf3a` (104), `0fbffa60` (94), `13ab6867` (158) and
+  `b4ff4672` (35).
 
-The hand-written port is on `backup/handwritten-port` at 10380 of
-11094 ticks. The translation replaces it only when it beats that; if
-it does not, say so and leave the old one in place.
+**Do not stop while ticks are still different.** The tools:
 
+* `tools/dev/pop-report.ts [name...]` -- the score.
+* `tools/dev/pop-first.ts [name...]` -- where a run first parts
+  company, under the same alignment the score uses, so a run that is
+  simply a tick or two ahead all the way through is not reported.
+* `tools/dev/pop-frames.ts <rec.json> <outdir> <from> <to>` -- the
+  translation's frames as PNGs, to put beside the capture's. The
+  captures live outside the repository (see `tools/oracle/README.md`);
+  `tools/oracle/digests/shifts.txt` says which capture of each
+  recording the digest was taken from.
+* `tools/dev/recording-trace.ts <rec.json> --all` -- the same run
+  through the hand-written port. Where the two ports agree and the
+  capture does not, the difference is old; where they disagree, the
+  translation has usually dropped a line of the C.
 
 ## The player plays `game.js`, not `src/`
 
