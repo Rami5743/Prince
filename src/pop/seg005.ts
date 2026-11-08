@@ -79,7 +79,7 @@ export function land(): void {
     if (!tile_is_floor(get_tile_infrontof_char()) && distance_to_edge_weight() < 3) {
       g.Char.x = byteOf(char_dx_forward(-3));
     }
-    l7.start_chompers.fn(g.Char.room, g.Char.curr_row);
+    l7.start_chompers.fn();
   } else {
     onSpikes = true;
   }

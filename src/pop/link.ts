@@ -27,7 +27,7 @@ function slot<T extends Fn>(name: string): { fn: T } {
 
 /** `seg007.c`. */
 export const l7 = {
-  start_chompers: slot<(room: number, row: number) => void>('start_chompers'),
+  start_chompers: slot<() => void>('start_chompers'),
   make_loose_fall: slot<(modifier: number) => void>('make_loose_fall'),
   trigger_button: slot<(process_shadow: number, tilepos: number, button_type: number) => void>('trigger_button'),
   is_spike_harmful: slot<() => number>('is_spike_harmful'),

@@ -230,11 +230,11 @@ export function play_seq(): void {
         break;
       case seqtbl_instructions.SEQ_UP:
         --g.Char.curr_row;
-        l7.start_chompers.fn(g.Char.room, g.Char.curr_row);
+        l7.start_chompers.fn();
         break;
       case seqtbl_instructions.SEQ_DOWN:
         l2.inc_curr_row.fn();
-        l7.start_chompers.fn(g.Char.room, g.Char.curr_row);
+        l7.start_chompers.fn();
         break;
       case seqtbl_instructions.SEQ_ACTION:
         g.Char.action = seqByte(g.Char.curr_seq);
@@ -504,7 +504,7 @@ export function start_fall(): void {
   const frame = g.Char.frame;
   g.Char.sword = sword_status.sword_0_sheathed;
   l2.inc_curr_row.fn();
-  l7.start_chompers.fn(g.Char.room, g.Char.curr_row);
+  l7.start_chompers.fn();
   fall_frame = frame;
   if (frame === frameids.frame_9_run) {
     seq_id = seqids.seq_7_fall;
@@ -645,6 +645,17 @@ export function fell_out(): void {
     g.Char.alive = 0;
     out.erase_bottom_text(1);
     g.Char.frame = frameids.frame_185_dead;
+  }
+}
+
+// seg006:0BDC
+export function play_kid(): void {
+  fell_out();
+  control_kid();
+  if (g.Char.alive >= 0 && is_dead()) {
+    // The death animation counts up through `alive` and the shell puts
+    // the words on the screen; the game's own part of it is the count.
+    ++g.Char.alive;
   }
 }
 
