@@ -56,6 +56,8 @@ export const GUARD_SEQ = {
    * takes the step back, so the step never happens.
    */
   becomeInactive: 87,
+  /** `seq_80_stand_flipped`: turning where he stands, without drawing. */
+  standFlipped: 80,
   stabbed: 74,
   dropDead: 71,
 } as const;
@@ -280,6 +282,15 @@ export interface GuardStepContext {
    * is what the tests that drive a guard by hand want.
    */
   readonly canGuardSee?: number;
+  /**
+   * `is_guard_notice`: the Prince has made a noise since the last time
+   * a guard looked. A footstep sets it, so does a hard landing and so
+   * does walking into a wall, and it is the only thing that makes an
+   * inactive guard turn round on someone behind him.
+   */
+  readonly heard?: () => boolean;
+  /** Clear `is_guard_notice`, which looking at it does. */
+  readonly forget?: () => void;
 }
 
 /** What a guard can see of the Prince. */
@@ -383,18 +394,27 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
   // the Prince being in the room. Across a hole in the floor or behind a
   // gate he still draws -- `can_guard_see_kid` of one is enough for that
   // -- but behind a wall he does not.
-  // `autocontrol_guard_inactive` does not draw on someone behind it.
-  // The test is `Opp.curr_row != Char.curr_row || (word)distance <
-  // (word)-8`, and the unsigned compare makes that "a different row,
-  // or in front, or behind by nine or more"; inside it, with no sound
-  // to have given the Prince away, anything behind is let alone. So a
-  // guard is roused by a Prince in front of him, or by one within
-  // eight units behind him in his own row, and by nothing else. The
-  // port drew on anything it could see, from either side.
-  const behind = charOppDist(guard, kid);
-  if ((kid.currentRow !== guard.currentRow || behind >= 0 || behind <= -9)
-    && behind < 0) {
-    return;
+  // `autocontrol_guard_inactive` does not draw on someone behind it,
+  // unless the Prince has made a noise. The test is `Opp.curr_row !=
+  // Char.curr_row || (word)distance < (word)-8`, and the unsigned
+  // compare makes that "a different row, or in front, or behind by
+  // nine or more". Inside it: a Prince who has just been heard and is
+  // behind by more than four makes the guard turn round in place --
+  // `move_4_down`, which `control_guard_inactive` reads as sequence 80
+  // -- and one who has not been heard and is behind is let alone. The
+  // port drew on anything it could see, from either side and in
+  // silence.
+  const distance = charOppDist(guard, kid);
+  if (kid.currentRow !== guard.currentRow || distance >= 0 || distance <= -9) {
+    if (ctx.heard?.()) {
+      ctx.forget?.();
+      if (distance < 0) {
+        if (distance < -4) startSequence(guard, GUARD_SEQ.standFlipped, ctx.tables);
+        return;
+      }
+    } else if (distance < 0) {
+      return;
+    }
   }
   if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
   guard.sword = 2;

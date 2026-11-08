@@ -2683,6 +2683,8 @@ var GUARD_SEQ = {
    * takes the step back, so the step never happens.
    */
   becomeInactive: 87,
+  /** `seq_80_stand_flipped`: turning where he stands, without drawing. */
+  standFlipped: 80,
   stabbed: 74,
   dropDead: 71
 };
@@ -2854,9 +2856,17 @@ function comeOnGuard(guard, ctx) {
   if (guard.frame !== GUARD_FRAME_INACTIVE) return;
   const kid = ctx.kid;
   if (!kid || kid.alive >= 0) return;
-  const behind = charOppDist(guard, kid);
-  if ((kid.currentRow !== guard.currentRow || behind >= 0 || behind <= -9) && behind < 0) {
-    return;
+  const distance = charOppDist(guard, kid);
+  if (kid.currentRow !== guard.currentRow || distance >= 0 || distance <= -9) {
+    if (ctx.heard?.()) {
+      ctx.forget?.();
+      if (distance < 0) {
+        if (distance < -4) startSequence(guard, GUARD_SEQ.standFlipped, ctx.tables);
+        return;
+      }
+    } else if (distance < 0) {
+      return;
+    }
   }
   if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
   guard.sword = 2;
@@ -5022,6 +5032,7 @@ var Prng2 = class {
 };
 
 // src/game/game.ts
+var HEARD_BY_GUARDS = /* @__PURE__ */ new Set([SOUND_SILENCE, 23, 8, 17, 16]);
 var GUARD_FOLLOWS_LEFT = 91;
 var GUARD_FOLLOWS_RIGHT = 165;
 var Game = class _Game {
@@ -5105,6 +5116,8 @@ var Game = class _Game {
    * jumped from.
    */
   pendingKnock = 0;
+  /** `is_guard_notice`; see the `sound` effect. */
+  guardNotice = false;
   /**
    * `get_tile_at_kid`: the tile of the Prince's own room and row at an
    * x, for the line of sight between a guard and him.
@@ -5180,7 +5193,19 @@ var Game = class _Game {
       drawnRoom: () => this.drawnRoom,
       startRoom: scene.level.startRoom,
       effects: {
-        sound: effects.sound,
+        /**
+         * `is_guard_notice`: a noise tells a guard the Prince is there.
+         * The byte-code's `sound` opcode raises nought for a footfall
+         * that is heard but not played and one for a footstep, and
+         * both of those set it in `play_seq`; so do a hard landing and
+         * walking into a wall, which come through here as the same
+         * two codes. It is the only thing that makes a guard with his
+         * back turned look round.
+         */
+        sound: (which) => {
+          if (HEARD_BY_GUARDS.has(which)) this.guardNotice = true;
+          effects.sound?.(which);
+        },
         /**
          * A heavy landing shakes the loose floors around it. The
          * sequences raise this themselves -- `knockUp` and `knockDown`
@@ -5287,6 +5312,10 @@ var Game = class _Game {
       // a dozen ticks and the capture's did not.
       random: () => this.prng.next(255),
       justBlocked: () => this.justBlocked !== 0,
+      heard: () => this.guardNotice,
+      forget: () => {
+        this.guardNotice = false;
+      },
       // `get_tile_infrontof_char` and `get_tile_infrontof2_char`, which
       // follow the room links: a guard who has come through a door is
       // standing a tile or two outside the room he is walking into, and

@@ -322,3 +322,35 @@ describe('a guard with his sword away', () => {
     expect(guard.frame).toBe(166);
   });
 });
+
+/**
+ * A noise is the only thing that makes a guard with his back turned
+ * look round: `is_guard_notice`, set by the byte-code's `sound` opcode
+ * on every footfall, by a hard landing and by walking into a wall.
+ * `autocontrol_guard_inactive` reads it, forgets it, and if the Prince
+ * is behind by more than four turns the guard where he stands --
+ * `move_4_down`, which `control_guard_inactive` reads as sequence 80.
+ */
+describe('a guard who hears something behind him', () => {
+  it('turns round', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(3);
+    const guard = game.guard;
+    guard.x = standX(4);
+    guard.currentColumn = 4;
+    guard.direction = -1;
+    const was = guard.direction;
+    const kid = game.kid;
+    kid.room = 3;
+    kid.currentRow = guard.currentRow;
+    kid.currentColumn = 6;
+    kid.x = standX(6);
+    kid.y = standY(guard.currentRow);
+    kid.fallY = 0;
+    // Walking away is what makes the noise: the run's byte-code raises
+    // the sound opcode on every stride, and he stays behind the guard.
+    for (let i = 0; i < 34; i++) game.step({ x: 1, y: 0, shift: false });
+    expect(guard.direction, 'he is facing the other way now').not.toBe(was);
+  });
+});
