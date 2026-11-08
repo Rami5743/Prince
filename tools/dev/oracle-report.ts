@@ -10,8 +10,14 @@
  * the suite pins these numbers so they cannot fall, but the pins say
  * nothing about *where* a run is wrong, and the ranges below do.
  *
- * `--frames <dir>` also writes the port's own pictures, so that a tick
- * in the list can be put beside the capture's.
+ * Each line also says whether the capture's own clock and the player's
+ * keys agree about which tick is which. They have to: the level's
+ * number under the room is a count the game keeps itself and the keys
+ * cannot move it, so if the alignment before the player touched
+ * anything and the alignment after it want different offsets, the
+ * capture was taken with the schedule half a tick the wrong side of a
+ * boundary and has to be taken again -- see tools/dev/pick-shift.ts.
+ * A `PHASE` on a line means that run's number is not worth reading.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -65,8 +71,30 @@ for (const name of names) {
   }
   if (run >= 0) miss.push(`${run}-${ex.ticks - 1}`);
   const pct = ex.ticks ? Math.round((ex.agreed / ex.ticks) * 100) : 0;
+  // The commonest offset over the ticks that agree, before the player
+  // touched anything and after.
+  let firstPress = ticks.length;
+  for (let t = 0; t < ticks.length; t++) {
+    const c = ticks[t];
+    if (c.x !== 0 || c.y !== 0 || c.shift) { firstPress = t; break; }
+  }
+  const settled = (from: number, to: number): number | null => {
+    const count = new Map<number, number>();
+    for (let i = Math.max(0, from); i < Math.min(ex.drift.length, to); i++) {
+      if (dos[i] == null || dos[i] !== port.hash[i + ex.drift[i]]) continue;
+      count.set(ex.drift[i], (count.get(ex.drift[i]) ?? 0) + 1);
+    }
+    let best: number | null = null;
+    let most = 0;
+    for (const [d, n] of count) if (n > most) { most = n; best = d; }
+    return most >= 3 ? best : null;
+  };
+  const before = settled(0, firstPress - 1);
+  const after = settled(firstPress + 2, ex.drift.length);
+  const phase = before !== null && after !== null && before !== after
+    ? ` PHASE${after - before > 0 ? '+' : ''}${after - before}` : '';
   console.log(`${name.padEnd(10)} ${String(ex.agreed).padStart(5)} of `
-    + `${String(ex.ticks).padStart(5)}  ${String(pct).padStart(3)}%  `
+    + `${String(ex.ticks).padStart(5)}  ${String(pct).padStart(3)}%${phase}  `
     + miss.slice(0, 12).join(' ') + (miss.length > 12 ? ' ...' : ''));
 }
 const pct = totalTicks ? Math.round((totalAgreed / totalTicks) * 100) : 0;

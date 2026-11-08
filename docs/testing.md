@@ -304,9 +304,9 @@ lip of a floor and running off it. Which of the two captures to keep:
 The two captures are the same picture until the first key that matters
 is read; on that one tick they differ, and at most one of them can be
 the picture the port draws for it. `tools/oracle/digests/shifts.txt`
-records which was kept for each recording, and `tools/dev/phase-check.ts`
-checks a finished capture from the other end, against the level's own
-clock.
+records which was kept for each recording, and
+`tools/dev/oracle-report.ts` marks a run `PHASE` if its capture is
+still the wrong side of a tick boundary.
 
 The capture itself cannot go in the repository -- a thousand pictures
 and twenty-five megabytes -- so what is kept is a fingerprint of each

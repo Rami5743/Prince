@@ -62,7 +62,15 @@ times they were pressed, and recover the game's ticks from the grab.
   the port one way and 326 the other.
 
   So each recording is captured at `--shift 0` and at `--shift 1`, and
-  `tools/dev/phase-check.ts` says which to keep. It lines the capture
+  `tools/dev/pick-shift.ts` says which to keep. The two captures are
+  the same picture until the first key that matters is read --
+  `first_divergence.py` says which tick that is -- and on that one
+  tick at most one of them can be the picture the port draws. That is
+  the only thing the port is asked, and the rest of the comparison is
+  what it is being measured on.
+
+  `tools/dev/oracle-report.ts` checks a finished capture from the
+  other end and marks it `PHASE` if it is wrong: it lines the capture
   up against the port over the ticks before the player touched
   anything, where only the level's own clock is running -- the number
   under the room, which the keys cannot move -- and then over the ticks
