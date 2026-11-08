@@ -274,11 +274,16 @@ export function control_standing(): void {
     return;
   }
   if (g.control_forward === CONTROL_HELD) {
-    forward_pressed();
+    // `is_keyboard_mode`: forward and up together are a standing jump.
+    // The original sets it in `set_joy_mode` and a game played on the
+    // keyboard -- which is what every capture is -- has it on.
+    if (g.control_up === CONTROL_HELD) standing_jump();
+    else forward_pressed();
   } else if (g.control_backward === CONTROL_HELD) {
     back_pressed();
   } else if (g.control_up === CONTROL_HELD) {
-    up_pressed();
+    if (g.control_forward === CONTROL_HELD) standing_jump();
+    else up_pressed();
   } else if (g.control_down === CONTROL_HELD) {
     down_pressed();
   } else if (g.control_x === CONTROL_HELD_FORWARD) {
