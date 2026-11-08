@@ -221,6 +221,8 @@ class Globals {
   obj_chtab = 0;
   obj_id = 0;
   obj_x = 0;
+  obj_xh = 0;
+  obj_xl = 0;
   obj_y = 0;
   obj_tilepos = 0;
   obj_clip_left = 0;
