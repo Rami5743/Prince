@@ -156,20 +156,36 @@ def main():
         # twelfth of a second and not the nominal one -- a tenth of a per
         # cent is a tick and a half over a long recording, which is the
         # fault the gap-walk was written to avoid.
+        # How many ticks a gap between two changes is.
+        #
+        # A tick is two and a half frames at thirty against twelve, so
+        # the boundaries fall two and three frames apart in turn and a
+        # gap of four is a three the emulator was late for -- there is
+        # no such thing as a four-frame tick. A plain `round(gap / per)`
+        # makes that four into two and invents a tick: the picture of
+        # the tick before written twice, and every tick after it a tick
+        # out for the rest of the run. One frame of jitter in twelve
+        # hundred ticks is enough, and it happened -- of the four
+        # captures of `f6874819` in the third round, three have the
+        # Prince's stride at ticks 119 to 130 and the fourth has tick
+        # 121 written twice, which cost that run its alignment from 122
+        # to the end.
+        #
+        # So the rounding leans towards the shorter reading: a two-tick
+        # gap is five frames and a three-tick gap seven or eight, and
+        # anything under four and a half is one tick. Leaning the other
+        # way stretches a capture -- numbering `probeC` against its own
+        # measured rate gave 238 ticks where the game drew 235, at
+        # 12.13 ticks a second where the emulator keeps 12.00.
+        def ticks_in(gap):
+            return max(1, int(round(gap / per - 0.3)))
+
         base = changes[0]
-        walked = 0
-        for n in range(1, len(changes)):
-            walked += max(1, int(round((changes[n] - changes[n - 1]) / per)))
-        fit = (changes[-1] - base) / walked if walked else per
-        # A rate that far out is not jitter, it is a broken capture.
-        if not 0.9 * per <= fit <= 1.1 * per:
-            print(f'measured {fit:.4f} frames a tick against {per:.4f}: '
-                  f'keeping the nominal rate')
-            fit = per
         pics = {}
-        t = -1
+        t = 0
         for n, f in enumerate(changes):
-            t = max(t + 1, int(round((f - base) / fit)))
+            if n:
+                t += ticks_in(f - changes[n - 1])
             end = changes[n + 1] - 1 if n + 1 < len(changes) else len(frames) - 1
             pics[t] = frames[min(end, len(frames) - 1)]
         last = max(pics)
