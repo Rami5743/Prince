@@ -60,7 +60,12 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // his own row bought those three and cost the climb at a room's edge;
   // what buys them and costs nothing is the front of a floor, and only
   // that -- see `paint` in src/render/room.ts.
-  { name: 'level1-grab', reproduces: 36 },
+  //
+  // 49 of 54 since the direction latches became the original's: a key
+  // the player has let go of is still waiting to be acted on, and a
+  // character who is bumped or falling forgets all four. The whole of
+  // the climbing and the jumping after it is reproduced now.
+  { name: 'level1-grab', reproduces: 49 },
 
   // The same opening as level1-grab, then Down and Down with Shift. 9 of
   // 48, and that number is mostly about the capture rather than the port:

@@ -3559,8 +3559,9 @@ var ControlLatch = class {
   }
 };
 function step(latch, down) {
+  if (latch === CONTROL.held) return CONTROL.held;
   if (!down) return CONTROL.released;
-  return latch === CONTROL.ignore ? CONTROL.ignore : CONTROL.held;
+  return latch === CONTROL.released ? CONTROL.held : latch;
 }
 
 // src/game/kid.ts
@@ -3683,7 +3684,10 @@ function backwardHeld(state, controls) {
 function control(state, controls, ctx) {
   if (state.alive >= 0) return;
   const f = state.frame;
-  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) return;
+  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
+    ctx.latch.releaseArrows();
+    return;
+  }
   if (controlSwordPlay(state, controls, ctx)) return;
   if (f === FRAME.stand || f >= FRAME.turnEnd && f < 53) {
     controlStanding(state, controls, ctx);
@@ -3927,8 +3931,7 @@ function controlHanging(state, controls, ctx) {
   hangFall(state, ctx);
 }
 function canClimbUp(state, ctx) {
-  ctx.latch.shift2 = CONTROL.ignore;
-  ctx.latch.releaseArrows();
+  ctx.latch.up = ctx.latch.shift2 = ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq = KID_SEQ.climbUp;
   if ((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0 || above.type === TILE.gate && state.direction !== 0 && modifierOf(ctx, above) >> 2 < 6) {
@@ -3937,7 +3940,7 @@ function canClimbUp(state, ctx) {
   startSequence(state, seq, ctx.tables);
 }
 function hangFall(state, ctx) {
-  ctx.latch.releaseArrows();
+  ctx.latch.down = ctx.latch.releaseArrows();
   const behind = tileBehind(state, ctx);
   const here = tileHere(state, ctx);
   if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
@@ -4363,11 +4366,6 @@ function stepKid(state, controls, ctx) {
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
   checkDrink(state, ctx);
-  if (state.room === 0 && state.alive < 0) {
-    ctx.damage?.(100);
-    state.alive = 0;
-    state.frame = FRAME.dead;
-  }
 }
 function checkBumped(state, ctx) {
   const frame = frameOf(ctx.tables, state);
@@ -4559,6 +4557,11 @@ function exitRoom(state, ctx) {
   if (leave < 0) return -1;
   gotoOtherRoom(state, leave, ctx);
   state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  if (state.room === 0 && state.alive < 0) {
+    ctx.damage?.(100);
+    state.alive = 0;
+    state.frame = FRAME.dead;
+  }
   return leave;
 }
 function gotoOtherRoom(state, direction, ctx) {

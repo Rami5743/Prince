@@ -107,11 +107,25 @@ export class ControlLatch {
 }
 
 function step(latch: number, down: boolean): number {
-  // Letting go always clears the latch, even one that nothing has acted on
-  // yet. Keeping it would hand the next move a press the player has already
-  // finished with: tap Up to climb a ledge, let go, then press left, and
-  // the stale Up turns the step into a standing jump.
+  // `read_user_control` wraps each of its five tests in
+  // `if (control_up >= CONTROL_RELEASED)`, and held is -1. So a latch
+  // that is held is not looked at at all: letting the key go does not
+  // clear it, and it waits there until something acts on it.
+  //
+  // It is what the player sees. In `72b3522f` he taps Down at ticks 180
+  // and 181, in the middle of a turn, and lets go; the original's Prince
+  // crouches at 184, three ticks after the key came up, because the turn's
+  // last frames are the first in which `control_standing` runs. In
+  // `848ee3c4` he taps Left at 124 and 125 while the Prince is stopping
+  // from a run, and the original turns him at 126.
+  //
+  // What makes this work rather than leave stale presses lying about is
+  // that nearly everything clears the latches as it acts, and that
+  // `control` clears all four of them on every tick a character is
+  // bumped or falling -- which is most of the ticks between one move
+  // and the next.
+  if (latch === CONTROL.held) return CONTROL.held;
   if (!down) return CONTROL.released;
-  // Held down: still waiting to be acted on, unless it already has been.
-  return latch === CONTROL.ignore ? CONTROL.ignore : CONTROL.held;
+  // Pressed again after being acted on stays ignored until it goes up.
+  return latch === CONTROL.released ? CONTROL.held : latch;
 }

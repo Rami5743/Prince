@@ -225,7 +225,18 @@ function backwardHeld(state: CharacterState, controls: Controls): boolean {
 export function control(state: CharacterState, controls: Controls, ctx: KidContext): void {
   if (state.alive >= 0) return;
   const f = state.frame;
-  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) return;
+  // `if (char_action == actions_5_bumped || char_action == actions_4_in_freefall)
+  // release_arrows();` -- not merely "do nothing". A character being
+  // knocked back or falling forgets every direction the player is
+  // holding, and that is what keeps a held latch from lingering: the
+  // Prince lands out of a climb on frame 149, which is `bumped`, and
+  // the press that started the climb is cleared there. Without it the
+  // faithful latch rule in `ControlLatch.step` jumps him straight back
+  // up again -- `probeF` 281.
+  if (state.action === ACTION.bumped || state.action === ACTION.inFreefall) {
+    ctx.latch.releaseArrows();
+    return;
+  }
   if (controlSwordPlay(state, controls, ctx)) return;
 
   if (f === FRAME.stand || (f >= FRAME.turnEnd && f < 53)) {
@@ -527,13 +538,12 @@ function controlHanging(state: CharacterState, controls: Controls, ctx: KidConte
 }
 
 function canClimbUp(state: CharacterState, ctx: KidContext): void {
-  ctx.latch.shift2 = CONTROL.ignore;
-  // The arrows are forgotten, but Up is not marked as used: the original
-  // keeps going while it is held, jumping again as soon as the Prince is
-  // back on his feet, and the level1-grab captures pin that. What must not
-  // happen is the same thing after the key has been let go -- that is the
-  // latch's own business, and `ControlLatch.step` clears a release.
-  ctx.latch.releaseArrows();
+  // `control_up = control_shift2 = release_arrows()`: both are marked
+  // used, not merely forgotten. The Prince still climbs again while Up
+  // is held -- the `bumped` frame at the end of the climb clears the
+  // latch and the next tick takes the key afresh -- but a press he has
+  // finished with does not follow him.
+  ctx.latch.up = ctx.latch.shift2 = ctx.latch.releaseArrows();
   const above = tileAbove(state, ctx);
   let seq: number = KID_SEQ.climbUp;
   if (((above.type === TILE.mirror || above.type === TILE.chomper) && state.direction === 0)
@@ -545,14 +555,8 @@ function canClimbUp(state: CharacterState, ctx: KidContext): void {
 }
 
 function hangFall(state: CharacterState, ctx: KidContext): void {
-  // The arrows are forgotten, but Down is not marked as used, for the
-  // reason `canClimbUp` gives about Up: the original goes on acting on a
-  // key that is still held once the move it started has finished. A
-  // player who holds Down at the top of a shaft climbs down one ledge
-  // after another; the port climbed down one and then stood there, for
-  // as long as the key was held, because `releaseLedgeAndLand` had
-  // marked Down used and nothing clears that until the key comes up.
-  ctx.latch.releaseArrows();
+  // `control_down = release_arrows()`, as `can_climb_up` does with Up.
+  ctx.latch.down = ctx.latch.releaseArrows();
   const behind = tileBehind(state, ctx);
   const here = tileHere(state, ctx);
   if (!tileIsFloor(behind.type) && !tileIsFloor(here.type)) {
@@ -1164,16 +1168,6 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   checkChomped(state, ctx);
   checkPickUpSword(state, ctx);
   checkDrink(state, ctx);
-
-  // `fell_out`: falling out of the level is fatal, and the body is the
-  // one the original shows for it -- frame 185, not whichever frame of
-  // the fall he happened to be on. He goes on falling through the room
-  // that is not there, which is off the screen and nobody's business.
-  if (state.room === 0 && state.alive < 0) {
-    ctx.damage?.(100);
-    state.alive = 0;
-    state.frame = FRAME.dead;
-  }
 }
 
 /**
@@ -1518,6 +1512,17 @@ export function exitRoom(state: CharacterState, ctx: KidContext): number {
   if (leave < 0) return -1;
   gotoOtherRoom(state, leave, ctx);
   state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+  // `fell_out`: falling out of the level is fatal, and the body is the
+  // one the original shows for it -- frame 185, not whichever frame of
+  // the fall he happened to be on. He goes on falling through the room
+  // that is not there, which is off the screen and nobody's business.
+  // It belongs with the room change: a Prince who has just been moved
+  // into room 0 must not get a tick of being alive there.
+  if (state.room === 0 && state.alive < 0) {
+    ctx.damage?.(100);
+    state.alive = 0;
+    state.frame = FRAME.dead;
+  }
   return leave;
 }
 

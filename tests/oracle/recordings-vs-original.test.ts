@@ -88,39 +88,40 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * time as the round finishes, and every number here moves when that
  * is done.
  *
- * `13ab6867` is down one as well, 527 to 526, and three against the
- * capture of the third round. It is the tiles a character in the air
- * has drawn back over him -- `draw_other_overlay`: three ticks of
- * this run lose by it where `ec99dc5b`, `33e8ace7`, `e209b01a`,
- * `760c3e74`, `848ee3c4`, `probeF` and `f6874819` gain twenty-one
- * between them, and the golden sessions gain three more. What those
- * three ticks are has not been found: at 333 to 335 the Prince's head
- * is a few pixels out in room 2 of level 2.
+ * `f6874819` is down too, 293 to 276, and that one is the direction
+ * latches: the original does not clear a latch when the key comes up,
+ * and `control` clears all four on every tick a character is bumped or
+ * falling. Together those are worth a hundred and sixty ticks on the
+ * third round's captures -- `72b3522f` 177 to 381 of 386, `848ee3c4`
+ * 1003 to 1215 of 1445, `756b259c` 297 to 432, `0fbffa60` 299 to 422 --
+ * and seventeen ticks of this run's *old* capture go the other way.
+ * The old capture's keys are a tick early throughout, which is exactly
+ * what a change to when a key is acted on is most sensitive to.
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 35,
-  '13ab6867': 526,
-  '25c4ebb8': 213,
-  '33e8ace7': 295,
-  '3764b76d': 184,
+  '13ab6867': 528,
+  '25c4ebb8': 218,
+  '33e8ace7': 300,
+  '3764b76d': 189,
   '5920a8c2': 372,
-  '72b3522f': 175,
-  '756b259c': 202,
-  '760c3e74': 1381,
+  '72b3522f': 381,
+  '756b259c': 263,
+  '760c3e74': 1455,
   '848ee3c4': 188,
-  '9b60bf3a': 292,
-  'a356bdd6': 173,
-  'b4ff4672': 354,
-  'e209b01a': 192,
-  'ec99dc5b': 174,
-  'f6874819': 293,
+  '9b60bf3a': 297,
+  'a356bdd6': 175,
+  'b4ff4672': 357,
+  'e209b01a': 195,
+  'ec99dc5b': 179,
+  'f6874819': 276,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
-  'probeC': 230,
-  'probeE': 157,
-  'probeF': 420,
+  'probeC': 234,
+  'probeE': 160,
+  'probeF': 421,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {
