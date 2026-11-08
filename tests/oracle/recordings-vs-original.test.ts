@@ -125,6 +125,16 @@ const EXPECTED: Record<string, number> = {
   'ec99dc5b': 237,
   'f6874819': 1189,
   'gate1': 591,
+  // `gate1`'s pin measures the replay, not the port: its two-tick tap
+  // of Right at 591 reached DOSBox fourteen ticks late, and with the
+  // tap moved there the port draws 790 of the 796 -- see
+  // `tools/dev/late-key.ts`.
+  //
+  // `gate2` is the first level-2 capture. Its recording is a fight,
+  // and a fight is tapped: `tools/dev/short-presses.ts` finds
+  // forty-odd presses in it of a single tick, which is well under what
+  // the emulator takes reliably.
+  'gate2': 616,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and

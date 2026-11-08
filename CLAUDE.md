@@ -34,6 +34,17 @@ nineteen captures of a real PRINCE.EXE:
   through the hand-written port. Where the two ports agree and the
   capture does not, the difference is old; where they disagree, the
   translation has usually dropped a line of the C.
+* `tools/dev/short-presses.ts` -- every press in the recordings
+  shorter than four ticks, which is what DOSBox takes reliably.
+* `tools/dev/late-key.ts <rec> <from> <to> <n,n,n>` -- the same run
+  with one press moved on by n ticks, scored.
+
+**Before reading a run of differences as a fault, check for a tap.**
+`gate1` looked like the worst difference in the set -- exact for 591
+ticks and nothing after -- and it is a two-tick tap of Right that
+reached the emulator fourteen ticks late. Moved there, the port draws
+790 of the 796. A late press does not read as lateness; it reads as
+the original doing something else.
 
 ## The player plays `game.js`, not `src/`
 
