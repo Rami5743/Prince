@@ -1,0 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+const REPO='/home/user/Prince';
+const { Assets } = await import(join(REPO,'src/render/assets.ts'));
+const { PopGame } = await import(join(REPO,'src/pop/game.ts'));
+const { g } = await import(join(REPO,'src/pop/state.ts'));
+const GAME_DIR = join(REPO,'original','prince1');
+const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR,n))));
+const exe = new Uint8Array(readFileSync(join(GAME_DIR,'UNCRKD.EXE')));
+const game = await PopGame.start(assets, exe, 1);
+game.step({x:0,y:0,shift:false});
+game.render();
+console.log('Kid room', g.Kid.room, 'drawn', g.drawn_room, 'frame', g.Kid.frame);
+console.log('objtable', g.objtable.length, JSON.stringify(g.objtable.slice(0,3)));
+console.log('midtable', g.midtable.length, 'back', g.backtable.length, 'fore', g.foretable.length);
+console.log('chtabs kid images', game.scene.chtabs.kid ? game.scene.chtabs.kid.images.length : 'none');
+console.log('tile_object_redraw', Array.from(g.tile_object_redraw).join(''));

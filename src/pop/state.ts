@@ -328,6 +328,17 @@ class Globals {
   grab_timer = 0;
   rem_min = 0;
   rem_tick = 0;
+
+  // ------------------------------------------------ the strip of words
+  /** `text_time_remaining`, `text_time_total`: how long a message stays. */
+  text_time_remaining = 0;
+  text_time_total = 0;
+  /** `is_show_time`: the clock has something to say. */
+  is_show_time = 0;
+  /** `seamless`: level 12's running exit, which shows no level number. */
+  seamless = 0;
+  /** `current_sound`: which sound is playing, or -1. */
+  current_sound = -1;
   random_seed = 0;
   upside_down = 0;
   need_level1_music = 0;

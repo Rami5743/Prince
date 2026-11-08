@@ -29,7 +29,7 @@ import {
 import { l2, l6, l7, out } from './link.ts';
 
 const TILE_SIZEX = 14;
-const FIRST_ONSCREEN_COLUMN = 2;
+const FIRST_ONSCREEN_COLUMN = 5;
 const CONTROL_HELD: number = -1;
 const CONTROL_RELEASED = 0;
 const CONTROL_IGNORE: number = 1;

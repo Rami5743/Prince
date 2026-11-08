@@ -19,6 +19,7 @@ import {
 import { tiles, soundids, frameids, seqids, actions } from './types.ts';
 import {
   get_tile, loadkid, savekid, take_hp, char_dx_forward, get_tile_behind_char,
+  y_to_row_mod4, get_tilepos, get_tilepos_nominus,
 } from './seg006.ts';
 import { l5, l8, out } from './link.ts';
 import { prandom } from './seg009.ts';
@@ -888,6 +889,62 @@ export function mob_down_a_row(): void {
     g.curmob.row = 0;
     g.curmob.room = g.level.roomlinks[g.curmob.room - 1].down;
   }
+}
+
+// seg007:13AE
+export function draw_mobs(): void {
+  for (let index = 0; index < g.mobs_count; ++index) {
+    g.curmob = { ...g.mobs[index] };
+    draw_mob();
+  }
+}
+
+// seg007:13E5
+export function draw_mob(): void {
+  let ypos = g.curmob.y;
+  if (g.curmob.room === g.drawn_room) {
+    if (g.curmob.y >= 210) return;
+  } else if (g.curmob.room === g.room_B) {
+    if (Math.abs(sbyteOf(ypos)) >= 18) return;
+    g.curmob.y += 192;
+    ypos = g.curmob.y;
+  } else if (g.curmob.room === g.room_A) {
+    if (g.curmob.y < 174) return;
+    ypos = g.curmob.y - 189;
+  } else {
+    return;
+  }
+  let tile_col = g.curmob.xh >> 2;
+  const tile_row = y_to_row_mod4(ypos);
+  g.obj_tilepos = get_tilepos_nominus(tile_col, tile_row);
+  ++tile_col;
+  let tilepos = get_tilepos(tile_col, tile_row);
+  set_redraw2(tilepos, 1);
+  set_redraw_fore(tilepos, 1);
+  const top_row = y_to_row_mod4(ypos - 18);
+  if (top_row !== tile_row) {
+    tilepos = get_tilepos(tile_col, top_row);
+    set_redraw2(tilepos, 1);
+    set_redraw_fore(tilepos, 1);
+  }
+  add_mob_to_objtable(ypos);
+}
+
+// seg007:14DE
+export function add_mob_to_objtable(ypos: number): void {
+  g.objtable.push({
+    obj_type: g.curmob.type | 0x80,
+    xh: g.curmob.xh,
+    xl: 0,
+    y: ypos,
+    chtab_id: 6, // id_chtab_6_environment
+    id: 10,
+    direction: 0,
+    clip: { top: 0, bottom: 0, left: 0, right: 40 },
+    tilepos: 30,
+  });
+  g.objtable_count = g.objtable.length;
+  l8.mark_obj_tile_redraw.fn(g.objtable.length - 1);
 }
 
 // seg007:1578

@@ -72,9 +72,18 @@ export function setFrameTables(
   seqtbl_offsets = offsets;
 }
 
+/**
+ * `*(SEQTBL_0 + Char.curr_seq)`.
+ *
+ * `curr_seq` is an address in the game's own data segment and the
+ * table is a slice of it, so the base comes off first. SDLPoP does the
+ * same with `#define SEQTBL_0 (seqtbl - SEQTBL_BASE)`.
+ */
 export function seqByte(at: number): number {
-  return seqtbl[at] ?? 0;
+  return seqtbl[at - SEQTBL_BASE] ?? 0;
 }
+
+const SEQTBL_BASE = 0x196e;
 
 export function seqOffset(index: number): number {
   return seqtbl_offsets[index] ?? 0;
@@ -653,8 +662,31 @@ export function play_kid(): void {
   fell_out();
   control_kid();
   if (g.Char.alive >= 0 && is_dead()) {
-    // The death animation counts up through `alive` and the shell puts
-    // the words on the screen; the game's own part of it is the count.
+    if (g.resurrect_time) {
+      out.stop_sounds();
+      loadkid();
+      g.hitp_delta = g.hitp_max;
+      l5.seqtbl_offset_char.fn(seqids.seq_2_stand);
+      g.Char.x += 8;
+      play_seq();
+      load_fram_det_col();
+      l2.set_start_pos.fn();
+    }
+    if (out.check_sound_playing() && g.current_sound !== 5) return; // a gate opening
+    g.is_show_time = 0;
+    if (g.Char.alive < 0 || g.Char.alive >= 6) {
+      if (g.Char.alive === 6) {
+        out.play_death_music();
+      } else {
+        if (g.Char.alive !== 7 || out.check_sound_playing()) return;
+        if (g.current_level !== 0 && g.current_level !== 15) {
+          g.text_time_remaining = g.text_time_total = 288;
+          out.display_text_bottom('Press Button to Continue');
+        } else {
+          g.text_time_remaining = g.text_time_total = 36;
+        }
+      }
+    }
     ++g.Char.alive;
   }
 }

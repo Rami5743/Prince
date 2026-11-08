@@ -35,7 +35,7 @@ import {
   do_mobs, process_trobs, start_chompers, start_anim_potion, start_anim_torch,
   start_anim_sword, get_curr_tile, make_loose_fall,
 } from './seg007.ts';
-import { get_room_address } from './seg008.ts';
+import { get_room_address, show_time, paintImage, paintBlit } from './seg008.ts';
 import { prandom } from './seg009.ts';
 import { out } from './link.ts';
 
@@ -59,7 +59,59 @@ export function play_frame(): void {
   exit_room();
   check_the_end();
   check_guard_fallout();
+  show_time();
+  // `expired()` -- the hour running out and the game starting again --
+  // is the shell's, not the game's, and no recording gets near it.
 }
+
+// seg000:10EA
+export function draw_kid_hp(curr_hp: number, max_hp: number): void {
+  for (let i = curr_hp; i < max_hp; ++i) {
+    // an empty hit point
+    paintBlit(chtabs_id_chtab_2_kid, 217, i * 7, 194, 0);
+  }
+  for (let i = 0; i < curr_hp; ++i) {
+    // a full hit point
+    paintBlit(chtabs_id_chtab_2_kid, 216, i * 7, 194, 0);
+  }
+}
+
+// seg000:1159
+export function draw_guard_hp(curr_hp: number, max_hp: number): void {
+  if (!g.chtab_addrs[chtabs_id_chtab_5_guard]) return;
+  const guard_charid = g.Guard.charid;
+  if (guard_charid !== charids.charid_4_skeleton
+    && guard_charid !== charids.charid_24_mouse
+    // The shadow has hit points only on level 12.
+    && (guard_charid !== charids.charid_1_shadow || g.current_level === 12)) {
+    for (let i = curr_hp; i < max_hp; ++i) {
+      paintBlit(chtabs_id_chtab_5_guard, -1, 314 - i * 7, 194, 9);
+    }
+    for (let i = 0; i < curr_hp; ++i) {
+      paintBlit(chtabs_id_chtab_5_guard, -1, 314 - i * 7, 194, 0);
+    }
+  }
+}
+
+// seg000:120B
+export function draw_hp(): void {
+  if (g.hitp_delta) draw_kid_hp(g.hitp_curr, g.hitp_max);
+  const blink_state = g.rem_tick & 1;
+  if (g.hitp_curr === 1 && g.current_level !== 15) {
+    // a hit point left: it blinks
+    if (blink_state) draw_kid_hp(1, 0);
+    else draw_kid_hp(0, 1);
+  }
+  if (g.guardhp_delta) draw_guard_hp(g.guardhp_curr, g.guardhp_max);
+  if (g.guardhp_curr === 1) {
+    if (blink_state) draw_guard_hp(1, 0);
+    else draw_guard_hp(0, 1);
+  }
+}
+
+const chtabs_id_chtab_2_kid = 2;
+const chtabs_id_chtab_5_guard = 5;
+void paintImage;
 
 // seg000:0EA8
 export function play_kid_frame(): number {

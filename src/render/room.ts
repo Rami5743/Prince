@@ -23,7 +23,7 @@ import { toScreenX } from '../game/geometry.ts';
 
 const flipCache = new WeakMap<object, { width: number; height: number; pixels: Uint8Array }>();
 
-function flipHorizontally(
+export function flipHorizontally(
   img: { width: number; height: number; pixels: Uint8Array },
 ): { width: number; height: number; pixels: Uint8Array } {
   const cached = flipCache.get(img);

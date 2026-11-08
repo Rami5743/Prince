@@ -7,7 +7,21 @@
  * compared without either of them keeping one, and not a palette, so
  * the emulator's own colour rounding does not come into it.
  */
-import type { Game } from '../../src/game/game.ts';
+/**
+ * What the scoring needs of a game, and no more.
+ *
+ * Two implementations answer to this now: the hand-written port in
+ * `src/game` and the translation of SDLPoP in `src/pop`, which is
+ * replacing it. Naming the four calls rather than the class is what
+ * lets the same measurement judge both.
+ */
+export interface Playable {
+  step(controls: Controls): void;
+  render(): { toRgb(palette: Uint8Array): Uint8Array };
+  pressButton(): void;
+  readonly restartDue: boolean;
+  readonly scene: { screenPalette: { toRgba(): Uint8Array } };
+}
 import type { Controls } from '../../src/game/kid.ts';
 
 const W = 320;
@@ -65,9 +79,9 @@ export function movedBetween(a: Uint8Array, b: Uint8Array): Moved {
 }
 
 /** Replay a recording and say what moved on each of its ticks. */
-export async function digestOfRun(
-  start: () => Promise<Game>,
-  restart: (g: Game) => Promise<Game>,
+export async function digestOfRun<T extends Playable>(
+  start: () => Promise<T>,
+  restart: (g: T) => Promise<T>,
   ticks: readonly Controls[],
 ): Promise<Moved[]> {
   let game = await start();
@@ -292,9 +306,9 @@ export interface Run {
   readonly moved: Moved[];
 }
 
-export async function runOf(
-  start: () => Promise<Game>,
-  restart: (g: Game) => Promise<Game>,
+export async function runOf<T extends Playable>(
+  start: () => Promise<T>,
+  restart: (g: T) => Promise<T>,
   ticks: readonly Controls[],
   digest: Digest,
 ): Promise<Run> {

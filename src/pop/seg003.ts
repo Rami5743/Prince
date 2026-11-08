@@ -23,7 +23,7 @@ import { l8, out } from './link.ts';
 
 const TILE_SIZEX = 14;
 const TILE_MIDX = 7;
-const FIRST_ONSCREEN_COLUMN = 2;
+const FIRST_ONSCREEN_COLUMN = 5;
 const SCREEN_TILECOUNTX = 10;
 const ROOMCOUNT = 24;
 

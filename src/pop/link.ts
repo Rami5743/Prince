@@ -44,6 +44,7 @@ export const l8 = {
   set_redraw_anim: slot<(tilepos: number, frames: number) => void>('set_redraw_anim'),
   get_room_address: slot<(room: number) => void>('get_room_address'),
   add_objtable: slot<(obj_type: number) => void>('add_objtable'),
+  mark_obj_tile_redraw: slot<(index: number) => void>('mark_obj_tile_redraw'),
 };
 
 /** `seg005.c`. */
@@ -80,4 +81,6 @@ export const out = {
   check_sound_playing: (): number => 0,
   display_text_bottom: (_text: string): void => {},
   erase_bottom_text: (_arg: number): void => {},
+  /** `play_death_music`, which `play_kid` then waits out. */
+  play_death_music: (): void => {},
 };

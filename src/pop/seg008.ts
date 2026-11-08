@@ -33,7 +33,7 @@ import {
   loadkid, loadshad, load_fram_det_col, obj_dx_forward, x_to_xh_and_xl,
   tile_is_floor,
 } from './seg006.ts';
-import { redraw_at_char, redraw_at_char2 } from './seg003.ts';
+import { redraw_at_char, redraw_at_char2, check_mirror } from './seg003.ts';
 import { get_doorlink_timer, clear_tile_wipes, get_curr_tile } from './seg007.ts';
 import { load_room_links } from './seg002.ts';
 import { prandom } from './seg009.ts';
@@ -51,10 +51,73 @@ export interface Painter {
   rect(left: number, top: number, right: number, bottom: number, color: number): void;
   /** `set_clip_rect` / `reset_clip_rect`. */
   clip(rect: RectType | null): void;
+  /**
+   * `current_target_surface`.
+   *
+   * The room is drawn into `offscreen_surface`, which is made from
+   * `rect_top` and so is 320 by 192: anything the tables would put
+   * below the room falls off the end of it. The hit points and the
+   * words under the room go to `onscreen_surface_`, which is the whole
+   * 320 by 200. `true` here is the offscreen one.
+   */
+  target(room: boolean): void;
+  /**
+   * `read_peel_from_screen`: the pixels of a rectangle, kept so that
+   * `restore_peel` can put them back next frame.
+   */
+  readPeel(left: number, top: number, right: number, bottom: number): Peel;
+  /** `restore_peel`: those pixels, back where they came from. */
+  restorePeel(peel: Peel): void;
+  /**
+   * `show_text(&rect_bottom_text, halign_center, valign_bottom, ...)`:
+   * one line of the game's own font, centred in the strip under the
+   * room. `null` is `draw_rect(&rect_bottom_text, color_0_black)` with
+   * nothing drawn over it.
+   */
+  text(text: string | null): void;
+}
+
+/** `peel_type`: a rectangle of the screen, kept to be put back. */
+export interface Peel {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  pixels: Uint8Array;
 }
 
 let paint: Painter;
 export function setPainter(p: Painter): void { paint = p; }
+
+/** `method_6_blit_img_to_scr`, for the two rows of hit points. */
+export function paintBlit(
+  chtab: number, id: number, x: number, y: number, blit: number,
+): void { paint.blit(chtab, id, x, y, blit); }
+export function paintImage(chtab: number, id: number): { width: number; height: number } | null {
+  return paint.image(chtab, id);
+}
+
+/** `peels_table` and `peels_count`. */
+const peels_table: Peel[] = [];
+
+// seg008:1208
+export function add_peel(left: number, right: number, top: number, height: number): void {
+  if (peels_table.length >= 50) return; // "Peels OverFlow"
+  peels_table.push(paint.readPeel(left, top, right, top + height));
+}
+
+// seg008:1C65
+export function restore_peels(): void {
+  while (peels_table.length) paint.restorePeel(peels_table.pop()!);
+}
+
+// seg008:2627
+export function free_peels(): void {
+  peels_table.length = 0;
+}
+
+/** `draw_hp` lives in seg000; linked here to avoid a cycle. */
+export const hp = { draw_hp: (): void => {} };
 
 /** `tbl_level_type`: 0 dungeon, 1 palace. */
 export const levelType = { of: (_level: number): number => 0 };
@@ -65,12 +128,28 @@ let gate_top_y = 0;
 let gate_openness = 0;
 let gate_bottom_y = 0;
 
-// seg008:0000
-export function redraw_room(): void {
+/**
+ * `memset(table_counts, 0, sizeof(table_counts))`.
+ *
+ * All five counts live in one array in the C -- back, fore, wipe, mid
+ * and the object table -- so one `memset` empties the lot, and every
+ * place that does it empties the lot.
+ */
+export function reset_tables(): void {
   g.table_counts.fill(0);
   g.backtable.length = 0;
   g.foretable.length = 0;
   g.midtable.length = 0;
+  g.wipetable.length = 0;
+  g.wipetable_count = 0;
+  g.objtable.length = 0;
+  g.objtable_count = 0;
+}
+
+// seg008:0000
+export function redraw_room(): void {
+  free_peels();
+  reset_tables();
   reset_obj_clip();
   draw_room();
   clear_tile_wipes();
@@ -700,6 +779,10 @@ export function draw_mid(index: number): void {
     xpos -= image ? image.width : 0;
     blit |= FLIPPED;
   }
+  if (entry.peel) {
+    const image = paint.image(chtab_id, entry.id);
+    if (image) add_peel(xpos, xpos + image.width, ypos, image.height);
+  }
   draw_image(chtab_id, entry.id, xpos, ypos, blit);
   if (chtab_flip_clip[chtab_id]) paint.clip(null);
 }
@@ -820,11 +903,14 @@ export function draw_tile_wipe(height: number): void {
 
 // seg008:1BEB
 export function draw_tables(): void {
+  paint.target(true);
+  restore_peels();
   draw_wipes(0);
   draw_table(0); // backtable
   draw_table(3); // midtable
   draw_wipes(1);
   draw_table(1); // foretable
+  paint.target(false);
 }
 
 // seg008:1DC3
@@ -1024,9 +1110,11 @@ export function load_obj_from_objtable(index: number): number {
 
 // seg008:228A
 export function draw_people(): void {
+  check_mirror();
   draw_kid();
   draw_guard();
   reset_obj_clip();
+  hp.draw_hp();
 }
 
 // seg008:22A2
@@ -1180,8 +1268,8 @@ export function wall_pattern(which_part: number, which_table: number): void {
   const bottom_divider = prandom(1);
   const bottom_divider_offset = prandom(4);
   const RSET_WALL = chtabs.id_chtab_7_environmentwall;
-  const RES_WALL_RNDBLOCK = 11;
-  const RES_WALL_DIVIDER1 = 13;
+  const RES_WALL_DIVIDER1 = 11;
+  const RES_WALL_RNDBLOCK = 13;
   const BLIT_TRANS = blitters.blitters_10h_transp;
   const BLIT_NO_TRANS = blitters.blitters_0_no_transp;
   const bg_modifier = g.curr_modifier & 0x7f;
@@ -1247,10 +1335,10 @@ export function wall_pattern(which_part: number, which_table: number): void {
 
 const LPOS = [58, 41, 37, 20, 16];
 const RPOS = [52, 42, 31, 21];
-const RES_WALL_MARK_TL = 17;
-const RES_WALL_MARK_BL = 18;
-const RES_WALL_MARK_TR = 19;
-const RES_WALL_MARK_BR = 20;
+const RES_WALL_MARK_TL = 14;
+const RES_WALL_MARK_BL = 15;
+const RES_WALL_MARK_TR = 16;
+const RES_WALL_MARK_BR = 17;
 
 export function draw_left_mark(decal_variant: number, arg2: number, arg1: number): void {
   let image_id = RES_WALL_MARK_TL;
@@ -1266,9 +1354,76 @@ export function draw_left_mark(decal_variant: number, arg2: number, arg1: number
 export function draw_right_mark(decal_variant: number, arg1: number): void {
   let image_id = RES_WALL_MARK_TR;
   if (decal_variant % 2) image_id = RES_WALL_MARK_BR;
-  ptr_add_table(chtabs.id_chtab_7_environmentwall, image_id, g.draw_xh + 3,
-    decal_variant > 1 ? arg1 : 0,
+  if (decal_variant < 2) arg1 = 24;
+  else arg1 -= 3;
+  ptr_add_table(chtabs.id_chtab_7_environmentwall, image_id,
+    g.draw_xh + (decal_variant > 1 ? 1 : 0), arg1,
     g.draw_bottom_y - RPOS[decal_variant], blitters.blitters_10h_transp, 0);
+}
+
+// seg008:2644
+export function display_text_bottom(text: string): void {
+  paint.text(text);
+}
+
+// seg008:266D
+export function erase_bottom_text(arg_0: number): void {
+  paint.text(null);
+  if (arg_0) {
+    g.text_time_total = 0;
+    g.text_time_remaining = 0;
+  }
+}
+
+// seg008:24A5
+export function show_time(): void {
+  if (g.Kid.alive < 0
+    && g.rem_min !== 0
+    && g.current_level < 13
+    && g.current_level < 15) {
+    // Time passes.
+    --g.rem_tick;
+    if (g.rem_tick === 0) {
+      g.rem_tick = 719; // 720 = 12*60 ticks = one minute
+      --g.rem_min;
+      if (g.rem_min !== 0 && (g.rem_min <= 5 || g.rem_min % 5 === 0)) {
+        g.is_show_time = 1;
+      }
+    } else if (g.rem_min === 1 && g.rem_tick % 12 === 0) {
+      g.is_show_time = 1;
+      g.text_time_remaining = 0;
+    }
+  }
+  if (g.is_show_time && g.text_time_remaining === 0) {
+    g.text_time_remaining = g.text_time_total = 24;
+    if (g.rem_min > 0) {
+      if (g.rem_min === 1) {
+        const rem_sec = Math.floor((g.rem_tick + 1) / 12);
+        if (rem_sec === 1) {
+          g.text_time_remaining = g.text_time_total = 12;
+          display_text_bottom('1 SECOND LEFT');
+        } else {
+          display_text_bottom(`${rem_sec} SECONDS LEFT`);
+        }
+      } else {
+        display_text_bottom(`${g.rem_min} MINUTES LEFT`);
+      }
+    } else {
+      display_text_bottom('TIME HAS EXPIRED!');
+    }
+    g.is_show_time = 0;
+  }
+}
+
+// seg008:25A8
+export function show_level(): void {
+  const disp_level = g.current_level;
+  if (disp_level !== 0 && disp_level < 14 && g.seamless === 0) {
+    g.text_time_remaining = g.text_time_total = 24;
+    display_text_bottom(`LEVEL ${disp_level === 13 ? 12 : disp_level}`);
+    g.is_show_time = 1;
+  }
+  g.seamless = 0;
 }
 
 /** `draw_mobs` lives in seg007; linked here to avoid a cycle. */
