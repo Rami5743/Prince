@@ -3580,25 +3580,26 @@ function get_tile(room, col, row) {
   return g.curr_tile2;
 }
 function find_room_of_tile() {
+  const linksOf = (room) => room >= 1 && room <= 24 ? g.level.roomlinks[room - 1] : { left: 0, right: 0, up: 0, down: 0 };
   for (; ; ) {
     if (g.tile_col < 0) {
       g.tile_col += 10;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].left;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).left;
       continue;
     }
     if (g.tile_col >= 10) {
       g.tile_col -= 10;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].right;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).right;
       continue;
     }
     if (g.tile_row < 0) {
       g.tile_row += 3;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].up;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).up;
       continue;
     }
     if (g.tile_row >= 3) {
       g.tile_row -= 3;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].down;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).down;
       continue;
     }
     return g.curr_room;

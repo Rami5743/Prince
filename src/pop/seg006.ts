@@ -108,25 +108,40 @@ export function get_tile(room: number, col: number, row: number): number {
 
 // seg006:005D
 export function find_room_of_tile(): number {
+  /**
+   * `level.roomlinks[curr_room - 1]`, where `curr_room` need not be a
+   * room.
+   *
+   * `check_chomped_kid` calls `get_tile` with a room of -1 -- the C
+   * says so itself, in the comment above its own guard on the way out
+   * -- and the C then indexes the array with -2 and reads whatever is
+   * in front of it. That is memory the array does not own, so there is
+   * nothing to translate: a room that is not a room has no links, and
+   * `get_tile` turns room 0 into a wall, which is what the original
+   * does at the edge of a level.
+   */
+  const linksOf = (room: number) => (room >= 1 && room <= 24
+    ? g.level.roomlinks[room - 1]
+    : { left: 0, right: 0, up: 0, down: 0 });
   for (;;) {
     if (g.tile_col < 0) {
       g.tile_col += 10;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].left;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).left;
       continue;
     }
     if (g.tile_col >= 10) {
       g.tile_col -= 10;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].right;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).right;
       continue;
     }
     if (g.tile_row < 0) {
       g.tile_row += 3;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].up;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).up;
       continue;
     }
     if (g.tile_row >= 3) {
       g.tile_row -= 3;
-      if (g.curr_room) g.curr_room = g.level.roomlinks[g.curr_room - 1].down;
+      if (g.curr_room) g.curr_room = linksOf(g.curr_room).down;
       continue;
     }
     return g.curr_room;
