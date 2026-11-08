@@ -258,11 +258,20 @@ interface Piece {
  * drawing reaches his tile. A position outside the room -- a row above
  * it or below it, a column off either end -- comes out of
  * `get_tilepos_nominus` as 30, and `redraw_needed_tiles` draws tile 30
- * *before* the room, so such a character is behind everything. That is
- * how the original hides the legs of a Prince stepping off the bottom
- * row of a room behind the floor he is leaving.
+ * before any tile of the room.
+ *
+ * The port used to paint such a character before the whole room, and
+ * that is too much. "Before the room" in the original means before the
+ * tiles it is going to redraw, and it redraws almost none of them: for
+ * a Prince in the air the marked tiles get `draw_other_overlay` and
+ * their fore layer and nothing else, so what comes back over him is
+ * the overlay, not the room. Painting him with the bottom row and
+ * letting `CharacterOverlay` take the pixels back is closer, and
+ * measured it is worth thirteen ticks across the captures -- the lip
+ * of the floor over the fingers of a Prince falling out of room 1 of
+ * level 1, which every recording of that level has.
  */
-type CharacterLayer = 'behind' | 'normal' | 'onTop';
+type CharacterLayer = 'normal' | 'onTop';
 
 interface Wipe {
   layer: number;
@@ -423,8 +432,6 @@ export class RoomRenderer {
 
   private back: Piece[] = [];
   private mid: Piece[] = [];
-  /** Characters whose tile is outside the room: painted before it. */
-  private behind: Piece[] = [];
   /** `obj_tilepos = -1`: painted after everything. */
   private onTop: Piece[] = [];
   private fore: Piece[] = [];
@@ -490,7 +497,6 @@ export class RoomRenderer {
   ): void {
     this.back = [];
     this.mid = [];
-    this.behind = [];
     this.onTop = [];
     this.fore = [];
     this.wipes = [];
@@ -1435,10 +1441,8 @@ export class RoomRenderer {
     const img = set.images[c.image];
     if (!img) return;
     const row = c.row ?? 0;
-    const layer: CharacterLayer = c.onTop ? 'onTop'
-      : (row < 0 || row > 2) ? 'behind' : 'normal';
-    const list = layer === 'behind' ? this.behind
-      : layer === 'onTop' ? this.onTop : this.mid;
+    const layer: CharacterLayer = c.onTop ? 'onTop' : 'normal';
+    const list = layer === 'onTop' ? this.onTop : this.mid;
     list.push({
       chtab: c.chtab,
       id: c.image,
@@ -1448,7 +1452,9 @@ export class RoomRenderer {
       character: true,
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
-      order: row,
+      // A row above the room or below it is painted with the nearest
+      // row of it: see `CharacterLayer`.
+      order: Math.min(2, Math.max(0, row)),
       overlay: c.overlay,
       clipTop: c.clipTop,
       col: c.overlay ? c.overlay.ownColumn : undefined,
@@ -1495,8 +1501,6 @@ export class RoomRenderer {
    */
   private paint(surface: Surface): void {
     this.paintWipes(surface, 0);
-    // `draw_objtable_items_at_tile(30)`, which comes before the room.
-    for (const p of this.behind) this.paintPiece(surface, p);
     for (const p of this.back) this.paintPiece(surface, p);
     // Nearest first, so that a character lower down is painted before the
     // floors that have to cover a character higher up.

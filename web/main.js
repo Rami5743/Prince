@@ -916,8 +916,6 @@ var RoomRenderer = class {
   opt;
   back = [];
   mid = [];
-  /** Characters whose tile is outside the room: painted before it. */
-  behind = [];
   /** `obj_tilepos = -1`: painted after everything. */
   onTop = [];
   fore = [];
@@ -972,7 +970,6 @@ var RoomRenderer = class {
   render(surface, room, characters = [], mobs = []) {
     this.back = [];
     this.mid = [];
-    this.behind = [];
     this.onTop = [];
     this.fore = [];
     this.wipes = [];
@@ -1890,8 +1887,8 @@ var RoomRenderer = class {
     const img = set.images[c.image];
     if (!img) return;
     const row = c.row ?? 0;
-    const layer = c.onTop ? "onTop" : row < 0 || row > 2 ? "behind" : "normal";
-    const list = layer === "behind" ? this.behind : layer === "onTop" ? this.onTop : this.mid;
+    const layer = c.onTop ? "onTop" : "normal";
+    const list = layer === "onTop" ? this.onTop : this.mid;
     list.push({
       chtab: c.chtab,
       id: c.image,
@@ -1901,7 +1898,9 @@ var RoomRenderer = class {
       character: true,
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
-      order: row,
+      // A row above the room or below it is painted with the nearest
+      // row of it: see `CharacterLayer`.
+      order: Math.min(2, Math.max(0, row)),
       overlay: c.overlay,
       clipTop: c.clipTop,
       col: c.overlay ? c.overlay.ownColumn : void 0
@@ -1947,7 +1946,6 @@ var RoomRenderer = class {
    */
   paint(surface) {
     this.paintWipes(surface, 0);
-    for (const p of this.behind) this.paintPiece(surface, p);
     for (const p of this.back) this.paintPiece(surface, p);
     const characters = [...this.mid].sort(
       (a, b) => b.order - a.order || a.yBottom - b.yBottom

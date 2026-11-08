@@ -13,9 +13,9 @@
  * And a character whose tile is outside the room -- a row above it, a
  * row below it, a column off either end -- comes out of
  * `get_tilepos_nominus` as tile 30, which `redraw_needed_tiles` draws
- * *before* the room rather than in the middle of it. So he is behind
- * everything, which is how the original hides the legs of a Prince
- * stepping off the bottom row behind the floor he is leaving.
+ * before any tile of the room. That is not the same as behind all of
+ * it: the original redraws hardly any tiles, so what comes back over
+ * him is the overlay of the ones his box covers.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -80,31 +80,61 @@ describe('the bottom of the room', () => {
 
 describe('a character whose tile is outside the room', () => {
   /**
-   * The same Prince in the same place, once as a character of the bottom
-   * row and once as a character of the row below it. The second is drawn
-   * before the room, so the floor covers whatever of him overlaps it.
+   * `get_tilepos_nominus` turns a row above the room or below it into
+   * tile 30, which `redraw_needed_tiles` draws before any tile of the
+   * room. The port used to paint such a character before the *whole*
+   * room, which hid far too much of him: the original redraws almost
+   * no tiles, so what comes back over a Prince in the air is the
+   * overlay of the tiles he covers and not the room. He is painted
+   * with the nearest row of it instead -- see `CharacterLayer` -- and
+   * `CharacterOverlay` is what takes the pixels back.
    */
-  it('is drawn behind the room, not in the middle of it', async () => {
-    const inside = await renderer();
-    inside.r.render(inside.s, 1, [kid(188, 2)]);
+  it('is drawn with the nearest row of the room', async () => {
     const below = await renderer();
     below.r.render(below.s, 1, [kid(188, 3)]);
-    let hidden = 0;
+    const inside = await renderer();
+    inside.r.render(inside.s, 1, [kid(188, 2)]);
+    let differing = 0;
     for (let i = 0; i < inside.s.pixels.length; i++) {
-      if (inside.s.pixels[i] !== below.s.pixels[i]) hidden += 1;
+      if (inside.s.pixels[i] !== below.s.pixels[i]) differing += 1;
     }
-    expect(hidden, 'the floor takes pixels back off him').toBeGreaterThan(20);
-  });
+    expect(differing, 'a row below the room draws like the bottom row').toBe(0);
 
-  it('is the same for a row above the room as for a row below it', async () => {
     const above = await renderer();
     above.r.render(above.s, 1, [kid(60, -1)]);
-    const normal = await renderer();
-    normal.r.render(normal.s, 1, [kid(60, 0)]);
-    let differing = 0;
+    const top = await renderer();
+    top.r.render(top.s, 1, [kid(60, 0)]);
+    differing = 0;
     for (let i = 0; i < above.s.pixels.length; i++) {
-      if (above.s.pixels[i] !== normal.s.pixels[i]) differing += 1;
+      if (above.s.pixels[i] !== top.s.pixels[i]) differing += 1;
     }
-    expect(differing, 'row -1 is not drawn like row 0').toBeGreaterThan(0);
+    expect(differing, 'and a row above it like the top row').toBe(0);
+  });
+
+  /**
+   * And what hides the legs of a Prince stepping off the bottom row is
+   * the overlay: the tiles his box covers, drawn again over him.
+   */
+  it('has the floor put back over him by the overlay', async () => {
+    // Row 0 of room 1 is `0 0 0 1 1 1 1 1 20 20`: column 3 is a floor
+    // and the tile to its left is empty, which is the test
+    // `draw_other_overlay` starts with. The Prince is at column 2,
+    // reaching into column 3.
+    const where = { x: 110 };
+    const plain = await renderer();
+    plain.r.render(plain.s, 1, [kid(62, 0, where)]);
+    const covered = await renderer();
+    covered.r.render(covered.s, 1, [kid(62, 0, {
+      ...where,
+      overlay: {
+        colLeft: 2, colRight: 3, topRow: 0, bottomRow: 0,
+        skipBottomRow: false, ownColumn: 2,
+      },
+    })]);
+    let hidden = 0;
+    for (let i = 0; i < plain.s.pixels.length; i++) {
+      if (plain.s.pixels[i] !== covered.s.pixels[i]) hidden += 1;
+    }
+    expect(hidden, 'the floor takes pixels back off him').toBeGreaterThan(20);
   });
 });
