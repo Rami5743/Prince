@@ -3601,6 +3601,8 @@ var KID_SEQ = {
   startRunAfterTurn: 43,
   stepOnEdge: 44,
   standUpFromCrouch: 49,
+  /** Down and forward from a crouch: a short hop forward on all fours. */
+  crouchHop: 79,
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
@@ -3718,7 +3720,7 @@ function controlSwordPlay(state, controls, ctx) {
     state.direction = facingOf(state, foe);
     state.sword = SWORD_DRAWN;
     startSequence(state, SWORD_SEQ.enGarde, ctx.tables);
-    ctx.latch.releaseArrows();
+    ctx.latch.forward = ctx.latch.shift2 = ctx.latch.releaseArrows();
     return true;
   }
   if (!isReady(state)) return true;
@@ -3907,7 +3909,14 @@ function downPressed(state, ctx) {
   }
 }
 function controlCrouched(state, controls, ctx) {
-  if (controls.y <= 0) startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
+  if (controls.y <= 0) {
+    startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
+    return;
+  }
+  if (ctx.latch.forward === CONTROL.held) {
+    ctx.latch.forward = CONTROL.ignore;
+    startSequence(state, KID_SEQ.crouchHop, ctx.tables);
+  }
 }
 function controlHanging(state, controls, ctx) {
   if (state.alive >= 0) {

@@ -78,6 +78,8 @@ export const KID_SEQ = {
   startRunAfterTurn: 43,
   stepOnEdge: 44,
   standUpFromCrouch: 49,
+  /** Down and forward from a crouch: a short hop forward on all fours. */
+  crouchHop: 79,
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
@@ -307,7 +309,10 @@ function controlSwordPlay(
     state.direction = facingOf(state, foe);
     state.sword = SWORD_DRAWN;
     startSequence(state, SWORD_SEQ.enGarde, ctx.tables);
-    ctx.latch.releaseArrows();
+    // `control_forward = control_shift2 = release_arrows()`: both are
+    // marked used. The key that walked him into the guard does not
+    // then walk him onto the blade -- he waits for a fresh press.
+    ctx.latch.forward = ctx.latch.shift2 = ctx.latch.releaseArrows();
     return true;
   }
 
@@ -503,7 +508,18 @@ function downPressed(state: CharacterState, ctx: KidContext): void {
 }
 
 function controlCrouched(state: CharacterState, controls: Controls, ctx: KidContext): void {
-  if (controls.y <= 0) startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
+  if (controls.y <= 0) {
+    startSequence(state, KID_SEQ.standUpFromCrouch, ctx.tables);
+    return;
+  }
+  // Down and forward together, out of a crouch: the crouch-hop, which
+  // the port did not have at all. `control_crouched` takes the latch
+  // and marks it used, so it is one hop per press however long the key
+  // is held.
+  if (ctx.latch.forward === CONTROL.held) {
+    ctx.latch.forward = CONTROL.ignore;
+    startSequence(state, KID_SEQ.crouchHop, ctx.tables);
+  }
 }
 
 function controlHanging(state: CharacterState, controls: Controls, ctx: KidContext): void {
