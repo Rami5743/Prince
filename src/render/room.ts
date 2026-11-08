@@ -132,19 +132,23 @@ const ROOM_BOTTOM_Y = 192;
  * `draw_mob` adds 192 to its y to put it back in the room above -- and
  * `get_tilepos_nominus` turns that into tile 30, which
  * `redraw_needed_tiles` draws before the room and therefore behind it.
- * The row is clamped here instead, so the slab stays in front.
  *
- * Tried the other way, on captures taken at the right phase: it fixes
- * one of the three ticks that are out while room 1 is still on screen
- * after its floor gives way, leaves the second as it was, and costs
- * two ticks of `0fbffa60` that were exact. The two readings are both
- * partly right because the original only redraws the tiles it has to,
- * so "behind the room" means behind whatever it redrew that tick --
- * which the port, redrawing everything, cannot say. The clamp is the
- * closer of the two until the redraw list is there to ask.
+ * Putting it behind the room was tried and is worse: the slab is then
+ * hidden by the pieces of the column it fell out of, and the capture
+ * shows it plainly, because the original did not redraw those pieces
+ * that tick. "Behind the room" in the original means behind whatever
+ * the original redrew, and the port, which redraws everything, cannot
+ * say what that was.
+ *
+ * `addMob` reads a -1 as the bottom row instead, which is where such a
+ * slab is on the screen, and the rule in `Piece.mob` then lets the
+ * floor of the column to its right come down over it. Across the five
+ * captures of the third round that is fifteen ticks the port now draws
+ * exactly and did not: the whole of `probeE` 79 and 81, `probeC` 79
+ * and 81, `probeF` 79 and 81, and `0fbffa60` 77 and 79.
  */
 function yToRowForMob(y: number): number {
-  return Math.min(2, Math.max(0, (Math.floor((y + 60) / 63) % 4) - 1));
+  return Math.min(2, (Math.floor((y + 60) / 63) % 4) - 1);
 }
 
 interface Piece {
@@ -171,6 +175,29 @@ interface Piece {
    * over the top. See `PAINT_ORDERS`.
    */
   order: number;
+  /**
+   * A falling slab, which the tiles to its right in its own row cover.
+   *
+   * The original paints a room tile by tile, left to right within a
+   * row, and paints the objects that belong to a tile when it reaches
+   * that tile -- so whatever is drawn for column 7 lands on top of an
+   * object sitting at column 6. For characters the port does not do
+   * this, and measured that is right. For the slab it is wrong: the
+   * slab is three sprites and the third of them, the sliver that
+   * joins it to the tile on its right, is drawn a whole tile along
+   * and so lands inside the next column, where the original's floor
+   * comes down over it. Left uncovered it is a dark diagonal band
+   * across the floor to the right of the hole, on every tick of every
+   * fall -- `probeE` 79 to 81, `probeC` 79 to 81, `0fbffa60` 76 to 79.
+   *
+   * What pins it is the capture: with this and the row of a slab below
+   * the room (see `yToRowForMob`), `probeE` 79 and 81, `probeC` 79 and
+   * 81, `probeF` 79 and 81 and `0fbffa60` 77 and 79 are drawn exactly
+   * and were not. A unit test was tried and thrown away: a room with
+   * the loose tile taken out by hand is not the room the game has
+   * while the slab is in the air, and the test was measuring the fake.
+   */
+  mob?: boolean;
 }
 
 /**
@@ -1234,7 +1261,10 @@ export class RoomRenderer {
     const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
-    const order = yToRowForMob(y);
+    // -1 is a slab drawn through the hole it made, which is at the foot
+    // of the room: the bottom row. See `yToRowForMob`.
+    const rawRow = yToRowForMob(y);
+    const order = rawRow < 0 ? 2 : rawRow;
     // `draw_mid_obj` case 10, and the ten is the point: a slab that has
     // come away is not drawn with the pictures of a floor at rest.
     // `add_mob_to_objtable` gives it `id = 10`, which indexes the same
@@ -1245,11 +1275,11 @@ export class RoomRenderer {
     // and a good half-tile short on its left.
     const MOB = 10;
     this.mid.push({
-      chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[MOB], x,
+      chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[MOB], x, mob: true,
       yBottom: y - 3, blit: BLIT.transparent, order,
     });
     this.mid.push({
-      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[MOB], x, yBottom: y,
+      chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[MOB], x, yBottom: y, mob: true,
       blit: BLIT.opaque, order,
     });
     // And the piece that joins it to the tile on its right, a tile
@@ -1258,14 +1288,22 @@ export class RoomRenderer {
     // than leaving it in. With the right sprite and an exact
     // comparison it is twenty-six pixels of plank that were missing
     // from every tick of every fall.
+    //
+    // It lands inside the next column, and in the original the floor
+    // of that column comes down over most of it -- which is what
+    // `mob: true` is for. Without that it is a dark diagonal band lying
+    // across the floor to the right of the hole, and it was what made
+    // the piece look wrong both times.
+    //
     // `add_mob_to_objtable` also gives the slab a clip forty pixels
     // wide, which would leave eight pixels of this piece and cut the
-    // other eighteen. Measured, it is not what the original draws: with
-    // the clip the three ticks of the first descent are 97 pixels out
-    // instead of 134, and four ticks that were exact stop being exact.
-    // So the clip is read from the code and not applied.
+    // other eighteen -- but `chtab_flip_clip[6]` is nought, so
+    // `draw_mid` never sets a clip rectangle for anything out of the
+    // environment chtab and the forty is dead. Measured, that is what
+    // the capture shows: with the clip applied, four ticks that are
+    // exact stop being exact.
     this.mid.push({
-      chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[MOB], x: x + 32,
+      chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[MOB], x: x + 32, mob: true,
       yBottom: y - 1, blit: BLIT.transparent, order,
     });
     // And nothing in the next column along. A floor at rest is three
@@ -1377,8 +1415,14 @@ export class RoomRenderer {
       // And then the front of every floor above him, again. They are the
       // same pixels they were the first time, over the character instead
       // of under him, which is the whole of the difference.
+      //
+      // For a falling slab, the floors of its own row that are further
+      // right as well: see `Piece.mob`.
       for (const p of this.back) {
-        if (p.floorFront && p.order < c.order) this.paintPiece(surface, p);
+        if (!p.floorFront) continue;
+        if (p.order < c.order || (c.mob === true && p.order === c.order && p.x > c.x)) {
+          this.paintPiece(surface, p);
+        }
       }
     }
     this.paintWipes(surface, 1);

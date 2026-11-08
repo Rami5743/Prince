@@ -816,7 +816,7 @@ var CHTAB = {
 var ROW_ABOVE_ORDER = -1;
 var ROOM_BOTTOM_Y = 192;
 function yToRowForMob(y) {
-  return Math.min(2, Math.max(0, Math.floor((y + 60) / 63) % 4 - 1));
+  return Math.min(2, Math.floor((y + 60) / 63) % 4 - 1);
 }
 var COL_X = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288];
 var WALL_RES = {
@@ -1802,12 +1802,14 @@ var RoomRenderer = class {
     const col = m.column;
     if (col < 0 || col >= COL_X.length) return;
     const x = COL_X[col];
-    const order = yToRowForMob(y);
+    const rawRow = yToRowForMob(y);
+    const order = rawRow < 0 ? 2 : rawRow;
     const MOB = 10;
     this.mid.push({
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_LEFT[MOB],
       x,
+      mob: true,
       yBottom: y - 3,
       blit: BLIT.transparent,
       order
@@ -1817,6 +1819,7 @@ var RoomRenderer = class {
       id: LOOSE_FRAM_BOTTOM[MOB],
       x,
       yBottom: y,
+      mob: true,
       blit: BLIT.opaque,
       order
     });
@@ -1824,6 +1827,7 @@ var RoomRenderer = class {
       chtab: CHTAB.environment,
       id: LOOSE_FRAM_RIGHT[MOB],
       x: x + 32,
+      mob: true,
       yBottom: y - 1,
       blit: BLIT.transparent,
       order
@@ -1897,7 +1901,10 @@ var RoomRenderer = class {
     for (const c of characters) {
       this.paintPiece(surface, c);
       for (const p of this.back) {
-        if (p.floorFront && p.order < c.order) this.paintPiece(surface, p);
+        if (!p.floorFront) continue;
+        if (p.order < c.order || c.mob === true && p.order === c.order && p.x > c.x) {
+          this.paintPiece(surface, p);
+        }
       }
     }
     this.paintWipes(surface, 1);

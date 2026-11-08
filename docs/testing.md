@@ -297,16 +297,17 @@ about half of all captures read every key of the run a tick early. In
 `0fbffa60` that is the difference between the Prince pulling up at the
 lip of a floor and running off it. Which of the two captures to keep:
 
-    python3 tools/oracle/first_divergence.py /tmp/dos0 /tmp/dos1 rec.json
     node --experimental-strip-types tools/dev/pick-shift.ts \
-        rec.json /tmp/dos0.json /tmp/dos1.json <that tick>
+        rec.json /tmp/dos0.json /tmp/dos1.json
 
-The two captures are the same picture until the first key that matters
-is read; on that one tick they differ, and at most one of them can be
-the picture the port draws for it. `tools/oracle/digests/shifts.txt`
-records which was kept for each recording, and
-`tools/dev/oracle-report.ts` marks a run `PHASE` if its capture is
-still the wrong side of a tick boundary.
+It keeps whichever of the two the port draws more of exactly. Both
+candidates are the original, so that cannot hide a place where the
+port is wrong; what it could hide is the port reading the keyboard a
+tick late, and `tools/dev/oracle-report.ts` marks a run `PHASE` when
+the capture's own clock and the player's keys disagree about which
+tick is which, which is what that would look like.
+`tools/oracle/digests/shifts.txt` records which was kept for each
+recording.
 
 The capture itself cannot go in the repository -- a thousand pictures
 and twenty-five megabytes -- so what is kept is a fingerprint of each

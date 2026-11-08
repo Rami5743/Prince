@@ -62,12 +62,25 @@ times they were pressed, and recover the game's ticks from the grab.
   the port one way and 326 the other.
 
   So each recording is captured at `--shift 0` and at `--shift 1`, and
-  `tools/dev/pick-shift.ts` says which to keep. The two captures are
-  the same picture until the first key that matters is read --
-  `first_divergence.py` says which tick that is -- and on that one
-  tick at most one of them can be the picture the port draws. That is
-  the only thing the port is asked, and the rest of the comparison is
-  what it is being measured on.
+  `tools/dev/pick-shift.ts` says which to keep: whichever of the two
+  the port draws more of exactly.
+
+  Deciding it on one tick was tried first and does not work. The two
+  captures are the same picture until the first key that matters is
+  read (`first_divergence.py` still finds that tick), so asking the
+  port only about that tick keeps the rest of the comparison clean of
+  the choice -- but it is a tick chosen for being the first thing the
+  keys change, which is exactly the sort of tick a port gets wrong,
+  and then the wrong capture wins it. For `probeF` that one tick
+  chose the capture the port draws 459 ticks of over the one it draws
+  1053 of.
+
+  Counting whole runs cannot hide a difference between the port and
+  the original: both candidates *are* the original, and a port that is
+  wrong somewhere is wrong against both of them. What it could hide is
+  the port reading the keyboard a tick late or early, because then the
+  capture that is out by a tick in the same direction would win --
+  which is what the `PHASE` check below is for.
 
   `tools/dev/oracle-report.ts` checks a finished capture from the
   other end and marks it `PHASE` if it is wrong: it lines the capture

@@ -2,94 +2,81 @@
  * Which of a recording's two captures has the keys in the right ticks?
  *
  *   node --experimental-strip-types tools/dev/pick-shift.ts \
- *       <recording.json> <digest-shift0.json> <digest-shift1.json> \
- *       <first-divergence-tick>
+ *       <recording.json> <digest-shift0.json> <digest-shift1.json>
  *
  * ## The problem
  *
  * `dosbox_oracle.py` sends every key edge on a wall clock whose origin
- * is Ctrl+A plus however long DOSBox took to restart the level, and the
- * game reads the keyboard at the start of each of its own ticks. Where
- * the one clock sits inside the other's tick is wherever that landed --
- * anywhere in a tick, differently on every run, and no value of
- * `--settle` helps: the uncertainty is a whole tick wide and so is the
- * window. About half of all captures come out with every key edge of
- * the run a tick early.
+ * is Ctrl+A plus however long DOSBox took to restart the level, and
+ * the game reads the keyboard at the start of each of its own ticks.
+ * Where the one clock sits inside the other's tick is wherever that
+ * landed -- anywhere in a tick, differently on every run -- and no
+ * value of `--settle` helps, because the uncertainty is a whole tick
+ * wide and so is the window. About half of all captures come out with
+ * every key edge of the run a tick early.
  *
- * A tick is not a rounding error. In `0fbffa60` the player lets go of
- * Right on tick 35, when the Prince is on frame 8 of his stride.
- * `control_running` takes the key only on frames 7 and 11, so he runs
- * on and goes over the edge of the floor in room 1. Read one tick
- * early, on frame 7, he pulls up at the lip of it instead, and nothing
- * in the remaining seven hundred ticks of the run is the same again.
+ * A tick is not a rounding error. `probeF` captured at one shift
+ * scores 459 of its 1194 ticks pixel-exact against the port and at the
+ * other 1053 of 1196; `0fbffa60` went from 35 of 731 to 227 of 726
+ * when the schedule itself was corrected. A capture at the wrong phase
+ * is not a hard measurement, it is a different run.
  *
- * ## Telling which
+ * ## How this chooses
  *
- * Every recording is captured twice, the second with the whole
- * schedule a tick later. The two captures are the same picture until
- * the first key that *matters* is read; `first_divergence.py` says
- * which tick that is. On that one tick the two captures show different
- * pictures, and at most one of them can be the picture the port draws
- * for it. That one is the capture whose clock is in step with the
- * recording.
+ * By the count: whichever of the two captures the port draws more of
+ * exactly. That is not the test the comparison would like -- it uses
+ * the port to choose the thing the port is then measured against --
+ * so it is worth being exact about what it can and cannot hide.
  *
- * It is one tick of the port's behaviour, on the tick where the two
- * candidates disagree, and it decides nothing else: the rest of the
- * comparison is what the port is being measured on. If the port is
- * wrong on that tick too then neither capture matches, and this says
- * so rather than guessing.
+ * It cannot hide a difference between the port and the original: both
+ * candidates are the original, and a port that is wrong somewhere is
+ * wrong against both. What it can hide is the port being a tick late
+ * or early in reading the keyboard, because then the capture that is
+ * a tick out in the same direction would win. So the choice is kept
+ * honest from the other end: `tools/dev/oracle-report.ts` marks a run
+ * `PHASE` when the capture's own clock -- the level number under the
+ * room, which the keys cannot move -- and the keys disagree about
+ * which tick is which. A port that read the keyboard a tick late
+ * would put a `PHASE` on every run it chose.
+ *
+ * A single tick was tried first and is not enough: the tick the two
+ * captures first part company on is sometimes one the port is wrong
+ * about, and then the wrong capture wins it. `probeF` is that case.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
-import { runOf, type Digest } from './digest-common.ts';
+import { runOf, exactAgreement, inputChanges, type Digest } from './digest-common.ts';
 
 const GAME_DIR = join(import.meta.dirname, '..', '..', 'original', 'prince1');
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-const [recPath, zeroPath, onePath, divergence] = process.argv.slice(2);
-if (!recPath || !zeroPath || !onePath || divergence === undefined) {
-  console.error('usage: pick-shift.ts <recording.json> <digest0> <digest1> <tick>');
+const [recPath, zeroPath, onePath] = process.argv.slice(2);
+if (!recPath || !zeroPath || !onePath) {
+  console.error('usage: pick-shift.ts <recording.json> <digest0> <digest1>');
   process.exit(2);
 }
 const rec = parseRecording(readFileSync(recPath, 'utf8'));
 const ticks = decodeTimeline(rec.timeline);
 const name = recPath.split('/').pop()?.replace(/\.json$/, '');
 
-if (divergence === 'none') {
-  console.log(`${name} 0  the two captures are the same run`);
-  process.exit(0);
-}
-const at = Number(divergence);
-
-/** Does this capture's picture on tick `at` agree with the port's? */
-async function agrees(path: string): Promise<boolean | null> {
+/** How many of this capture's ticks the port draws exactly. */
+async function score(path: string): Promise<{ agreed: number; ticks: number }> {
   const digest = JSON.parse(readFileSync(path, 'utf8')) as Digest;
-  if (!digest.hash || digest.hash[at] == null) return null;
   const port = await runOf(
     () => Game.start(assets, exe, rec.level),
     (g) => g.restart(assets, exe),
     ticks,
     digest,
   );
-  if (at >= port.hash.length) return null;
-  return digest.hash[at] === port.hash[at];
+  return exactAgreement(digest, port, inputChanges(ticks));
 }
 
-const zero = await agrees(zeroPath);
-const one = await agrees(onePath);
-
-if (zero === true && one !== true) {
-  console.log(`${name} 0  (tick ${at}: the shift-0 capture is the port's picture)`);
-} else if (one === true && zero !== true) {
-  console.log(`${name} 1  (tick ${at}: the shift-0 capture read every key a tick `
-    + `early; the shift-1 one is the port's picture)`);
-} else if (zero === true && one === true) {
-  console.log(`${name} ?  (tick ${at}: both captures match the port, which cannot be)`);
-} else {
-  console.log(`${name} ?  (tick ${at}: neither capture is the port's picture -- `
-    + `the port may be wrong there too)`);
-}
+const zero = await score(zeroPath);
+const one = await score(onePath);
+const pick = one.agreed > zero.agreed ? 1 : 0;
+console.log(`${name} ${pick}  (shift 0: ${zero.agreed} of ${zero.ticks}, `
+  + `shift 1: ${one.agreed} of ${one.ticks})`);

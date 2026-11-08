@@ -5,11 +5,19 @@ The first tick on which two captures of the same recording part company.
 Each recording is captured twice, the second time with the whole key
 schedule a tick later (`recording_to_script.mjs --shift 1`), because
 where the schedule's clock sits inside one of the game's ticks is not
-something the replay can choose -- see tools/oracle/README. The two
-captures are the same picture until the first key that matters is read,
-and that tick is what this prints. `tools/dev/pick-shift.ts` compares
-it with the tick the port says the first key matters on and so decides
-which of the two captures to keep.
+something the replay can choose -- see tools/oracle/README.
+
+This is a diagnostic, not a step of the pipeline. It was the pipeline
+once: `tools/dev/pick-shift.ts` used to keep whichever capture the port
+agreed with on this one tick. That is wrong whenever the port is
+itself wrong about this tick, which is a tick chosen for being the
+first thing the keys change and so exactly the sort of tick a port
+gets wrong. `probeF` is the case that showed it -- the single tick
+chose the capture the port draws 459 of, over the one it draws 1053
+of. The picker now counts whole runs.
+
+What it is still good for is saying whether two captures are the same
+run at all, and where to start looking when they are not.
 
   first_divergence.py <dir-shift0> <dir-shift1> <recording.json>
 
