@@ -144,6 +144,25 @@ seconds before the pictures they are compared against; `gate2` scored
 143 ticks of 1313 that way, with the capture's Prince standing at the
 level door while the port's played the level.
 
+### A press too short for the emulator
+
+Give a press four ticks at least. A shorter one is a coin toss, and the
+coin can land a long way off: `gate1`'s two-tick tap of Right at 591 to
+592 reached the game fourteen ticks late, at 605, which is the tick the
+player let Shift go.
+
+It took a while to see, because fourteen ticks late is not a difference
+you read as lateness. The capture's Prince stands at the lip from 592 to
+604 and only then starts the run the port starts at 592, and everything
+after it is a run that has already happened. `latekey.mjs` -- move an
+edge on by n ticks, replay, score -- is what settled it: n of 0 to 13
+scores 591 to 644 of 796 and n of 14 scores 790, so the capture is the
+port's own run with the tap delivered at 605.
+
+So a recording whose player taps is not fully adjudicated by its
+capture, and a pin under one of those taps measures the replay rather
+than the translation.
+
 ### `--numbering clock`
 
 Numbering a change by adding up the rounded gaps before it is exact only
