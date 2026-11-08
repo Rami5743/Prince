@@ -1186,8 +1186,6 @@ var RoomRenderer = class {
     }
     this.drawnRoom = saved;
     this.loadRoomLinks();
-    this.fore.unshift(...this.back.filter((p) => p.order === ROW_ABOVE_ORDER));
-    this.back = this.back.filter((p) => p.order !== ROW_ABOVE_ORDER);
   }
   drawTile() {
     this.drawTileFloorRight();
@@ -3644,7 +3642,11 @@ var KID_SEQ = {
   /** Meeting one in mid-air: the fall frames and then a real fall. */
   bumpFall: 45,
   /** Meeting one at the end of a jump: hands down, then the crouch. */
-  hardBump: 46
+  hardBump: 46,
+  /** Bumped from behind with the sword out: shoved back a step. */
+  pushedBackWithSword: 64,
+  /** Bumped from in front with the sword out: he leans into it. */
+  bumpForwardWithSword: 65
 };
 var FRAME = {
   startRunFirst: 1,
@@ -4493,10 +4495,11 @@ function bumpedFall(state, ctx, frame) {
   state.currentColumn = determineColumn(state, frame);
   if (state.action === ACTION.inFreefall) {
     state.fallX = 0;
-    return;
+  } else {
+    startSequence(state, KID_SEQ.bumpFall, ctx.tables);
+    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   }
-  startSequence(state, KID_SEQ.bumpFall, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  ctx.effects?.sound?.(SOUND_BUMPED);
 }
 function bumpedFloor(state, ctx, frame, pushingRight) {
   if (state.sword !== 2 && u16(floorHeightOfRow(state.currentRow) - state.y) >= 15) {
@@ -4511,9 +4514,21 @@ function bumpedFloor(state, ctx, frame, pushingRight) {
   }
   state.fallY = 0;
   if (state.alive === 0) return;
-  const f = state.frame;
-  const hard = f === 24 || f === 25 || f >= 40 && f < 43 || f >= 102 && f < 107;
-  startSequence(state, hard ? KID_SEQ.hardBump : KID_SEQ.bump, ctx.tables);
+  let seq;
+  if (state.sword === 2) {
+    if (pushingRight === state.direction >= 0) {
+      startSequence(state, KID_SEQ.bumpForwardWithSword, ctx.tables);
+      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+      state.x = forwardX(state, 1) & 255;
+      return;
+    }
+    seq = KID_SEQ.pushedBackWithSword;
+  } else {
+    const f = state.frame;
+    const hard = f === 24 || f === 25 || f >= 40 && f < 43 || f >= 102 && f < 107;
+    seq = hard ? KID_SEQ.hardBump : KID_SEQ.bump;
+  }
+  startSequence(state, seq, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   ctx.effects?.sound?.(SOUND_BUMPED);
 }

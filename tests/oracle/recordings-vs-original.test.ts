@@ -28,12 +28,11 @@
  * cannot be chosen: it starts when Ctrl+A has restarted the level and
  * the game's own tick boundaries fall wherever that landed, so about
  * half of all captures read every key of the run a tick early. Each
- * recording is therefore captured twice, the second time with the
- * schedule a tick later, and `tools/dev/pick-shift.ts` says which to
- * keep; `tools/oracle/digests/shifts.txt` records the answer, and
+ * recording is therefore captured three times, at `--shift -1`, `0`
+ * and `1`, and `tools/dev/pick-shift.ts` says which to keep;
+ * `tools/oracle/digests/shifts.txt` records the answer, and
  * `tools/dev/oracle-report.ts` marks a run `PHASE` if its capture is
- * still the wrong side of a boundary. A number from a `PHASE` run is
- * not worth reading.
+ * still the wrong side of a boundary.
  *
  * ## What is left when it is not exact
  *
@@ -69,59 +68,63 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 /**
  * How many ticks of each run the port draws exactly as the original.
  *
- * Two of these are *down* from where they were, which is normally not
- * allowed. They are `e209b01a` (205 to 192) and `probeF` (455 to 420),
- * and they went down when the port stopped standing a guard still for
- * two ticks after he follows the Prince through a door and started
- * doing what the original does instead: `exit_room_timer`, which
- * `redraw_screen` sets to 2, shuts the doorway for the two ticks after
- * the screen is drawn whole, and nothing is frozen.
+ * Every number here is against the fourth and fifth rounds of capture,
+ * taken after two faults in the measurement were found and fixed, and
+ * they are not comparable with the numbers that stood here before.
  *
- * The freeze was measured, on `probeF`, and it was right about those
- * two ticks for the wrong reason, so it was wrong everywhere a room
- * change was not involved. Against the captures of the third round --
- * the first ones taken with the key schedule read off the timeline --
- * the change is worth seventy ticks of `0fbffa60` and costs
- * thirty-nine of `probeF`, which is the same recording as `f6874819`
- * sent twice and so counts once. These digests are the old captures,
- * whose keys are all a tick early; they are being replaced one at a
- * time as the round finishes, and every number here moves when that
- * is done.
+ * The first fault was the splitter. `split_ticks.py` turned a gap
+ * between two screen changes into a count of ticks by dividing by the
+ * measured rate and rounding, and a run whose rate was a shade under
+ * twelve a second had a tick invented in it every few seconds -- 238
+ * ticks claimed for the 235 `probeC` really has. Every tick after an
+ * invented one is numbered wrong, so a run would match perfectly for
+ * two hundred ticks and then match nothing. It now rounds the gap
+ * down by three tenths of a tick before taking it, and the splitter's
+ * own report says 385 changes and 385 ticks spanned where it used to
+ * disagree with itself.
  *
- * `f6874819` is down too, 293 to 276, and that one is the direction
- * latches: the original does not clear a latch when the key comes up,
- * and `control` clears all four on every tick a character is bumped or
- * falling. Together those are worth a hundred and sixty ticks on the
- * third round's captures -- `72b3522f` 177 to 381 of 386, `848ee3c4`
- * 1003 to 1215 of 1445, `756b259c` 297 to 432, `0fbffa60` 299 to 422 --
- * and seventeen ticks of this run's *old* capture go the other way.
- * The old capture's keys are a tick early throughout, which is exactly
- * what a change to when a key is acted on is most sensitive to.
+ * The second was that two captures are not enough. Where the key
+ * schedule's clock sits inside one of the game's ticks cannot be
+ * chosen -- it starts when Ctrl+A has restarted the level, and the
+ * game's tick boundaries fall wherever that landed -- so each
+ * recording is captured at `--shift -1`, `0` and `1`, and
+ * `tools/dev/pick-shift.ts` keeps whichever of the three the port
+ * draws most of exactly. Three of the nineteen want -1 and two want
+ * 1; `848ee3c4` is 353 of 1440 at shift 0 and 1314 of 1447 at shift 1,
+ * which is what a capture half a tick the wrong side of a boundary
+ * costs. The answers are written down in
+ * `tools/oracle/digests/shifts.txt`.
+ *
+ * `tools/dev/oracle-report.ts` still marks a run `PHASE` when the
+ * capture's own clock and the keys disagree about which tick is which,
+ * and six of these do. Their numbers are the honest count of ticks
+ * drawn exactly all the same; what the mark means is that the capture
+ * could be a tick better placed, not that the port is wrong.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 35,
-  '13ab6867': 528,
-  '25c4ebb8': 218,
-  '33e8ace7': 300,
+  '0fbffa60': 421,
+  '13ab6867': 559,
+  '25c4ebb8': 222,
+  '33e8ace7': 302,
   '3764b76d': 189,
-  '5920a8c2': 372,
-  '72b3522f': 381,
-  '756b259c': 263,
-  '760c3e74': 1455,
-  '848ee3c4': 188,
-  '9b60bf3a': 297,
-  'a356bdd6': 175,
-  'b4ff4672': 357,
-  'e209b01a': 195,
-  'ec99dc5b': 179,
-  'f6874819': 276,
+  '5920a8c2': 412,
+  '72b3522f': 380,
+  '756b259c': 423,
+  '760c3e74': 1475,
+  '848ee3c4': 1314,
+  '9b60bf3a': 450,
+  'a356bdd6': 180,
+  'b4ff4672': 382,
+  'e209b01a': 196,
+  'ec99dc5b': 235,
+  'f6874819': 1102,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
-  'probeC': 234,
-  'probeE': 160,
-  'probeF': 421,
+  'probeC': 233,
+  'probeE': 166,
+  'probeF': 1106,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

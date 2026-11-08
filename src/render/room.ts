@@ -745,14 +745,6 @@ export class RoomRenderer {
     }
     this.drawnRoom = saved;
     this.loadRoomLinks();
-    // `redraw_needed_above` runs after every row of the room and after
-    // the objects in them, and the original paints as it goes, so the
-    // strip of the room above is painted over anybody standing in the
-    // top row -- which the port, painting the room and then the
-    // characters, had the wrong way round. Moving the strip to the
-    // front of the queue is the same thing.
-    this.fore.unshift(...this.back.filter((p) => p.order === ROW_ABOVE_ORDER));
-    this.back = this.back.filter((p) => p.order !== ROW_ABOVE_ORDER);
   }
 
   private drawTile(): void {

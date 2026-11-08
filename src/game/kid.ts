@@ -124,6 +124,10 @@ export const KID_SEQ = {
   bumpFall: 45,
   /** Meeting one at the end of a jump: hands down, then the crouch. */
   hardBump: 46,
+  /** Bumped from behind with the sword out: shoved back a step. */
+  pushedBackWithSword: 64,
+  /** Bumped from in front with the sword out: he leans into it. */
+  bumpForwardWithSword: 65,
 } as const;
 
 export const FRAME = {
@@ -1414,10 +1418,14 @@ function bumpedFall(state: CharacterState, ctx: KidContext, frame: Frame): void 
   state.currentColumn = determineColumn(state, frame);
   if (state.action === ACTION.inFreefall) {
     state.fallX = 0;
-    return;
+  } else {
+    startSequence(state, KID_SEQ.bumpFall, ctx.tables);
+    playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   }
-  startSequence(state, KID_SEQ.bumpFall, ctx.tables);
-  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  // `bumped_sound()` is the last line of `bumped_fall`, outside the
+  // `if`: coming off a wall in mid-air is a noise too, and a guard
+  // with his back turned hears it and looks round.
+  ctx.effects?.sound?.(SOUND_BUMPED);
 }
 
 /** There is floor where he was stopped: the original's `bumped_floor`. */
@@ -1440,11 +1448,30 @@ function bumpedFloor(
   }
   state.fallY = 0;
   if (state.alive === 0) return;
-  // The stagger a running jump ends in is not the one a walk ends in:
-  // sequence 46 puts him on his hands, 47 is the three-frame shuffle.
-  const f = state.frame;
-  const hard = f === 24 || f === 25 || (f >= 40 && f < 43) || (f >= 102 && f < 107);
-  startSequence(state, hard ? KID_SEQ.hardBump : KID_SEQ.bump, ctx.tables);
+  let seq: number;
+  if (state.sword === 2) {
+    // With the sword out he does not stagger, he gives ground -- and
+    // which way depends on whether the wall is in front of him or
+    // behind. Shoved forward he leans into it and gains a unit;
+    // shoved back he takes the step back. The port had neither, and
+    // used the walking stagger for both, which in a fight against the
+    // left wall of a room left the Prince in the wrong pose and out of
+    // guard for three frames.
+    if (pushingRight === (state.direction >= 0)) {
+      startSequence(state, KID_SEQ.bumpForwardWithSword, ctx.tables);
+      playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+      state.x = forwardX(state, 1) & 0xff;
+      return;
+    }
+    seq = KID_SEQ.pushedBackWithSword;
+  } else {
+    // The stagger a running jump ends in is not the one a walk ends in:
+    // sequence 46 puts him on his hands, 47 is the three-frame shuffle.
+    const f = state.frame;
+    const hard = f === 24 || f === 25 || (f >= 40 && f < 43) || (f >= 102 && f < 107);
+    seq = hard ? KID_SEQ.hardBump : KID_SEQ.bump;
+  }
+  startSequence(state, seq, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   // `bumped_sound()`, which is `is_guard_notice = 1; play_sound(8)`.
   // Walking into a wall is a noise, and a guard with his back turned
