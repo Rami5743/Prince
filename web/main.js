@@ -2854,6 +2854,10 @@ function comeOnGuard(guard, ctx) {
   if (guard.frame !== GUARD_FRAME_INACTIVE) return;
   const kid = ctx.kid;
   if (!kid || kid.alive >= 0) return;
+  const behind = charOppDist(guard, kid);
+  if ((kid.currentRow !== guard.currentRow || behind >= 0 || behind <= -9) && behind < 0) {
+    return;
+  }
   if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);

@@ -272,3 +272,53 @@ describe('a blow that lands', () => {
     expect(kid.frame).toBeGreaterThanOrEqual(170);
   });
 });
+
+/**
+ * `autocontrol_guard_inactive` does not draw on someone behind it. The
+ * test is `Opp.curr_row != Char.curr_row || (word)distance <
+ * (word)-8`, and the unsigned compare makes that "a different row, or
+ * in front, or behind by nine or more"; inside it, with no sound to
+ * have given the Prince away, anything behind is let alone. The port
+ * drew on anything it could see, from either side, so a guard woke to
+ * a Prince creeping up behind him when the original's would not.
+ */
+describe('a guard with his sword away', () => {
+  it('draws on a Prince in front of him', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(3);
+    const guard = game.guard;
+    const ahead = guard.direction < 0 ? -1 : 1;
+    game.kid.room = 3;
+    game.kid.currentRow = guard.currentRow;
+    game.kid.x = (guard.x + ahead * 40) & 0xff;
+    game.kid.currentColumn = guard.currentColumn + ahead * 3;
+    game.kid.y = standY(guard.currentRow);
+    for (let i = 0; i < 5; i++) game.step({ x: 0, y: 0, shift: false });
+    expect(guard.sword).toBe(2);
+  });
+
+  it('leaves one creeping up behind him alone', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(3);
+    const guard = game.guard;
+    // Put him in the middle of the row so there is room behind him.
+    guard.x = standX(4);
+    guard.currentColumn = 4;
+    guard.direction = -1; // facing left; behind him is to the right
+    const kid = game.kid;
+    const hold = (): void => {
+      kid.room = 3;
+      kid.currentRow = guard.currentRow;
+      kid.currentColumn = 7;
+      kid.x = standX(7);
+      kid.y = standY(guard.currentRow);
+      kid.fallY = 0;
+    };
+    hold();
+    for (let i = 0; i < 10; i++) { game.step({ x: 0, y: 0, shift: false }); hold(); }
+    expect(guard.sword, 'his blade stays away').toBe(0);
+    expect(guard.frame).toBe(166);
+  });
+});

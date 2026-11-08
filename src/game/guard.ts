@@ -383,6 +383,19 @@ function comeOnGuard(guard: GuardState, ctx: GuardStepContext): void {
   // the Prince being in the room. Across a hole in the floor or behind a
   // gate he still draws -- `can_guard_see_kid` of one is enough for that
   // -- but behind a wall he does not.
+  // `autocontrol_guard_inactive` does not draw on someone behind it.
+  // The test is `Opp.curr_row != Char.curr_row || (word)distance <
+  // (word)-8`, and the unsigned compare makes that "a different row,
+  // or in front, or behind by nine or more"; inside it, with no sound
+  // to have given the Prince away, anything behind is let alone. So a
+  // guard is roused by a Prince in front of him, or by one within
+  // eight units behind him in his own row, and by nothing else. The
+  // port drew on anything it could see, from either side.
+  const behind = charOppDist(guard, kid);
+  if ((kid.currentRow !== guard.currentRow || behind >= 0 || behind <= -9)
+    && behind < 0) {
+    return;
+  }
   if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
   guard.sword = 2;
   startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
