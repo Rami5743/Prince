@@ -746,7 +746,50 @@ export class Game {
     if (!draw) return null;
     const overlay = this.overlayOf(this.kid, frame, 'kid');
     const clipTop = this.clipTopOf(this.kid, frame, 'kid');
-    return { ...draw, ...(overlay ? { overlay } : {}), ...(clipTop ? { clipTop } : {}) };
+    const tile = this.objTileOf(this.kid, frame, 'kid');
+    return {
+      ...draw, objColumn: tile.column, objRow: tile.row,
+      ...(overlay ? { overlay } : {}), ...(clipTop ? { clipTop } : {}),
+    };
+  }
+
+  /**
+   * `set_objtile_at_char`: which tile a character's object sits at.
+   *
+   * A running jump takes the tile under the leading foot; anything
+   * else the tile he is standing in -- and a character who is
+   * climbing, hanging or in the air takes the one to its *left*.
+   *
+   * It decides where he comes in the painting, because the room is
+   * painted row 2, row 1, row 0, each row left to right, with every
+   * object slotted in at its own tile. The left step is why a falling
+   * Prince goes behind the slab that fell with him and behind the
+   * floors of his own column: they are painted after him.
+   */
+  private objTileOf(
+    state: CharacterState, frame: Frame, chtab: 'kid' | 'guard',
+  ): { column: number; row: number } {
+    const f = state.frame;
+    const a = state.action;
+    let row = state.currentRow;
+    let column = state.currentColumn;
+    if (a === ACTION.runJump) {
+      const set = chtab === 'kid' ? this.scene.chtabs.kid : this.scene.chtabs.guard;
+      const image = set?.images[frame.image + 1];
+      if (image) {
+        const coll = charCollision(state, frame, objectX(state, frame), image.width);
+        const objY = frame.dy + state.y;
+        let bottomRow = (Math.trunc((objY + 60) / 63) % 4) - 1;
+        if (bottomRow === -1) bottomRow = 3;
+        row = bottomRow;
+        column = Math.max(tileDivMod(coll.xLeft).column, 0);
+      }
+    }
+    if ((f >= 135 && f < 149) || a === ACTION.hangClimb || a === ACTION.inMidair
+      || a === ACTION.inFreefall || a === ACTION.hangStraight) {
+      column -= 1;
+    }
+    return { column, row };
   }
 
   /**
@@ -830,13 +873,30 @@ export class Game {
     const rowOf = (y: number): number => (Math.trunc((y + 60) / 63) % 4) - 1;
     let bottomRow = rowOf(objY);
     if (bottomRow === -1) bottomRow = 3;
+    const colLeft = Math.max(tileDivMod(coll.xLeft).column, 0);
+    // `set_objtile_at_char`: which tile the character is painted with.
+    // A running jump is painted with the tile under his leading foot;
+    // anything else with the one he is standing in -- and a character
+    // who is climbing, hanging or in the air is painted with the tile
+    // one to the *left* of that.
+    //
+    // That last line is what puts a falling Prince behind the ledge he
+    // is dropping past. The room is painted left to right, a character
+    // with his own tile, so every tile from his own column on is
+    // painted after him and comes down over him. The port had him at
+    // his own column, so only the tiles past it covered him, and the
+    // first fall of level 1 -- which is in all nineteen recordings --
+    // drew him in front of the ledge for the three ticks he is beside
+    // it.
+    const ownTile = this.objTileOf(state, frame, chtab);
     return {
-      colLeft: Math.max(tileDivMod(coll.xLeft).column, 0),
+      colLeft,
       colRight: Math.min(tileDivMod(coll.xRight).column, 9),
       topRow: rowOf(topY),
       bottomRow,
       skipBottomRow: a === ACTION.hangClimb,
-      ownColumn: state.currentColumn,
+      ownColumn: ownTile.column,
+      ownRow: ownTile.row,
       climbFrame,
     };
   }
@@ -885,15 +945,20 @@ export class Game {
     const characters: CharacterDraw[] = [];
 
     if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
+      const frame = guardFrame(this.guard, this.tables);
+      // `add_sword_to_objtable` leaves `obj_tilepos` as
+      // `add_guard_to_objtable` set it, so the sword is painted with
+      // the hand that holds it.
+      const at = frame ? this.objTileOf(this.guard, frame, 'guard') : undefined;
+      const tile = at ? { objColumn: at.column, objRow: at.row } : {};
       const draw = guardDraw(this.guard, this.tables);
-      if (draw) characters.push(draw);
+      if (draw) characters.push({ ...draw, ...tile });
       const guardSplash = this.guardHurtSplashDraw();
       if (guardSplash) characters.push(guardSplash);
-      const frame = guardFrame(this.guard, this.tables);
       // A living guard always has his sword out.
       if (frame && this.guard.alive < 0) {
         const sword = placeSword(this.guard, frame, this.tables.swordTable, toScreenX);
-        if (sword) characters.push(sword);
+        if (sword) characters.push({ ...sword, ...tile });
       }
     }
 
@@ -904,7 +969,11 @@ export class Game {
     const kidFrame = this.tables.frameTableKid[this.kid.frame];
     if (kid && kidFrame && this.kid.sword !== 0) {
       const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);
-      if (sword) characters.push(sword);
+      if (sword) {
+        characters.push({
+          ...sword, objColumn: kid.objColumn, objRow: kid.objRow,
+        });
+      }
     }
 
     const mobs: MobDraw[] = this.traps.mobs.map((m) => ({

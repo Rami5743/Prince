@@ -48,7 +48,7 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // redrawing and are now left out rather than reproduced.
   // 42 since a character in the air has the tiles his box covers drawn
   // again over him -- `draw_other_overlay`.
-  { name: 'level1-open', reproduces: 42 },
+  { name: 'level1-open', reproduces: 43 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
   // 36 of 54. All three careful steps are reproduced exactly, and so is

@@ -128,7 +128,7 @@ describe('a character whose tile is outside the room', () => {
       ...where,
       overlay: {
         colLeft: 2, colRight: 3, topRow: 0, bottomRow: 0,
-        skipBottomRow: false, ownColumn: 2,
+        skipBottomRow: false, ownColumn: 2, ownRow: 0,
       },
     })]);
     let hidden = 0;

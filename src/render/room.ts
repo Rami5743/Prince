@@ -122,8 +122,10 @@ export interface CharacterOverlay {
   readonly bottomRow: number;
   /** `if (char_action != 2)`: hanging marks the top row only. */
   readonly skipBottomRow: boolean;
-  /** `obj_tilepos`: the tile he is painted with, from `Char.curr_col`. */
+  /** `obj_tilepos`: the tile he is painted with -- `set_objtile_at_char`. */
   readonly ownColumn: number;
+  /** The row of that tile. */
+  readonly ownRow: number;
   /**
    * Frames 137 to 144 take `draw_floor_overlay` rather than
    * `draw_other_overlay`: a sprite of the floor's lip from
@@ -154,6 +156,14 @@ export interface CharacterDraw {
   readonly onTop?: boolean;
   /** Which tiles go back over him: see `CharacterOverlay`. */
   readonly overlay?: CharacterOverlay;
+  /**
+   * `obj_tilepos`: the tile his object sits at, from
+   * `set_objtile_at_char`. The room is painted row 2, row 1, row 0 and
+   * each row left to right, with every object slotted in at its own
+   * tile, so this is his place in that order.
+   */
+  readonly objColumn?: number;
+  readonly objRow?: number;
   /** `obj_clip_top`: nothing of him is drawn above this row. */
   readonly clipTop?: number;
 }
@@ -1376,11 +1386,11 @@ export class RoomRenderer {
     const MOB = 10;
     this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_LEFT[MOB], x, mob: true,
-      yBottom: y - 3, blit: BLIT.transparent, order,
+      yBottom: y - 3, blit: BLIT.transparent, order, col,
     });
     this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_BOTTOM[MOB], x, yBottom: y, mob: true,
-      blit: BLIT.opaque, order,
+      blit: BLIT.opaque, order, col,
     });
     // And the piece that joins it to the tile on its right, a tile
     // along and a pixel up. This was in the port once, with the wrong
@@ -1404,7 +1414,7 @@ export class RoomRenderer {
     // exact stop being exact.
     this.mid.push({
       chtab: CHTAB.environment, id: LOOSE_FRAM_RIGHT[MOB], x: x + 32, mob: true,
-      yBottom: y - 1, blit: BLIT.transparent, order,
+      yBottom: y - 1, blit: BLIT.transparent, order, col,
     });
     // And nothing in the next column along. A floor at rest is three
     // pieces -- its top, its front, and the sliver that joins it to the
@@ -1452,7 +1462,7 @@ export class RoomRenderer {
       order: Math.min(2, Math.max(0, row)),
       overlay: c.overlay,
       clipTop: c.clipTop,
-      col: c.overlay ? c.overlay.ownColumn : undefined,
+      col: c.objColumn ?? c.overlay?.ownColumn,
     });
   }
 
@@ -1509,7 +1519,9 @@ export class RoomRenderer {
     // through it. Without the rule the port drew one pixel of blade
     // over the guard's knuckle, every fourth tick of his advance.
     const characters = [...this.mid].sort(
-      (a, b) => (b.order - a.order) || (a.yBottom - b.yBottom),
+      (a, b) => (b.order - a.order)
+        || ((a.col ?? 0) - (b.col ?? 0))
+        || (a.yBottom - b.yBottom),
     );
     for (const c of characters) {
       this.paintPiece(surface, c);
@@ -1549,10 +1561,14 @@ export class RoomRenderer {
     if (!o) return;
     const rows = o.skipBottomRow ? [o.topRow]
       : o.topRow === o.bottomRow ? [o.bottomRow] : [o.topRow, o.bottomRow];
-    const own = c.col ?? -1;
+    // The room is painted row 2, row 1, row 0, and each row left to
+    // right, with the character slotted in at his own tile. So a tile
+    // is painted after him -- and therefore over him -- when it is in
+    // a row *above* his, or in his row and further right.
     for (const row of rows) {
-      if (row < 0 || row > 2) continue;
-      for (let col = Math.max(o.colLeft, own + 1); col <= o.colRight; col++) {
+      if (row < 0 || row > 2 || row > o.ownRow) continue;
+      const from = row < o.ownRow ? o.colLeft : Math.max(o.colLeft, o.ownColumn + 1);
+      for (let col = from; col <= o.colRight; col++) {
         const info = this.tileInfo.get(row * 10 + col);
         if (!info) continue;
         // An empty tile has nothing of its own: every id `draw_tile2`

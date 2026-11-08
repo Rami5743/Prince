@@ -1858,7 +1858,8 @@ var RoomRenderer = class {
       mob: true,
       yBottom: y - 3,
       blit: BLIT.transparent,
-      order
+      order,
+      col
     });
     this.mid.push({
       chtab: CHTAB.environment,
@@ -1867,7 +1868,8 @@ var RoomRenderer = class {
       yBottom: y,
       mob: true,
       blit: BLIT.opaque,
-      order
+      order,
+      col
     });
     this.mid.push({
       chtab: CHTAB.environment,
@@ -1876,7 +1878,8 @@ var RoomRenderer = class {
       mob: true,
       yBottom: y - 1,
       blit: BLIT.transparent,
-      order
+      order,
+      col
     });
   }
   addCharacter(c) {
@@ -1901,7 +1904,7 @@ var RoomRenderer = class {
       order: Math.min(2, Math.max(0, row)),
       overlay: c.overlay,
       clipTop: c.clipTop,
-      col: c.overlay ? c.overlay.ownColumn : void 0
+      col: c.objColumn ?? c.overlay?.ownColumn
     });
   }
   /**
@@ -1946,7 +1949,7 @@ var RoomRenderer = class {
     this.paintWipes(surface, 0);
     for (const p of this.back) this.paintPiece(surface, p);
     const characters = [...this.mid].sort(
-      (a, b) => b.order - a.order || a.yBottom - b.yBottom
+      (a, b) => b.order - a.order || (a.col ?? 0) - (b.col ?? 0) || a.yBottom - b.yBottom
     );
     for (const c of characters) {
       this.paintPiece(surface, c);
@@ -1977,10 +1980,10 @@ var RoomRenderer = class {
     const o = c.overlay;
     if (!o) return;
     const rows = o.skipBottomRow ? [o.topRow] : o.topRow === o.bottomRow ? [o.bottomRow] : [o.topRow, o.bottomRow];
-    const own = c.col ?? -1;
     for (const row of rows) {
-      if (row < 0 || row > 2) continue;
-      for (let col = Math.max(o.colLeft, own + 1); col <= o.colRight; col++) {
+      if (row < 0 || row > 2 || row > o.ownRow) continue;
+      const from = row < o.ownRow ? o.colLeft : Math.max(o.colLeft, o.ownColumn + 1);
+      for (let col = from; col <= o.colRight; col++) {
         const info = this.tileInfo.get(row * 10 + col);
         if (!info) continue;
         if (info.curr === TILE.empty) continue;
@@ -5795,7 +5798,49 @@ var Game = class _Game {
     if (!draw) return null;
     const overlay = this.overlayOf(this.kid, frame, "kid");
     const clipTop = this.clipTopOf(this.kid, frame, "kid");
-    return { ...draw, ...overlay ? { overlay } : {}, ...clipTop ? { clipTop } : {} };
+    const tile = this.objTileOf(this.kid, frame, "kid");
+    return {
+      ...draw,
+      objColumn: tile.column,
+      objRow: tile.row,
+      ...overlay ? { overlay } : {},
+      ...clipTop ? { clipTop } : {}
+    };
+  }
+  /**
+   * `set_objtile_at_char`: which tile a character's object sits at.
+   *
+   * A running jump takes the tile under the leading foot; anything
+   * else the tile he is standing in -- and a character who is
+   * climbing, hanging or in the air takes the one to its *left*.
+   *
+   * It decides where he comes in the painting, because the room is
+   * painted row 2, row 1, row 0, each row left to right, with every
+   * object slotted in at its own tile. The left step is why a falling
+   * Prince goes behind the slab that fell with him and behind the
+   * floors of his own column: they are painted after him.
+   */
+  objTileOf(state, frame, chtab) {
+    const f = state.frame;
+    const a = state.action;
+    let row = state.currentRow;
+    let column = state.currentColumn;
+    if (a === ACTION.runJump) {
+      const set = chtab === "kid" ? this.scene.chtabs.kid : this.scene.chtabs.guard;
+      const image = set?.images[frame.image + 1];
+      if (image) {
+        const coll = charCollision(state, frame, objectX(state, frame), image.width);
+        const objY = frame.dy + state.y;
+        let bottomRow = Math.trunc((objY + 60) / 63) % 4 - 1;
+        if (bottomRow === -1) bottomRow = 3;
+        row = bottomRow;
+        column = Math.max(tileDivMod(coll.xLeft).column, 0);
+      }
+    }
+    if (f >= 135 && f < 149 || a === ACTION.hangClimb || a === ACTION.inMidair || a === ACTION.inFreefall || a === ACTION.hangStraight) {
+      column -= 1;
+    }
+    return { column, row };
   }
   /**
    * `clip_char`, the part of it that matters: a character with a floor
@@ -5870,13 +5915,16 @@ var Game = class _Game {
     const rowOf = (y) => Math.trunc((y + 60) / 63) % 4 - 1;
     let bottomRow = rowOf(objY);
     if (bottomRow === -1) bottomRow = 3;
+    const colLeft = Math.max(tileDivMod(coll.xLeft).column, 0);
+    const ownTile = this.objTileOf(state, frame, chtab);
     return {
-      colLeft: Math.max(tileDivMod(coll.xLeft).column, 0),
+      colLeft,
       colRight: Math.min(tileDivMod(coll.xRight).column, 9),
       topRow: rowOf(topY),
       bottomRow,
       skipBottomRow: a === ACTION.hangClimb,
-      ownColumn: state.currentColumn,
+      ownColumn: ownTile.column,
+      ownRow: ownTile.row,
       climbFrame
     };
   }
@@ -5917,14 +5965,16 @@ var Game = class _Game {
     }
     const characters = [];
     if (this.guard.room === this.drawnRoom && this.guard.direction !== NO_DIRECTION) {
+      const frame = guardFrame(this.guard, this.tables);
+      const at = frame ? this.objTileOf(this.guard, frame, "guard") : void 0;
+      const tile = at ? { objColumn: at.column, objRow: at.row } : {};
       const draw = guardDraw(this.guard, this.tables);
-      if (draw) characters.push(draw);
+      if (draw) characters.push({ ...draw, ...tile });
       const guardSplash = this.guardHurtSplashDraw();
       if (guardSplash) characters.push(guardSplash);
-      const frame = guardFrame(this.guard, this.tables);
       if (frame && this.guard.alive < 0) {
         const sword = placeSword(this.guard, frame, this.tables.swordTable, toScreenX);
-        if (sword) characters.push(sword);
+        if (sword) characters.push({ ...sword, ...tile });
       }
     }
     const kid = this.kidDraw();
@@ -5934,7 +5984,13 @@ var Game = class _Game {
     const kidFrame = this.tables.frameTableKid[this.kid.frame];
     if (kid && kidFrame && this.kid.sword !== 0) {
       const sword = placeSword(this.kid, kidFrame, this.tables.swordTable, toScreenX);
-      if (sword) characters.push(sword);
+      if (sword) {
+        characters.push({
+          ...sword,
+          objColumn: kid.objColumn,
+          objRow: kid.objRow
+        });
+      }
     }
     const mobs = this.traps.mobs.map((m) => ({
       room: m.room,
