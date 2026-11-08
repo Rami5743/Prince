@@ -2819,6 +2819,8 @@ var Globals = class {
   palace_wall_colors = new Uint8Array(44 * 3);
   demo_index = 0;
   demo_time = 0;
+  /** `shadow_initialized`: level 12's shadow has been put in the room. */
+  shadow_initialized = 0;
   /** `chtab_addrs`: the sprite banks, filled in by the loader. */
   chtab_addrs = Array.from({ length: 10 }, () => null);
   tile_table = [];
@@ -6482,10 +6484,108 @@ function get_guard_hp() {
 }
 function check_shadow() {
   g.offguard = 0;
+  if (g.current_level === 12) {
+    if (!g.united_with_shadow && g.drawn_room === 15) {
+      g.Char.room = g.drawn_room;
+      if (get_tile(15, 1, 0) === tiles.tiles_22_sword) return;
+      g.shadow_initialized = 0;
+      do_init_shad(INIT_SHAD_12, seqids.seq_7_fall);
+      return;
+    }
+  }
+  if (g.current_level === 6) {
+    g.Char.room = g.drawn_room;
+    if (g.Char.room === 1) {
+      if (g.leveldoor_open !== 77) {
+        out.play_sound(soundids.sound_25_presentation);
+        g.leveldoor_open = 77;
+      }
+      do_init_shad(INIT_SHAD_6, seqids.seq_2_stand);
+      return;
+    }
+  }
+  if (g.current_level === 5) {
+    g.Char.room = g.drawn_room;
+    if (g.Char.room === 24) {
+      if (get_tile(24, 3, 0) !== tiles.tiles_10_potion) return;
+      do_init_shad(INIT_SHAD_5, seqids.seq_2_stand);
+      return;
+    }
+  }
   enter_guard();
 }
-var hp = { draw_guard_hp: (_curr, _max) => {
-} };
+var INIT_SHAD_6 = [15, 81, 118, 0, 0, 1, 0];
+var INIT_SHAD_5 = [15, 55, 55, 0, 255, 0, 0];
+var INIT_SHAD_12 = [15, 81, 232, 0, 0, 0, 0];
+function do_init_shad(source, seq_index) {
+  g.Char.frame = source[0];
+  g.Char.x = source[1];
+  g.Char.y = source[2];
+  g.Char.direction = sbyteOf(source[3]);
+  g.Char.curr_col = sbyteOf(source[4]);
+  g.Char.curr_row = sbyteOf(source[5]);
+  g.Char.action = source[6];
+  seqtbl_offset_char(seq_index);
+  g.Char.charid = charids.charid_1_shadow;
+  g.demo_time = 0;
+  g.guard_skill = 3;
+  g.guardhp_delta = g.guardhp_curr = g.guardhp_max = 4;
+  saveshad();
+}
+var SHAD_DRINK_MOVE = [
+  [0, 0],
+  [1, 1],
+  [14, 0],
+  [18, 6],
+  [29, 7],
+  [45, 2],
+  [49, 1],
+  [255, -2]
+];
+function do_auto_moves(moves) {
+  if (g.demo_time >= 254) return;
+  ++g.demo_time;
+  let demoindex = g.demo_index;
+  if (moves[demoindex][0] <= g.demo_time) ++g.demo_index;
+  else demoindex = g.demo_index - 1;
+  switch (moves[demoindex][1]) {
+    case -1:
+      break;
+    case 0:
+      move_0_nothing();
+      break;
+    case 1:
+      move_1_forward();
+      break;
+    case 2:
+      move_2_backward();
+      break;
+    case 3:
+      move_3_up();
+      break;
+    case 4:
+      move_4_down();
+      break;
+    case 5:
+      move_3_up();
+      move_1_forward();
+      break;
+    case 6:
+      move_6_shift();
+      break;
+    case 7:
+      move_7();
+      break;
+    default:
+      break;
+  }
+}
+var hp = {
+  draw_guard_hp: (_curr, _max) => {
+  },
+  add_life: () => {
+  }
+};
 function enter_guard() {
   const room_minus_1 = g.drawn_room - 1;
   const guard_tile = g.level.guards_tile[room_minus_1];
@@ -6747,6 +6847,9 @@ function move_6_shift() {
   g.control_shift = CONTROL_HELD3;
   g.control_shift2 = CONTROL_HELD3;
 }
+function move_7() {
+  g.control_shift = CONTROL_RELEASED3;
+}
 function autocontrol_opponent() {
   move_0_nothing();
   const charid = g.Char.charid;
@@ -6773,6 +6876,71 @@ function autocontrol_mouse() {
   }
 }
 function autocontrol_shadow() {
+  if (g.current_level === 4) autocontrol_shadow_level4();
+  if (g.current_level === 5) autocontrol_shadow_level5();
+  if (g.current_level === 6) autocontrol_shadow_level6();
+  if (g.current_level === 12) autocontrol_shadow_level12();
+}
+function autocontrol_shadow_level4() {
+  if (g.Char.room === 4) {
+    if (g.Char.x < 80) clear_char();
+    else move_1_forward();
+  }
+}
+function autocontrol_shadow_level5() {
+  if (g.Char.room !== 24) return;
+  if (g.demo_time === 0) {
+    get_tile(24, 1, 0);
+    if (g.curr_room_modif[g.curr_tilepos] < 80) return;
+    g.demo_index = 0;
+  }
+  do_auto_moves(SHAD_DRINK_MOVE);
+  if (g.Char.x < 15) clear_char();
+}
+function autocontrol_shadow_level6() {
+  if (g.Char.room === 1 && g.Kid.frame === frameids.frame_43_running_jump_4 && g.Kid.x < 128) {
+    move_6_shift();
+    move_1_forward();
+  }
+}
+function autocontrol_shadow_level12() {
+  if (g.Char.room === 15 && g.shadow_initialized === 0) {
+    if (g.Opp.x >= 150) {
+      do_init_shad(INIT_SHAD_12, seqids.seq_7_fall);
+      return;
+    }
+    g.shadow_initialized = 1;
+  }
+  if (g.Char.sword >= sword_status.sword_2_drawn) {
+    if (g.offguard === 0 || g.guard_refrac === 0) autocontrol_guard_active();
+    else move_4_down();
+    return;
+  }
+  if (g.Opp.sword >= sword_status.sword_2_drawn || g.offguard === 0) {
+    let xdiff = 28672;
+    if (g.can_guard_see_kid < 2 || (xdiff = char_opp_dist()) >= 90) {
+      if (xdiff < 0) move_2_backward();
+      return;
+    }
+    if (g.Char.frame === 15) move_down_forw();
+    return;
+  }
+  if (char_opp_dist() < 10) {
+    g.flash_color = 15;
+    g.flash_time = 18;
+    hp.add_life();
+    g.united_with_shadow = 42;
+    g.Char.charid = charids.charid_0_kid;
+    savekid();
+    clear_char();
+    return;
+  }
+  if (g.can_guard_see_kid === 2) {
+    const opp_frame = g.Opp.frame;
+    if (opp_frame >= frameids.frame_3_start_run && opp_frame < frameids.frame_15_stand || opp_frame >= frameids.frame_127_stepping_7 && opp_frame < 133) {
+      move_1_forward();
+    }
+  }
 }
 function autocontrol_skeleton() {
   g.Char.sword = sword_status.sword_2_drawn;
@@ -8647,6 +8815,16 @@ function draw_guard_hp(curr_hp, max_hp) {
     }
   }
 }
+function add_life() {
+  let hpmax = g.hitp_max;
+  ++hpmax;
+  if (hpmax > 10) hpmax = 10;
+  g.hitp_max = hpmax;
+  set_health_life();
+}
+function set_health_life() {
+  g.hitp_delta = g.hitp_max - g.hitp_curr;
+}
 function draw_hp() {
   if (g.hitp_delta) draw_kid_hp(g.hitp_curr, g.hitp_max);
   const blink_state = g.rem_tick & 1;
@@ -8835,6 +9013,7 @@ function link() {
   mobs.draw_mobs = draw_mobs;
   hp2.draw_hp = draw_hp;
   hp.draw_guard_hp = draw_guard_hp;
+  hp.add_life = add_life;
 }
 var DEATH_MUSIC_TICKS = 36;
 var TEXT_RECT = { top: 193, left: 70, bottom: 202, right: 250 };

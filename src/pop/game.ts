@@ -45,7 +45,7 @@ import {
 } from './seg007.ts';
 import {
   play_frame, check_the_end, screen, redraw_screen, anim_tile_modif, draw_hp,
-  draw_kid_hp, draw_guard_hp,
+  draw_kid_hp, draw_guard_hp, add_life,
 } from './seg000.ts';
 import { add_objtable, mark_obj_tile_redraw } from './seg008.ts';
 import { l2, l5, l6, l7, l8, out } from './link.ts';
@@ -114,6 +114,7 @@ function link(): void {
   drawMobs.draw_mobs = draw_mobs;
   drawHp.draw_hp = draw_hp;
   guardHp.draw_guard_hp = draw_guard_hp;
+  guardHp.add_life = add_life;
 }
 
 /** How long `play_death_music` sounds, in ticks. */

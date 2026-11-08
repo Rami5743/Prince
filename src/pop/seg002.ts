@@ -130,14 +130,98 @@ export function get_guard_hp(): void {
 // seg002:0064
 export function check_shadow(): void {
   g.offguard = 0;
-  // Levels 4, 5, 6 and 12 bring the shadow out and return before the
-  // last line; none of them is reachable until those levels are
-  // played, so what is left of the C here is its last line.
+  if (g.current_level === 12) {
+    // Special event: level 12's shadow.
+    if (!g.united_with_shadow && g.drawn_room === 15) {
+      g.Char.room = g.drawn_room;
+      if (get_tile(15, 1, 0) === tiles.tiles_22_sword) return;
+      g.shadow_initialized = 0;
+      do_init_shad(INIT_SHAD_12, seqids.seq_7_fall);
+      return;
+    }
+  }
+  if (g.current_level === 6) {
+    // Special event: level 6's shadow, who steps across the gap.
+    g.Char.room = g.drawn_room;
+    if (g.Char.room === 1) {
+      if (g.leveldoor_open !== 0x4d) {
+        out.play_sound(soundids.sound_25_presentation);
+        g.leveldoor_open = 0x4d;
+      }
+      do_init_shad(INIT_SHAD_6, seqids.seq_2_stand);
+      return;
+    }
+  }
+  if (g.current_level === 5) {
+    // Special event: level 5's shadow, who drinks the potion.
+    g.Char.room = g.drawn_room;
+    if (g.Char.room === 24) {
+      if (get_tile(24, 3, 0) !== tiles.tiles_10_potion) return;
+      do_init_shad(INIT_SHAD_5, seqids.seq_2_stand);
+      return;
+    }
+  }
   enter_guard();
 }
 
+/**
+ * `init_shad_6`, `init_shad_5` and `init_shad_12`: the first seven
+ * bytes of a `char_type` -- frame, x, y, direction, column, row and
+ * action -- for the shadow of each level that has one.
+ */
+const INIT_SHAD_6 = [0x0f, 0x51, 0x76, 0, 0, 1, 0] as const;
+const INIT_SHAD_5 = [0x0f, 0x37, 0x37, 0, 0xff, 0, 0] as const;
+const INIT_SHAD_12 = [0x0f, 0x51, 0xe8, 0, 0, 0, 0] as const;
+
+// seg002:0000
+export function do_init_shad(source: readonly number[], seq_index: number): void {
+  g.Char.frame = source[0];
+  g.Char.x = source[1];
+  g.Char.y = source[2];
+  g.Char.direction = sbyteOf(source[3]);
+  g.Char.curr_col = sbyteOf(source[4]);
+  g.Char.curr_row = sbyteOf(source[5]);
+  g.Char.action = source[6];
+  seqtbl_offset_char(seq_index);
+  g.Char.charid = charids.charid_1_shadow;
+  g.demo_time = 0;
+  g.guard_skill = 3;
+  g.guardhp_delta = g.guardhp_curr = g.guardhp_max = 4;
+  saveshad();
+}
+
+/** `shad_drink_move`: what the shadow of level 5 does, tick by tick. */
+const SHAD_DRINK_MOVE: readonly (readonly [number, number])[] = [
+  [0x00, 0], [0x01, 1], [0x0e, 0], [0x12, 6],
+  [0x1d, 7], [0x2d, 2], [0x31, 1], [0xff, -2],
+];
+
+// seg002:1083
+export function do_auto_moves(moves: readonly (readonly [number, number])[]): void {
+  if (g.demo_time >= 0xfe) return;
+  ++g.demo_time;
+  let demoindex = g.demo_index;
+  if (moves[demoindex][0] <= g.demo_time) ++g.demo_index;
+  else demoindex = g.demo_index - 1;
+  switch (moves[demoindex][1]) {
+    case -1: break;
+    case 0: move_0_nothing(); break;
+    case 1: move_1_forward(); break;
+    case 2: move_2_backward(); break;
+    case 3: move_3_up(); break;
+    case 4: move_4_down(); break;
+    case 5: move_3_up(); move_1_forward(); break;
+    case 6: move_6_shift(); break;
+    case 7: move_7(); break;
+    default: break;
+  }
+}
+
 /** `draw_guard_hp` lives in seg000; linked here to avoid a cycle. */
-export const hp = { draw_guard_hp: (_curr: number, _max: number): void => {} };
+export const hp = {
+  draw_guard_hp: (_curr: number, _max: number): void => {},
+  add_life: (): void => {},
+};
 
 // seg002:00DF
 export function enter_guard(): void {
@@ -493,7 +577,88 @@ export function autocontrol_mouse(): void {
 
 // seg002:081D
 export function autocontrol_shadow(): void {
-  // Levels 4, 5, 6 and 12. Nothing to dispatch to until they are played.
+  if (g.current_level === 4) autocontrol_shadow_level4();
+  if (g.current_level === 5) autocontrol_shadow_level5();
+  if (g.current_level === 6) autocontrol_shadow_level6();
+  if (g.current_level === 12) autocontrol_shadow_level12();
+}
+
+// seg002:1000
+export function autocontrol_shadow_level4(): void {
+  if (g.Char.room === 4) {
+    if (g.Char.x < 80) clear_char();
+    else move_1_forward();
+  }
+}
+
+// seg002:101A
+export function autocontrol_shadow_level5(): void {
+  if (g.Char.room !== 24) return;
+  if (g.demo_time === 0) {
+    get_tile(24, 1, 0);
+    // Is the door open?
+    if (g.curr_room_modif[g.curr_tilepos] < 80) return;
+    g.demo_index = 0;
+  }
+  do_auto_moves(SHAD_DRINK_MOVE);
+  if (g.Char.x < 15) clear_char();
+}
+
+// seg002:1064
+export function autocontrol_shadow_level6(): void {
+  if (g.Char.room === 1
+    && g.Kid.frame === frameids.frame_43_running_jump_4
+    && g.Kid.x < 128) {
+    move_6_shift();
+    move_1_forward();
+  }
+}
+
+// seg002:1082
+export function autocontrol_shadow_level12(): void {
+  if (g.Char.room === 15 && g.shadow_initialized === 0) {
+    if (g.Opp.x >= 150) {
+      do_init_shad(INIT_SHAD_12, seqids.seq_7_fall);
+      return;
+    }
+    g.shadow_initialized = 1;
+  }
+  if (g.Char.sword >= sword_status.sword_2_drawn) {
+    // If the Prince puts his sword away the shadow does the same, but
+    // only once the shadow has been hurt.
+    if (g.offguard === 0 || g.guard_refrac === 0) autocontrol_guard_active();
+    else move_4_down();
+    return;
+  }
+  if (g.Opp.sword >= sword_status.sword_2_drawn || g.offguard === 0) {
+    let xdiff = 0x7000;
+    if (g.can_guard_see_kid < 2 || (xdiff = char_opp_dist()) >= 90) {
+      if (xdiff < 0) move_2_backward();
+      return;
+    }
+    // The shadow draws his sword.
+    if (g.Char.frame === 15) move_down_forw();
+    return;
+  }
+  if (char_opp_dist() < 10) {
+    // United with the shadow.
+    g.flash_color = 15; // bright white
+    g.flash_time = 18;
+    hp.add_life();
+    g.united_with_shadow = 42;
+    g.Char.charid = charids.charid_0_kid;
+    savekid();
+    clear_char();
+    return;
+  }
+  if (g.can_guard_see_kid === 2) {
+    // If the Prince runs at the shadow, the shadow runs at him.
+    const opp_frame = g.Opp.frame;
+    if ((opp_frame >= frameids.frame_3_start_run && opp_frame < frameids.frame_15_stand)
+      || (opp_frame >= frameids.frame_127_stepping_7 && opp_frame < 133)) {
+      move_1_forward();
+    }
+  }
 }
 
 // seg002:0850

@@ -93,6 +93,20 @@ export function draw_guard_hp(curr_hp: number, max_hp: number): void {
   }
 }
 
+// seg000:11EC
+export function add_life(): void {
+  let hpmax = g.hitp_max;
+  ++hpmax;
+  if (hpmax > 10) hpmax = 10;
+  g.hitp_max = hpmax;
+  set_health_life();
+}
+
+// seg000:1200
+export function set_health_life(): void {
+  g.hitp_delta = g.hitp_max - g.hitp_curr;
+}
+
 // seg000:120B
 export function draw_hp(): void {
   if (g.hitp_delta) draw_kid_hp(g.hitp_curr, g.hitp_max);

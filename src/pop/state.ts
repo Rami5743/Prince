@@ -347,6 +347,8 @@ class Globals {
   palace_wall_colors = new Uint8Array(44 * 3);
   demo_index = 0;
   demo_time = 0;
+  /** `shadow_initialized`: level 12's shadow has been put in the room. */
+  shadow_initialized = 0;
 
   /** `chtab_addrs`: the sprite banks, filled in by the loader. */
   chtab_addrs: (readonly { width: number; height: number; data: Uint8Array }[] | null)[]
