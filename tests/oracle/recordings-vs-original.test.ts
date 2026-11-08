@@ -22,21 +22,24 @@
  * torches, which pick their flame from the game's random numbers. The
  * ceiling was the measurement's.
  *
+ * ## Which capture
+ *
+ * Where the key schedule's clock sits inside one of the game's ticks
+ * cannot be chosen: it starts when Ctrl+A has restarted the level and
+ * the game's own tick boundaries fall wherever that landed, so about
+ * half of all captures read every key of the run a tick early. Each
+ * recording is therefore captured twice, the second time with the
+ * schedule a tick later, and `tools/dev/pick-shift.ts` says which to
+ * keep; `tools/oracle/digests/shifts.txt` records the answer, and
+ * `tools/dev/oracle-report.ts` marks a run `PHASE` if its capture is
+ * still the wrong side of a boundary. A number from a `PHASE` run is
+ * not worth reading.
+ *
  * ## What is left when it is not exact
  *
  * The alignment may still slip by a tick, and pays two disagreements
- * for each tick of slip, because two things in the harness are a tick
- * wide and neither is the game:
- *
- * * Which tick a key press lands in. The game reads the keyboard once a
- *   tick; the emulator is sent the press on the clock, and where the
- *   clock sits inside a tick depends on how long DOSBox took to restart
- *   the level. `recording_to_script.mjs` puts each edge in the middle of
- *   its tick, which is the best that can be done without asking the
- *   game, and that is still half a tick either way.
- * * A room change. The original holds the screen black for one tick
- *   longer than the port, which is the redraw and not the game; see
- *   `ROOM_CHANGE_BLANK`.
+ * for each tick of slip, because the emulator's clock and the game's
+ * are not the same clock.
  *
  * ## The numbers
  *
