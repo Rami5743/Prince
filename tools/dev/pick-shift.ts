@@ -2,7 +2,7 @@
  * Which of a recording's two captures has the keys in the right ticks?
  *
  *   node --experimental-strip-types tools/dev/pick-shift.ts \
- *       <recording.json> <digest-shift0.json> <digest-shift1.json>
+ *       <recording.json> <label>=<digest.json> ...
  *
  * ## The problem
  *
@@ -54,9 +54,9 @@ const GAME_DIR = join(import.meta.dirname, '..', '..', 'original', 'prince1');
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-const [recPath, zeroPath, onePath] = process.argv.slice(2);
-if (!recPath || !zeroPath || !onePath) {
-  console.error('usage: pick-shift.ts <recording.json> <digest0> <digest1>');
+const [recPath, ...candidates] = process.argv.slice(2);
+if (!recPath || candidates.length < 2) {
+  console.error('usage: pick-shift.ts <recording.json> <label>=<digest.json> ...');
   process.exit(2);
 }
 const rec = parseRecording(readFileSync(recPath, 'utf8'));
@@ -75,8 +75,14 @@ async function score(path: string): Promise<{ agreed: number; ticks: number }> {
   return exactAgreement(digest, port, inputChanges(ticks));
 }
 
-const zero = await score(zeroPath);
-const one = await score(onePath);
-const pick = one.agreed > zero.agreed ? 1 : 0;
-console.log(`${name} ${pick}  (shift 0: ${zero.agreed} of ${zero.ticks}, `
-  + `shift 1: ${one.agreed} of ${one.ticks})`);
+const scored: { label: string; agreed: number; ticks: number }[] = [];
+for (const spec of candidates) {
+  const at = spec.indexOf('=');
+  const label = at < 0 ? String(scored.length) : spec.slice(0, at);
+  const got = await score(at < 0 ? spec : spec.slice(at + 1));
+  scored.push({ label, ...got });
+}
+let best = scored[0];
+for (const s of scored) if (s.agreed > best.agreed) best = s;
+console.log(`${name} ${best.label}  (`
+  + scored.map((s) => `${s.label}: ${s.agreed} of ${s.ticks}`).join(', ') + ')');
