@@ -102,29 +102,29 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * could be a tick better placed, not that the port is wrong.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 422,
-  '13ab6867': 561,
+  '0fbffa60': 467,
+  '13ab6867': 562,
   '25c4ebb8': 375,
-  '33e8ace7': 304,
+  '33e8ace7': 308,
   '3764b76d': 216,
-  '5920a8c2': 411,
+  '5920a8c2': 412,
   '72b3522f': 384,
-  '756b259c': 480,
-  '760c3e74': 1476,
-  '848ee3c4': 1410,
-  '9b60bf3a': 451,
+  '756b259c': 494,
+  '760c3e74': 1490,
+  '848ee3c4': 1411,
+  '9b60bf3a': 453,
   'a356bdd6': 184,
-  'b4ff4672': 390,
-  'e209b01a': 197,
-  'ec99dc5b': 236,
-  'f6874819': 1105,
+  'b4ff4672': 393,
+  'e209b01a': 210,
+  'ec99dc5b': 237,
+  'f6874819': 1112,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
   // `probeF` is the whole of `f6874819` sent again.
   'probeC': 232,
-  'probeE': 165,
-  'probeF': 1109,
+  'probeE': 166,
+  'probeF': 1116,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

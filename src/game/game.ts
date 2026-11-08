@@ -180,6 +180,12 @@ export class Game {
   readonly guards: GuardsData;
   private readonly renderer: RoomRenderer;
   private readonly ctx: KidContext;
+  /**
+   * The same world and traps as the Prince's, with the guard's own
+   * sprites and his own hit points: what `play_guard_frame` hands to
+   * `check_action` and the four checks after it.
+   */
+  private readonly guardCtx: KidContext;
 
   readonly levelNumber: number;
 
@@ -278,6 +284,23 @@ export class Game {
         },
       },
     };
+    this.guardCtx = {
+      ...this.ctx,
+      spriteWidth: (image) => scene.chtabs.guard?.images[image + 1]?.width ?? 0,
+      spriteHeight: (image) => scene.chtabs.guard?.images[image + 1]?.height ?? 0,
+      // A guard who falls into the spikes loses his own hit points, not
+      // the Prince's, and the hundred `spiked` and `chomped` take is all
+      // of them however many he had.
+      damage: (amount) => {
+        if (this.guard.hitPoints > 0) this.guardHurt = true;
+        this.guard.hitPoints = Math.max(0, this.guard.hitPoints - amount);
+        return this.guard.hitPoints === 0;
+      },
+      opponent: () => this.kid,
+      // Nothing a guard walks over is picked up, and he has no keyboard.
+      markItem: undefined,
+      hasSword: () => true,
+    };
     enterLevel(
       this.kid, scene.level.startRoom, scene.level.startPos, scene.level.startDir,
       this.ctx, levelNumber,
@@ -351,6 +374,10 @@ export class Game {
       kidX: this.kid.x,
       kid: this.kid,
       kidArmed: this.hasSword,
+      // The world and the traps, so a guard falls off a ledge, stands
+      // on a plate, dies on spikes and is cut in half by a chomper --
+      // all of which `play_guard_frame` runs and the port did not.
+      physics: this.guardCtx,
       // `prandom(255)`. It was `next(8)`, which is not the same roll at
       // all: every one of the original's probabilities is a number out
       // of 255, so against a nought-to-eight roll anything over eight

@@ -223,6 +223,23 @@ export function distanceFromWallForward(
   return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
 }
 
+/**
+ * `dist_from_wall_behind`: how far the face *behind* him is, which is
+ * the mirror of `distanceFromWallForward`. Negative means he has
+ * backed into it.
+ */
+export function distanceFromWallBehind(
+  state: CharacterState, tileType: number, tileColumn: number, coll: Collision,
+): number {
+  const type = wallType(tileType);
+  if (type === 0) return 99;
+  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (state.direction >= 0) {
+    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
+  }
+  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
+}
+
 export interface EdgeResult {
   distance: number;
   edgeType: number;
@@ -310,10 +327,32 @@ export interface CollisionMemory {
   /** Three rows of ten columns: above, the row itself, below. */
   room: Int8Array;
   flags: Uint8Array;
+  /**
+   * `prev_coll_flags` for the row he is in, kept after the reading
+   * rather than thrown away with it: `check_gate_push` needs to know
+   * that his box covered the gate's column on the tick before as well
+   * as on this one.
+   */
+  prevFlags: Uint8Array;
 }
 
 export function newCollisionMemory(): CollisionMemory {
-  return { row: -9, room: new Int8Array(30).fill(-1), flags: new Uint8Array(30) };
+  return {
+    row: -9,
+    room: new Int8Array(30).fill(-1),
+    flags: new Uint8Array(30),
+    prevFlags: new Uint8Array(10),
+  };
+}
+
+/** This tick's and last tick's flags for a column of his own row. */
+export function collisionFlagsAt(
+  memory: CollisionMemory, column: number,
+): { now: number; before: number } {
+  return {
+    now: memory.flags[ROW_HERE + column] ?? 0,
+    before: memory.prevFlags[column] ?? 0,
+  };
 }
 
 /** Where a bump has just begun, by column, or -1. */
@@ -375,6 +414,7 @@ export function checkCollisions(
   }
   const prevRoom = memory.room.slice(was, was + 10);
   const prevFlags = memory.flags.slice(was, was + 10);
+  memory.prevFlags = prevFlags;
   memory.room.fill(-1);
   memory.flags.fill(0);
   memory.row = row;

@@ -12,6 +12,7 @@ import type { CharacterState } from './character.ts';
 import { newCharacter, CHAR_ID, placeCharacter } from './character.ts';
 import type { CharacterDraw } from '../render/room.ts';
 import type { ExeTables, Frame } from './exe-tables.ts';
+import { guardChecks, type KidContext } from './kid.ts';
 import {
   startSequence, playSequence, ACTION, type SequenceEffects,
 } from './sequence.ts';
@@ -267,6 +268,12 @@ export interface GuardStepContext {
   readonly random?: () => number;
   /** Is there floor in front of the guard to step onto? */
   readonly floorInFront?: (guard: GuardState) => boolean;
+  /**
+   * The world and the traps, so the checks at the end of a guard's
+   * tick -- the floor, the plates, the spikes, the chomper -- can be
+   * the same code as the Prince's, which is what the original does.
+   */
+  readonly physics?: KidContext;
   /**
    * `get_tile_at_kid`: the tile of the Prince's own room and row at an x,
    * for the line of sight between a guard and him.
@@ -720,6 +727,10 @@ export function stepGuard(guard: GuardState, ctx: GuardStepContext): void {
   guard.y = (guard.y + guard.fallY) & 0xff;
   const frame = guardFrame(guard, ctx.tables);
   if (frame) guard.currentColumn = determineColumn(guard, frame);
+  // `check_action`, `check_press`, `check_spike_below`, `check_spiked`
+  // and `check_chomped_guard`, the last five lines of
+  // `play_guard_frame`.
+  if (ctx.physics) guardChecks(guard, ctx.physics);
 }
 
 /**

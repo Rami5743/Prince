@@ -262,6 +262,40 @@ whole thing can tell from a pixel the Prince crossed twice.
 
     python3 tools/oracle/digest.py /tmp/dos tools/oracle/digests/NAME.json
 
+"Room by room" means cutting the run at the ticks where the screen
+changes wholesale. That used to mean half the screen, and a room
+change is not nearly that: the rooms of a level share their walls and
+their floors, so going from room 6 to room 5 of level 1 moves
+thirty-five per cent of the pixels, where an ordinary tick moves half
+a per cent. Nothing lies in between, so the threshold is not delicate
+-- it is fifteen per cent now and anything from a tenth to a fifth
+gives the same cuts.
+
+It matters because a missed cut makes the mask too small. The flames
+are not the only thing the original does not reproduce: the bubbles
+over a potion start at `prandom(6) + 1` when the room is first drawn,
+out of the same generator, and three captures of `0fbffa60` disagree
+about them on every tick the flask of room 5 is on the screen. With
+the old threshold that run was one segment of 459 ticks and the flask
+was in the last 290 of them, so its bubbles changed on six per cent of
+the segment and went unmasked.
+
+### The measurement's own test
+
+    python3 tools/oracle/agree.py <dir-a> <dir-b>
+
+Two captures of the same recording at the same shift, from two
+separate runs of DOSBox. The original is deterministic, so outside the
+mask they have to be the same pictures tick for tick; where they are
+not, the mask is too small and the port is being marked wrong for
+something the original does not reproduce either. This is the only
+check here that can fail honestly -- every other one compares the port
+with a single capture and cannot tell a fault in the one from a fault
+in the other.
+
+On `0fbffa60`, captured twice: 658 of 724 ticks agreed with the old
+threshold and 716 of 724 with this one.
+
 Nineteen runs are pinned in `tests/oracle/recordings-vs-original.test.ts`:
 the sixteen recordings the player has sent, and three probes.
 

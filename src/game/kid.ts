@@ -13,7 +13,7 @@
  * and sword play are not yet here.
  */
 import type { CharacterState } from './character.ts';
-import { forwardX } from './character.ts';
+import { forwardX, CHAR_ID } from './character.ts';
 import type { ExeTables, Frame } from './exe-tables.ts';
 import {
   startSequence, playSequence, SEQ, ACTION, SOUND_SILENCE, type SequenceEffects,
@@ -24,7 +24,7 @@ import {
   DIR_FRONT, DIR_BEHIND, TILE_RIGHT_X, TILE_SIZE_Y, charCollision,
   tileDivModM7, weightX, distanceToEdge, wallTypeAt, wallType, distanceFromWallForward,
   checkCollisions, WALL_DIST_FROM_LEFT, WALL_DIST_FROM_RIGHT, type Collision,
-  collisionRoomAt, xposInDrawnRoom,
+  collisionRoomAt, xposInDrawnRoom, collisionFlagsAt, distanceFromWallBehind,
 } from './physics.ts';
 import { X_BUMP, FIRST_ONSCREEN_COLUMN, TILE_MID_X } from './geometry.ts';
 import { TILE, tileIsFloor } from './tiles.ts';
@@ -205,7 +205,26 @@ export interface KidContext {
   startRoom?: number;
 }
 
+/**
+ * The frame table a character is drawn and measured from.
+ *
+ * Guards and skeletons have their own, offset from the Prince's: the
+ * frames they share with him come out of his, the rest out of theirs.
+ * Dispatching here rather than in the caller is what lets the checks
+ * at the end of a tick -- the floor, the plates, the spikes, the
+ * chomper -- be the same code for both, which is what the original
+ * does: `check_action` and the rest are called from `play_kid_frame`
+ * and from `play_guard_frame` alike.
+ */
 function frameOf(tables: ExeTables, state: CharacterState): Frame {
+  if (state.charId === CHAR_ID.guard || state.charId === CHAR_ID.skeleton) {
+    let add = 0;
+    if (state.frame >= 102 && state.frame < 107) add = 70;
+    const index = state.frame + add - 149;
+    const own = index >= 0 && index < tables.frameTableGuard.length
+      ? tables.frameTableGuard[index] : undefined;
+    if (own) return own;
+  }
   return tables.frameTableKid[state.frame] ?? tables.frameTableKid[0];
 }
 
@@ -1206,6 +1225,64 @@ function checkChomped(state: CharacterState, ctx: KidContext): void {
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
 
+/**
+ * `check_guard_bumped`: a guard who runs at a wall with his sword out
+ * is pressed up against it rather than stopped dead by it.
+ *
+ * It takes the place of `check_bumped` for a guard, and it is a much
+ * smaller thing: only a running jump, only while he is alive and has
+ * the blade out, and only against a wall, a tapestry with floor, or a
+ * gate low enough to walk into. He is moved back by however far he
+ * has gone into it -- up to twelve units, beyond which he is through
+ * it and nothing is done -- and put on the lean-into-it sequence.
+ */
+function checkGuardBumped(state: CharacterState, ctx: KidContext): void {
+  if (state.action !== ACTION.runJump || state.alive >= 0 || state.sword < 2) return;
+  const frame = frameOf(ctx.tables, state);
+  const height = ctx.spriteHeight(frame.image);
+  let tile = tileHere(state, ctx);
+  let hit = tile.type === TILE.wall || tile.type === TILE.doortopWithFloor
+    || (tile.type === TILE.gate && isObstacle(ctx, height, tile));
+  if (!hit && state.direction >= 0) {
+    tile = getTile(ctx.world, state.room, state.currentColumn - 1, state.currentRow);
+    hit = tile.type === TILE.doortopWithFloor
+      || (tile.type === TILE.gate && isObstacle(ctx, height, tile));
+  }
+  if (!hit) return;
+  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
+  if (!isObstacle(ctx, height, tile)) return;
+  const delta = distanceFromWallBehind(state, tile.type, tile.column, coll);
+  if (delta >= 0 || delta <= -13) return;
+  state.x = forwardX(state, -delta) & 0xff;
+  startSequence(state, KID_SEQ.bumpForwardWithSword, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+}
+
+/**
+ * The checks `play_guard_frame` runs at the end of a guard's tick.
+ *
+ * The same four as the Prince's, out of the same code: the floor he is
+ * standing on, the plate he is standing on, the spikes that are about
+ * to come up and the ones he is in, and the chomper. A guard in the
+ * original falls off a ledge, sets off a gate, dies on blades and is
+ * cut in half exactly as the Prince is; the port ran none of it for
+ * him, so a guard pushed into the spikes of level 6 stood in them, and
+ * a guard standing on a plate held no gate open.
+ *
+ * `check_guard_bumped` is the one difference and is not here yet: a
+ * guard in a running jump with his sword out is pressed back off a
+ * wall rather than stopped by it.
+ */
+export function guardChecks(state: CharacterState, ctx: KidContext): void {
+  checkGuardBumped(state, ctx);
+  checkAction(state, ctx);
+  checkPress(state, ctx);
+  checkSpikeBelow(state, ctx);
+  checkSpiked(state, ctx);
+  checkChomped(state, ctx);
+}
+
 /** Advance the Prince by one frame of the game. */
 export function stepKid(state: CharacterState, controls: Controls, ctx: KidContext): void {
   ctx.controls = controls;
@@ -1233,6 +1310,7 @@ export function stepKid(state: CharacterState, controls: Controls, ctx: KidConte
   // first, so the floor test sees where it really ends up.
   checkBumped(state, ctx);
   checkBumpedIntoFoe(state, ctx);
+  checkGatePush(state, ctx);
   checkAction(state, ctx);
 
   checkPress(state, ctx);
@@ -1504,6 +1582,47 @@ function bumpedFloor(
   // Walking into a wall is a noise, and a guard with his back turned
   // looks round at it -- see the sounds `game.ts` counts as heard.
   ctx.effects?.sound?.(SOUND_BUMPED);
+}
+
+/**
+ * A gate coming down pushes whoever is standing under it out of the way.
+ *
+ * `check_gate_push`, which runs between `check_bumped` and
+ * `check_action`. Only three poses are pushed: a turn, standing, and
+ * the three frames of a crouch -- anything else is moving and the
+ * ordinary collision takes care of it.
+ *
+ * The gate may be his own tile or the one to his left, and which it is
+ * decides the way he goes: at his own tile he is pushed five units
+ * left, at the tile to his left five units right. The push is in
+ * screen terms, not his facing, so `Char.x +=` and not
+ * `char_dx_forward`.
+ *
+ * His box has to have covered that column on this tick *and* the one
+ * before -- `curr_row_coll_flags & prev_coll_flags == 0xFF` -- which
+ * is why the collision memory now keeps the previous row's flags.
+ */
+function checkGatePush(state: CharacterState, ctx: KidContext): void {
+  const f = state.frame;
+  if (!(state.action === ACTION.turning || f === FRAME.stand
+    || (f >= 108 && f < 111))) {
+    return;
+  }
+  const origColumn = state.currentColumn;
+  let tile = getTile(ctx.world, state.room, origColumn, state.currentRow);
+  let column = origColumn;
+  if (tile.type !== TILE.gate) {
+    column = origColumn - 1;
+    tile = getTile(ctx.world, state.room, column, state.currentRow);
+    if (tile.type !== TILE.gate) return;
+  }
+  if (column < 0 || column > 9) return;
+  const flags = collisionFlagsAt(state.collisions, column);
+  if ((flags.now & flags.before) !== 0xff) return;
+  const frame = frameOf(ctx.tables, state);
+  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
+  ctx.effects?.sound?.(SOUND_BUMPED);
+  state.x = (state.x + (origColumn <= column ? -5 : 5)) & 0xff;
 }
 
 /**

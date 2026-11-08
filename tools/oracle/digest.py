@@ -62,6 +62,31 @@ FLAME_SHARE = 0.12
 FLAME_GROW = 6
 #: Pixels differing by more than this are different pixels.
 TOLERANCE = 40
+#: What fraction of the screen has to change for a tick to count as a
+#: room change, and so as the start of a new set of torches.
+#:
+#: It was half the screen, and a room change is not nearly that: the
+#: two rooms share their walls and their floors, so going from room 6
+#: to room 5 of level 1 moves thirty-five per cent of the pixels and an
+#: ordinary tick moves half a per cent. Nothing lies between, so the
+#: threshold is not delicate -- anything from a tenth to a fifth gives
+#: the same answer.
+#:
+#: Missing a room change costs the mask. `0fbffa60` runs 459 ticks
+#: between the two cuts the old threshold found, and the potion of room
+#: 5 is only on the screen for the last 290 of them: its bubbles change
+#: on every one of those ticks, which is six per cent of the segment and
+#: under the share, so they were not masked. They are not reproducible
+#: -- `start_anim_potion` picks the first bubble with `prandom(6)`, the
+#: same generator the flames come out of -- and three captures of
+#: `0fbffa60` disagree about them on every tick.
+#:
+#: Measured, on two captures of `0fbffa60` taken an hour apart with the
+#: same key schedule: outside the mask they agreed on 658 of 724 ticks
+#: at half a screen and on 716 of 724 at this. The original is
+#: deterministic, so a tick two of its own captures disagree on is a
+#: tick the mask should have covered.
+ROOM_CHANGE_SHARE = 0.15
 
 
 def load_dir(path):
@@ -110,7 +135,7 @@ def flame_mask(frames):
     # new set of torches.
     cuts = [0]
     for i, a, b in pairs:
-        if (np.abs(a - b).max(axis=2) > TOLERANCE).sum() > 0.5 * W * H:
+        if (np.abs(a - b).max(axis=2) > TOLERANCE).sum() > ROOM_CHANGE_SHARE * W * H:
             cuts.append(i + 1)
     cuts.append(len(frames))
     hot = np.zeros((H, W), dtype=bool)

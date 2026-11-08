@@ -200,3 +200,77 @@ describe('the exit door', () => {
     expect(game.scene.state.modifierAt(9, 3, 1)).toBe(43);
   });
 });
+
+/**
+ * `check_gate_push`: a gate coming down shoves him out of the way.
+ *
+ * It runs between `check_bumped` and `check_action`, and only on three
+ * poses -- a turn, standing, and the three frames of a crouch. The gate
+ * can be his own tile or the one to his left, and which it is decides
+ * the way he goes: five units left when he is standing in it, five
+ * right when it is beside him. The push is in screen terms and not in
+ * his facing, so it is `Char.x += 5` and not `char_dx_forward`.
+ *
+ * The port had none of this. It is the only thing in the original that
+ * moves a character who is doing nothing at all, and without it a
+ * portcullis comes down through him and he stands in the bars.
+ */
+describe('a gate coming down', () => {
+  /**
+   * Stand him in the top row of room 5 at `column` and run two ticks,
+   * once with the gate shut and once with it fully up, and report the
+   * difference. Against his starting x it would not read: the first
+   * tick settles him on the floor and that is worth two units on its
+   * own, gate or no gate.
+   */
+  async function standsAt(column: number, nudge = 0): Promise<number> {
+    return await runTwo(column, 0, nudge) - await runTwo(column, GATE_FULLY_OPEN, nudge);
+  }
+
+  async function runTwo(
+    column: number, modifier: number, nudge: number,
+  ): Promise<number> {
+    const game = await Game.start(assets, exe, 1);
+    // Up, to begin with. A character put down inside a shut gate has
+    // no collision history, so the first reading looks like walking
+    // into it and `check_bumped` knocks him off it -- which is right,
+    // and is not what is being measured. The gate comes down once he
+    // has been standing there long enough to have a history.
+    game.scene.state.setModifier(ROOM, GATE_COLUMN, ROW, GATE_FULLY_OPEN);
+    const kid = game.kid;
+    kid.room = ROOM;
+    kid.currentRow = ROW;
+    kid.currentColumn = column;
+    kid.x = standX(column) + nudge;
+    kid.y = standY(ROW);
+    kid.direction = -1;
+    kid.frame = 15;
+    kid.action = 0;
+    kid.fallX = 0;
+    kid.fallY = 0;
+    game.showRoom(ROOM);
+    for (let i = 0; i < 4; i++) game.step({ x: 0, y: 0, shift: false });
+    game.scene.state.setModifier(ROOM, GATE_COLUMN, ROW, modifier);
+    // Two: the test is on this tick's collision flags and the one
+    // before, so the first tick after it shuts can never push him.
+    game.step({ x: 0, y: 0, shift: false });
+    game.step({ x: 0, y: 0, shift: false });
+    return kid.x;
+  }
+
+  it('pushes him left out of its own tile', async () => {
+    expect(await standsAt(GATE_COLUMN)).toBe(-5);
+  });
+
+  it('pushes him right off the tile beside it', async () => {
+    // Far enough into the gate's tile for his box to cover the whole
+    // of it: the test is `flags == 0xFF`, both faces of the gate
+    // inside him, and someone standing cleanly in the next tile along
+    // only has one of them.
+    expect(await standsAt(GATE_COLUMN + 1, -6)).toBe(5);
+  });
+
+  it('leaves alone someone standing well clear of it', async () => {
+    expect(await standsAt(GATE_COLUMN + 3)).toBe(0);
+  });
+});

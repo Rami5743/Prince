@@ -2352,6 +2352,15 @@ function distanceFromWallForward(state, tileType, tileColumn, coll, knownType) {
   }
   return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
 }
+function distanceFromWallBehind(state, tileType, tileColumn, coll) {
+  const type = wallType(tileType);
+  if (type === 0) return 99;
+  const tileLeft = X_BUMP[tileColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (state.direction >= 0) {
+    return coll.xLeftColl - (tileLeft + TILE_RIGHT_X - WALL_DIST_FROM_RIGHT[type]);
+  }
+  return WALL_DIST_FROM_LEFT[type] + tileLeft - coll.xRightColl;
+}
 function getEdgeDistance(world, state, frame, objX, spriteWidth, spriteHeight) {
   const coll = charCollision(state, frame, objX, spriteWidth);
   const here = getTile(world, state.room, state.currentColumn, state.currentRow);
@@ -2393,7 +2402,18 @@ function floorHeightOfRow(row) {
   return Y_LAND[row + 1];
 }
 function newCollisionMemory() {
-  return { row: -9, room: new Int8Array(30).fill(-1), flags: new Uint8Array(30) };
+  return {
+    row: -9,
+    room: new Int8Array(30).fill(-1),
+    flags: new Uint8Array(30),
+    prevFlags: new Uint8Array(10)
+  };
+}
+function collisionFlagsAt(memory, column) {
+  return {
+    now: memory.flags[ROW_HERE + column] ?? 0,
+    before: memory.prevFlags[column] ?? 0
+  };
 }
 var ROW_ABOVE = 0;
 var ROW_HERE = 10;
@@ -2426,6 +2446,7 @@ function checkCollisions(world, state, coll, memory) {
   }
   const prevRoom = memory.room.slice(was, was + 10);
   const prevFlags = memory.flags.slice(was, was + 10);
+  memory.prevFlags = prevFlags;
   memory.room.fill(-1);
   memory.flags.fill(0);
   memory.row = row;
@@ -2763,723 +2784,6 @@ function facingOf(c, other) {
   return other.x > c.x ? 0 : -1;
 }
 
-// src/game/guard.ts
-var GUARD_SEQ = {
-  standInactive: 77,
-  activeAfterFall: 63,
-  /**
-   * Coming on guard, which is NOT the Prince's sequence 55. A guard's
-   * frames are looked up in `frameTableGuard`, which runs from 149 to 189
-   * only, and 55 opens with frames 207..210 -- the Prince's own flourish as
-   * he draws. Those indices fall off the end of the guard's table and out
-   * of its sprite set, so a guard sent through 55 is simply not drawn for
-   * the four frames it takes, which is what made one appear out of nothing
-   * a moment after the Prince walked in. Sequence 69 is the guard's: frame
-   * 167, then 155..157 and 158, 170, 171 into the stance, all of them
-   * inside his own table.
-   */
-  enGarde: 90,
-  advance: 56,
-  retreat: 57,
-  strike: 58,
-  turn: 60,
-  readyBlock: 62,
-  strikeToBlock: 61,
-  blockToStrike: 66,
-  /**
-   * `seq_87_guard_become_inactive`. A guard who cannot see the Prince
-   * any more puts his blade down and stands: `move_down_back` sets the
-   * original's `control_down`, and `swordfight` takes that before it
-   * takes the step back, so the step never happens.
-   */
-  becomeInactive: 87,
-  /** `seq_80_stand_flipped`: turning where he stands, without drawing. */
-  standFlipped: 80,
-  stabbed: 74,
-  dropDead: 71
-};
-var GUARD_TYPE = {
-  guard: 0,
-  fat: 1,
-  skeleton: 2,
-  vizier: 3,
-  shadow: 4,
-  none: -1
-};
-var GUARD_FILES = [
-  "GUARD.DAT",
-  "FAT.DAT",
-  "SKEL.DAT",
-  "VIZIER.DAT",
-  "SHADOW.DAT"
-];
-var GUARD_TYPE_BY_LEVEL = [
-  0,
-  0,
-  0,
-  2,
-  0,
-  0,
-  1,
-  0,
-  0,
-  0,
-  0,
-  0,
-  4,
-  3,
-  -1,
-  -1
-];
-var EXTRA_STRENGTH = [0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3];
-var NUM_GUARD_SKILLS = 12;
-function newGuard() {
-  return {
-    ...newCharacter({ charId: CHAR_ID.guard }),
-    skill: 0,
-    colour: 0,
-    hitPoints: 0,
-    maxHitPoints: 0,
-    waitTimer: 0,
-    // A guard that is not in the room faces nowhere.
-    direction: NO_DIRECTION
-  };
-}
-var NO_DIRECTION = 56;
-function positionGuards(level, guards) {
-  for (let room = 1; room <= 24; room++) {
-    const tile = guards.tile[room - 1];
-    if (tile >= 30) continue;
-    guards.x[room - 1] = X_BUMP[tile % 10 + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
-    guards.seqHi[room - 1] = 0;
-  }
-  void level;
-}
-function guardsFromLevel(specs) {
-  const pick = (f) => Uint8Array.from(specs.map(f));
-  return {
-    tile: pick((s) => s.tile),
-    dir: pick((s) => s.dir),
-    x: pick((s) => s.x),
-    seqLo: pick((s) => s.seqLo),
-    skill: pick((s) => s.skill),
-    seqHi: pick((s) => s.seqHi),
-    colour: pick((s) => s.color)
-  };
-}
-function enterGuard(guard, room, guards, ctx) {
-  const index = room - 1;
-  const tile = guards.tile[index];
-  if (tile >= 30) {
-    guard.direction = NO_DIRECTION;
-    return false;
-  }
-  guard.room = room;
-  guard.currentRow = Math.floor(tile / 10);
-  guard.y = Y_LAND[guard.currentRow + 1];
-  guard.x = guards.x[index];
-  guard.currentColumn = tileDivModM7(guard.x).column;
-  guard.direction = guards.dir[index] << 24 >> 24;
-  guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 15 : 0;
-  guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
-  const seqHi = guards.seqHi[index];
-  if (seqHi === 0) {
-    if (guard.charId === CHAR_ID.skeleton) {
-      guard.sword = 2;
-      startSequence(guard, GUARD_SEQ.activeAfterFall, ctx.tables);
-    } else {
-      guard.sword = 0;
-      startSequence(guard, GUARD_SEQ.standInactive, ctx.tables);
-    }
-  } else {
-    guard.currentSequence = guards.seqLo[index] + (seqHi << 8);
-  }
-  playSequence(guard, { tables: ctx.tables });
-  guard.skill = guards.skill[index];
-  if (guard.skill >= NUM_GUARD_SKILLS) guard.skill = 3;
-  const dead = guard.frame === 185 || guard.frame === 177 || guard.frame === 178;
-  guard.alive = dead ? 1 : -1;
-  guard.hitPoints = dead ? 0 : (EXTRA_STRENGTH[guard.skill] ?? 0) + ctx.levelGuardHitPoints;
-  guard.maxHitPoints = guard.hitPoints;
-  guard.fallY = 0;
-  guard.fallX = 0;
-  guard.action = 1;
-  return true;
-}
-function leaveGuard(guard, guards) {
-  if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
-  const index = guard.room - 1;
-  guards.tile[index] = guard.currentRow * 10;
-  guards.x[index] = guard.x;
-  guards.dir[index] = guard.direction & 255;
-  guards.skill[index] = guard.skill;
-  guards.colour[index] = guard.colour;
-  if (guard.alive < 0) {
-    guards.seqLo[index] = guard.currentSequence & 255;
-    guards.seqHi[index] = guard.currentSequence >> 8 & 255;
-  } else {
-    guards.seqHi[index] = 0;
-  }
-  guard.direction = NO_DIRECTION;
-}
-var SIGHT = {
-  /** Nothing: something solid is in the way. */
-  none: 0,
-  /** Him, but across something the guard will not cross. */
-  wont: 1,
-  /** Him, with a clear floor between. */
-  comes: 2
-};
-function canGuardSeeKid(guard, kid, ctx) {
-  const at = ctx.tileAtKid;
-  if (!at) return kid.room === guard.room && kid.currentRow === guard.currentRow ? SIGHT.comes : SIGHT.none;
-  if (kid.frame === 0 || kid.frame >= 219 && kid.frame < 229) return SIGHT.none;
-  if (guard.direction === NO_DIRECTION || kid.alive >= 0 || guard.alive >= 0) {
-    return SIGHT.none;
-  }
-  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return SIGHT.none;
-  let left = X_BUMP[kid.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  let right = X_BUMP[guard.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
-  if (left === void 0 || right === void 0) return SIGHT.none;
-  if (left > right) {
-    const t = left;
-    left = right;
-    right = t;
-  }
-  if (at(left).type === TILE.chomper) left += TILE_SIZE_X;
-  if (at(right).type === TILE.gate) right -= TILE_SIZE_X;
-  let sight = SIGHT.comes;
-  for (let x = left; x <= right; x += TILE_SIZE_X) {
-    const tile = at(x);
-    if (tile.type === TILE.wall || tile.type === TILE.doortopWithFloor || tile.type === TILE.doortop) {
-      return SIGHT.none;
-    }
-    if (tile.type === TILE.loose || tile.type === TILE.chomper || tile.type === TILE.gate && tile.modifier < 112 || !tileIsFloor(tile.type)) {
-      sight = SIGHT.wont;
-    }
-  }
-  return sight;
-}
-var GUARD_FRAME_INACTIVE = 166;
-function comeOnGuard(guard, ctx) {
-  if (guard.alive >= 0 || guard.sword !== 0) return;
-  if (guard.frame !== GUARD_FRAME_INACTIVE) return;
-  const kid = ctx.kid;
-  if (!kid || kid.alive >= 0) return;
-  const distance = charOppDist(guard, kid);
-  if (kid.currentRow !== guard.currentRow || distance >= 0 || distance <= -9) {
-    if (ctx.heard?.()) {
-      ctx.forget?.();
-      if (distance < 0) {
-        if (distance < -4) startSequence(guard, GUARD_SEQ.standFlipped, ctx.tables);
-        return;
-      }
-    } else if (distance < 0) {
-      return;
-    }
-  }
-  if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
-  guard.sword = 2;
-  startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
-}
-var STRIKE_PROB = [61, 100, 61, 61, 61, 40, 100, 220, 0, 48, 32, 48];
-var RESTRIKE_PROB = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
-var BLOCK_PROB = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
-var IMP_BLOCK_PROB = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
-var ADV_PROB = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
-var REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
-var CAN_STRIKE = [157, 158, 165, 170, 171];
-var CAN_STEP = [158, 170, 171];
-var CAN_PARRY = [158, 170, 171, 168, 165];
-var GUARD_FRAME_BLOCKED = 167;
-var PARRY_FRAMES = [150, 161];
-function moveShift(guard, ctx) {
-  if (CAN_STRIKE.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.strike, ctx.tables);
-  } else if (PARRY_FRAMES.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.blockToStrike, ctx.tables);
-  }
-}
-function moveForward(guard, ctx) {
-  if (CAN_STEP.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.advance, ctx.tables);
-  }
-}
-function moveBackward(guard, ctx) {
-  if (CAN_STEP.includes(guard.frame)) {
-    startSequence(guard, GUARD_SEQ.retreat, ctx.tables);
-  }
-}
-var CAN_SHEATHE = [158, 170, 171];
-function moveDownBack(guard, ctx) {
-  if (!CAN_SHEATHE.includes(guard.frame)) return;
-  guard.sword = 0;
-  startSequence(guard, GUARD_SEQ.becomeInactive, ctx.tables);
-}
-function moveUp(guard, kid, distance, ctx) {
-  if (CAN_PARRY.includes(guard.frame)) {
-    if (distance >= 32) {
-      moveBackward(guard, ctx);
-      return;
-    }
-    if (kid.frame !== 152) return;
-    startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
-    return;
-  }
-  if (guard.frame === GUARD_FRAME_BLOCKED) {
-    startSequence(guard, GUARD_SEQ.strikeToBlock, ctx.tables);
-  }
-}
-function chance(ctx, probability) {
-  return probability > (ctx.random?.() ?? 128);
-}
-function guardAdvance(guard, ctx) {
-  if (chance(ctx, ADV_PROB[guard.skill] ?? 0)) moveForward(guard, ctx);
-}
-function guardStrike(guard, kid, ctx) {
-  if (kid.frame === 169 || kid.frame === 151) return;
-  const table = PARRY_FRAMES.includes(guard.frame) ? RESTRIKE_PROB : STRIKE_PROB;
-  if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
-}
-function guardBlock(guard, kid, distance, ctx) {
-  if (kid.frame !== 152 && kid.frame !== 153 && kid.frame !== 162) return;
-  const table = ctx.justBlocked?.() ? IMP_BLOCK_PROB : BLOCK_PROB;
-  if (chance(ctx, table[guard.skill] ?? 0)) moveUp(guard, kid, distance, ctx);
-}
-function guardKidArmed(guard, kid, distance, ctx) {
-  if (distance < 10 || distance >= 29) {
-    guardAdvance(guard, ctx);
-    return;
-  }
-  guardBlock(guard, kid, distance, ctx);
-  if (guard.waitTimer !== 0) return;
-  if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
-  else guardStrike(guard, kid, ctx);
-}
-function guardKidInSight(guard, kid, distance, ctx) {
-  if (kid.sword === SWORD_DRAWN) {
-    guardKidArmed(guard, kid, distance, ctx);
-  } else if (guard.waitTimer === 0) {
-    if (distance < SWORD_REACH) moveShift(guard, ctx);
-    else moveForward(guard, ctx);
-  }
-}
-function guardKidFar(guard, ctx) {
-  const front = ctx.floorInFront?.(guard) ?? true;
-  if (front) moveForward(guard, ctx);
-  else moveBackward(guard, ctx);
-}
-function autocontrolGuardActive(guard, ctx) {
-  const kid = ctx.kid;
-  if (!kid || guard.alive >= 0) return;
-  if (guard.sword !== SWORD_DRAWN) return;
-  if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
-  const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);
-  if (sight === SIGHT.wont) return;
-  if (sight === SIGHT.none) {
-    moveDownBack(guard, ctx);
-    return;
-  }
-  const distance = charOppDist(guard, kid);
-  if (distance >= 12 && kid.frame >= 102 && kid.frame < 118 && kid.action === ACTION.bumped) {
-    return;
-  }
-  if (distance < 35) {
-    if (distance < 12) {
-      if (guard.direction === kid.direction) moveBackward(guard, ctx);
-      else moveForward(guard, ctx);
-    } else {
-      guardKidInSight(guard, kid, distance, ctx);
-    }
-    return;
-  }
-  if (guard.waitTimer !== 0) return;
-  if (guard.direction !== kid.direction) {
-    if (kid.frame >= 7 && kid.frame < 15) {
-      if (distance < 40) moveShift(guard, ctx);
-      return;
-    }
-    if (kid.frame >= 34 && kid.frame < 44) {
-      if (distance < 50) moveShift(guard, ctx);
-      return;
-    }
-  }
-  guardKidFar(guard, ctx);
-}
-function faceTheKid(guard, ctx) {
-  const kid = ctx.kid;
-  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
-  if (!isReady(guard) || kid.alive >= 0) return;
-  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
-  if (guard.direction !== facingOf(guard, kid)) {
-    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
-  }
-}
-function refractoryFor(skill) {
-  return REFRACTORY[skill] ?? 0;
-}
-function stepGuard(guard, ctx) {
-  if (guard.direction === NO_DIRECTION) return;
-  if (guard.waitTimer > 0) guard.waitTimer -= 1;
-  {
-    const frame2 = guardFrame(guard, ctx.tables);
-    if (frame2) guard.currentColumn = determineColumn(guard, frame2);
-  }
-  comeOnGuard(guard, ctx);
-  faceTheKid(guard, ctx);
-  autocontrolGuardActive(guard, ctx);
-  if (ctx.drawnRoom !== void 0 && guard.room !== ctx.drawnRoom) return;
-  playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
-  if (guard.x < 44 || guard.x >= 211) return;
-  if (guard.action === ACTION.inFreefall) {
-    guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
-    guard.x = forwardX(guard, guard.fallX) & 255;
-  }
-  guard.y = guard.y + guard.fallY & 255;
-  const frame = guardFrame(guard, ctx.tables);
-  if (frame) guard.currentColumn = determineColumn(guard, frame);
-}
-function guardFrame(guard, tables) {
-  const frame = guard.frame;
-  if (guard.charId === CHAR_ID.guard || guard.charId === CHAR_ID.skeleton) {
-    let add = 0;
-    if (frame >= 102 && frame < 107) add = 70;
-    const index = frame + add - 149;
-    if (index >= 0 && index < tables.frameTableGuard.length) {
-      return tables.frameTableGuard[index];
-    }
-  }
-  return tables.frameTableKid[frame] ?? null;
-}
-function guardDraw(guard, tables) {
-  if (guard.direction === NO_DIRECTION) return null;
-  const frame = guardFrame(guard, tables);
-  if (!frame) return null;
-  return placeCharacter(guard, frame, "guard");
-}
-
-// src/game/recording.ts
-var RECORDING_FORMAT = "prince-input-recording";
-var RECORDING_VERSION = 1;
-function tokenOf(c) {
-  const s = (c.x < 0 ? "l" : c.x > 0 ? "r" : "") + (c.y < 0 ? "u" : c.y > 0 ? "d" : "") + (c.shift ? "s" : "");
-  return s === "" ? "." : s;
-}
-function encodeTimeline(ticks) {
-  const out = [];
-  let token = "";
-  let count = 0;
-  for (const c of ticks) {
-    const t = tokenOf(c);
-    if (t === token) {
-      count++;
-      continue;
-    }
-    if (count) out.push(`${count}${token}`);
-    token = t;
-    count = 1;
-  }
-  if (count) out.push(`${count}${token}`);
-  return out.join(",");
-}
-
-// src/render/font.ts
-var FONT_OFFSET = 107020;
-function looksLikeGlyph(exe, o) {
-  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
-}
-function readFont(exe, base = FONT_OFFSET) {
-  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
-  const firstChar = exe[base];
-  const lastChar = exe[base + 1];
-  const count = lastChar - firstChar + 1;
-  const glyphs = [];
-  for (let i = 0; i < count; i++) {
-    let o = base + dv.getUint16(base + 10 + i * 2, true);
-    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
-    if (!looksLikeGlyph(exe, o)) {
-      glyphs.push(null);
-      continue;
-    }
-    const height = exe[o];
-    const width = exe[o + 2];
-    const stride = Math.ceil(width / 8);
-    const pixels = new Uint8Array(width * height);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
-        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
-      }
-    }
-    glyphs.push({ width, height, sprite: { width, height, pixels } });
-  }
-  return {
-    firstChar,
-    lastChar,
-    heightAbove: dv.getInt16(base + 2, true),
-    heightBelow: dv.getInt16(base + 4, true),
-    lineSpacing: dv.getInt16(base + 6, true),
-    charSpacing: dv.getInt16(base + 8, true),
-    glyphs
-  };
-}
-function glyphOf(font, code) {
-  if (code < font.firstChar || code > font.lastChar) return null;
-  return font.glyphs[code - font.firstChar] ?? null;
-}
-function textWidth(font, text) {
-  let width = 0;
-  let drawn = 0;
-  for (const ch of text) {
-    const g = glyphOf(font, ch.charCodeAt(0));
-    if (!g) continue;
-    width += g.width;
-    drawn += 1;
-  }
-  return width + Math.max(0, drawn - 1) * font.charSpacing;
-}
-function drawText(surface, font, text, x, top, color) {
-  let at = x;
-  for (const ch of text) {
-    const g = glyphOf(font, ch.charCodeAt(0));
-    if (!g) continue;
-    surface.blitMono(g.sprite, at, top, color);
-    at += g.width + font.charSpacing;
-  }
-  return at - font.charSpacing;
-}
-function drawTextCentred(surface, font, text, left, right, top, color) {
-  const width = textWidth(font, text);
-  drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
-}
-
-// src/dat/level.ts
-var ROOM_COUNT = 24;
-var ROOM_WIDTH = 10;
-var ROOM_HEIGHT = 3;
-var TILES_PER_ROOM = ROOM_WIDTH * ROOM_HEIGHT;
-var LEVEL_TILE_COUNT = ROOM_COUNT * TILES_PER_ROOM;
-var LEVEL_PAYLOAD_SIZE = 2305;
-var FIRST_LEVEL_RESOURCE = 2e3;
-var OFF_FG = 0;
-var OFF_BG = 720;
-var OFF_DOORLINKS1 = 1440;
-var OFF_DOORLINKS2 = 1696;
-var OFF_ROOMLINKS = 1952;
-var OFF_USED_ROOMS = 2048;
-var OFF_ROOM_XS = 2049;
-var OFF_ROOM_YS = 2073;
-var OFF_START_ROOM = 2112;
-var OFF_START_POS = 2113;
-var OFF_START_DIR = 2114;
-var OFF_GUARDS = 2119;
-function normalise(payload) {
-  if (payload.length >= LEVEL_PAYLOAD_SIZE) return payload;
-  const out = new Uint8Array(LEVEL_PAYLOAD_SIZE);
-  out.fill(255);
-  out.set(payload);
-  return out;
-}
-function parseLevel(payload, resourceId) {
-  if (payload.length < LEVEL_PAYLOAD_SIZE - 1) {
-    throw new Error(
-      `level payload is ${payload.length} bytes, expected ${LEVEL_PAYLOAD_SIZE}`
-    );
-  }
-  const d = normalise(payload);
-  const guards = [];
-  for (let i = 0; i < ROOM_COUNT; i++) {
-    guards.push({
-      tile: d[OFF_GUARDS + i],
-      dir: d[OFF_GUARDS + 24 + i],
-      x: d[OFF_GUARDS + 48 + i],
-      seqLo: d[OFF_GUARDS + 72 + i],
-      skill: d[OFF_GUARDS + 96 + i],
-      seqHi: d[OFF_GUARDS + 120 + i],
-      color: d[OFF_GUARDS + 144 + i]
-    });
-  }
-  return {
-    resourceId,
-    fg: d.slice(OFF_FG, OFF_FG + LEVEL_TILE_COUNT),
-    bg: d.slice(OFF_BG, OFF_BG + LEVEL_TILE_COUNT),
-    doorLinks1: d.slice(OFF_DOORLINKS1, OFF_DOORLINKS1 + 256),
-    doorLinks2: d.slice(OFF_DOORLINKS2, OFF_DOORLINKS2 + 256),
-    roomLinks: d.slice(OFF_ROOMLINKS, OFF_ROOMLINKS + 96),
-    usedRooms: d[OFF_USED_ROOMS],
-    roomXs: d.slice(OFF_ROOM_XS, OFF_ROOM_XS + ROOM_COUNT),
-    roomYs: d.slice(OFF_ROOM_YS, OFF_ROOM_YS + ROOM_COUNT),
-    startRoom: d[OFF_START_ROOM],
-    startPos: d[OFF_START_POS],
-    startDir: d[OFF_START_DIR] << 24 >> 24,
-    guards
-  };
-}
-function resourceIdOfLevel(levelNumber) {
-  return FIRST_LEVEL_RESOURCE + levelNumber;
-}
-
-// src/game/level-state.ts
-var LevelState = class {
-  /** Tile codes, room-major, as the level data lays them out. */
-  fg;
-  /** Modifier bytes, rewritten on load the way the original rewrites them. */
-  modifiers;
-  roomLinks;
-  doorLinks1;
-  doorLinks2;
-  startRoom;
-  startPos;
-  startDir;
-  constructor(level) {
-    this.fg = level.fg.slice();
-    this.modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
-    this.roomLinks = level.roomLinks.slice();
-    this.doorLinks1 = level.doorLinks1.slice();
-    this.doorLinks2 = level.doorLinks2.slice();
-    this.startRoom = level.startRoom;
-    this.startPos = level.startPos;
-    this.startDir = level.startDir;
-  }
-  index(room, column, row) {
-    return (room - 1) * 30 + row * ROOM_COLUMNS + column;
-  }
-  inRoom(room, column, row) {
-    return room >= 1 && room <= 24 && column >= 0 && column < ROOM_COLUMNS && row >= 0 && row < 3;
-  }
-  /** The tile's type, with the modifier bits masked off. */
-  typeAt(room, column, row) {
-    if (!this.inRoom(room, column, row)) return 0;
-    return this.fg[this.index(room, column, row)] & TILE_TYPE_MASK;
-  }
-  /** The raw tile byte, type and flags together. */
-  rawAt(room, column, row) {
-    if (!this.inRoom(room, column, row)) return 0;
-    return this.fg[this.index(room, column, row)];
-  }
-  setType(room, column, row, type) {
-    if (!this.inRoom(room, column, row)) return;
-    this.fg[this.index(room, column, row)] = type;
-  }
-  modifierAt(room, column, row) {
-    if (!this.inRoom(room, column, row)) return 0;
-    return this.modifiers[this.index(room, column, row)];
-  }
-  setModifier(room, column, row, value) {
-    if (!this.inRoom(room, column, row)) return;
-    this.modifiers[this.index(room, column, row)] = value & 255;
-  }
-  /** By tile position within a room: 0..29, counting across then down. */
-  typeAtPos(room, tilePos) {
-    return this.typeAt(room, tilePos % 10, Math.floor(tilePos / 10));
-  }
-  rawAtPos(room, tilePos) {
-    return this.rawAt(room, tilePos % 10, Math.floor(tilePos / 10));
-  }
-  setTypeAtPos(room, tilePos, type) {
-    this.setType(room, tilePos % 10, Math.floor(tilePos / 10), type);
-  }
-  modifierAtPos(room, tilePos) {
-    return this.modifierAt(room, tilePos % 10, Math.floor(tilePos / 10));
-  }
-  setModifierAtPos(room, tilePos, value) {
-    this.setModifier(room, tilePos % 10, Math.floor(tilePos / 10), value);
-  }
-  linkOf(room, dir) {
-    if (room < 1 || room > 24) return 0;
-    return this.roomLinks[(room - 1) * 4 + dir];
-  }
-  /**
-   * A door link entry: which tile in which room a button is wired to, and
-   * whether another entry follows. The room number is split across the two
-   * arrays, which is why it is assembled rather than read.
-   */
-  doorLink(index) {
-    const a = this.doorLinks1[index] ?? 0;
-    const b = this.doorLinks2[index] ?? 0;
-    return {
-      room: ((a & 96) >> 5) + ((b & 224) >> 3),
-      tilePos: a & 31,
-      hasNext: (a & 128) === 0
-    };
-  }
-  doorLinkTimer(index) {
-    return (this.doorLinks2[index] ?? 0) & 31;
-  }
-  setDoorLinkTimer(index, value) {
-    if (index < 0 || index >= this.doorLinks2.length) return;
-    this.doorLinks2[index] = this.doorLinks2[index] & 224 | value & 31;
-  }
-};
-
-// src/game/scene.ts
-var PALETTE_BASE = {
-  /** The default VGA colours; mono blits and the status bar use these. */
-  global: 0,
-  sword: 2 * 16,
-  flameSwordPotion: 3 * 16,
-  environment: 5 * 16,
-  environmentWall: 6 * 16,
-  kid: 7 * 16,
-  guard: 8 * 16
-};
-function tilesetFileFor(levelType, prefix = "V") {
-  return `${prefix}${levelType ? "PALACE" : "DUNGEON"}.DAT`;
-}
-async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
-  const constants = readExeConstants(exe);
-  const levelsDat = await assets.dat("LEVELS.DAT");
-  const resourceId = resourceIdOfLevel(levelNumber);
-  const level = parseLevel(levelsDat.get(resourceId), resourceId);
-  const levelType = constants.levelType[levelNumber] ?? 0;
-  const tilesetFile = tilesetFileFor(levelType, prefix);
-  const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
-  const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
-  const flameSwordPotion = await assets.group("PRINCE.DAT", 150, PALETTE_BASE.flameSwordPotion);
-  const kid = await assets.group("KID.DAT", 400, PALETTE_BASE.kid);
-  const sword = await assets.group("PRINCE.DAT", 700, PALETTE_BASE.sword);
-  const guardType = GUARD_TYPE_BY_LEVEL[levelNumber] ?? -1;
-  let guard;
-  let guardPalettes;
-  const guardFile = GUARD_FILES[guardType];
-  if (guardFile) {
-    const headerFile = guardType === 0 ? levelType ? "GUARD1.DAT" : "GUARD2.DAT" : guardFile;
-    guard = await assets.group(guardFile, 750, PALETTE_BASE.guard, false, headerFile);
-    const princeDat = await assets.dat("PRINCE.DAT");
-    guardPalettes = princeDat.get(10);
-  }
-  const screenPalette = new ScreenPalette();
-  screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
-  for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
-    screenPalette.loadBlock(set.paletteBase, set.palette.vga);
-  }
-  if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
-  const state = new LevelState(level);
-  const tiles = {
-    typeAt: (room, column, row) => state.typeAt(room, column, row),
-    modifierAt: (room, column, row) => state.modifierAt(room, column, row),
-    linkOf: (room, dir) => state.linkOf(room, dir),
-    doorLinkTimer: (index) => state.doorLinkTimer(index)
-  };
-  return {
-    level,
-    state,
-    constants,
-    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword, guard },
-    guardType,
-    guardPalettes,
-    screenPalette,
-    tiles,
-    options: {
-      levelType,
-      topLevelEdgeTile: constants.drawnTileTopLevelEdge,
-      leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
-      enableWdaInPalace: constants.enableWdaInPalace,
-      startRoom: level.startRoom
-    }
-  };
-}
-
 // src/game/control-latch.ts
 var CONTROL = {
   /** Pressed, and nothing has acted on it yet. */
@@ -3675,6 +2979,13 @@ var FRAME = {
   dead: 185
 };
 function frameOf(tables, state) {
+  if (state.charId === CHAR_ID.guard || state.charId === CHAR_ID.skeleton) {
+    let add = 0;
+    if (state.frame >= 102 && state.frame < 107) add = 70;
+    const index = state.frame + add - 149;
+    const own = index >= 0 && index < tables.frameTableGuard.length ? tables.frameTableGuard[index] : void 0;
+    if (own) return own;
+  }
   return tables.frameTableKid[state.frame] ?? tables.frameTableKid[0];
 }
 function objectX(state, frame) {
@@ -4374,6 +3685,34 @@ function checkChomped(state, ctx) {
   startSequence(state, KID_SEQ.chomped, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
 }
+function checkGuardBumped(state, ctx) {
+  if (state.action !== ACTION.runJump || state.alive >= 0 || state.sword < 2) return;
+  const frame = frameOf(ctx.tables, state);
+  const height = ctx.spriteHeight(frame.image);
+  let tile = tileHere(state, ctx);
+  let hit = tile.type === TILE.wall || tile.type === TILE.doortopWithFloor || tile.type === TILE.gate && isObstacle(ctx, height, tile);
+  if (!hit && state.direction >= 0) {
+    tile = getTile(ctx.world, state.room, state.currentColumn - 1, state.currentRow);
+    hit = tile.type === TILE.doortopWithFloor || tile.type === TILE.gate && isObstacle(ctx, height, tile);
+  }
+  if (!hit) return;
+  const coll = charCollision(state, frame, objectX(state, frame), ctx.spriteWidth(frame.image));
+  if (!isObstacle(ctx, height, tile)) return;
+  const delta = distanceFromWallBehind(state, tile.type, tile.column, coll);
+  if (delta >= 0 || delta <= -13) return;
+  state.x = forwardX(state, -delta) & 255;
+  startSequence(state, KID_SEQ.bumpForwardWithSword, ctx.tables);
+  playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  state.currentColumn = determineColumn(state, frameOf(ctx.tables, state));
+}
+function guardChecks(state, ctx) {
+  checkGuardBumped(state, ctx);
+  checkAction(state, ctx);
+  checkPress(state, ctx);
+  checkSpikeBelow(state, ctx);
+  checkSpiked(state, ctx);
+  checkChomped(state, ctx);
+}
 function stepKid(state, controls, ctx) {
   ctx.controls = controls;
   if (state.grabTimer > 0) state.grabTimer -= 1;
@@ -4391,6 +3730,7 @@ function stepKid(state, controls, ctx) {
   state.currentColumn = determineColumn(state, frame);
   checkBumped(state, ctx);
   checkBumpedIntoFoe(state, ctx);
+  checkGatePush(state, ctx);
   checkAction(state, ctx);
   checkPress(state, ctx);
   checkSpikeBelow(state, ctx);
@@ -4541,6 +3881,27 @@ function bumpedFloor(state, ctx, frame, pushingRight) {
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
   ctx.effects?.sound?.(SOUND_BUMPED);
 }
+function checkGatePush(state, ctx) {
+  const f = state.frame;
+  if (!(state.action === ACTION.turning || f === FRAME.stand || f >= 108 && f < 111)) {
+    return;
+  }
+  const origColumn = state.currentColumn;
+  let tile = getTile(ctx.world, state.room, origColumn, state.currentRow);
+  let column = origColumn;
+  if (tile.type !== TILE.gate) {
+    column = origColumn - 1;
+    tile = getTile(ctx.world, state.room, column, state.currentRow);
+    if (tile.type !== TILE.gate) return;
+  }
+  if (column < 0 || column > 9) return;
+  const flags = collisionFlagsAt(state.collisions, column);
+  if ((flags.now & flags.before) !== 255) return;
+  const frame = frameOf(ctx.tables, state);
+  if (!isObstacle(ctx, ctx.spriteHeight(frame.image), tile)) return;
+  ctx.effects?.sound?.(SOUND_BUMPED);
+  state.x = state.x + (origColumn <= column ? -5 : 5) & 255;
+}
 var FOE_BODY = 10;
 function checkBumpedIntoFoe(state, ctx) {
   if (state.alive >= 0) return;
@@ -4670,6 +4031,724 @@ function X_BUMP_START(column) {
     254
   ];
   return X_BUMP2[column + 5] + 14;
+}
+
+// src/game/guard.ts
+var GUARD_SEQ = {
+  standInactive: 77,
+  activeAfterFall: 63,
+  /**
+   * Coming on guard, which is NOT the Prince's sequence 55. A guard's
+   * frames are looked up in `frameTableGuard`, which runs from 149 to 189
+   * only, and 55 opens with frames 207..210 -- the Prince's own flourish as
+   * he draws. Those indices fall off the end of the guard's table and out
+   * of its sprite set, so a guard sent through 55 is simply not drawn for
+   * the four frames it takes, which is what made one appear out of nothing
+   * a moment after the Prince walked in. Sequence 69 is the guard's: frame
+   * 167, then 155..157 and 158, 170, 171 into the stance, all of them
+   * inside his own table.
+   */
+  enGarde: 90,
+  advance: 56,
+  retreat: 57,
+  strike: 58,
+  turn: 60,
+  readyBlock: 62,
+  strikeToBlock: 61,
+  blockToStrike: 66,
+  /**
+   * `seq_87_guard_become_inactive`. A guard who cannot see the Prince
+   * any more puts his blade down and stands: `move_down_back` sets the
+   * original's `control_down`, and `swordfight` takes that before it
+   * takes the step back, so the step never happens.
+   */
+  becomeInactive: 87,
+  /** `seq_80_stand_flipped`: turning where he stands, without drawing. */
+  standFlipped: 80,
+  stabbed: 74,
+  dropDead: 71
+};
+var GUARD_TYPE = {
+  guard: 0,
+  fat: 1,
+  skeleton: 2,
+  vizier: 3,
+  shadow: 4,
+  none: -1
+};
+var GUARD_FILES = [
+  "GUARD.DAT",
+  "FAT.DAT",
+  "SKEL.DAT",
+  "VIZIER.DAT",
+  "SHADOW.DAT"
+];
+var GUARD_TYPE_BY_LEVEL = [
+  0,
+  0,
+  0,
+  2,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  4,
+  3,
+  -1,
+  -1
+];
+var EXTRA_STRENGTH = [0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3];
+var NUM_GUARD_SKILLS = 12;
+function newGuard() {
+  return {
+    ...newCharacter({ charId: CHAR_ID.guard }),
+    skill: 0,
+    colour: 0,
+    hitPoints: 0,
+    maxHitPoints: 0,
+    waitTimer: 0,
+    // A guard that is not in the room faces nowhere.
+    direction: NO_DIRECTION
+  };
+}
+var NO_DIRECTION = 56;
+function positionGuards(level, guards) {
+  for (let room = 1; room <= 24; room++) {
+    const tile = guards.tile[room - 1];
+    if (tile >= 30) continue;
+    guards.x[room - 1] = X_BUMP[tile % 10 + FIRST_ONSCREEN_COLUMN] + TILE_SIZE_X;
+    guards.seqHi[room - 1] = 0;
+  }
+  void level;
+}
+function guardsFromLevel(specs) {
+  const pick = (f) => Uint8Array.from(specs.map(f));
+  return {
+    tile: pick((s) => s.tile),
+    dir: pick((s) => s.dir),
+    x: pick((s) => s.x),
+    seqLo: pick((s) => s.seqLo),
+    skill: pick((s) => s.skill),
+    seqHi: pick((s) => s.seqHi),
+    colour: pick((s) => s.color)
+  };
+}
+function enterGuard(guard, room, guards, ctx) {
+  const index = room - 1;
+  const tile = guards.tile[index];
+  if (tile >= 30) {
+    guard.direction = NO_DIRECTION;
+    return false;
+  }
+  guard.room = room;
+  guard.currentRow = Math.floor(tile / 10);
+  guard.y = Y_LAND[guard.currentRow + 1];
+  guard.x = guards.x[index];
+  guard.currentColumn = tileDivModM7(guard.x).column;
+  guard.direction = guards.dir[index] << 24 >> 24;
+  guard.colour = ctx.guardType === GUARD_TYPE.guard ? guards.colour[index] & 15 : 0;
+  guard.charId = ctx.guardType === GUARD_TYPE.skeleton ? CHAR_ID.skeleton : CHAR_ID.guard;
+  const seqHi = guards.seqHi[index];
+  if (seqHi === 0) {
+    if (guard.charId === CHAR_ID.skeleton) {
+      guard.sword = 2;
+      startSequence(guard, GUARD_SEQ.activeAfterFall, ctx.tables);
+    } else {
+      guard.sword = 0;
+      startSequence(guard, GUARD_SEQ.standInactive, ctx.tables);
+    }
+  } else {
+    guard.currentSequence = guards.seqLo[index] + (seqHi << 8);
+  }
+  playSequence(guard, { tables: ctx.tables });
+  guard.skill = guards.skill[index];
+  if (guard.skill >= NUM_GUARD_SKILLS) guard.skill = 3;
+  const dead = guard.frame === 185 || guard.frame === 177 || guard.frame === 178;
+  guard.alive = dead ? 1 : -1;
+  guard.hitPoints = dead ? 0 : (EXTRA_STRENGTH[guard.skill] ?? 0) + ctx.levelGuardHitPoints;
+  guard.maxHitPoints = guard.hitPoints;
+  guard.fallY = 0;
+  guard.fallX = 0;
+  guard.action = 1;
+  return true;
+}
+function leaveGuard(guard, guards) {
+  if (guard.direction === NO_DIRECTION || guard.room < 1 || guard.room > 24) return;
+  const index = guard.room - 1;
+  guards.tile[index] = guard.currentRow * 10;
+  guards.x[index] = guard.x;
+  guards.dir[index] = guard.direction & 255;
+  guards.skill[index] = guard.skill;
+  guards.colour[index] = guard.colour;
+  if (guard.alive < 0) {
+    guards.seqLo[index] = guard.currentSequence & 255;
+    guards.seqHi[index] = guard.currentSequence >> 8 & 255;
+  } else {
+    guards.seqHi[index] = 0;
+  }
+  guard.direction = NO_DIRECTION;
+}
+var SIGHT = {
+  /** Nothing: something solid is in the way. */
+  none: 0,
+  /** Him, but across something the guard will not cross. */
+  wont: 1,
+  /** Him, with a clear floor between. */
+  comes: 2
+};
+function canGuardSeeKid(guard, kid, ctx) {
+  const at = ctx.tileAtKid;
+  if (!at) return kid.room === guard.room && kid.currentRow === guard.currentRow ? SIGHT.comes : SIGHT.none;
+  if (kid.frame === 0 || kid.frame >= 219 && kid.frame < 229) return SIGHT.none;
+  if (guard.direction === NO_DIRECTION || kid.alive >= 0 || guard.alive >= 0) {
+    return SIGHT.none;
+  }
+  if (kid.room !== guard.room || kid.currentRow !== guard.currentRow) return SIGHT.none;
+  let left = X_BUMP[kid.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  let right = X_BUMP[guard.currentColumn + FIRST_ONSCREEN_COLUMN] + TILE_MID_X;
+  if (left === void 0 || right === void 0) return SIGHT.none;
+  if (left > right) {
+    const t = left;
+    left = right;
+    right = t;
+  }
+  if (at(left).type === TILE.chomper) left += TILE_SIZE_X;
+  if (at(right).type === TILE.gate) right -= TILE_SIZE_X;
+  let sight = SIGHT.comes;
+  for (let x = left; x <= right; x += TILE_SIZE_X) {
+    const tile = at(x);
+    if (tile.type === TILE.wall || tile.type === TILE.doortopWithFloor || tile.type === TILE.doortop) {
+      return SIGHT.none;
+    }
+    if (tile.type === TILE.loose || tile.type === TILE.chomper || tile.type === TILE.gate && tile.modifier < 112 || !tileIsFloor(tile.type)) {
+      sight = SIGHT.wont;
+    }
+  }
+  return sight;
+}
+var GUARD_FRAME_INACTIVE = 166;
+function comeOnGuard(guard, ctx) {
+  if (guard.alive >= 0 || guard.sword !== 0) return;
+  if (guard.frame !== GUARD_FRAME_INACTIVE) return;
+  const kid = ctx.kid;
+  if (!kid || kid.alive >= 0) return;
+  const distance = charOppDist(guard, kid);
+  if (kid.currentRow !== guard.currentRow || distance >= 0 || distance <= -9) {
+    if (ctx.heard?.()) {
+      ctx.forget?.();
+      if (distance < 0) {
+        if (distance < -4) startSequence(guard, GUARD_SEQ.standFlipped, ctx.tables);
+        return;
+      }
+    } else if (distance < 0) {
+      return;
+    }
+  }
+  if ((ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx)) === SIGHT.none) return;
+  guard.sword = 2;
+  startSequence(guard, GUARD_SEQ.enGarde, ctx.tables);
+}
+var STRIKE_PROB = [61, 100, 61, 61, 61, 40, 100, 220, 0, 48, 32, 48];
+var RESTRIKE_PROB = [0, 0, 0, 5, 5, 175, 16, 8, 0, 255, 255, 150];
+var BLOCK_PROB = [0, 150, 150, 200, 200, 255, 200, 250, 0, 255, 255, 255];
+var IMP_BLOCK_PROB = [0, 61, 61, 100, 100, 145, 100, 250, 0, 145, 255, 175];
+var ADV_PROB = [255, 200, 200, 200, 255, 255, 200, 0, 0, 255, 100, 100];
+var REFRACTORY = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
+var CAN_STRIKE = [157, 158, 165, 170, 171];
+var CAN_STEP = [158, 170, 171];
+var CAN_PARRY = [158, 170, 171, 168, 165];
+var GUARD_FRAME_BLOCKED = 167;
+var PARRY_FRAMES = [150, 161];
+function moveShift(guard, ctx) {
+  if (CAN_STRIKE.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.strike, ctx.tables);
+  } else if (PARRY_FRAMES.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.blockToStrike, ctx.tables);
+  }
+}
+function moveForward(guard, ctx) {
+  if (CAN_STEP.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.advance, ctx.tables);
+  }
+}
+function moveBackward(guard, ctx) {
+  if (CAN_STEP.includes(guard.frame)) {
+    startSequence(guard, GUARD_SEQ.retreat, ctx.tables);
+  }
+}
+var CAN_SHEATHE = [158, 170, 171];
+function moveDownBack(guard, ctx) {
+  if (!CAN_SHEATHE.includes(guard.frame)) return;
+  guard.sword = 0;
+  startSequence(guard, GUARD_SEQ.becomeInactive, ctx.tables);
+}
+function moveUp(guard, kid, distance, ctx) {
+  if (CAN_PARRY.includes(guard.frame)) {
+    if (distance >= 32) {
+      moveBackward(guard, ctx);
+      return;
+    }
+    if (kid.frame !== 152) return;
+    startSequence(guard, GUARD_SEQ.readyBlock, ctx.tables);
+    return;
+  }
+  if (guard.frame === GUARD_FRAME_BLOCKED) {
+    startSequence(guard, GUARD_SEQ.strikeToBlock, ctx.tables);
+  }
+}
+function chance(ctx, probability) {
+  return probability > (ctx.random?.() ?? 128);
+}
+function guardAdvance(guard, ctx) {
+  if (chance(ctx, ADV_PROB[guard.skill] ?? 0)) moveForward(guard, ctx);
+}
+function guardStrike(guard, kid, ctx) {
+  if (kid.frame === 169 || kid.frame === 151) return;
+  const table = PARRY_FRAMES.includes(guard.frame) ? RESTRIKE_PROB : STRIKE_PROB;
+  if (chance(ctx, table[guard.skill] ?? 0)) moveShift(guard, ctx);
+}
+function guardBlock(guard, kid, distance, ctx) {
+  if (kid.frame !== 152 && kid.frame !== 153 && kid.frame !== 162) return;
+  const table = ctx.justBlocked?.() ? IMP_BLOCK_PROB : BLOCK_PROB;
+  if (chance(ctx, table[guard.skill] ?? 0)) moveUp(guard, kid, distance, ctx);
+}
+function guardKidArmed(guard, kid, distance, ctx) {
+  if (distance < 10 || distance >= 29) {
+    guardAdvance(guard, ctx);
+    return;
+  }
+  guardBlock(guard, kid, distance, ctx);
+  if (guard.waitTimer !== 0) return;
+  if (distance < 12 || distance >= 29) guardAdvance(guard, ctx);
+  else guardStrike(guard, kid, ctx);
+}
+function guardKidInSight(guard, kid, distance, ctx) {
+  if (kid.sword === SWORD_DRAWN) {
+    guardKidArmed(guard, kid, distance, ctx);
+  } else if (guard.waitTimer === 0) {
+    if (distance < SWORD_REACH) moveShift(guard, ctx);
+    else moveForward(guard, ctx);
+  }
+}
+function guardKidFar(guard, ctx) {
+  const front = ctx.floorInFront?.(guard) ?? true;
+  if (front) moveForward(guard, ctx);
+  else moveBackward(guard, ctx);
+}
+function autocontrolGuardActive(guard, ctx) {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0) return;
+  if (guard.sword !== SWORD_DRAWN) return;
+  if (guard.frame === GUARD_FRAME_INACTIVE || guard.frame < 150) return;
+  const sight = ctx.canGuardSee ?? canGuardSeeKid(guard, kid, ctx);
+  if (sight === SIGHT.wont) return;
+  if (sight === SIGHT.none) {
+    moveDownBack(guard, ctx);
+    return;
+  }
+  const distance = charOppDist(guard, kid);
+  if (distance >= 12 && kid.frame >= 102 && kid.frame < 118 && kid.action === ACTION.bumped) {
+    return;
+  }
+  if (distance < 35) {
+    if (distance < 12) {
+      if (guard.direction === kid.direction) moveBackward(guard, ctx);
+      else moveForward(guard, ctx);
+    } else {
+      guardKidInSight(guard, kid, distance, ctx);
+    }
+    return;
+  }
+  if (guard.waitTimer !== 0) return;
+  if (guard.direction !== kid.direction) {
+    if (kid.frame >= 7 && kid.frame < 15) {
+      if (distance < 40) moveShift(guard, ctx);
+      return;
+    }
+    if (kid.frame >= 34 && kid.frame < 44) {
+      if (distance < 50) moveShift(guard, ctx);
+      return;
+    }
+  }
+  guardKidFar(guard, ctx);
+}
+function faceTheKid(guard, ctx) {
+  const kid = ctx.kid;
+  if (!kid || guard.alive >= 0 || guard.sword !== SWORD_DRAWN) return;
+  if (!isReady(guard) || kid.alive >= 0) return;
+  if (guard.room !== kid.room || guard.currentRow !== kid.currentRow) return;
+  if (guard.direction !== facingOf(guard, kid)) {
+    startSequence(guard, SWORD_SEQ.turn, ctx.tables);
+  }
+}
+function refractoryFor(skill) {
+  return REFRACTORY[skill] ?? 0;
+}
+function stepGuard(guard, ctx) {
+  if (guard.direction === NO_DIRECTION) return;
+  if (guard.waitTimer > 0) guard.waitTimer -= 1;
+  {
+    const frame2 = guardFrame(guard, ctx.tables);
+    if (frame2) guard.currentColumn = determineColumn(guard, frame2);
+  }
+  comeOnGuard(guard, ctx);
+  faceTheKid(guard, ctx);
+  autocontrolGuardActive(guard, ctx);
+  if (ctx.drawnRoom !== void 0 && guard.room !== ctx.drawnRoom) return;
+  playSequence(guard, { tables: ctx.tables, effects: ctx.effects });
+  if (guard.x < 44 || guard.x >= 211) return;
+  if (guard.action === ACTION.inFreefall) {
+    guard.fallY = Math.min(guard.fallY + FALLING_SPEED_ACCEL, FALLING_SPEED_MAX);
+    guard.x = forwardX(guard, guard.fallX) & 255;
+  }
+  guard.y = guard.y + guard.fallY & 255;
+  const frame = guardFrame(guard, ctx.tables);
+  if (frame) guard.currentColumn = determineColumn(guard, frame);
+  if (ctx.physics) guardChecks(guard, ctx.physics);
+}
+function guardFrame(guard, tables) {
+  const frame = guard.frame;
+  if (guard.charId === CHAR_ID.guard || guard.charId === CHAR_ID.skeleton) {
+    let add = 0;
+    if (frame >= 102 && frame < 107) add = 70;
+    const index = frame + add - 149;
+    if (index >= 0 && index < tables.frameTableGuard.length) {
+      return tables.frameTableGuard[index];
+    }
+  }
+  return tables.frameTableKid[frame] ?? null;
+}
+function guardDraw(guard, tables) {
+  if (guard.direction === NO_DIRECTION) return null;
+  const frame = guardFrame(guard, tables);
+  if (!frame) return null;
+  return placeCharacter(guard, frame, "guard");
+}
+
+// src/game/recording.ts
+var RECORDING_FORMAT = "prince-input-recording";
+var RECORDING_VERSION = 1;
+function tokenOf(c) {
+  const s = (c.x < 0 ? "l" : c.x > 0 ? "r" : "") + (c.y < 0 ? "u" : c.y > 0 ? "d" : "") + (c.shift ? "s" : "");
+  return s === "" ? "." : s;
+}
+function encodeTimeline(ticks) {
+  const out = [];
+  let token = "";
+  let count = 0;
+  for (const c of ticks) {
+    const t = tokenOf(c);
+    if (t === token) {
+      count++;
+      continue;
+    }
+    if (count) out.push(`${count}${token}`);
+    token = t;
+    count = 1;
+  }
+  if (count) out.push(`${count}${token}`);
+  return out.join(",");
+}
+
+// src/render/font.ts
+var FONT_OFFSET = 107020;
+function looksLikeGlyph(exe, o) {
+  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
+}
+function readFont(exe, base = FONT_OFFSET) {
+  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  const firstChar = exe[base];
+  const lastChar = exe[base + 1];
+  const count = lastChar - firstChar + 1;
+  const glyphs = [];
+  for (let i = 0; i < count; i++) {
+    let o = base + dv.getUint16(base + 10 + i * 2, true);
+    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
+    if (!looksLikeGlyph(exe, o)) {
+      glyphs.push(null);
+      continue;
+    }
+    const height = exe[o];
+    const width = exe[o + 2];
+    const stride = Math.ceil(width / 8);
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
+        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
+      }
+    }
+    glyphs.push({ width, height, sprite: { width, height, pixels } });
+  }
+  return {
+    firstChar,
+    lastChar,
+    heightAbove: dv.getInt16(base + 2, true),
+    heightBelow: dv.getInt16(base + 4, true),
+    lineSpacing: dv.getInt16(base + 6, true),
+    charSpacing: dv.getInt16(base + 8, true),
+    glyphs
+  };
+}
+function glyphOf(font, code) {
+  if (code < font.firstChar || code > font.lastChar) return null;
+  return font.glyphs[code - font.firstChar] ?? null;
+}
+function textWidth(font, text) {
+  let width = 0;
+  let drawn = 0;
+  for (const ch of text) {
+    const g = glyphOf(font, ch.charCodeAt(0));
+    if (!g) continue;
+    width += g.width;
+    drawn += 1;
+  }
+  return width + Math.max(0, drawn - 1) * font.charSpacing;
+}
+function drawText(surface, font, text, x, top, color) {
+  let at = x;
+  for (const ch of text) {
+    const g = glyphOf(font, ch.charCodeAt(0));
+    if (!g) continue;
+    surface.blitMono(g.sprite, at, top, color);
+    at += g.width + font.charSpacing;
+  }
+  return at - font.charSpacing;
+}
+function drawTextCentred(surface, font, text, left, right, top, color) {
+  const width = textWidth(font, text);
+  drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
+}
+
+// src/dat/level.ts
+var ROOM_COUNT = 24;
+var ROOM_WIDTH = 10;
+var ROOM_HEIGHT = 3;
+var TILES_PER_ROOM = ROOM_WIDTH * ROOM_HEIGHT;
+var LEVEL_TILE_COUNT = ROOM_COUNT * TILES_PER_ROOM;
+var LEVEL_PAYLOAD_SIZE = 2305;
+var FIRST_LEVEL_RESOURCE = 2e3;
+var OFF_FG = 0;
+var OFF_BG = 720;
+var OFF_DOORLINKS1 = 1440;
+var OFF_DOORLINKS2 = 1696;
+var OFF_ROOMLINKS = 1952;
+var OFF_USED_ROOMS = 2048;
+var OFF_ROOM_XS = 2049;
+var OFF_ROOM_YS = 2073;
+var OFF_START_ROOM = 2112;
+var OFF_START_POS = 2113;
+var OFF_START_DIR = 2114;
+var OFF_GUARDS = 2119;
+function normalise(payload) {
+  if (payload.length >= LEVEL_PAYLOAD_SIZE) return payload;
+  const out = new Uint8Array(LEVEL_PAYLOAD_SIZE);
+  out.fill(255);
+  out.set(payload);
+  return out;
+}
+function parseLevel(payload, resourceId) {
+  if (payload.length < LEVEL_PAYLOAD_SIZE - 1) {
+    throw new Error(
+      `level payload is ${payload.length} bytes, expected ${LEVEL_PAYLOAD_SIZE}`
+    );
+  }
+  const d = normalise(payload);
+  const guards = [];
+  for (let i = 0; i < ROOM_COUNT; i++) {
+    guards.push({
+      tile: d[OFF_GUARDS + i],
+      dir: d[OFF_GUARDS + 24 + i],
+      x: d[OFF_GUARDS + 48 + i],
+      seqLo: d[OFF_GUARDS + 72 + i],
+      skill: d[OFF_GUARDS + 96 + i],
+      seqHi: d[OFF_GUARDS + 120 + i],
+      color: d[OFF_GUARDS + 144 + i]
+    });
+  }
+  return {
+    resourceId,
+    fg: d.slice(OFF_FG, OFF_FG + LEVEL_TILE_COUNT),
+    bg: d.slice(OFF_BG, OFF_BG + LEVEL_TILE_COUNT),
+    doorLinks1: d.slice(OFF_DOORLINKS1, OFF_DOORLINKS1 + 256),
+    doorLinks2: d.slice(OFF_DOORLINKS2, OFF_DOORLINKS2 + 256),
+    roomLinks: d.slice(OFF_ROOMLINKS, OFF_ROOMLINKS + 96),
+    usedRooms: d[OFF_USED_ROOMS],
+    roomXs: d.slice(OFF_ROOM_XS, OFF_ROOM_XS + ROOM_COUNT),
+    roomYs: d.slice(OFF_ROOM_YS, OFF_ROOM_YS + ROOM_COUNT),
+    startRoom: d[OFF_START_ROOM],
+    startPos: d[OFF_START_POS],
+    startDir: d[OFF_START_DIR] << 24 >> 24,
+    guards
+  };
+}
+function resourceIdOfLevel(levelNumber) {
+  return FIRST_LEVEL_RESOURCE + levelNumber;
+}
+
+// src/game/level-state.ts
+var LevelState = class {
+  /** Tile codes, room-major, as the level data lays them out. */
+  fg;
+  /** Modifier bytes, rewritten on load the way the original rewrites them. */
+  modifiers;
+  roomLinks;
+  doorLinks1;
+  doorLinks2;
+  startRoom;
+  startPos;
+  startDir;
+  constructor(level) {
+    this.fg = level.fg.slice();
+    this.modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
+    this.roomLinks = level.roomLinks.slice();
+    this.doorLinks1 = level.doorLinks1.slice();
+    this.doorLinks2 = level.doorLinks2.slice();
+    this.startRoom = level.startRoom;
+    this.startPos = level.startPos;
+    this.startDir = level.startDir;
+  }
+  index(room, column, row) {
+    return (room - 1) * 30 + row * ROOM_COLUMNS + column;
+  }
+  inRoom(room, column, row) {
+    return room >= 1 && room <= 24 && column >= 0 && column < ROOM_COLUMNS && row >= 0 && row < 3;
+  }
+  /** The tile's type, with the modifier bits masked off. */
+  typeAt(room, column, row) {
+    if (!this.inRoom(room, column, row)) return 0;
+    return this.fg[this.index(room, column, row)] & TILE_TYPE_MASK;
+  }
+  /** The raw tile byte, type and flags together. */
+  rawAt(room, column, row) {
+    if (!this.inRoom(room, column, row)) return 0;
+    return this.fg[this.index(room, column, row)];
+  }
+  setType(room, column, row, type) {
+    if (!this.inRoom(room, column, row)) return;
+    this.fg[this.index(room, column, row)] = type;
+  }
+  modifierAt(room, column, row) {
+    if (!this.inRoom(room, column, row)) return 0;
+    return this.modifiers[this.index(room, column, row)];
+  }
+  setModifier(room, column, row, value) {
+    if (!this.inRoom(room, column, row)) return;
+    this.modifiers[this.index(room, column, row)] = value & 255;
+  }
+  /** By tile position within a room: 0..29, counting across then down. */
+  typeAtPos(room, tilePos) {
+    return this.typeAt(room, tilePos % 10, Math.floor(tilePos / 10));
+  }
+  rawAtPos(room, tilePos) {
+    return this.rawAt(room, tilePos % 10, Math.floor(tilePos / 10));
+  }
+  setTypeAtPos(room, tilePos, type) {
+    this.setType(room, tilePos % 10, Math.floor(tilePos / 10), type);
+  }
+  modifierAtPos(room, tilePos) {
+    return this.modifierAt(room, tilePos % 10, Math.floor(tilePos / 10));
+  }
+  setModifierAtPos(room, tilePos, value) {
+    this.setModifier(room, tilePos % 10, Math.floor(tilePos / 10), value);
+  }
+  linkOf(room, dir) {
+    if (room < 1 || room > 24) return 0;
+    return this.roomLinks[(room - 1) * 4 + dir];
+  }
+  /**
+   * A door link entry: which tile in which room a button is wired to, and
+   * whether another entry follows. The room number is split across the two
+   * arrays, which is why it is assembled rather than read.
+   */
+  doorLink(index) {
+    const a = this.doorLinks1[index] ?? 0;
+    const b = this.doorLinks2[index] ?? 0;
+    return {
+      room: ((a & 96) >> 5) + ((b & 224) >> 3),
+      tilePos: a & 31,
+      hasNext: (a & 128) === 0
+    };
+  }
+  doorLinkTimer(index) {
+    return (this.doorLinks2[index] ?? 0) & 31;
+  }
+  setDoorLinkTimer(index, value) {
+    if (index < 0 || index >= this.doorLinks2.length) return;
+    this.doorLinks2[index] = this.doorLinks2[index] & 224 | value & 31;
+  }
+};
+
+// src/game/scene.ts
+var PALETTE_BASE = {
+  /** The default VGA colours; mono blits and the status bar use these. */
+  global: 0,
+  sword: 2 * 16,
+  flameSwordPotion: 3 * 16,
+  environment: 5 * 16,
+  environmentWall: 6 * 16,
+  kid: 7 * 16,
+  guard: 8 * 16
+};
+function tilesetFileFor(levelType, prefix = "V") {
+  return `${prefix}${levelType ? "PALACE" : "DUNGEON"}.DAT`;
+}
+async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
+  const constants = readExeConstants(exe);
+  const levelsDat = await assets.dat("LEVELS.DAT");
+  const resourceId = resourceIdOfLevel(levelNumber);
+  const level = parseLevel(levelsDat.get(resourceId), resourceId);
+  const levelType = constants.levelType[levelNumber] ?? 0;
+  const tilesetFile = tilesetFileFor(levelType, prefix);
+  const environment = await assets.group(tilesetFile, 200, PALETTE_BASE.environment, true);
+  const environmentWall = await assets.group(tilesetFile, 360, PALETTE_BASE.environmentWall);
+  const flameSwordPotion = await assets.group("PRINCE.DAT", 150, PALETTE_BASE.flameSwordPotion);
+  const kid = await assets.group("KID.DAT", 400, PALETTE_BASE.kid);
+  const sword = await assets.group("PRINCE.DAT", 700, PALETTE_BASE.sword);
+  const guardType = GUARD_TYPE_BY_LEVEL[levelNumber] ?? -1;
+  let guard;
+  let guardPalettes;
+  const guardFile = GUARD_FILES[guardType];
+  if (guardFile) {
+    const headerFile = guardType === 0 ? levelType ? "GUARD1.DAT" : "GUARD2.DAT" : guardFile;
+    guard = await assets.group(guardFile, 750, PALETTE_BASE.guard, false, headerFile);
+    const princeDat = await assets.dat("PRINCE.DAT");
+    guardPalettes = princeDat.get(10);
+  }
+  const screenPalette = new ScreenPalette();
+  screenPalette.loadBlock(PALETTE_BASE.global, constants.vgaPalette);
+  for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
+    screenPalette.loadBlock(set.paletteBase, set.palette.vga);
+  }
+  if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
+  const state = new LevelState(level);
+  const tiles = {
+    typeAt: (room, column, row) => state.typeAt(room, column, row),
+    modifierAt: (room, column, row) => state.modifierAt(room, column, row),
+    linkOf: (room, dir) => state.linkOf(room, dir),
+    doorLinkTimer: (index) => state.doorLinkTimer(index)
+  };
+  return {
+    level,
+    state,
+    constants,
+    chtabs: { environment, environmentWall, flameSwordPotion, kid, sword, guard },
+    guardType,
+    guardPalettes,
+    screenPalette,
+    tiles,
+    options: {
+      levelType,
+      topLevelEdgeTile: constants.drawnTileTopLevelEdge,
+      leftLevelEdgeTile: constants.drawnTileLeftLevelEdge,
+      enableWdaInPalace: constants.enableWdaInPalace,
+      startRoom: level.startRoom
+    }
+  };
 }
 
 // src/game/traps.ts
@@ -5319,6 +5398,12 @@ var Game = class _Game {
   guards;
   renderer;
   ctx;
+  /**
+   * The same world and traps as the Prince's, with the guard's own
+   * sprites and his own hit points: what `play_guard_frame` hands to
+   * `check_action` and the four checks after it.
+   */
+  guardCtx;
   levelNumber;
   effects;
   constructor(scene, tables, levelNumber, effects = {}) {
@@ -5417,6 +5502,23 @@ var Game = class _Game {
         }
       }
     };
+    this.guardCtx = {
+      ...this.ctx,
+      spriteWidth: (image) => scene.chtabs.guard?.images[image + 1]?.width ?? 0,
+      spriteHeight: (image) => scene.chtabs.guard?.images[image + 1]?.height ?? 0,
+      // A guard who falls into the spikes loses his own hit points, not
+      // the Prince's, and the hundred `spiked` and `chomped` take is all
+      // of them however many he had.
+      damage: (amount) => {
+        if (this.guard.hitPoints > 0) this.guardHurt = true;
+        this.guard.hitPoints = Math.max(0, this.guard.hitPoints - amount);
+        return this.guard.hitPoints === 0;
+      },
+      opponent: () => this.kid,
+      // Nothing a guard walks over is picked up, and he has no keyboard.
+      markItem: void 0,
+      hasSword: () => true
+    };
     enterLevel(
       this.kid,
       scene.level.startRoom,
@@ -5474,6 +5576,10 @@ var Game = class _Game {
       kidX: this.kid.x,
       kid: this.kid,
       kidArmed: this.hasSword,
+      // The world and the traps, so a guard falls off a ledge, stands
+      // on a plate, dies on spikes and is cut in half by a chomper --
+      // all of which `play_guard_frame` runs and the port did not.
+      physics: this.guardCtx,
       // `prandom(255)`. It was `next(8)`, which is not the same roll at
       // all: every one of the original's probabilities is a number out
       // of 255, so against a nought-to-eight roll anything over eight
