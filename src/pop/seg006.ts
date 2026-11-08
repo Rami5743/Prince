@@ -46,6 +46,7 @@ export let through_tile = 0;
 export function setThroughTile(v: number): void { through_tile = v; }
 export let fall_frame = 0;
 export let droppedout = 0;
+export function setDroppedout(v: number): void { droppedout = v; }
 
 /**
  * The three frame tables, out of PRINCE.EXE.
