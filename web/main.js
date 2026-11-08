@@ -4037,6 +4037,7 @@ function controlRunning(state, controls, ctx) {
     startSequence(state, KID_SEQ.crouchWhileRunning, ctx.tables);
   }
 }
+var SOUND_BUMPED = 8;
 var RUN_JUMP_FIRST = FRAME.run7;
 function runJump(state, ctx) {
   if (state.frame < RUN_JUMP_FIRST) return;
@@ -4503,6 +4504,7 @@ function bumpedFloor(state, ctx, frame, pushingRight) {
   const hard = f === 24 || f === 25 || f >= 40 && f < 43 || f >= 102 && f < 107;
   startSequence(state, hard ? KID_SEQ.hardBump : KID_SEQ.bump, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  ctx.effects?.sound?.(SOUND_BUMPED);
 }
 var FOE_BODY = 10;
 function checkBumpedIntoFoe(state, ctx) {

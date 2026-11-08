@@ -679,6 +679,9 @@ function controlRunning(state: CharacterState, controls: Controls, ctx: KidConte
   }
 }
 
+/** `sound_8_bumped`: touching a wall, which a guard hears. */
+const SOUND_BUMPED = 8;
+
 /** Which frames of the stride a running jump may be taken from. */
 const RUN_JUMP_FIRST = FRAME.run7;
 
@@ -1420,6 +1423,10 @@ function bumpedFloor(
   const hard = f === 24 || f === 25 || (f >= 40 && f < 43) || (f >= 102 && f < 107);
   startSequence(state, hard ? KID_SEQ.hardBump : KID_SEQ.bump, ctx.tables);
   playSequence(state, { tables: ctx.tables, effects: ctx.effects });
+  // `bumped_sound()`, which is `is_guard_notice = 1; play_sound(8)`.
+  // Walking into a wall is a noise, and a guard with his back turned
+  // looks round at it -- see the sounds `game.ts` counts as heard.
+  ctx.effects?.sound?.(SOUND_BUMPED);
 }
 
 /**
