@@ -22,7 +22,8 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { SWORD_DRAWN } from '../../src/game/sword.ts';
-import { NO_DIRECTION } from '../../src/game/guard.ts';
+import { NO_DIRECTION, stepGuard } from '../../src/game/guard.ts';
+import type { CharacterState } from '../../src/game/character.ts';
 import { standX } from '../../src/game/geometry.ts';
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
@@ -98,5 +99,126 @@ describe('a guard the view has moved away from', () => {
     game.showRoom(LEFT);
     expect(game.guard.room, 'and he is there when the view comes back').toBe(LEFT);
     expect(game.guard.direction).not.toBe(NO_DIRECTION);
+  });
+});
+
+/**
+ * Losing sight of the Prince.
+ *
+ * `autocontrol_guard_active` answers a `can_guard_see_kid` of nought
+ * with `move_down_back`, which holds the original's `control_down` and
+ * `control_backward` together. `swordfight` reads them in that order,
+ * and down wins: a guard on one of the three stance frames sheathes his
+ * blade and goes through sequence 87 into the inactive stand. The step
+ * back is never reached.
+ *
+ * The port read `move_down_back` as a step back, so a guard who lost
+ * sight walked away across the room with his sword still up. The
+ * capture of `probeF` settles it: at tick 261 the Prince climbs out of
+ * the guard's row, the original's guard lowers his blade and never moves
+ * again, and the port's backed off a tile every three ticks. Putting
+ * this right took that run from 250 of its 1194 ticks pixel-exact to
+ * 735.
+ */
+describe('a guard who can no longer see the Prince', () => {
+  /**
+   * The guard of room 3 on his stance frame, with the Prince four tiles
+   * off in his own row.
+   */
+  async function onGuardInRoom3(): Promise<Game> {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(ROOM);
+    const guard = game.guard;
+    game.kid.room = ROOM;
+    game.kid.currentRow = guard.currentRow;
+    game.kid.currentColumn = guard.currentColumn - 4;
+    game.kid.x = standX(game.kid.currentColumn);
+    for (let i = 0; i < 40 && guard.frame !== 158; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+    }
+    expect(guard.sword, 'he has drawn').toBe(SWORD_DRAWN);
+    expect(guard.frame, 'and is in the stance').toBe(158);
+    return game;
+  }
+
+  /**
+   * The Prince one row up, which is out of sight. He is stepped by hand
+   * here rather than by the game: `stepKid` works his row out again from
+   * his y every tick, so moving him with the game running moves him
+   * straight back.
+   */
+  function outOfSight(game: Game): CharacterState {
+    const row = game.guard.currentRow;
+    return { ...game.kid, currentRow: row === 0 ? 1 : row - 1 };
+  }
+
+  it('puts his sword away and stands, rather than backing off', async () => {
+    const game = await onGuardInRoom3();
+    const guard = game.guard;
+    const wasX = guard.x;
+    const kid = outOfSight(game);
+    stepGuard(guard, { tables: game.tables, kid });
+    expect(guard.sword, 'the blade goes down at once').toBe(0);
+    for (let i = 0; i < 6; i++) stepGuard(guard, { tables: game.tables, kid });
+    expect(guard.frame, 'and he ends up in the inactive stand').toBe(166);
+    expect(guard.x, 'without having moved a unit').toBe(wasX);
+  });
+
+  it('comes back on guard when he can see him again', async () => {
+    const game = await onGuardInRoom3();
+    const guard = game.guard;
+    const kid = outOfSight(game);
+    for (let i = 0; i < 8; i++) stepGuard(guard, { tables: game.tables, kid });
+    expect(guard.frame).toBe(166);
+    game.step({ x: 0, y: 0, shift: false });
+    expect(guard.sword, 'the Prince is back in his row').toBe(SWORD_DRAWN);
+  });
+});
+
+/**
+ * A guard who has just followed the Prince through a door is in a room
+ * the screen has not caught up with, and `play_guard_frame` runs his
+ * byte-code only while `Char.room == drawn_room`. Two of his ticks go by
+ * unplayed.
+ *
+ * Measured against the capture of `probeF`, where the guard follows out
+ * of room 3 at tick 190 and walks back on from the right-hand edge of
+ * room 2: every sprite of his is the port's exactly, and every one of
+ * them two ticks late.
+ */
+describe('a guard who has just followed the Prince', () => {
+  it('stands still for two ticks and then walks on', async () => {
+    const game = await Game.start(assets, exe, 1);
+    game.clearBottomText();
+    game.showRoom(ROOM);
+    const guard = game.guard;
+    const kid = game.kid;
+    kid.room = ROOM;
+    kid.currentRow = guard.currentRow;
+    kid.currentColumn = guard.currentColumn - 4;
+    kid.x = standX(kid.currentColumn);
+    for (let i = 0; i < 40 && guard.frame !== 158; i++) {
+      game.step({ x: 0, y: 0, shift: false });
+    }
+    expect(guard.frame).toBe(158);
+    // Near enough to the left-hand door to come through it after him.
+    guard.currentColumn = 1;
+    guard.x = 88;
+
+    game.showRoom(LEFT);
+    expect(guard.room, 'he came through the door').toBe(LEFT);
+    // The Prince comes with him, or the guard loses sight and stands down.
+    kid.room = LEFT;
+    kid.currentColumn = 9;
+    kid.x = standX(9);
+    const frozen = { x: guard.x, frame: guard.frame };
+    game.step({ x: 0, y: 0, shift: false });
+    expect({ x: guard.x, frame: guard.frame }, 'first tick, nothing').toEqual(frozen);
+    game.step({ x: 0, y: 0, shift: false });
+    expect({ x: guard.x, frame: guard.frame }, 'second tick, nothing').toEqual(frozen);
+    game.step({ x: 0, y: 0, shift: false });
+    expect({ x: guard.x, frame: guard.frame }, 'and then he moves')
+      .not.toEqual(frozen);
   });
 });

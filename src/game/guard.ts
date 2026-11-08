@@ -49,6 +49,13 @@ export const GUARD_SEQ = {
   readyBlock: 62,
   strikeToBlock: 61,
   blockToStrike: 66,
+  /**
+   * `seq_87_guard_become_inactive`. A guard who cannot see the Prince
+   * any more puts his blade down and stands: `move_down_back` sets the
+   * original's `control_down`, and `swordfight` takes that before it
+   * takes the step back, so the step never happens.
+   */
+  becomeInactive: 87,
   stabbed: 74,
   dropDead: 71,
 } as const;
@@ -430,6 +437,31 @@ function moveBackward(guard: GuardState, ctx: GuardStepContext): void {
   }
 }
 
+/** The three stances a blade can be put away from. */
+const CAN_SHEATHE = [158, 170, 171];
+
+/**
+ * `move_down_back`, which is what the original does with a guard who has
+ * lost sight of the Prince -- behind a wall, or round a corner.
+ *
+ * It is not a step back. `move_down_back` holds down *and* back, and
+ * `swordfight` tests them in that order: a guard on one of the three
+ * stance frames sheathes his blade and goes to sequence 87, the inactive
+ * stand, and on any other frame nothing happens at all. The step back is
+ * never reached.
+ *
+ * The port had this as a plain `move_2_backward`, so a guard who lost
+ * sight walked away in the en-garde stance instead of standing down. The
+ * capture of `probeF` has it at tick 261: the Prince climbs up out of the
+ * guard's row behind a wall, the original's guard lowers his sword and
+ * does not move again, and the port's backed off across the room.
+ */
+function moveDownBack(guard: GuardState, ctx: GuardStepContext): void {
+  if (!CAN_SHEATHE.includes(guard.frame)) return;
+  guard.sword = 0;
+  startSequence(guard, GUARD_SEQ.becomeInactive, ctx.tables);
+}
+
 /**
  * `parry`. Pressing up is not the same as parrying: the original puts
  * three more tests between them, and a guard fails most of them.
@@ -528,9 +560,7 @@ function autocontrolGuardActive(guard: GuardState, ctx: GuardStepContext): void 
   // He can see him but will not cross what is between them: he stands.
   if (sight === SIGHT.wont) return;
   if (sight === SIGHT.none) {
-    // `move_down_back`. Out of sight is not out of the fight: the
-    // original backs away rather than freezing where it stands.
-    moveBackward(guard, ctx);
+    moveDownBack(guard, ctx);
     return;
   }
   const distance = charOppDist(guard, kid);

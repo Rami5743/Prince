@@ -92,6 +92,24 @@ export class Game {
    */
   private kidHurt = false;
   private guardHurt = false;
+
+  /**
+   * How many more ticks a guard who has just followed the Prince through
+   * a door stands still for.
+   *
+   * `play_guard_frame` runs the guard's byte-code only while
+   * `Char.room == drawn_room`, and a guard who has just been moved into
+   * the room the Prince left for is in a room the screen has not caught
+   * up with yet. Two ticks of him go by with nothing played.
+   *
+   * Measured, not reasoned. In the capture of `probeF` the guard follows
+   * out of room 3 into room 2 at tick 190 and walks back on from the
+   * right-hand edge; his sprites are the port's exactly, pixel for pixel,
+   * but every one of them is two ticks late. Freezing him for two ticks
+   * put 37 more ticks of that run pixel-exact and moved the first
+   * difference from 205 to 261.
+   */
+  private guardFreeze = 0;
   maxHitPoints: number;
   /**
    * Has the Prince got a sword? It lies on the floor of level 1 and he
@@ -239,6 +257,8 @@ export class Game {
     // only thing that puts the hurt splash on the screen.
     this.kidHurt = false;
     this.guardHurt = false;
+    const frozen = this.guardFreeze > 0;
+    if (frozen) this.guardFreeze -= 1;
     const wasDrawing = this.drawnRoom;
     this.traps.drawnRoom = this.drawnRoom;
     this.traps.kidRoom = this.kid.room;
@@ -246,7 +266,7 @@ export class Game {
     this.traps.kidAlive = this.kid.alive;
     this.traps.step();
     stepKid(this.kid, controls, this.ctx);
-    stepGuard(this.guard, {
+    if (!frozen) stepGuard(this.guard, {
       tables: this.tables,
       effects: this.effects,
       kidRoom: this.kid.room,
@@ -571,6 +591,7 @@ export class Game {
     guard.room = room;
     guard.x = (guard.x + (toTheLeft ? 140 : -140)) & 0xff;
     guard.currentColumn += toTheLeft ? 10 : -10;
+    this.guardFreeze = 2;
     return true;
   }
 
