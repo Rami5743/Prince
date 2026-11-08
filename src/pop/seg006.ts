@@ -695,8 +695,15 @@ export function play_kid(): void {
 export function control_kid(): void {
   if (g.Char.alive < 0 && g.hitp_curr === 0) g.Char.alive = 0;
   if (g.grab_timer !== 0) --g.grab_timer;
+  // The four `control_` latches are one set of globals and the guard's
+  // `autocontrol_` writes them too, so the Prince's are put back before
+  // he is asked and put away after. Without this the guard's last word
+  // stood as the player's, and a guard walking towards the Prince
+  // turned him round with nothing pressed.
+  rest_ctrl_1();
   read_user_control();
   user_control();
+  save_ctrl_1();
 }
 
 // seg006:0D3E
