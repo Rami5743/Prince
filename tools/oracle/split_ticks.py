@@ -75,6 +75,14 @@ def main():
     ap.add_argument('--rate', type=float, default=12.0,
                     help="the game's own ticks per second; 0 counts changes "
                          'instead of trusting the clock')
+    ap.add_argument('--numbering', choices=('gaps', 'clock'), default='gaps',
+                    help='how a change is given a tick number. `gaps` adds '
+                         'up the rounded gaps between changes, which is '
+                         'what every digest before gate2 was cut with. '
+                         '`clock` puts tick n at `base + n * per`, with '
+                         '`per` measured from the capture itself; a '
+                         'mis-read gap then costs one change instead of '
+                         'every tick after it.')
     ap.add_argument('--anchor-text', type=int, default=-1,
                     help='renumber so that the tick the level title goes '
                          'off the bottom of the screen is this one. The '
@@ -182,12 +190,54 @@ def main():
 
         base = changes[0]
         pics = {}
-        t = 0
-        for n, f in enumerate(changes):
-            if n:
-                t += ticks_in(f - changes[n - 1])
-            end = changes[n + 1] - 1 if n + 1 < len(changes) else len(frames) - 1
-            pics[t] = frames[min(end, len(frames) - 1)]
+        if a.numbering == 'clock':
+            # Number against the capture's own clock rather than by
+            # adding up the gaps.
+            #
+            # Adding up the gaps is exact only while the rounding is,
+            # and it is not: a three-tick gap is seven frames or eight,
+            # and `ticks_in` reads seven as two. The lean towards the
+            # shorter reading is there to stop a late one-tick gap of
+            # four frames being read as two, and it has to be, but it
+            # costs a tick every time the screen holds still for three.
+            # `gate2`, where the Prince stands about a good deal, came
+            # out 1246 ticks long against the recording's 1313 -- five
+            # per cent short, and every tick after the first still
+            # stretch out of place.
+            #
+            # Against the clock there is no such thing. Tick n is where
+            # `base + n * per` says it is, and a change takes the
+            # nearest tick not already spoken for, so a mis-read gap
+            # costs that one change and nothing after it.
+            #
+            # `per` is measured from the capture rather than taken as
+            # `fps / rate`: the gaps between changes that are one tick
+            # apart -- everything up to four frames, since there is no
+            # such thing as a four-frame tick -- average the emulator's
+            # own twelfth of a second.
+            ones = [changes[n] - changes[n - 1] for n in range(1, len(changes))
+                    if changes[n] - changes[n - 1] <= 4]
+            if ones:
+                per = sum(ones) / len(ones)
+            print(f'one-tick gap averages {per:.4f} frames '
+                  f'({a.fps / per:.4f} ticks a second, over {len(ones)})')
+            taken = set()
+            for n, f in enumerate(changes):
+                t = max(0, int(round((f - base) / per)))
+                while t in taken:
+                    t += 1
+                taken.add(t)
+                end = (changes[n + 1] - 1 if n + 1 < len(changes)
+                       else len(frames) - 1)
+                pics[t] = frames[min(end, len(frames) - 1)]
+        else:
+            t = 0
+            for n, f in enumerate(changes):
+                if n:
+                    t += ticks_in(f - changes[n - 1])
+                end = (changes[n + 1] - 1 if n + 1 < len(changes)
+                       else len(frames) - 1)
+                pics[t] = frames[min(end, len(frames) - 1)]
         last = max(pics)
         # The title bar is the game's own clock: it writes the level's
         # name under the room and takes it away a fixed number of ticks

@@ -131,6 +131,45 @@ times they were pressed, and recover the game's ticks from the grab.
 `--start 49` is where to begin looking for the restart flash and depends
 on the waits the generated script opens with.
 
+### A recording that does not start on level 1
+
+`recording_to_script.mjs` reaches the recording's level with one
+`shift+l` per level and a `wait 70` after each, so the Ctrl+A restart --
+and with it the flash `--after-blank` looks for -- is seventy seconds
+further in per level. `--start` has to follow: `49 + 70 * (level - 1)`.
+
+Left at 49 for a level-2 capture the search finds the title screen's own
+fade instead, numbers the run from there, and the keys land seventy
+seconds before the pictures they are compared against; `gate2` scored
+143 ticks of 1313 that way, with the capture's Prince standing at the
+level door while the port's played the level.
+
+### `--numbering clock`
+
+Numbering a change by adding up the rounded gaps before it is exact only
+while the rounding is. A tick is two and a half frames at thirty against
+twelve, so a three-tick gap is seven frames or eight, and `ticks_in`
+reads seven as two: the lean towards the shorter reading has to be there
+-- without it a one-tick gap the emulator was late for, four frames,
+reads as two and invents a tick -- but it costs a tick every time the
+screen holds still for three, and every tick after it is out.
+
+`--numbering clock` puts tick n at `base + n * per` instead, with `per`
+measured from the capture's own one-tick gaps, and gives a change the
+nearest tick not already spoken for. A mis-read gap then costs that one
+change and nothing after it. `gate2`, where the Prince stands about a
+good deal, came out 1246 ticks long against the recording's 1313 under
+the gap-walk.
+
+The measured `per` is worth reading in its own right: it says how fast
+the emulator really ran. `gate1` gives 11.94 ticks a second at
+`--cycles 20000`, which is the game's 12; `gate2` on the same cycles
+gives 11.35, because level 2 has more to draw than level 1 and DOSBox
+could not keep up. A capture that is five per cent slow is useless
+whatever the numbering does, because the keys were sent on a twelve-a-
+second schedule. Raise `--cycles` until the measured rate comes back to
+12.
+
 ## A second source: SDLPoP
 
 `https://github.com/NagyD/SDLPoP` is the game's logic as C, reconstructed
