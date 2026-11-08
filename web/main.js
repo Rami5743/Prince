@@ -4234,6 +4234,9 @@ function doFall(state, ctx) {
     checkGrab(state, ctx.controls, ctx);
     return;
   }
+  if (getTile(ctx.world, state.room, state.currentColumn, state.currentRow).type === TILE.wall) {
+    inWall(state, ctx);
+  }
   if (hasFloorAt(state, ctx)) land(state, ctx);
   else state.currentRow += 1;
 }
@@ -4306,6 +4309,9 @@ function checkSpikeBelow(state, ctx) {
 }
 function impale(state, ctx, tile) {
   ctx.traps?.impaleOnSpikes(tile.room, tile.row * 10 + tile.column);
+  state.y = floorHeightOfRow(state.currentRow);
+  state.x = X_BUMP[tile.column + FIRST_ONSCREEN_COLUMN] + 10 & 255;
+  state.x = forwardX(state, 8) & 255;
   state.fallY = 0;
   state.fallX = 0;
   state.alive = 0;
@@ -5768,26 +5774,35 @@ var Game = class _Game {
    * draws a room for the first time.
    */
   startRoomTiles(room) {
-    for (let row = 0; row < 3; row++) {
-      for (let column = 0; column < 10; column++) {
-        const type = this.scene.state.typeAt(room, column, row);
-        const tilePos = row * 10 + column;
-        if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(255));
-          this.traps.add(room, tilePos, 1);
-        } else if (type === 10 || type === 22) {
-          this.traps.add(room, tilePos, 1);
-        }
-      }
-      const left = this.scene.state.linkOf(room, 0);
-      if (left) {
-        const type = this.scene.state.typeAt(left, 9, row);
-        if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(left, row * 10 + 9, this.prng.next(255));
-          this.traps.add(left, row * 10 + 9, 1);
-        }
+    for (let tilePos = 0; tilePos < 30; tilePos++) {
+      const type = this.scene.state.typeAt(room, tilePos % 10, Math.trunc(tilePos / 10));
+      if (type === 19 || type === 30) {
+        this.startAnimTorch(room, tilePos);
+      } else if (type === 10) {
+        const was = this.scene.state.modifierAt(room, tilePos % 10, Math.trunc(tilePos / 10));
+        this.scene.state.setModifierAtPos(
+          room,
+          tilePos,
+          was & 248 | this.prng.next(6) + 1
+        );
+        this.traps.add(room, tilePos, 1);
+      } else if (type === 22) {
+        this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(255) & 31);
+        this.traps.add(room, tilePos, 1);
       }
     }
+    const left = this.scene.state.linkOf(room, 0);
+    if (left) {
+      for (let row = 0; row < 3; row++) {
+        const type = this.scene.state.typeAt(left, 9, row);
+        if (type === 19 || type === 30) this.startAnimTorch(left, row * 10 + 9);
+      }
+    }
+  }
+  /** `start_anim_torch`: `prandom(8)`, not `prandom(255)`. */
+  startAnimTorch(room, tilePos) {
+    this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(8));
+    this.traps.add(room, tilePos, 1);
   }
   /** What to draw for the Prince, if he is in the room being shown. */
   kidDraw() {

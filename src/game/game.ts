@@ -715,26 +715,49 @@ export class Game {
    * draws a room for the first time.
    */
   private startRoomTiles(room: number): void {
-    for (let row = 0; row < 3; row++) {
-      for (let column = 0; column < 10; column++) {
-        const type = this.scene.state.typeAt(room, column, row);
-        const tilePos = row * 10 + column;
-        if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(255));
-          this.traps.add(room, tilePos, 1);
-        } else if (type === 10 || type === 22) {
-          this.traps.add(room, tilePos, 1);
-        }
-      }
-      const left = this.scene.state.linkOf(room, 0);
-      if (left) {
-        const type = this.scene.state.typeAt(left, 9, row);
-        if (type === 19 || type === 30) {
-          this.scene.state.setModifierAtPos(left, row * 10 + 9, this.prng.next(255));
-          this.traps.add(left, row * 10 + 9, 1);
-        }
+    // `anim_tile_modif`: all thirty tiles of the room first, and the
+    // right-hand column of the room to its left after them, not
+    // interleaved row by row. The order is the order the rolls come
+    // out of the generator in, and every roll after a wrong one is a
+    // different roll.
+    for (let tilePos = 0; tilePos < 30; tilePos++) {
+      const type = this.scene.state.typeAt(room, tilePos % 10, Math.trunc(tilePos / 10));
+      if (type === 19 || type === 30) {
+        this.startAnimTorch(room, tilePos);
+      } else if (type === 10) {
+        // `start_anim_potion`: the bubbles start at a random point in
+        // their seven-frame cycle, and the top five bits of the
+        // modifier -- which say what is in the flask -- are kept.
+        //
+        // The port left the modifier alone, so every potion in the
+        // game bubbled in step from frame nought. It is not masked out
+        // of the comparison the way a flame is, and in `0fbffa60` the
+        // flask of room 5 comes into view on tick 433 and is wrong in
+        // every one of the 291 ticks after it.
+        const was = this.scene.state.modifierAt(room, tilePos % 10, Math.trunc(tilePos / 10));
+        this.scene.state.setModifierAtPos(
+          room, tilePos, (was & 0xf8) | (this.prng.next(6) + 1),
+        );
+        this.traps.add(room, tilePos, 1);
+      } else if (type === 22) {
+        // `start_anim_sword`.
+        this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(0xff) & 0x1f);
+        this.traps.add(room, tilePos, 1);
       }
     }
+    const left = this.scene.state.linkOf(room, 0);
+    if (left) {
+      for (let row = 0; row < 3; row++) {
+        const type = this.scene.state.typeAt(left, 9, row);
+        if (type === 19 || type === 30) this.startAnimTorch(left, row * 10 + 9);
+      }
+    }
+  }
+
+  /** `start_anim_torch`: `prandom(8)`, not `prandom(255)`. */
+  private startAnimTorch(room: number, tilePos: number): void {
+    this.scene.state.setModifierAtPos(room, tilePos, this.prng.next(8));
+    this.traps.add(room, tilePos, 1);
   }
 
   /** What to draw for the Prince, if he is in the room being shown. */

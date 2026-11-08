@@ -931,6 +931,22 @@ function doFall(state: CharacterState, ctx: KidContext): void {
     checkGrab(state, ctx.controls, ctx);
     return;
   }
+  // `if (get_tile_at_char() == tiles_20_wall) in_wall();`, and then the
+  // floor test reads the tile again, at the column `in_wall` has just
+  // moved him to.
+  //
+  // It is how the original lands a falling Prince on something beside
+  // the stone he came down on. In `3764b76d` he runs off the ledge of
+  // room 6 into the shaft above the spikes: his weight puts him in
+  // column 2, which is the wall beside the shaft, so there is no floor
+  // under him and the port dropped him through the room and out of the
+  // level. The original pushes him clear of the wall into column 3,
+  // reads the spikes there, and lands him on them -- which is what the
+  // capture shows and what the player would expect.
+  if (getTile(ctx.world, state.room, state.currentColumn, state.currentRow)
+    .type === TILE.wall) {
+    inWall(state, ctx);
+  }
   if (hasFloorAt(state, ctx)) land(state, ctx);
   else state.currentRow += 1;
 }
@@ -1041,6 +1057,17 @@ function impale(
   tile: { room: number; column: number; row: number },
 ): void {
   ctx.traps?.impaleOnSpikes(tile.room, tile.row * 10 + tile.column);
+  // `spiked` puts the body on the blades, it does not leave it where it
+  // happened to be: `Char.y = y_land[curr_row + 1]`, then
+  // `Char.x = x_bump[tile_col] + 10` and eight units forward from
+  // there. In `3764b76d` the Prince comes down the shaft of room 6
+  // against the wall at its left, so `in_wall` has pushed him to the
+  // right of the spike tile; the original snaps him back to its middle
+  // and the port left him six units out, which is thirteen pixels and
+  // every tick the body lies there.
+  state.y = floorHeightOfRow(state.currentRow);
+  state.x = (X_BUMP[tile.column + FIRST_ONSCREEN_COLUMN] + 10) & 0xff;
+  state.x = forwardX(state, 8) & 0xff;
   state.fallY = 0;
   state.fallX = 0;
   state.alive = 0;
