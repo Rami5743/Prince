@@ -80,6 +80,8 @@ export const KID_SEQ = {
   standUpFromCrouch: 49,
   /** Down and forward from a crouch: a short hop forward on all fours. */
   crouchHop: 79,
+  /** Turning to a guard behind him: the turn and the blade in one. */
+  turnDrawSword: 89,
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
@@ -647,8 +649,22 @@ function controlStanding(state: CharacterState, controls: Controls, ctx: KidCont
 
 /** Backward: turn round. */
 function backPressed(state: CharacterState, ctx: KidContext): void {
-  startSequence(state, KID_SEQ.turn, ctx.tables);
   ctx.latch.backward = ctx.latch.releaseArrows();
+  // `back_pressed` is not always a plain turn. A Prince who has a
+  // sword, who is being looked at by a guard standing behind him, and
+  // who is not right on the lip of a floor, turns *and draws*:
+  // sequence 89 instead of 5.
+  const foe = ctx.opponent?.();
+  const seeing = foe != null && foe.alive < 0 && foe.sword === 2
+    && foe.room === state.room && foe.currentRow === state.currentRow;
+  const frame = frameOf(ctx.tables, state);
+  if ((ctx.hasSword?.() ?? false) && seeing && foe !== null
+    && charOppDist(state, foe) <= 0 && distanceToEdgeWeight(state, frame) >= 2) {
+    state.sword = 2;
+    startSequence(state, KID_SEQ.turnDrawSword, ctx.tables);
+    return;
+  }
+  startSequence(state, KID_SEQ.turn, ctx.tables);
 }
 
 function controlTurning(state: CharacterState, controls: Controls, ctx: KidContext): void {

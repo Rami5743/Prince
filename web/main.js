@@ -3603,6 +3603,8 @@ var KID_SEQ = {
   standUpFromCrouch: 49,
   /** Down and forward from a crouch: a short hop forward on all fours. */
   crouchHop: 79,
+  /** Turning to a guard behind him: the turn and the blade in one. */
+  turnDrawSword: 89,
   crouch: 50,
   climbDown: 68,
   climbUpToClosedGate: 73,
@@ -4011,8 +4013,16 @@ function controlStanding(state, controls, ctx) {
   }
 }
 function backPressed(state, ctx) {
-  startSequence(state, KID_SEQ.turn, ctx.tables);
   ctx.latch.backward = ctx.latch.releaseArrows();
+  const foe = ctx.opponent?.();
+  const seeing = foe != null && foe.alive < 0 && foe.sword === 2 && foe.room === state.room && foe.currentRow === state.currentRow;
+  const frame = frameOf(ctx.tables, state);
+  if ((ctx.hasSword?.() ?? false) && seeing && foe !== null && charOppDist(state, foe) <= 0 && distanceToEdgeWeight(state, frame) >= 2) {
+    state.sword = 2;
+    startSequence(state, KID_SEQ.turnDrawSword, ctx.tables);
+    return;
+  }
+  startSequence(state, KID_SEQ.turn, ctx.tables);
 }
 function controlTurning(state, controls, ctx) {
   if (!controls.shift && forwardHeld(state, controls) && controls.y >= 0) {
