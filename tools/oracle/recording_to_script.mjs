@@ -140,15 +140,39 @@ const MIN_GAP = 0.002;
 const SLEEP_COST = 0.0010;
 const EDGE_COST = 0.0130;
 
+/**
+ * How long to give the game to reach the next level after `shift+l`.
+ *
+ * It was seventy seconds, which is far more than the level change
+ * needs and more than the capture can afford: the clock in the status
+ * bar is running the whole time, and a minute of it is the difference
+ * between the capture's `59 MINUTES LEFT` and the port's `60`, which
+ * is eleven pixels of difference on every tick the line is on screen.
+ * Ctrl+A restarts the level but not the hour.
+ *
+ * Ten seconds is comfortably enough for the fade, the load and the
+ * level's own title, and leaves the whole run inside the first minute
+ * for anything up to level 4.
+ */
+const SKIP_WAIT = arg('skip-wait', 10);
+/** When the game is at the title screen, in seconds from the start. */
+const BOOT = 25;
+/** How long level 1 is left running before the first `shift+l`. */
+const SETTLE_L1 = 25;
 const lines = [
   `# generated from ${basename(src)} -- the player's own key events, replayed`,
-  'wait 25',
+  `wait ${BOOT}`,
   'key Return',
-  'wait 25',
+  `wait ${SETTLE_L1}`,
 ];
-for (let l = 1; l < rec.level; l++) lines.push('key shift+l', 'wait 70');
+for (let l = 1; l < rec.level; l++) lines.push('key shift+l', `wait ${SKIP_WAIT}`);
 // Ctrl+A restarts the level, which is where the recording starts too.
 lines.push('key ctrl+a', `wait ${settle.toFixed(3)}`);
+/**
+ * When Ctrl+A goes out, which is where `split_ticks.py --after-blank`
+ * has to start looking for the flash.
+ */
+const restartAt = BOOT + SETTLE_L1 + SKIP_WAIT * (rec.level - 1);
 
 /**
  * The schedule, in blocks that each start at an absolute time.
@@ -265,5 +289,6 @@ console.error(`${out}: level ${rec.level}, ${sent} key edges `
   + `${rawMs ? ', raw millisecond stamps' : ', edges a tick ahead of their own'}`
   + `${shift ? `, shifted ${shift} ticks` : ''}`
   + `, ${(EDGE_COST * 1000).toFixed(1)}ms taken off each sleep`);
+console.error(`restart at ${restartAt}`);
 console.log(`python3 tools/oracle/dosbox_oracle.py --script ${out} \\
     --out /tmp/replay-${name} --record /tmp/replay-${name}/run.mkv --fps 30`);

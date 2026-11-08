@@ -215,18 +215,38 @@ def main():
             # apart -- everything up to four frames, since there is no
             # such thing as a four-frame tick -- average the emulator's
             # own twelfth of a second.
-            ones = [changes[n] - changes[n - 1] for n in range(1, len(changes))
-                    if changes[n] - changes[n - 1] <= 4]
-            if ones:
-                per = sum(ones) / len(ones)
-            print(f'one-tick gap averages {per:.4f} frames '
-                  f'({a.fps / per:.4f} ticks a second, over {len(ones)})')
-            taken = set()
-            for n, f in enumerate(changes):
-                t = max(0, int(round((f - base) / per)))
-                while t in taken:
-                    t += 1
-                taken.add(t)
+            # `per` has to be measured, not taken as `fps / rate`: a
+            # tenth of a per cent is a tick and a half over a long
+            # recording. Averaging the gaps that look like one tick
+            # does not measure it -- a change one frame after another
+            # is a tear and is dropped, and the dropped frame lands in
+            # the next gap, so the average comes out high. On `gate2`
+            # that reads 2.6378 frames where the emulator kept 2.4989,
+            # and five per cent is sixty ticks.
+            #
+            # So fit it instead: number the changes with the nominal
+            # `per`, then take the span divided by the tick it put the
+            # last change on, and again. Three rounds is well past
+            # where it settles.
+            def number(per):
+                taken = {}
+                for n, f in enumerate(changes):
+                    t = max(0, int(round((f - base) / per)))
+                    while t in taken:
+                        t += 1
+                    taken[t] = n
+                return taken
+            per = a.fps / a.rate
+            for _ in range(3):
+                taken = number(per)
+                last_t = max(taken)
+                if last_t:
+                    per = (changes[-1] - base) / last_t
+            print(f'tick measures {per:.4f} frames '
+                  f'({a.fps / per:.4f} ticks a second over '
+                  f'{len(changes)} changes)')
+            taken = number(per)
+            for t, n in taken.items():
                 end = (changes[n + 1] - 1 if n + 1 < len(changes)
                        else len(frames) - 1)
                 pics[t] = frames[min(end, len(frames) - 1)]
