@@ -101,6 +101,15 @@ export function load_room_links(): void {
   g.room_AR = 0;
   g.room_AL = 0;
   if (g.drawn_room) {
+    // The C's first line, and the translation had dropped it: every
+    // caller of this is a room change, and without it `curr_room_tiles`
+    // and `curr_room_modif` go on pointing at the room before. The
+    // torches and potions of the new room were then started at the tile
+    // positions of the old one -- so they never animated -- and every
+    // write to a modifier after a room change landed in the wrong room,
+    // which pressed buttons, opened gates and shook loose floors that
+    // nothing had touched.
+    l8.get_room_address.fn(g.drawn_room);
     const link = g.level.roomlinks[g.drawn_room - 1];
     g.room_L = link.left;
     g.room_R = link.right;

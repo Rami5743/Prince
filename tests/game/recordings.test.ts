@@ -23,12 +23,16 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
-import { Game } from '../../src/game/game.ts';
+import { PopGame as Game } from '../../src/pop/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
 import { TILE, tileIsFloor } from '../../src/game/tiles.ts';
 import { ACTION } from '../../src/game/sequence.ts';
 import { standY } from '../../src/game/geometry.ts';
-import { NO_DIRECTION } from '../../src/game/guard.ts';
+/**
+ * `dir_56_none`, the C's own name for it: 0x56, not the decimal 56 the
+ * hand-written port read it as.
+ */
+const NO_DIRECTION = 0x56;
 
 const assets = new Assets(async (n) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -53,7 +57,7 @@ describe('the recordings, replayed', () => {
         if (bad.length < 6) bad.push(`tick ${t}: ${m}`);
       };
       let was: { room: number; row: number; column: number } | null = null;
-      let wasGuard: { room: number; x: number } | null = null;
+      let wasGuard: { room: number; x: number; direction: number } | null = null;
       let dead: { t: number; frame: number; x: number; y: number } | null = null;
       let resting: { frame: number; x: number; y: number } | null = null;
       for (let t = 0; t < ticks.length; t++) {
@@ -82,18 +86,22 @@ describe('the recordings, replayed', () => {
           // of the room he arrived in and walks the rest of the way: the
           // original's own thresholds put him anywhere from three tiles
           // short of it to two past it. Outside that he is nowhere.
-          if (guard.currentColumn < -4 || guard.currentColumn > 13) {
-            say(t, `the guard is at column ${guard.currentColumn}`);
+          if (guard.curr_col < -4 || guard.curr_col > 13) {
+            say(t, `the guard is at column ${guard.curr_col}`);
           }
-          if (guard.currentRow < 0 || guard.currentRow > 2) {
-            say(t, `the guard is on row ${guard.currentRow}`);
+          if (guard.curr_row < 0 || guard.curr_row > 2) {
+            say(t, `the guard is on row ${guard.curr_row}`);
           }
           // And he got where he is by walking or by stepping through a
           // door. A stride is a few units; a door is the width of a room,
           // a hundred and forty, and the room changes with it. Anything
           // else is a guard who has been moved by arithmetic that went
           // wrong -- which is how the one in `33e8ace7` crossed room 2.
-          if (wasGuard !== null) {
+          // Not on the tick he turned round. `Char.x` is measured from
+          // the direction a character faces, so `SEQ_FLIP` re-expresses
+          // it -- a guard standing on the spot and turning has his x
+          // moved by the width of his own frame without going anywhere.
+          if (wasGuard !== null && guard.direction === wasGuard.direction) {
             const moved = (guard.x - wasGuard.x) & 0xff;
             if (guard.room === wasGuard.room) {
               if (moved > GUARD_STRIDE && moved < 256 - GUARD_STRIDE) {
@@ -116,7 +124,7 @@ describe('the recordings, replayed', () => {
               }
             }
           }
-          wasGuard = { room: guard.room, x: guard.x };
+          wasGuard = { room: guard.room, x: guard.x, direction: guard.direction };
         } else {
           wasGuard = null;
         }
@@ -151,18 +159,25 @@ describe('the recordings, replayed', () => {
           resting = null;
         }
         if (kid.alive >= 0 || kid.room === 0) { was = null; continue; }
+        // Not on the tick the room changed. `goto_other_room` moves `x`
+        // across and leaves `curr_col` as it was; the original reads the
+        // column off the new x at the top of the *next* frame, in
+        // `load_fram_det_col`, so for one tick the two disagree and the
+        // Prince appears to be standing in whatever the old column holds
+        // in the new room.
+        if (was !== null && was.room !== kid.room) { was = null; continue; }
         const walking = kid.frame === 15 || (kid.frame >= 1 && kid.frame <= 14);
-        const onFloor = kid.y === standY(kid.currentRow)
-          && kid.currentColumn >= 0 && kid.currentColumn <= 9
+        const onFloor = kid.y === standY(kid.curr_row)
+          && kid.curr_col >= 0 && kid.curr_col <= 9
           && kid.action !== ACTION.hangClimb && kid.action !== ACTION.hangStraight;
         if (onFloor) {
-          const here = game.scene.state.typeAt(kid.room, kid.currentColumn, kid.currentRow);
+          const here = game.scene.state.typeAt(kid.room, kid.curr_col, kid.curr_row);
           if (walking && here === TILE.wall) say(t, 'the Prince is standing in a wall');
           if (kid.frame === 15 && !tileIsFloor(here) && here !== TILE.wall) {
             say(t, `the Prince is standing on tile ${here}`);
           }
         }
-        const now = { room: kid.room, row: kid.currentRow, column: kid.currentColumn };
+        const now = { room: kid.room, row: kid.curr_row, column: kid.curr_col };
         if (was && now.room === was.room && now.row === was.row
           && now.column !== was.column) {
           const lo = Math.min(now.column, was.column);

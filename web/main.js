@@ -4247,10 +4247,10 @@ function check_press() {
   } else if (action === actions.actions_7_turn || action === actions.actions_5_bumped || action < actions.actions_2_hang_climb) {
     if (frame === frameids.frame_79_jumphang && get_tile_above_char() === tiles.tiles_11_loose) {
       l7.make_loose_fall.fn(1);
-      return;
+    } else {
+      if (!(g.cur_frame.flags & frame_flags.FRAME_NEEDS_FLOOR)) return;
+      get_tile_at_char();
     }
-    if (!(g.cur_frame.flags & frame_flags.FRAME_NEEDS_FLOOR)) return;
-    get_tile_at_char();
   } else {
     return;
   }
@@ -6459,6 +6459,7 @@ function load_room_links() {
   g.room_AR = 0;
   g.room_AL = 0;
   if (g.drawn_room) {
+    l8.get_room_address.fn(g.drawn_room);
     const link2 = g.level.roomlinks[g.drawn_room - 1];
     g.room_L = link2.left;
     g.room_R = link2.right;

@@ -908,11 +908,14 @@ export function check_press(): void {
     || action < actions.actions_2_hang_climb) {
     if (frame === frameids.frame_79_jumphang
       && get_tile_above_char() === tiles.tiles_11_loose) {
+      // Break a loose floor from below. The C does not return here:
+      // `curr_tile2` is still the loose floor above, so the test at the
+      // bottom knocks it a second time.
       l7.make_loose_fall.fn(1);
-      return;
+    } else {
+      if (!(g.cur_frame.flags & frame_flags.FRAME_NEEDS_FLOOR)) return;
+      get_tile_at_char();
     }
-    if (!(g.cur_frame.flags & frame_flags.FRAME_NEEDS_FLOOR)) return;
-    get_tile_at_char();
   } else {
     return;
   }
