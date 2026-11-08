@@ -1,5 +1,26 @@
 # Read this first
 
+## THE JOB IN HAND: finish the translation, and do not stop
+
+`src/game` is being replaced by `src/pop`, a direct translation of
+https://github.com/NagyD/SDLPoP. The plan is `docs/sdlpop-translation.md`.
+
+**Do not stop until the whole of it is translated and every test
+passes.** Not when a segment is done, not when it typechecks, not when
+the context is getting long -- when `npm test` is green on the
+translated game and `tools/dev/oracle-report.ts` has been run against
+the nineteen recordings.
+
+Translated so far: `data`, `types`, `state`, `link`, `seg009`,
+`seg006`, `seg004`, `seg005`, `seg007`.
+Still to do: `seg003`, `seg002`, `seg008`, `seg000`, and the adapter
+that gives the shell and the tests the interface they already use.
+
+The hand-written port is on `backup/handwritten-port` at 10380 of
+11094 ticks. The translation replaces it only when it beats that; if
+it does not, say so and leave the old one in place.
+
+
 ## The player plays `game.js`, not `src/`
 
 GitHub Pages serves `index.html` and `game.js` from the repository root.
