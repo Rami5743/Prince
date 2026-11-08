@@ -97,6 +97,41 @@ export interface MobDraw {
   row: number;
 }
 
+/**
+ * `redraw_at_char2`: the parts of the room that go back over a
+ * character after he has been drawn.
+ *
+ * The original redraws only the tiles it has to, and a character who
+ * is falling, hanging or climbing marks the tiles his box covers.
+ * `redraw_needed` then draws those tiles' own pieces into the *mid*
+ * table, where they are painted in tile order -- so a tile to the
+ * right of the one the character is standing at is painted after him
+ * and comes down over him. That is how the original hides the hands
+ * of a Prince climbing up behind the floor he is pulling himself onto,
+ * and his shoulders behind the floor he is falling past.
+ *
+ * The port draws the whole room every tick and so has to put those
+ * pieces back by hand; this says which.
+ */
+export interface CharacterOverlay {
+  /** `char_col_left` and `char_col_right`, clamped to the room. */
+  readonly colLeft: number;
+  readonly colRight: number;
+  /** `char_top_row` and `char_bottom_row`. */
+  readonly topRow: number;
+  readonly bottomRow: number;
+  /** `if (char_action != 2)`: hanging marks the top row only. */
+  readonly skipBottomRow: boolean;
+  /** `obj_tilepos`: the tile he is painted with, from `Char.curr_col`. */
+  readonly ownColumn: number;
+  /**
+   * Frames 137 to 144 take `draw_floor_overlay` rather than
+   * `draw_other_overlay`: a sprite of the floor's lip from
+   * `floor_left_overlay`, and then the tile's own front.
+   */
+  readonly climbFrame?: number;
+}
+
 export interface CharacterDraw {
   readonly chtab: ChtabId;
   /** 1-based sprite id within the group. */
@@ -117,6 +152,8 @@ export interface CharacterDraw {
    * uses it.
    */
   readonly onTop?: boolean;
+  /** Which tiles go back over him: see `CharacterOverlay`. */
+  readonly overlay?: CharacterOverlay;
 }
 
 /** The strip of the room above, drawn after every row of this one. */
@@ -175,6 +212,15 @@ interface Piece {
    * over the top. See `PAINT_ORDERS`.
    */
   order: number;
+  /** The tile this came out of, for the overlay rules. */
+  col?: number;
+  row?: number;
+  /** Part of what `draw_tile2` draws, so part of an overlay. */
+  tile2?: boolean;
+  /** `tile_left == tiles_0_empty` when this tile was drawn. */
+  leftEmpty?: boolean;
+  /** For a character: which tiles go back over him. */
+  overlay?: CharacterOverlay;
   /**
    * A falling slab, which the tiles to its right in its own row cover.
    *
@@ -281,6 +327,18 @@ const LOOSE_FRAM_RIGHT = [42, 71, 42, 72, 72, 42, 42, 42, 72, 72, 72, 0];
 const WALL_FRAM_BOTTOM = [7, 9, 5, 3];
 const LOOSE_FRAM_BOTTOM = [43, 73, 43, 74, 74, 43, 43, 43, 74, 74, 74, 0];
 const LOOSE_FRAM_LEFT = [41, 69, 41, 70, 70, 41, 41, 41, 70, 70, 70, 0];
+
+/**
+ * `floor_left_overlay`, for frames 137 to 144 of the climb: the lip of
+ * the floor the Prince is pulling himself onto, drawn back over his
+ * hands.
+ */
+const FLOOR_LEFT_OVERLAY = [32, 151, 151, 150, 150, 151, 32, 32];
+
+/** The tiles `draw_floor_overlay` draws the lip for; the rest take `draw_tile2`. */
+const FLOOR_OVERLAY_TILES = new Set<number>([
+  TILE.floor, TILE.pillar, TILE.stuck, TILE.torch,
+]);
 const SPIKES_FRAM_LEFT = [0, 128, 129, 130, 131, 132, 131, 129, 128, 0];
 const POTION_FRAM_BUBB = [0, 16, 17, 18, 19, 20, 21, 22];
 const CHOMPER_FRAM1 = [3, 2, 0, 1, 4, 3, 3, 0];
@@ -369,6 +427,16 @@ export class RoomRenderer {
   private wipes: Wipe[] = [];
   /** Which list draw_tile_base / draw_tile_bottom append to. */
   private addTo: 'back' | 'fore' = 'back';
+  /** Inside the part of `draw_tile` that `draw_tile2` draws again. */
+  private inTile2 = false;
+  /**
+   * Inside `wall_pattern`, which names its table rather than taking
+   * the one in hand -- so the bricks and chips of a wall are never
+   * part of an overlay, however the tile they belong to was reached.
+   */
+  private inWallPattern = false;
+  /** Per tile, what the climbing lip needs: keyed row * 10 + column. */
+  private tileInfo = new Map<number, { x: number; mainY: number; curr: number }>();
 
   private drawnRoom = 0;
   /** Which pass of the room drawing is running; stamped on every piece. */
@@ -423,6 +491,9 @@ export class RoomRenderer {
     this.fore = [];
     this.wipes = [];
     this.addTo = 'back';
+    this.inTile2 = false;
+    this.inWallPattern = false;
+    this.tileInfo.clear();
     this.paintOrder = ROW_ABOVE_ORDER + 1;
     this.drawnRoom = room;
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
@@ -474,7 +545,12 @@ export class RoomRenderer {
   ): boolean {
     if (id === 0) return false;
     if (!this.image(chtab, id)) return false;
-    list.push({ chtab, id, x, yBottom, blit, order: this.paintOrder });
+    list.push({
+      chtab, id, x, yBottom, blit, order: this.paintOrder,
+      col: this.drawnCol, row: this.drawnRow,
+      tile2: this.inTile2 && !this.inWallPattern,
+      leftEmpty: this.tileLeft === TILE.empty,
+    });
     return true;
   }
 
@@ -661,12 +737,20 @@ export class RoomRenderer {
   private drawTile(): void {
     this.drawTileFloorRight();
     this.drawTileAnimTopRight();
+    // `draw_tile2` is the rest of it bar the fore layer, and it is what
+    // goes back over a character who is falling or climbing past this
+    // tile -- see `CharacterOverlay`.
+    this.inTile2 = true;
+    this.tileInfo.set(this.drawnRow * 10 + this.drawnCol, {
+      x: this.drawX, mainY: this.drawMainY, curr: this.currTile,
+    });
     this.drawTileRight();
     this.drawTileAnimRight();
     this.drawTileBottom();
     this.drawLoose();
     this.drawTileBase();
     this.drawTileAnim();
+    this.inTile2 = false;
     this.drawTileFore();
   }
 
@@ -1104,6 +1188,8 @@ export class RoomRenderer {
    */
   private wallPattern(whichPart: number, whichTable: number): void {
     const savedAddTo = this.addTo;
+    const savedInWall = this.inWallPattern;
+    this.inWallPattern = true;
     this.addTo = whichTable === 0 ? 'back' : 'fore';
     const savedSeed = this.prng.get();
     this.prng.set((this.drawnRoom + this.drawnRow * 10 + this.drawnCol) >>> 0);
@@ -1180,6 +1266,7 @@ export class RoomRenderer {
 
     this.prng.set(savedSeed);
     this.addTo = savedAddTo;
+    this.inWallPattern = savedInWall;
   }
 
   private palaceWallPattern(whichPart: number, whichTable: number): void {
@@ -1350,6 +1437,8 @@ export class RoomRenderer {
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
       order: row,
+      overlay: c.overlay,
+      col: c.overlay ? c.overlay.ownColumn : undefined,
     });
   }
 
@@ -1424,11 +1513,68 @@ export class RoomRenderer {
           this.paintPiece(surface, p);
         }
       }
+      if (c.overlay) this.paintOverlay(surface, c);
     }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
     // `draw_objtable_items_at_tile(-1)`, which comes after everything.
     for (const p of this.onTop) this.paintPiece(surface, p);
+  }
+
+  /**
+   * `draw_other_overlay` and `draw_floor_overlay`: the tiles a falling
+   * or climbing character marked, drawn again over him.
+   *
+   * Only the tiles past the one he is at: the original paints a room
+   * left to right and a character with the tile he stands at, so the
+   * tiles before his are under him and the ones after are over him.
+   * And only where the tile to the left is empty, which is the test
+   * both of those functions start with -- a floor with a floor beside
+   * it has nothing of its own sticking out to the left to redraw.
+   */
+  private paintOverlay(surface: Surface, c: Piece): void {
+    const o = c.overlay;
+    if (!o) return;
+    const rows = o.skipBottomRow ? [o.topRow]
+      : o.topRow === o.bottomRow ? [o.bottomRow] : [o.topRow, o.bottomRow];
+    const own = c.col ?? -1;
+    for (const row of rows) {
+      if (row < 0 || row > 2) continue;
+      for (let col = Math.max(o.colLeft, own + 1); col <= o.colRight; col++) {
+        const info = this.tileInfo.get(row * 10 + col);
+        if (!info) continue;
+        // An empty tile has nothing of its own: every id `draw_tile2`
+        // would look up for it is nought and `add_backtable` returns
+        // without drawing. The port draws the dark blue behind the
+        // room for such a tile, which is not a tile's picture and must
+        // not come back over anybody -- it put the wall's dither
+        // across the Prince as he swung up into room 2 of level 1,
+        // tick 83 of `probeE`.
+        if (info.curr === TILE.empty) continue;
+        // `if (tile_left != tiles_0_empty) return;` -- the piece this
+        // would put back is the part of the tile that overhangs an
+        // empty one, and there is none when a floor adjoins a floor.
+        const pieces = this.back.filter(
+          (p) => p.tile2 && p.row === row && p.col === col && p.leftEmpty,
+        );
+        if (!pieces.length) continue;
+        if (o.climbFrame !== undefined && FLOOR_OVERLAY_TILES.has(info.curr)) {
+          // `draw_floor_overlay`: the lip of the floor, then its front
+          // -- `draw_tile_bottom(0)` -- and nothing else of the tile.
+          const id = FLOOR_LEFT_OVERLAY[o.climbFrame - 137] ?? 0;
+          const yBottom = info.mainY + (info.curr === TILE.stuck ? 1 : 0);
+          if (id) {
+            this.paintPiece(surface, {
+              chtab: CHTAB.environment, id, x: info.x, yBottom,
+              blit: BLIT.transparent, order: row,
+            });
+          }
+          for (const p of pieces) if (p.floorFront) this.paintPiece(surface, p);
+          continue;
+        }
+        for (const p of pieces) this.paintPiece(surface, p);
+      }
+    }
   }
 
   private paintWipes(surface: Surface, layer: number): void {

@@ -839,6 +839,13 @@ var LOOSE_FRAM_RIGHT = [42, 71, 42, 72, 72, 42, 42, 42, 72, 72, 72, 0];
 var WALL_FRAM_BOTTOM = [7, 9, 5, 3];
 var LOOSE_FRAM_BOTTOM = [43, 73, 43, 74, 74, 43, 43, 43, 74, 74, 74, 0];
 var LOOSE_FRAM_LEFT = [41, 69, 41, 70, 70, 41, 41, 41, 70, 70, 70, 0];
+var FLOOR_LEFT_OVERLAY = [32, 151, 151, 150, 150, 151, 32, 32];
+var FLOOR_OVERLAY_TILES = /* @__PURE__ */ new Set([
+  TILE.floor,
+  TILE.pillar,
+  TILE.stuck,
+  TILE.torch
+]);
 var SPIKES_FRAM_LEFT = [0, 128, 129, 130, 131, 132, 131, 129, 128, 0];
 var POTION_FRAM_BUBB = [0, 16, 17, 18, 19, 20, 21, 22];
 var CHOMPER_FRAM1 = [3, 2, 0, 1, 4, 3, 3, 0];
@@ -909,6 +916,16 @@ var RoomRenderer = class {
   wipes = [];
   /** Which list draw_tile_base / draw_tile_bottom append to. */
   addTo = "back";
+  /** Inside the part of `draw_tile` that `draw_tile2` draws again. */
+  inTile2 = false;
+  /**
+   * Inside `wall_pattern`, which names its table rather than taking
+   * the one in hand -- so the bricks and chips of a wall are never
+   * part of an overlay, however the tile they belong to was reached.
+   */
+  inWallPattern = false;
+  /** Per tile, what the climbing lip needs: keyed row * 10 + column. */
+  tileInfo = /* @__PURE__ */ new Map();
   drawnRoom = 0;
   /** Which pass of the room drawing is running; stamped on every piece. */
   paintOrder = ROW_ABOVE_ORDER + 1;
@@ -952,6 +969,9 @@ var RoomRenderer = class {
     this.fore = [];
     this.wipes = [];
     this.addTo = "back";
+    this.inTile2 = false;
+    this.inWallPattern = false;
+    this.tileInfo.clear();
     this.paintOrder = ROW_ABOVE_ORDER + 1;
     this.drawnRoom = room;
     this.palaceWallColors = this.opt.palaceWallColors ?? generatePalaceWallColors(room);
@@ -987,7 +1007,18 @@ var RoomRenderer = class {
   push(list, chtab, id, x, yBottom, blit) {
     if (id === 0) return false;
     if (!this.image(chtab, id)) return false;
-    list.push({ chtab, id, x, yBottom, blit, order: this.paintOrder });
+    list.push({
+      chtab,
+      id,
+      x,
+      yBottom,
+      blit,
+      order: this.paintOrder,
+      col: this.drawnCol,
+      row: this.drawnRow,
+      tile2: this.inTile2 && !this.inWallPattern,
+      leftEmpty: this.tileLeft === TILE.empty
+    });
     return true;
   }
   addWipe(layer, left, bottom, height, width, color) {
@@ -1154,12 +1185,19 @@ var RoomRenderer = class {
   drawTile() {
     this.drawTileFloorRight();
     this.drawTileAnimTopRight();
+    this.inTile2 = true;
+    this.tileInfo.set(this.drawnRow * 10 + this.drawnCol, {
+      x: this.drawX,
+      mainY: this.drawMainY,
+      curr: this.currTile
+    });
     this.drawTileRight();
     this.drawTileAnimRight();
     this.drawTileBottom();
     this.drawLoose();
     this.drawTileBase();
     this.drawTileAnim();
+    this.inTile2 = false;
     this.drawTileFore();
   }
   drawTileAboveRoom() {
@@ -1652,6 +1690,8 @@ var RoomRenderer = class {
    */
   wallPattern(whichPart, whichTable) {
     const savedAddTo = this.addTo;
+    const savedInWall = this.inWallPattern;
+    this.inWallPattern = true;
     this.addTo = whichTable === 0 ? "back" : "fore";
     const savedSeed = this.prng.get();
     this.prng.set(this.drawnRoom + this.drawnRow * 10 + this.drawnCol >>> 0);
@@ -1732,6 +1772,7 @@ var RoomRenderer = class {
     }
     this.prng.set(savedSeed);
     this.addTo = savedAddTo;
+    this.inWallPattern = savedInWall;
   }
   palaceWallPattern(whichPart, whichTable) {
     const at = (i) => this.palaceWallColors[i];
@@ -1850,7 +1891,9 @@ var RoomRenderer = class {
       character: true,
       flip: c.direction === 0,
       screenX: c.alreadyScreenX === true,
-      order: row
+      order: row,
+      overlay: c.overlay,
+      col: c.overlay ? c.overlay.ownColumn : void 0
     });
   }
   /**
@@ -1906,10 +1949,57 @@ var RoomRenderer = class {
           this.paintPiece(surface, p);
         }
       }
+      if (c.overlay) this.paintOverlay(surface, c);
     }
     this.paintWipes(surface, 1);
     for (const p of this.fore) this.paintPiece(surface, p);
     for (const p of this.onTop) this.paintPiece(surface, p);
+  }
+  /**
+   * `draw_other_overlay` and `draw_floor_overlay`: the tiles a falling
+   * or climbing character marked, drawn again over him.
+   *
+   * Only the tiles past the one he is at: the original paints a room
+   * left to right and a character with the tile he stands at, so the
+   * tiles before his are under him and the ones after are over him.
+   * And only where the tile to the left is empty, which is the test
+   * both of those functions start with -- a floor with a floor beside
+   * it has nothing of its own sticking out to the left to redraw.
+   */
+  paintOverlay(surface, c) {
+    const o = c.overlay;
+    if (!o) return;
+    const rows = o.skipBottomRow ? [o.topRow] : o.topRow === o.bottomRow ? [o.bottomRow] : [o.topRow, o.bottomRow];
+    const own = c.col ?? -1;
+    for (const row of rows) {
+      if (row < 0 || row > 2) continue;
+      for (let col = Math.max(o.colLeft, own + 1); col <= o.colRight; col++) {
+        const info = this.tileInfo.get(row * 10 + col);
+        if (!info) continue;
+        if (info.curr === TILE.empty) continue;
+        const pieces = this.back.filter(
+          (p) => p.tile2 && p.row === row && p.col === col && p.leftEmpty
+        );
+        if (!pieces.length) continue;
+        if (o.climbFrame !== void 0 && FLOOR_OVERLAY_TILES.has(info.curr)) {
+          const id = FLOOR_LEFT_OVERLAY[o.climbFrame - 137] ?? 0;
+          const yBottom = info.mainY + (info.curr === TILE.stuck ? 1 : 0);
+          if (id) {
+            this.paintPiece(surface, {
+              chtab: CHTAB.environment,
+              id,
+              x: info.x,
+              yBottom,
+              blit: BLIT.transparent,
+              order: row
+            });
+          }
+          for (const p of pieces) if (p.floorFront) this.paintPiece(surface, p);
+          continue;
+        }
+        for (const p of pieces) this.paintPiece(surface, p);
+      }
+    }
   }
   paintWipes(surface, layer) {
     for (const w of this.wipes) {
@@ -5648,7 +5738,50 @@ var Game = class _Game {
     if (this.kid.room !== this.drawnRoom) return null;
     const frame = this.tables.frameTableKid[this.kid.frame];
     if (!frame) return null;
-    return placeCharacter(this.kid, frame);
+    const draw = placeCharacter(this.kid, frame);
+    if (!draw) return null;
+    const overlay = this.overlayOf(this.kid, frame, "kid");
+    return overlay ? { ...draw, overlay } : draw;
+  }
+  /**
+   * `redraw_at_char2`: which tiles are drawn again over this character.
+   *
+   * A character who is in the air, hanging, grabbing or climbing marks
+   * the tiles his box covers, and `redraw_needed` draws those tiles
+   * into the mid table -- where the ones past his own come down over
+   * him. Climbing, frames 137 to 144, it is the floor's lip instead of
+   * the whole tile. Anything else marks nothing.
+   */
+  overlayOf(state, frame, chtab) {
+    const f = state.frame;
+    const a = state.action;
+    let climbFrame;
+    if (f < 78 || f >= 80) {
+      if (f >= 137 && f < 145) {
+        climbFrame = f;
+      } else if (a !== ACTION.hangClimb && a !== ACTION.inMidair && a !== ACTION.inFreefall && a !== ACTION.hangStraight && !(a === ACTION.bumped && f >= 102 && f <= 106)) {
+        return void 0;
+      }
+    }
+    const set = chtab === "kid" ? this.scene.chtabs.kid : this.scene.chtabs.guard;
+    const image = set?.images[frame.image + 1];
+    if (!image) return void 0;
+    const coll = charCollision(state, frame, objectX(state, frame), image.width);
+    const objY = frame.dy + state.y;
+    let topY = objY - image.height + 1;
+    if (topY >= 192) topY = 0;
+    const rowOf = (y) => Math.trunc((y + 60) / 63) % 4 - 1;
+    let bottomRow = rowOf(objY);
+    if (bottomRow === -1) bottomRow = 3;
+    return {
+      colLeft: Math.max(tileDivMod(coll.xLeft).column, 0),
+      colRight: Math.min(tileDivMod(coll.xRight).column, 9),
+      topRow: rowOf(topY),
+      bottomRow,
+      skipBottomRow: a === ACTION.hangClimb,
+      ownColumn: state.currentColumn,
+      climbFrame
+    };
   }
   /**
    * The star at the point of impact, if hit points came off the Prince

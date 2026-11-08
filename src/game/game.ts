@@ -4,16 +4,21 @@
 import type { Assets } from '../render/assets.ts';
 import { Surface } from '../render/surface.ts';
 import { readFont, drawTextCentred, type Font } from '../render/font.ts';
-import { RoomRenderer, type CharacterDraw, type MobDraw } from '../render/room.ts';
+import {
+  RoomRenderer, type CharacterDraw, type CharacterOverlay, type MobDraw,
+} from '../render/room.ts';
 import { buildLevelScene, type LevelScene } from './scene.ts';
-import { readExeTables, type ExeTables } from './exe-tables.ts';
+import { readExeTables, type ExeTables, type Frame } from './exe-tables.ts';
 import {
   newCharacter, placeCharacter, placeHurtSplash, placeSword, type CharacterState,
 } from './character.ts';
 import {
-  stepKid, exitRoom, enterLevel, type Controls, type KidContext, type TrapHooks,
+  stepKid, exitRoom, enterLevel, objectX,
+  type Controls, type KidContext, type TrapHooks,
 } from './kid.ts';
-import { getTile, tileDivModM7, type World } from './physics.ts';
+import {
+  getTile, tileDivMod, tileDivModM7, charCollision, type World,
+} from './physics.ts';
 import { ControlLatch } from './control-latch.ts';
 import { TILE, TILE_TYPE_MASK, ROOM_COLUMNS, tileIsFloor } from './tiles.ts';
 import { toScreenX, standX, standY } from './geometry.ts';
@@ -39,7 +44,7 @@ const HEARD_BY_GUARDS = new Set([SOUND_SILENCE, 23, 8, 17, 16]);
 
 const GUARD_FOLLOWS_LEFT = 91;
 const GUARD_FOLLOWS_RIGHT = 165;
-import { startSequence, playSequence, SOUND_SILENCE } from './sequence.ts';
+import { startSequence, playSequence, ACTION, SOUND_SILENCE } from './sequence.ts';
 import {
   newGuard, guardsFromLevel, positionGuards, enterGuard, leaveGuard, guardDraw,
   guardFrame, stepGuard, refractoryFor, NO_DIRECTION, canGuardSeeKid, type GuardState,
@@ -734,7 +739,58 @@ export class Game {
     if (this.kid.room !== this.drawnRoom) return null;
     const frame = this.tables.frameTableKid[this.kid.frame];
     if (!frame) return null;
-    return placeCharacter(this.kid, frame);
+    const draw = placeCharacter(this.kid, frame);
+    if (!draw) return null;
+    const overlay = this.overlayOf(this.kid, frame, 'kid');
+    return overlay ? { ...draw, overlay } : draw;
+  }
+
+  /**
+   * `redraw_at_char2`: which tiles are drawn again over this character.
+   *
+   * A character who is in the air, hanging, grabbing or climbing marks
+   * the tiles his box covers, and `redraw_needed` draws those tiles
+   * into the mid table -- where the ones past his own come down over
+   * him. Climbing, frames 137 to 144, it is the floor's lip instead of
+   * the whole tile. Anything else marks nothing.
+   */
+  private overlayOf(
+    state: CharacterState, frame: Frame, chtab: 'kid' | 'guard',
+  ): CharacterOverlay | undefined {
+    const f = state.frame;
+    const a = state.action;
+    let climbFrame: number | undefined;
+    // Frames 78 and 79, the grab, always mark; otherwise it is the
+    // climb or one of the four actions that leave a character in the
+    // air, plus a bump in the middle of a fall.
+    if (f < 78 || f >= 80) {
+      if (f >= 137 && f < 145) {
+        climbFrame = f;
+      } else if (a !== ACTION.hangClimb && a !== ACTION.inMidair
+        && a !== ACTION.inFreefall && a !== ACTION.hangStraight
+        && !(a === ACTION.bumped && f >= 102 && f <= 106)) {
+        return undefined;
+      }
+    }
+    const set = chtab === 'kid' ? this.scene.chtabs.kid : this.scene.chtabs.guard;
+    const image = set?.images[frame.image + 1];
+    if (!image) return undefined;
+    const coll = charCollision(state, frame, objectX(state, frame), image.width);
+    const objY = frame.dy + state.y;
+    let topY = objY - image.height + 1;
+    if (topY >= 192) topY = 0;
+    const rowOf = (y: number): number => (Math.trunc((y + 60) / 63) % 4) - 1;
+    let bottomRow = rowOf(objY);
+    if (bottomRow === -1) bottomRow = 3;
+    return {
+      colLeft: Math.max(tileDivMod(coll.xLeft).column, 0),
+      colRight: Math.min(tileDivMod(coll.xRight).column, 9),
+      topRow: rowOf(topY),
+      bottomRow,
+      skipBottomRow: a === ACTION.hangClimb,
+      ownColumn: state.currentColumn,
+      climbFrame,
+    };
   }
 
   /**

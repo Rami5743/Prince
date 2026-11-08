@@ -100,8 +100,11 @@ function matchingStep(file: string): Step | null {
  * Which simulated frame reproduces each capture. hang05 to hang10 all land
  * on the same one because the Prince is standing still in all of them.
  *
- * hang17 is not reproduced: the nearest frame is three pixels out, at
- * (164..166, 126). Left unexplained rather than excused.
+ * step17 was not reproduced at all until the port drew the overlay the
+ * original puts back over a hanging character -- `draw_other_overlay`,
+ * the tiles his box covers drawn again into the mid table. The three
+ * pixels that were out, at (164..166, 126), were the floor's lip over
+ * his hand.
  */
 const EXPECTED: Record<string, number | null> = {
   'step00.png': 18,
@@ -121,7 +124,7 @@ const EXPECTED: Record<string, number | null> = {
   'step14.png': 45,
   'step15.png': 47,
   'step16.png': 50,
-  'step17.png': null,
+  'step17.png': 52,
 };
 
 describe('stepping carefully, against the original', () => {

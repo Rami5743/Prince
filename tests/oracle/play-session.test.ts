@@ -46,7 +46,9 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // 41 since the port stopped blanking the screen on a room change,
   // which the original does not do: s036 and s037 are the emulator
   // redrawing and are now left out rather than reproduced.
-  { name: 'level1-open', reproduces: 41 },
+  // 42 since a character in the air has the tiles his box covers drawn
+  // again over him -- `draw_other_overlay`.
+  { name: 'level1-open', reproduces: 42 },
 
   // Careful steps up to a ledge, then Up on its own, then Up with Shift.
   // 36 of 54. All three careful steps are reproduced exactly, and so is
@@ -117,8 +119,9 @@ const SESSIONS: { name: string; reproduces: number }[] = [
   // before it, so the count is low and says little; the frames are what
   // matter.
   //
-  // 16 since landings shake the loose floors near them.
-  { name: 'level1-guard', reproduces: 16 },
+  // 16 since landings shake the loose floors near them; 17 since the
+  // tiles a falling character covers are drawn again over him.
+  { name: 'level1-guard', reproduces: 17 },
 ];
 
 /** Every capture, so a failure says which moves parted company and where. */
