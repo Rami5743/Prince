@@ -165,7 +165,24 @@ const lines = [
   'key Return',
   `wait ${SETTLE_L1}`,
 ];
-for (let l = 1; l < rec.level; l++) lines.push('key shift+l', `wait ${SKIP_WAIT}`);
+/**
+ * The level skip, as Shift held down over a tap of L.
+ *
+ * `xdotool key shift+l` presses and releases the pair as fast as X
+ * will take them, and DOSBox's keyboard does not reliably see Shift
+ * down at the moment L arrives: a capture of a level-4 probe came
+ * back on level 1 with the hour untouched, all three skips lost.
+ * Holding Shift either side of L, with a sixth of a second of air
+ * around it, is taken every time.
+ */
+for (let l = 1; l < rec.level; l++) {
+  lines.push(
+    'xdo keydown --window @W shift sleep 0.15'
+    + ' keydown --window @W l sleep 0.08 keyup --window @W l'
+    + ' sleep 0.15 keyup --window @W shift',
+    `wait ${SKIP_WAIT}`,
+  );
+}
 // Ctrl+A restarts the level, which is where the recording starts too.
 lines.push('key ctrl+a', `wait ${settle.toFixed(3)}`);
 /**

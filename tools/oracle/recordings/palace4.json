@@ -1,0 +1,143 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-09T13:36:49.272Z",
+ "level": 4,
+ "ticksPerSecond": 12,
+ "timeline": "20.,40r,8.,40r,8.,30r,10.,40l,8.,40l,8.,40l,10.,20d,10.,40r,8.,40r,10.,20u,10.,40r,20.",
+ "events": [
+  {
+   "ms": 1667,
+   "tick": 20,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 5000,
+   "tick": 60,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 5667,
+   "tick": 68,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 9000,
+   "tick": 108,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 9667,
+   "tick": 116,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 12167,
+   "tick": 146,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 13000,
+   "tick": 156,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 16333,
+   "tick": 196,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 17000,
+   "tick": 204,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 20333,
+   "tick": 244,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 21000,
+   "tick": 252,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 24333,
+   "tick": 292,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 25167,
+   "tick": 302,
+   "type": "down",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 26833,
+   "tick": 322,
+   "type": "up",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 27667,
+   "tick": 332,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 31000,
+   "tick": 372,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 31667,
+   "tick": 380,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 35000,
+   "tick": 420,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 35833,
+   "tick": 430,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 37500,
+   "tick": 450,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 38333,
+   "tick": 460,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 41667,
+   "tick": 500,
+   "type": "up",
+   "key": "Numpad6"
+  }
+ ],
+ "states": []
+}
