@@ -8600,6 +8600,72 @@ function wall_pattern(which_part, which_table) {
   const saved_prng_state = g.random_seed;
   g.random_seed = g.drawn_room + tbl_line[g.drawn_row] + g.drawn_col;
   prandom(1);
+  if (levelType2.of(g.current_level) !== 0) {
+    if (which_part !== 0) {
+      const at = (i) => g.palace_wall_colors[44 * g.drawn_row + i + g.drawn_col];
+      add_wipetable(which_table, 8 * g.draw_xh, g.draw_main_y - 40, 20, 4 * 8, at(0));
+      add_wipetable(which_table, 8 * g.draw_xh, g.draw_main_y - 19, 21, 2 * 8, at(11));
+      add_wipetable(which_table, 8 * (g.draw_xh + 2), g.draw_main_y - 19, 21, 2 * 8, at(12));
+      add_wipetable(which_table, 8 * g.draw_xh, g.draw_main_y, 19, 1 * 8, at(22));
+      add_wipetable(which_table, 8 * (g.draw_xh + 1), g.draw_main_y, 19, 3 * 8, at(23));
+      ptr_add_table(
+        chtabs.id_chtab_7_environmentwall,
+        prandom(2) + 3,
+        g.draw_xh + 3,
+        0,
+        g.draw_main_y - 53,
+        blitters.blitters_46h_mono_6,
+        0
+      );
+      ptr_add_table(
+        chtabs.id_chtab_7_environmentwall,
+        prandom(2) + 6,
+        g.draw_xh,
+        0,
+        g.draw_main_y - 34,
+        blitters.blitters_46h_mono_6,
+        0
+      );
+      ptr_add_table(
+        chtabs.id_chtab_7_environmentwall,
+        prandom(2) + 9,
+        g.draw_xh,
+        0,
+        g.draw_main_y - 13,
+        blitters.blitters_46h_mono_6,
+        0
+      );
+      ptr_add_table(
+        chtabs.id_chtab_7_environmentwall,
+        prandom(2) + 12,
+        g.draw_xh,
+        0,
+        g.draw_main_y,
+        blitters.blitters_46h_mono_6,
+        0
+      );
+    }
+    add_wipetable(
+      which_table,
+      8 * g.draw_xh,
+      g.draw_bottom_y,
+      3,
+      4 * 8,
+      g.palace_wall_colors[44 * g.drawn_row + 33 + g.drawn_col]
+    );
+    ptr_add_table(
+      chtabs.id_chtab_7_environmentwall,
+      prandom(2) + 15,
+      g.draw_xh,
+      0,
+      g.draw_bottom_y,
+      blitters.blitters_46h_mono_6,
+      0
+    );
+    g.ptr_add_table = saved_sim;
+    g.random_seed = saved_prng_state;
+    return;
+  }
   const middle_divider = prandom(1);
   const middle_divider_offset = prandom(4);
   const bottom_divider = prandom(1);
@@ -8941,6 +9007,26 @@ function play_guard_frame() {
     saveshad_and_opp();
   }
 }
+function gen_palace_wall_colors() {
+  const old_randseed = g.random_seed;
+  g.random_seed = g.drawn_room;
+  prandom(1);
+  for (let row = 0; row < 3; row++) {
+    for (let subrow = 0; subrow < 4; subrow++) {
+      const color_base = subrow % 2 ? 97 : 102;
+      let prev_color = -1;
+      for (let column = 0; column <= 10; ++column) {
+        let color;
+        do {
+          color = color_base + prandom(3);
+        } while (color === prev_color);
+        g.palace_wall_colors[44 * row + 11 * subrow + column] = color;
+        prev_color = color;
+      }
+    }
+  }
+  g.random_seed = old_randseed;
+}
 function check_the_end() {
   if (g.next_room !== 0 && g.next_room !== g.drawn_room) {
     g.drawn_room = g.next_room;
@@ -9274,6 +9360,7 @@ var PopGame = class _PopGame {
     loadkid();
     start_chompers();
     enter_guard();
+    if (levelType2.of(g.current_level)) gen_palace_wall_colors();
     redraw_screen();
     this.surface.clear(0);
     show_level();
@@ -9466,6 +9553,7 @@ var PopGame = class _PopGame {
       }
     } else if (screen.different_room) {
       g.drawn_room = g.next_room;
+      if (levelType2.of(g.current_level)) gen_palace_wall_colors();
       this.redrawScreen(true);
     } else {
       reset_tables();
@@ -9707,6 +9795,7 @@ var PopGame = class _PopGame {
     if (room === g.drawn_room) return;
     g.drawn_room = room;
     g.next_room = room;
+    if (levelType2.of(g.current_level)) gen_palace_wall_colors();
     load_room_links();
     get_room_address(room);
     anim_tile_modif();
@@ -10259,7 +10348,7 @@ async function boot() {
     display.setAspect(aspectSel.value);
   });
   const CHEAT_WORD = "megahit";
-  let cheats = false;
+  let cheats = true;
   let typed = "";
   function keyName(e) {
     const mod = (e.ctrlKey || e.metaKey ? "ctrl+" : "") + (e.shiftKey ? "shift+" : "");

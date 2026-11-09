@@ -45,7 +45,7 @@ import {
 } from './seg007.ts';
 import {
   play_frame, check_the_end, screen, redraw_screen, anim_tile_modif, draw_hp,
-  draw_kid_hp, draw_guard_hp, add_life,
+  draw_kid_hp, draw_guard_hp, add_life, gen_palace_wall_colors,
 } from './seg000.ts';
 import { add_objtable, mark_obj_tile_redraw } from './seg008.ts';
 import { l2, l5, l6, l7, l8, out } from './link.ts';
@@ -361,6 +361,9 @@ export class PopGame {
     loadkid();
     start_chompers();
     enter_guard();
+    // `draw_level_first`: a palace wall's brick colours are rolled
+    // once for the room, before the room is drawn.
+    if (drawLevelType.of(g.current_level)) gen_palace_wall_colors();
     redraw_screen();
     // `draw_level_first`: the whole screen black, the level's number in
     // the strip under the room, the room drawn, the hit points put up.
@@ -567,6 +570,7 @@ export class PopGame {
       }
     } else if (screen.different_room) {
       g.drawn_room = g.next_room;
+      if (drawLevelType.of(g.current_level)) gen_palace_wall_colors();
       this.redrawScreen(true);
     } else {
       reset_tables();
@@ -792,6 +796,7 @@ export class PopGame {
     if (room === g.drawn_room) return;
     g.drawn_room = room;
     g.next_room = room;
+    if (drawLevelType.of(g.current_level)) gen_palace_wall_colors();
     load_room_links();
     get_room_address(room);
     anim_tile_modif();

@@ -295,7 +295,14 @@ async function boot(): Promise<void> {
    * letters of it in a row, anywhere, and the keys below wake up.
    */
   const CHEAT_WORD = 'megahit';
-  let cheats = false;
+  /**
+   * On, and the word turns them off again.
+   *
+   * The original wants `prince megahit` on a command line; there is no
+   * command line here and no reason to hide them from a player who has
+   * come to look at the game, so they start on.
+   */
+  let cheats = true;
   let typed = '';
 
   /** Which of the original's keys this is, as `process_key` names them. */

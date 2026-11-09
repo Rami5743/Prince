@@ -185,6 +185,37 @@ export function play_guard_frame(): void {
   }
 }
 
+/**
+ * `gen_palace_wall_colors`: the colours of a palace wall's bricks.
+ *
+ * A palace wall has no drawn pattern the way a dungeon one does; it is
+ * blocks of flat colour, four subrows of eleven, picked from two runs
+ * of four shades and never twice the same in a row. The seed is the
+ * room, so the wall is the same every time the room is drawn and
+ * different from room to room.
+ */
+// seg000:1587
+export function gen_palace_wall_colors(): void {
+  const old_randseed = g.random_seed;
+  g.random_seed = g.drawn_room;
+  prandom(1); // a roll is fetched and thrown away
+  for (let row = 0; row < 3; row++) {
+    for (let subrow = 0; subrow < 4; subrow++) {
+      const color_base = subrow % 2 ? 0x61 : 0x66;
+      let prev_color = -1;
+      for (let column = 0; column <= 10; ++column) {
+        let color: number;
+        do {
+          color = color_base + prandom(3);
+        } while (color === prev_color);
+        g.palace_wall_colors[44 * row + 11 * subrow + column] = color;
+        prev_color = color;
+      }
+    }
+  }
+  g.random_seed = old_randseed;
+}
+
 // seg000:0FBD
 export function check_the_end(): void {
   if (g.next_room !== 0 && g.next_room !== g.drawn_room) {

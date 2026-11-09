@@ -1267,6 +1267,35 @@ export function wall_pattern(which_part: number, which_table: number): void {
   // The pattern of a wall is fixed: its seed is where the tile is.
   g.random_seed = g.drawn_room + tbl_line[g.drawn_row] + g.drawn_col;
   prandom(1); // a roll is fetched and thrown away
+  if (levelType.of(g.current_level) !== 0) {
+    // A palace wall has no drawn pattern. It is blocks of flat colour
+    // out of `palace_wall_colors`, with a run of thin decals between
+    // the bricks over the top of them -- and the port drew none of it,
+    // so every palace level had a hole where its walls should be.
+    if (which_part !== 0) {
+      const at = (i: number) => g.palace_wall_colors[44 * g.drawn_row + i + g.drawn_col];
+      add_wipetable(which_table, 8 * g.draw_xh, g.draw_main_y - 40, 20, 4 * 8, at(0));
+      add_wipetable(which_table, 8 * g.draw_xh, g.draw_main_y - 19, 21, 2 * 8, at(11));
+      add_wipetable(which_table, 8 * (g.draw_xh + 2), g.draw_main_y - 19, 21, 2 * 8, at(12));
+      add_wipetable(which_table, 8 * g.draw_xh, g.draw_main_y, 19, 1 * 8, at(22));
+      add_wipetable(which_table, 8 * (g.draw_xh + 1), g.draw_main_y, 19, 3 * 8, at(23));
+      ptr_add_table(chtabs.id_chtab_7_environmentwall, prandom(2) + 3, g.draw_xh + 3, 0,
+        g.draw_main_y - 53, blitters.blitters_46h_mono_6, 0);
+      ptr_add_table(chtabs.id_chtab_7_environmentwall, prandom(2) + 6, g.draw_xh, 0,
+        g.draw_main_y - 34, blitters.blitters_46h_mono_6, 0);
+      ptr_add_table(chtabs.id_chtab_7_environmentwall, prandom(2) + 9, g.draw_xh, 0,
+        g.draw_main_y - 13, blitters.blitters_46h_mono_6, 0);
+      ptr_add_table(chtabs.id_chtab_7_environmentwall, prandom(2) + 12, g.draw_xh, 0,
+        g.draw_main_y, blitters.blitters_46h_mono_6, 0);
+    }
+    add_wipetable(which_table, 8 * g.draw_xh, g.draw_bottom_y, 3, 4 * 8,
+      g.palace_wall_colors[44 * g.drawn_row + 33 + g.drawn_col]);
+    ptr_add_table(chtabs.id_chtab_7_environmentwall, prandom(2) + 15, g.draw_xh, 0,
+      g.draw_bottom_y, blitters.blitters_46h_mono_6, 0);
+    g.ptr_add_table = saved_sim;
+    g.random_seed = saved_prng_state;
+    return;
+  }
   const middle_divider = prandom(1);
   const middle_divider_offset = prandom(4);
   const bottom_divider = prandom(1);
