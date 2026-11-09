@@ -490,7 +490,14 @@ async function boot(): Promise<void> {
     if (!game) return;
     const v = views[current];
     const was = v.kind === 'level' ? v.level : 1;
-    const carried = { ticks: game.remainingTicks, sword: game.hasSword };
+    const carried = {
+      ticks: game.remainingTicks,
+      sword: game.hasSword,
+      // The flasks he has found. `start_level` gives every level the
+      // executable's three, so without this the player was robbed of
+      // every one of them at each door.
+      lives: game.beginningHitPoints,
+    };
     held.clear();
     const next = views.findIndex((x) => x.kind === 'level' && x.level === was + 1);
     // Out of the last level and the game is over: the screen the
@@ -500,6 +507,7 @@ async function boot(): Promise<void> {
     if (!game) return;
     game.remainingTicks = carried.ticks;
     game.hasSword = carried.sword || game.hasSword;
+    game.beginningHitPoints = carried.lives;
     watchRoom = null;
   }
 
@@ -615,6 +623,7 @@ async function boot(): Promise<void> {
     frame: game.kid.frame, room: game.kid.room, x: game.kid.x, y: game.kid.y,
     hitPoints: game.hitPoints, dead: game.isDead, held: [...held].sort(),
     awaitingButton: game.awaitingButton, level: w0Level(),
+    maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_GUARD ? null : {
       frame: game.guard.frame, x: game.guard.x,

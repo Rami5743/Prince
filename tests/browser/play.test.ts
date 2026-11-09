@@ -27,7 +27,7 @@ const consoleErrors: string[] = [];
 interface PageState {
   frame: number; room: number; x: number; y: number;
   hitPoints: number; dead: boolean; held: string[]; sword: number;
-  awaitingButton: boolean; level: number;
+  awaitingButton: boolean; level: number; maxHitPoints: number;
   guard: { frame: number; x: number; hitPoints: number; alive: number } | null;
 }
 

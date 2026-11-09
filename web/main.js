@@ -9460,6 +9460,10 @@ var PopGame = class _PopGame {
       this.surface.blitXor(sprite, x, y, found.base);
       return;
     }
+    if (blit === blitters.blitters_46h_mono_6 && chtab === chtabs.id_chtab_7_environmentwall) {
+      this.surface.blitMono(sprite, x, y, found.base + 14);
+      return;
+    }
     if (blit >= blitters.blitters_40h_mono) {
       this.surface.blitMono(sprite, x, y, blit & 15);
       return;
@@ -9642,6 +9646,25 @@ var PopGame = class _PopGame {
   }
   get maxHitPoints() {
     return g.hitp_max;
+  }
+  /**
+   * `hitp_beg_lev`: how many flasks the Prince starts a level with.
+   *
+   * `start_level` sets it from the executable's `start_hitp` every
+   * time, so a level of its own always begins with three. What carries
+   * it is the shell: a death keeps it -- `restart` already did -- and
+   * so must the door out of a level, or every flask the player found
+   * is taken off him at the next one.
+   */
+  get beginningHitPoints() {
+    return g.hitp_beg_lev;
+  }
+  set beginningHitPoints(n) {
+    if (n <= g.hitp_beg_lev) return;
+    g.hitp_beg_lev = n;
+    g.hitp_max = n;
+    g.hitp_curr = n;
+    g.hitp_delta = 1;
   }
   /** `drawn_room`, which the shell also sets to look round the level. */
   get drawnRoom() {
@@ -10796,7 +10819,14 @@ async function boot() {
     if (!game) return;
     const v = views[current];
     const was = v.kind === "level" ? v.level : 1;
-    const carried = { ticks: game.remainingTicks, sword: game.hasSword };
+    const carried = {
+      ticks: game.remainingTicks,
+      sword: game.hasSword,
+      // The flasks he has found. `start_level` gives every level the
+      // executable's three, so without this the player was robbed of
+      // every one of them at each door.
+      lives: game.beginningHitPoints
+    };
     held.clear();
     const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
     if (next < 0) {
@@ -10807,6 +10837,7 @@ async function boot() {
     if (!game) return;
     game.remainingTicks = carried.ticks;
     game.hasSword = carried.sword || game.hasSword;
+    game.beginningHitPoints = carried.lives;
     watchRoom = null;
   }
   async function restartGame() {
@@ -10910,6 +10941,7 @@ async function boot() {
     held: [...held].sort(),
     awaitingButton: game.awaitingButton,
     level: w0Level(),
+    maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_DIRECTION ? null : {
       frame: game.guard.frame,

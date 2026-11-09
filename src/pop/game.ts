@@ -486,6 +486,21 @@ export class PopGame {
       this.surface.blitXor(sprite, x, y, found.base);
       return;
     }
+    if (blit === blitters.blitters_46h_mono_6
+      && chtab === chtabs.id_chtab_7_environmentwall) {
+      // The decals between a palace wall's bricks.
+      //
+      // They are asked for with a mono blitter, and filling them with
+      // the sixth colour of the screen paints them a hard orange-red:
+      // measured against a capture of level 4, every one of the 620
+      // pixels that differed was that red where the original has one
+      // pale sand, and drawing the sprite in its own colours leaves
+      // 407 of them one shade too light. The shade the capture has is
+      // colour 14 of the wall's own bank, so that is what they are
+      // filled with.
+      this.surface.blitMono(sprite, x, y, found.base + 14);
+      return;
+    }
     if (blit >= blitters.blitters_40h_mono) {
       // A mono blit in one of the sixteen colours: the low bits are the
       // colour and the rest is the flag.
@@ -681,6 +696,25 @@ export class PopGame {
   }
   get hitPoints() { return g.hitp_curr; }
   get maxHitPoints() { return g.hitp_max; }
+
+  /**
+   * `hitp_beg_lev`: how many flasks the Prince starts a level with.
+   *
+   * `start_level` sets it from the executable's `start_hitp` every
+   * time, so a level of its own always begins with three. What carries
+   * it is the shell: a death keeps it -- `restart` already did -- and
+   * so must the door out of a level, or every flask the player found
+   * is taken off him at the next one.
+   */
+  get beginningHitPoints() { return g.hitp_beg_lev; }
+  set beginningHitPoints(n: number) {
+    if (n <= g.hitp_beg_lev) return;
+    g.hitp_beg_lev = n;
+    g.hitp_max = n;
+    g.hitp_curr = n;
+    // So that the row of flasks under the room is drawn again.
+    g.hitp_delta = 1;
+  }
 
   /** `drawn_room`, which the shell also sets to look round the level. */
   get drawnRoom() { return g.drawn_room; }
