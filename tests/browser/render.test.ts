@@ -107,17 +107,24 @@ describe('the keyboard, in a real browser', () => {
     expect((await state())?.held).toEqual([]);
   });
 
-  it('keeps the keys away from the menus, which would change what is shown', async () => {
+  it('has no level or room menu to play the game from', async () => {
+    const menus = await page.evaluate(() => [
+      document.getElementById('scene'), document.getElementById('room'),
+    ].filter(Boolean).length);
+    expect(menus, 'the game is played from its own title screen').toBe(0);
+  });
+
+  it('keeps the keys away from the page, which would swallow them', async () => {
     await playLevel(3);
     const before = await page.evaluate(() =>
-      (document.getElementById('scene') as HTMLSelectElement).value);
-    await page.focus('#scene');
+      (document.getElementById('aspect') as HTMLSelectElement).value);
+    await page.focus('#aspect');
     await page.keyboard.down('Numpad9');
     await page.keyboard.up('Numpad9');
     await page.keyboard.down('ArrowDown');
     await page.keyboard.up('ArrowDown');
     const after = await page.evaluate(() =>
-      (document.getElementById('scene') as HTMLSelectElement).value);
+      (document.getElementById('aspect') as HTMLSelectElement).value);
     expect(after).toBe(before);
   });
 

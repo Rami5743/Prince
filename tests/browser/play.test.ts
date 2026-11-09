@@ -27,6 +27,7 @@ const consoleErrors: string[] = [];
 interface PageState {
   frame: number; room: number; x: number; y: number;
   hitPoints: number; dead: boolean; held: string[]; sword: number;
+  awaitingButton: boolean; level: number;
   guard: { frame: number; x: number; hitPoints: number; alive: number } | null;
 }
 
@@ -218,6 +219,38 @@ describe('played in the browser', () => {
     });
     await pause(false);
     expect(outcome, 'the guard should go down').toBe('killed');
+    expect(consoleErrors).toEqual([]);
+  }, 180000);
+
+  /**
+   * And the fight can be lost -- and then any key begins the level
+   * again.
+   *
+   * The C takes Shift or Enter for this and nothing else, which leaves
+   * a player who does not know that pressing arrows at a dead Prince.
+   * The page takes any of them.
+   */
+  it('any key begins the level again after a death', async () => {
+    await meetTheGuard();
+    const died = await page.evaluate(() => {
+      const w = window as unknown as {
+        __princeStep(n: number, c: object): unknown;
+        __princeState(): { dead: boolean; awaitingButton: boolean } | null;
+      };
+      // Stand there and let him do it.
+      for (let i = 0; i < 600; i++) {
+        w.__princeStep(1, {});
+        if (w.__princeState()?.awaitingButton) return true;
+      }
+      return false;
+    });
+    expect(died, 'the guard should see to him').toBe(true);
+    await pause(false);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(900);
+    const after = await state();
+    expect(after?.dead, 'an arrow key, not Shift, began it again').toBe(false);
+    expect(after?.hitPoints, 'and with his strength back').toBe(3);
     expect(consoleErrors).toEqual([]);
   }, 180000);
 });

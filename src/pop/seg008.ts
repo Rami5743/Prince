@@ -904,6 +904,10 @@ export function draw_tile_wipe(height: number): void {
 // seg008:1BEB
 export function draw_tables(): void {
   paint.target(true);
+  // `if (is_blind_mode) draw_rect(&rect_top, color_0_black)`: the room
+  // is painted out and only what moves in it is drawn, which is the
+  // cheat the original calls blind mode.
+  if (g.is_blind_mode) paint.rect(0, 0, 320, 192, 0);
   restore_peels();
   draw_wipes(0);
   draw_table(0); // backtable

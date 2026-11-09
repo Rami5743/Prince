@@ -155,8 +155,6 @@
 </div>
 
 <div class="bar">
-  <label>scene <select id="scene"></select></label>
-  <label>room <select id="room" disabled></select></label>
   <label>pixels
     <select id="aspect">
       <option value="original-4-3">4:3 (as on a CRT)</option>
@@ -180,15 +178,27 @@
 </div>
 
 <footer>
-  <p><strong>Arrow keys</strong> or the <strong>numeric keypad</strong> to move —
-     a corner key jumps that way, as it does in the original. <strong>Shift</strong>
-     steps carefully; <strong>up</strong> while running is a running jump. Pick a
-     level from the menu; pick a room to look around without playing.</p>
-  <p>Standing, turning, running, jumping, climbing, hanging and falling are in,
-     and so are the traps — gates and the buttons that work them, loose floors,
-     spikes and chompers — and the guards, who stand where the level says and
-     are drawn with their own colours. Sword fighting and sound are not yet.
-     Every room here has been compared against the real game running under
+  <p>Press any key to begin. <strong>Arrow keys</strong> or the
+     <strong>numeric keypad</strong> to move — a corner key jumps that way, as
+     it does in the original. <strong>Shift</strong> steps carefully and takes
+     hold of a ledge; <strong>up</strong> while running is a running jump.
+     After a fall, any key begins the level again.</p>
+  <p>The rest of the original's keys are here too.
+     <strong>Space</strong> shows the time left, <strong>Esc</strong> pauses,
+     <strong>Ctrl+A</strong> begins the level again, <strong>Ctrl+R</strong>
+     goes back to the title, <strong>Ctrl+S</strong> turns the sound off and on,
+     and <strong>Shift+L</strong> skips a level, which the original allows up to
+     level 4. Type <strong>megahit</strong> for the cheats, as the original takes
+     it on its command line: then <strong>R</strong> raises a fallen Prince,
+     <strong>K</strong> fells the guard, <strong>Shift+T</strong> and
+     <strong>Shift+S</strong> give a flask and a hit point,
+     <strong>Shift+W</strong> is the feather, <strong>Shift+I</strong> turns the
+     screen over, <strong>Shift+B</strong> puts the lights out,
+     <strong>+</strong> and <strong>−</strong> move the clock, and
+     <strong>H J U N</strong> look at the rooms around this one, with
+     <strong>Ctrl+B</strong> to come back.</p>
+  <p>The whole game is here, from the title screen through all fourteen levels.
+     Every room has been compared against the real game running under
      emulation, and matches it pixel for pixel.</p>
 </footer>
 
@@ -212,15 +222,14 @@
     button.addEventListener('pointerleave', up);
   }
 
-  // Keep the chosen level across a republish.
+  // Keep the level across a republish, so a fix does not cost the player
+  // the hour he has played.
   const hot = window.claude?.hot;
   const start = (saved) => {
     if (!saved?.level) return;
     const restore = () => {
       if (!window.__princeReady) return void setTimeout(restore, 120);
-      const scene = document.getElementById('scene');
-      const option = [...scene.options].find((o) => o.textContent === `level ${saved.level}`);
-      if (option) { scene.value = option.value; scene.dispatchEvent(new Event('change')); }
+      window.__princeGoToLevel?.(saved.level);
     };
     restore();
   };

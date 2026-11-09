@@ -8203,6 +8203,7 @@ function draw_tile_wipe(height) {
 }
 function draw_tables() {
   paint.target(true);
+  if (g.is_blind_mode) paint.rect(0, 0, 320, 192, 0);
   restore_peels();
   draw_wipes(0);
   draw_table(0);
@@ -9561,6 +9562,142 @@ var PopGame = class _PopGame {
     g.have_sword = has ? 1 : 0;
   }
   /**
+   * `process_key`, less what belongs to a DOS machine.
+   *
+   * The original reads the keyboard twice: `read_keyb_control` turns
+   * the arrows and Shift into the three `control_` globals the game
+   * plays on, and `process_key` handles everything else -- the pause,
+   * the clock, the restart, the cheats. The first of those is the
+   * shell's `step`; these are the second. What is left out is what a
+   * browser has no business doing or cannot do: quitting, saving to
+   * disc, the joystick, redefining the keys.
+   *
+   * Each one says which case of the C's switch it stands for.
+   */
+  /** Space: `is_show_time = 1`. */
+  showTime() {
+    g.is_show_time = 1;
+  }
+  /** Esc: `is_paused`. The shell stops stepping while it is set. */
+  get paused() {
+    return g.is_paused !== 0;
+  }
+  set paused(on) {
+    g.is_paused = on ? 1 : 0;
+    if (on) this.say("GAME PAUSED", 0);
+    else erase_bottom_text(1);
+  }
+  /**
+   * `display_text_bottom(answer_text)` with the twenty-four ticks
+   * `process_key` gives an answer. `ticks` of nought leaves it up
+   * until something takes it away, which is what the pause wants.
+   */
+  say(text, ticks = 24) {
+    display_text_bottom(text);
+    g.text_time_total = ticks;
+    g.text_time_remaining = ticks;
+  }
+  /** Ctrl+A: start the level again. Level 15 is the potions level. */
+  restartLevel() {
+    if (this.levelNumber === 15) return;
+    out.stop_sounds();
+    g.is_restart_level = 1;
+  }
+  /**
+   * Shift+L: on to the next level.
+   *
+   * Without the cheats the original allows it only below level 4, and
+   * takes the clock down to fifteen minutes if more than that is left.
+   */
+  skipLevel(cheats) {
+    if (!(this.levelNumber < 4 || cheats)) return false;
+    if (this.levelNumber === 14) g.next_level = 1;
+    else {
+      g.next_level = this.levelNumber + 1;
+      if (!cheats && g.rem_min > 15) {
+        g.rem_min = 15;
+        g.rem_tick = 719;
+      }
+    }
+    out.stop_sounds();
+    return true;
+  }
+  /** `c` and Shift+C: the numbers of the rooms around this one. */
+  get roomsAround() {
+    return `S${g.drawn_room} L${g.room_L} R${g.room_R} A${g.room_A} B${g.room_B}`;
+  }
+  get roomsDiagonal() {
+    return `AL${g.room_AL} AR${g.room_AR} BL${g.room_BL} BR${g.room_BR}`;
+  }
+  /** H, J, U, N and Ctrl+B, as room numbers. */
+  get roomLeft() {
+    return g.room_L;
+  }
+  get roomRight() {
+    return g.room_R;
+  }
+  get roomAbove() {
+    return g.room_A;
+  }
+  get roomBelow() {
+    return g.room_B;
+  }
+  /** '+' and '-': a minute on the clock either way. */
+  addMinutes(n) {
+    g.rem_min = Math.max(1, g.rem_min + n);
+    g.text_time_total = 0;
+    g.text_time_remaining = 0;
+    g.is_show_time = 1;
+  }
+  /** R: the Prince gets up again. */
+  resurrect() {
+    if (g.Kid.alive <= 0) return;
+    g.resurrect_time = 20;
+    g.Kid.alive = -1;
+    erase_bottom_text(1);
+  }
+  /** K: the guard falls over. A skeleton cannot be killed. */
+  killGuard() {
+    if (g.Guard.charid === 4) return;
+    g.guardhp_delta = -g.guardhp_curr;
+    g.Guard.alive = 0;
+  }
+  /** Shift+S: one hit point back, with the small potion's red flash. */
+  heal() {
+    if (g.hitp_curr === g.hitp_max) return;
+    out.play_sound(33);
+    g.hitp_delta = 1;
+    g.flash_color = 4;
+    g.flash_time = 2;
+  }
+  /** Shift+T: another flask on the bar. */
+  addLife() {
+    out.play_sound(30);
+    g.flash_color = 4;
+    g.flash_time = 4;
+    add_life();
+  }
+  /** Shift+W: the feather, with the green flash and the low note. */
+  featherFall() {
+    g.is_feather_fall = 1;
+    g.flash_color = 2;
+    g.flash_time = 3;
+    out.stop_sounds();
+    out.play_sound(39);
+  }
+  /** Shift+B: the room goes dark and the Prince plays on without it. */
+  toggleBlind() {
+    g.is_blind_mode = g.is_blind_mode ? 0 : 1;
+    this.needFullRedraw = true;
+  }
+  /** Shift+I: the screen turns over. The shell does the turning. */
+  toggleUpsideDown() {
+    g.upside_down = g.upside_down ? 0 : -1;
+  }
+  get upsideDown() {
+    return g.upside_down !== 0;
+  }
+  /**
    * Show another room without playing: the view-the-level keys.
    *
    * `next_room = room` and the screen drawn whole, which is what the
@@ -9918,8 +10055,6 @@ var DATA_URL = window.__princeDataUrl ?? "../original/prince1";
 var FRAMES_PER_SECOND = 12;
 async function boot() {
   const canvas = document.getElementById("screen");
-  const sceneSel = document.getElementById("scene");
-  const roomSel = document.getElementById("room");
   const aspectSel = document.getElementById("aspect");
   const status = document.getElementById("status");
   const display = new Display(canvas);
@@ -9952,18 +10087,6 @@ async function boot() {
   const views = [{ kind: "title" }, { kind: "opening" }];
   for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
   const label = (v) => v.kind === "level" ? `level ${v.level}` : `${v.kind} screen`;
-  for (const [i, v] of views.entries()) {
-    const o = document.createElement("option");
-    o.value = String(i);
-    o.textContent = label(v);
-    sceneSel.append(o);
-  }
-  for (let r = 1; r <= 24; r++) {
-    const o = document.createElement("option");
-    o.value = String(r);
-    o.textContent = `room ${r}`;
-    roomSel.append(o);
-  }
   let current = 0;
   let game = null;
   let watchRoom = null;
@@ -10021,19 +10144,15 @@ async function boot() {
   }
   async function select(index) {
     current = index;
-    sceneSel.value = String(current);
     const v = views[current];
     if (v.kind !== "level") {
       game = null;
-      roomSel.disabled = true;
       drawTitle(v.kind === "title" ? title : opening);
-      status.textContent = `${label(v)} \u2014 320x200, drawn from the original data files`;
+      status.textContent = v.kind === "title" ? "press any key to begin" : "the hour is up \u2014 press any key";
       return;
     }
-    roomSel.disabled = false;
     game = await PopGame.start(assets, exe, v.level, { effects });
     watchRoom = null;
-    roomSel.value = String(game.drawnRoom);
   }
   const recordBtn = document.getElementById("record");
   const saveBtn = document.getElementById("save");
@@ -10096,8 +10215,25 @@ async function boot() {
     const v = views[current];
     return v.kind === "level" ? v.level : 0;
   };
+  const flipped = new Surface();
+  function present(g2) {
+    const drawn = g2.render();
+    if (!g2.upsideDown) {
+      display.present(drawn, g2.scene.screenPalette.toRgba());
+      return;
+    }
+    for (let y = 0; y < 200; y++) {
+      flipped.pixels.set(drawn.pixels.subarray(y * 320, y * 320 + 320), (199 - y) * 320);
+    }
+    display.present(flipped, g2.scene.screenPalette.toRgba());
+  }
   function frame() {
     if (!game) return;
+    if (game.paused) {
+      present(game);
+      status.textContent = "paused \u2014 press any key";
+      return;
+    }
     if (watchRoom === null) {
       const c = controls();
       pressedSinceStep.clear();
@@ -10111,44 +10247,170 @@ async function boot() {
         void changeScene(nextLevel);
         return;
       }
-      if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
     }
-    display.present(game.render(), game.scene.screenPalette.toRgba());
+    present(game);
     const v = views[current];
-    const type = game.scene.options.levelType ? "palace" : "dungeon";
-    status.textContent = game.awaitingButton ? `${label(v)} \u2014 you are dead; press Shift to begin again` : watchRoom === null ? `${label(v)} (${type}) \u2014 ${CONTROLS}` : `${label(v)} (${type}), room ${watchRoom} \u2014 looking around; press a key to play`;
+    status.textContent = game.awaitingButton ? `${label(v)} \u2014 press any key to begin the level again` : watchRoom === null ? `${label(v)} \u2014 ${CONTROLS}` : `${label(v)}, room ${watchRoom} \u2014 looking around; press a key to play`;
   }
-  sceneSel.addEventListener("change", () => {
-    sceneSel.blur();
-    void select(Number(sceneSel.value));
-  });
-  roomSel.addEventListener("change", () => {
-    roomSel.blur();
-    watchRoom = Number(roomSel.value);
-  });
-  aspectSel.addEventListener("change", () => {
+  aspectSel?.addEventListener("change", () => {
     aspectSel.blur();
     display.setAspect(aspectSel.value);
   });
+  const CHEAT_WORD = "megahit";
+  let cheats = false;
+  let typed = "";
+  function keyName(e) {
+    const mod = (e.ctrlKey || e.metaKey ? "ctrl+" : "") + (e.shiftKey ? "shift+" : "");
+    const code = e.code;
+    if (/^Key[A-Z]$/.test(code)) return mod + code.slice(3).toLowerCase();
+    if (code === "NumpadAdd" || code === "Equal") return mod + "+";
+    if (code === "NumpadSubtract" || code === "Minus") return mod + "-";
+    if (code === "Space") return mod + "space";
+    if (code === "Escape") return mod + "escape";
+    if (code === "Enter" || code === "NumpadEnter") return mod + "enter";
+    return mod + code.toLowerCase();
+  }
+  function command(e) {
+    const key = keyName(e);
+    if (!game) return false;
+    switch (key) {
+      case "space":
+        game.showTime();
+        return true;
+      case "escape":
+      case "shift+escape":
+        game.paused = true;
+        return true;
+      case "ctrl+a":
+        game.restartLevel();
+        return true;
+      case "ctrl+r":
+        void changeScene(restartGame);
+        return true;
+      case "ctrl+s":
+        if (sound) sound.muted = !sound.muted;
+        game.say(sound && !sound.muted ? "SOUND ON" : "SOUND OFF");
+        return true;
+      case "ctrl+k":
+        game.say("KEYBOARD MODE");
+        return true;
+      case "ctrl+j":
+        game.say("JOYSTICK NOT FOUND");
+        return true;
+      case "ctrl+v":
+        game.say("PRINCE OF PERSIA  V1.0");
+        return true;
+      case "shift+l":
+        if (!game.skipLevel(cheats)) return true;
+        return true;
+      default:
+        break;
+    }
+    if (!cheats) return false;
+    switch (key) {
+      case "c":
+        game.say(game.roomsAround);
+        return true;
+      case "shift+c":
+        game.say(game.roomsDiagonal);
+        return true;
+      case "+":
+        game.addMinutes(1);
+        return true;
+      case "-":
+        game.addMinutes(-1);
+        return true;
+      case "r":
+        game.resurrect();
+        return true;
+      case "k":
+        game.killGuard();
+        return true;
+      case "shift+i":
+        game.toggleUpsideDown();
+        return true;
+      case "shift+w":
+        game.featherFall();
+        return true;
+      case "shift+b":
+        game.toggleBlind();
+        return true;
+      case "shift+s":
+        game.heal();
+        return true;
+      case "shift+t":
+        game.addLife();
+        return true;
+      case "h":
+        watchRoom = game.roomLeft;
+        return true;
+      case "j":
+        watchRoom = game.roomRight;
+        return true;
+      case "u":
+        watchRoom = game.roomAbove;
+        return true;
+      case "n":
+        watchRoom = game.roomBelow;
+        return true;
+      case "ctrl+b":
+        watchRoom = game.kid.room;
+        return true;
+      default:
+        return false;
+    }
+  }
   window.addEventListener("keydown", (e) => {
+    if (e.altKey) return;
+    wakeSound();
+    document.activeElement?.blur?.();
+    if (/^[a-z]$/i.test(e.key)) {
+      typed = (typed + e.key.toLowerCase()).slice(-CHEAT_WORD.length);
+      if (typed === CHEAT_WORD) {
+        cheats = !cheats;
+        typed = "";
+        game?.say(cheats ? "CHEATS ON" : "CHEATS OFF");
+        e.preventDefault();
+        return;
+      }
+    }
+    if (!game) {
+      e.preventDefault();
+      void changeScene(async () => {
+        await select(views.findIndex((v) => v.kind === "level" && v.level === 1));
+      });
+      return;
+    }
+    if (game.paused) {
+      e.preventDefault();
+      game.paused = false;
+      return;
+    }
+    if (game.awaitingButton) {
+      e.preventDefault();
+      game.pressButton();
+      return;
+    }
+    if (command(e)) {
+      e.preventDefault();
+      return;
+    }
     const dirs = directionsOf(e);
     if (dirs === null) return;
     e.preventDefault();
-    document.activeElement?.blur?.();
     if (dirs.length === 0) held.clear();
     for (const d of dirs) {
       held.add(d);
       pressedSinceStep.add(d);
     }
     recorder.key("down", e.code);
-    if (watchRoom !== null && game) {
+    if (watchRoom !== null) {
       watchRoom = null;
       game.drawnRoom = game.kid.room;
     }
-    if (dirs.includes("shift")) game?.pressButton();
-    wakeSound();
+    if (dirs.includes("shift")) game.pressButton();
   });
   window.addEventListener("keyup", (e) => {
     const dirs = directionsOf(e);
@@ -10200,15 +10462,22 @@ async function boot() {
     if (!game) return;
     const v = views[current];
     const was = v.kind === "level" ? v.level : 1;
-    const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
-    if (next < 0) return;
     const carried = { ticks: game.remainingTicks, sword: game.hasSword };
     held.clear();
+    const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
+    if (next < 0) {
+      await select(1);
+      return;
+    }
     await select(next);
     if (!game) return;
     game.remainingTicks = carried.ticks;
     game.hasSword = carried.sword || game.hasSword;
     watchRoom = null;
+  }
+  async function restartGame() {
+    held.clear();
+    await select(0);
   }
   async function restart() {
     if (!game) return;
@@ -10305,6 +10574,8 @@ async function boot() {
     hitPoints: game.hitPoints,
     dead: game.isDead,
     held: [...held].sort(),
+    awaitingButton: game.awaitingButton,
+    level: w0Level(),
     sword: game.kid.sword,
     guard: game.guard.direction === NO_DIRECTION ? null : {
       frame: game.guard.frame,
@@ -10313,6 +10584,10 @@ async function boot() {
       alive: game.guard.alive
     }
   } : null;
+  w.__princeGoToLevel = (level) => {
+    const at = views.findIndex((v) => v.kind === "level" && v.level === level);
+    if (at >= 0) void changeScene(() => select(at));
+  };
   w.__princeLevel = () => views[current].kind === "level" ? views[current].level : 0;
   w.__princeReady = true;
   void RoomRenderer;

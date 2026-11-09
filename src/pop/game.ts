@@ -651,6 +651,138 @@ export class PopGame {
   set hasSword(has: boolean) { g.have_sword = has ? 1 : 0; }
 
   /**
+   * `process_key`, less what belongs to a DOS machine.
+   *
+   * The original reads the keyboard twice: `read_keyb_control` turns
+   * the arrows and Shift into the three `control_` globals the game
+   * plays on, and `process_key` handles everything else -- the pause,
+   * the clock, the restart, the cheats. The first of those is the
+   * shell's `step`; these are the second. What is left out is what a
+   * browser has no business doing or cannot do: quitting, saving to
+   * disc, the joystick, redefining the keys.
+   *
+   * Each one says which case of the C's switch it stands for.
+   */
+
+  /** Space: `is_show_time = 1`. */
+  showTime(): void { g.is_show_time = 1; }
+
+  /** Esc: `is_paused`. The shell stops stepping while it is set. */
+  get paused() { return g.is_paused !== 0; }
+  set paused(on: boolean) {
+    g.is_paused = on ? 1 : 0;
+    if (on) this.say('GAME PAUSED', 0);
+    else erase_bottom_text(1);
+  }
+
+  /**
+   * `display_text_bottom(answer_text)` with the twenty-four ticks
+   * `process_key` gives an answer. `ticks` of nought leaves it up
+   * until something takes it away, which is what the pause wants.
+   */
+  say(text: string, ticks = 24): void {
+    display_text_bottom(text);
+    g.text_time_total = ticks;
+    g.text_time_remaining = ticks;
+  }
+
+  /** Ctrl+A: start the level again. Level 15 is the potions level. */
+  restartLevel(): void {
+    if (this.levelNumber === 15) return;
+    out.stop_sounds();
+    g.is_restart_level = 1;
+  }
+
+  /**
+   * Shift+L: on to the next level.
+   *
+   * Without the cheats the original allows it only below level 4, and
+   * takes the clock down to fifteen minutes if more than that is left.
+   */
+  skipLevel(cheats: boolean): boolean {
+    if (!(this.levelNumber < 4 || cheats)) return false;
+    if (this.levelNumber === 14) g.next_level = 1;
+    else {
+      g.next_level = this.levelNumber + 1;
+      if (!cheats && g.rem_min > 15) { g.rem_min = 15; g.rem_tick = 719; }
+    }
+    out.stop_sounds();
+    return true;
+  }
+
+  /** `c` and Shift+C: the numbers of the rooms around this one. */
+  get roomsAround() {
+    return `S${g.drawn_room} L${g.room_L} R${g.room_R} A${g.room_A} B${g.room_B}`;
+  }
+  get roomsDiagonal() {
+    return `AL${g.room_AL} AR${g.room_AR} BL${g.room_BL} BR${g.room_BR}`;
+  }
+  /** H, J, U, N and Ctrl+B, as room numbers. */
+  get roomLeft() { return g.room_L; }
+  get roomRight() { return g.room_R; }
+  get roomAbove() { return g.room_A; }
+  get roomBelow() { return g.room_B; }
+
+  /** '+' and '-': a minute on the clock either way. */
+  addMinutes(n: number): void {
+    g.rem_min = Math.max(1, g.rem_min + n);
+    g.text_time_total = 0;
+    g.text_time_remaining = 0;
+    g.is_show_time = 1;
+  }
+
+  /** R: the Prince gets up again. */
+  resurrect(): void {
+    if (g.Kid.alive <= 0) return;
+    g.resurrect_time = 20;
+    g.Kid.alive = -1;
+    erase_bottom_text(1);
+  }
+
+  /** K: the guard falls over. A skeleton cannot be killed. */
+  killGuard(): void {
+    if (g.Guard.charid === 4) return; // charid_4_skeleton
+    g.guardhp_delta = -g.guardhp_curr;
+    g.Guard.alive = 0;
+  }
+
+  /** Shift+S: one hit point back, with the small potion's red flash. */
+  heal(): void {
+    if (g.hitp_curr === g.hitp_max) return;
+    out.play_sound(33); // sound_33_small_potion
+    g.hitp_delta = 1;
+    g.flash_color = 4;
+    g.flash_time = 2;
+  }
+
+  /** Shift+T: another flask on the bar. */
+  addLife(): void {
+    out.play_sound(30); // sound_30_big_potion
+    g.flash_color = 4;
+    g.flash_time = 4;
+    add_life();
+  }
+
+  /** Shift+W: the feather, with the green flash and the low note. */
+  featherFall(): void {
+    g.is_feather_fall = 1;
+    g.flash_color = 2;
+    g.flash_time = 3;
+    out.stop_sounds();
+    out.play_sound(39); // sound_39_low_weight
+  }
+
+  /** Shift+B: the room goes dark and the Prince plays on without it. */
+  toggleBlind(): void {
+    g.is_blind_mode = g.is_blind_mode ? 0 : 1;
+    this.needFullRedraw = true;
+  }
+
+  /** Shift+I: the screen turns over. The shell does the turning. */
+  toggleUpsideDown(): void { g.upside_down = g.upside_down ? 0 : -1; }
+  get upsideDown() { return g.upside_down !== 0; }
+
+  /**
    * Show another room without playing: the view-the-level keys.
    *
    * `next_room = room` and the screen drawn whole, which is what the
