@@ -705,6 +705,10 @@ export class PopGame {
    * it is the shell: a death keeps it -- `restart` already did -- and
    * so must the door out of a level, or every flask the player found
    * is taken off him at the next one.
+   *
+   * The shell hands it the `hitp_max` of the level just finished, not
+   * that level's own `hitp_beg_lev`: a flask raises the first and
+   * leaves the second where it was.
    */
   get beginningHitPoints() { return g.hitp_beg_lev; }
   set beginningHitPoints(n: number) {

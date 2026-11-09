@@ -9655,6 +9655,10 @@ var PopGame = class _PopGame {
    * it is the shell: a death keeps it -- `restart` already did -- and
    * so must the door out of a level, or every flask the player found
    * is taken off him at the next one.
+   *
+   * The shell hands it the `hitp_max` of the level just finished, not
+   * that level's own `hitp_beg_lev`: a flask raises the first and
+   * leaves the second where it was.
    */
   get beginningHitPoints() {
     return g.hitp_beg_lev;
@@ -10822,10 +10826,15 @@ async function boot() {
     const carried = {
       ticks: game.remainingTicks,
       sword: game.hasSword,
-      // The flasks he has found. `start_level` gives every level the
-      // executable's three, so without this the player was robbed of
-      // every one of them at each door.
-      lives: game.beginningHitPoints
+      // The flasks he has found.
+      //
+      // `add_life` raises `hitp_max` and leaves `hitp_beg_lev` alone --
+      // which is what the C does too -- and `start_level` sets
+      // `hitp_max` back from `hitp_beg_lev` on the next level. So the
+      // number to carry is the one he is playing with, not the one the
+      // level began with, and carrying the latter is why the first
+      // attempt at this changed nothing.
+      lives: game.maxHitPoints
     };
     held.clear();
     const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
