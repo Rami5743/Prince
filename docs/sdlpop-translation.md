@@ -147,6 +147,25 @@ recording a tick earlier scores 10060 rather than 10559 (measured before
 the two clock fixes), so the phase
 that is there is the better of the two.
 
+### The level door did not cut the Prince off
+
+`clip_char` sets `obj_clip_right` to `leveldoor_right` for frames 224
+to 228 -- the top of the climb up the way out of the level -- and to
+the right edge of the tile for a door top. The port carried both of
+those the whole way, from `clip_char` through `add_objtable`,
+`add_midtable` and `draw_mid` into `paint.clip`, and then dropped
+`left` and `right` on the floor, because `Surface` had no horizontal
+clip to put them in. The Prince's trailing leg was drawn out past the
+door's edge on the last four ticks of the climb.
+
+![The climb up the level door, before and above, after and
+below](img/leveldoor-clip.png)
+
+No capture reaches that climb yet. `gate1`'s original died before it,
+and `exitdoor` -- `gate1`'s timeline with every press stretched to four
+ticks, which reaches the same stairs on the same ticks 762 to 774 --
+parts company with its capture at 336 and again at 595.
+
 ### A third kind: the press the emulator took late
 
 `gate1`, captured after the nineteen, turned out to be a kind of its
