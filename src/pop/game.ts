@@ -24,7 +24,8 @@ import { g, newChar, type RectType } from './state.ts';
 import { chtabs, blitters, directions } from './types.ts';
 import { setFrameTables, loadkid, savekid, loadshad, saveshad } from './seg006.ts';
 import {
-  setPainter, levelType as drawLevelType, redraw_room, draw_moving, draw_tables,
+  setPainter, levelType as drawLevelType, mirror as drawMirror,
+  redraw_room, draw_moving, draw_tables,
   get_room_address, mobs as drawMobs, FLIPPED, reset_tables, hp as drawHp,
   show_level, display_text_bottom, erase_bottom_text, type Peel,
 } from './seg008.ts';
@@ -152,6 +153,16 @@ export class PopGame {
   private pendingFirstTick = true;
   /** The screen has to be drawn whole: `need_full_redraw`. */
   private needFullRedraw = true;
+  /**
+   * Whether the next full redraw paints the room out first.
+   *
+   * `draw_game_frame` clears only when the room has changed. The
+   * shell's own look-around changes the room too, and did not say so:
+   * the room before it was left underneath and the new one drawn over
+   * the top, so a palace room came up with another room's torches and
+   * floors showing through it.
+   */
+  private fullRedrawClears = false;
   /** The game's own font, out of the executable. */
   private font?: Font;
   /** `draw_level_first` has still to put the hit points up. */
@@ -253,6 +264,8 @@ export class PopGame {
     const type = this.scene.options.levelType;
     drawLevelType.of = () => type;
     looseLevelType.of = () => type;
+    drawMirror.level = constants.mirrorLevel;
+    drawMirror.room = constants.mirrorRoom;
     guardTables.hp = (n) => constants.guardHitPoints[n] ?? 0;
     guardTables.type = () => this.scene.guardType === 4 ? 2 : 0;
 
@@ -596,7 +609,9 @@ export class PopGame {
   render(): Surface {
     if (this.needFullRedraw) {
       this.needFullRedraw = false;
-      this.redrawScreen(false);
+      const clears = this.fullRedrawClears;
+      this.fullRedrawClears = false;
+      this.redrawScreen(clears);
       if (this.firstDraw) {
         // `draw_level_first` is not `draw_game_frame`: it draws the
         // level's opening picture without spending a tick of the words
@@ -839,6 +854,7 @@ export class PopGame {
     anim_tile_modif();
     start_chompers();
     this.needFullRedraw = true;
+    this.fullRedrawClears = true;
   }
 }
 

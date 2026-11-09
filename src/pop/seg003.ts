@@ -11,7 +11,7 @@
 import { g, byteOf, copyChar } from './state.ts';
 import { x_bump, y_land } from './data.ts';
 import {
-  tiles, charids, directions, frameids, seqids, sword_status, actions,
+  tiles, charids, directions, frameids, seqids, sword_status, actions, soundids,
 } from './types.ts';
 import {
   get_tile, get_tile_div_mod_m7, distance_to_edge_weight, play_seq, take_hp,
@@ -208,6 +208,9 @@ export function jump_through_mirror(): void {
   loadkid();
   check_mirror_image();
   g.Guard.charid = charids.charid_1_shadow;
+  // The glass going. The translation never asked for it, so the one
+  // moment on the level that ought to make a noise made none.
+  out.play_sound(soundids.sound_45_jump_through_mirror);
   g.guardhp_max = g.hitp_max;
   g.guardhp_curr = g.guardhp_max;
   copyChar(g.Guard, g.Char);

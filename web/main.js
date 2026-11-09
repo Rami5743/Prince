@@ -6337,6 +6337,7 @@ function jump_through_mirror() {
   loadkid();
   check_mirror_image();
   g.Guard.charid = charids.charid_1_shadow;
+  out.play_sound(soundids.sound_45_jump_through_mirror);
   g.guardhp_max = g.hitp_max;
   g.guardhp_curr = g.guardhp_max;
   copyChar(g.Guard, g.Char);
@@ -8497,6 +8498,7 @@ function add_kid_to_objtable() {
   clip_char();
   add_objtable(0);
 }
+var mirror = { level: 4, room: 4, column: 4 };
 function add_guard_to_objtable() {
   loadshad();
   load_fram_det_col();
@@ -8507,7 +8509,14 @@ function add_guard_to_objtable() {
   redraw_at_char();
   redraw_at_char2();
   clip_char();
-  add_objtable(g.Char.charid === charids.charid_1_shadow ? 1 : 2);
+  if (g.Char.charid === charids.charid_1_shadow) {
+    if (g.current_level === mirror.level && g.Char.room === mirror.room) {
+      g.obj_clip_left = 137 + (mirror.column - 4) * 32;
+    }
+    add_objtable(1);
+    return;
+  }
+  add_objtable(2);
 }
 function add_objtable(obj_type) {
   if (g.objtable.length >= 50) return;
@@ -9163,6 +9172,16 @@ var PopGame = class _PopGame {
   pendingFirstTick = true;
   /** The screen has to be drawn whole: `need_full_redraw`. */
   needFullRedraw = true;
+  /**
+   * Whether the next full redraw paints the room out first.
+   *
+   * `draw_game_frame` clears only when the room has changed. The
+   * shell's own look-around changes the room too, and did not say so:
+   * the room before it was left underneath and the new one drawn over
+   * the top, so a palace room came up with another room's torches and
+   * floors showing through it.
+   */
+  fullRedrawClears = false;
   /** The game's own font, out of the executable. */
   font;
   /** `draw_level_first` has still to put the hit points up. */
@@ -9258,6 +9277,8 @@ var PopGame = class _PopGame {
     const type = this.scene.options.levelType;
     levelType2.of = () => type;
     levelType.of = () => type;
+    mirror.level = constants.mirrorLevel;
+    mirror.room = constants.mirrorRoom;
     guards.hp = (n) => constants.guardHitPoints[n] ?? 0;
     guards.type = () => this.scene.guardType === 4 ? 2 : 0;
     g.level = {
@@ -9550,7 +9571,9 @@ var PopGame = class _PopGame {
   render() {
     if (this.needFullRedraw) {
       this.needFullRedraw = false;
-      this.redrawScreen(false);
+      const clears = this.fullRedrawClears;
+      this.fullRedrawClears = false;
+      this.redrawScreen(clears);
       if (this.firstDraw) {
         this.firstDraw = false;
         draw_kid_hp(g.hitp_curr, g.hitp_max);
@@ -9806,6 +9829,7 @@ var PopGame = class _PopGame {
     anim_tile_modif();
     start_chompers();
     this.needFullRedraw = true;
+    this.fullRedrawClears = true;
   }
 };
 

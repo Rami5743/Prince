@@ -1154,6 +1154,12 @@ export function add_kid_to_objtable(): void {
 }
 
 // seg008:2324
+/**
+ * `custom->mirror_level` and `custom->mirror_room`, read out of the
+ * executable and filled in when a level is built.
+ */
+export const mirror = { level: 4, room: 4, column: 4 };
+
 export function add_guard_to_objtable(): void {
   loadshad();
   load_fram_det_col();
@@ -1164,7 +1170,19 @@ export function add_guard_to_objtable(): void {
   redraw_at_char();
   redraw_at_char2();
   clip_char();
-  add_objtable(g.Char.charid === charids.charid_1_shadow ? 1 : 2);
+  if (g.Char.charid === charids.charid_1_shadow) {
+    // Special event: on the mirror level the shadow is clipped, so
+    // that it can only come out from the mirror and is not drawn
+    // standing in the room beside it. The port had the whole of him
+    // on screen from the first tick, which is what made him look like
+    // a second Prince.
+    if (g.current_level === mirror.level && g.Char.room === mirror.room) {
+      g.obj_clip_left = 137 + (mirror.column - 4) * 32;
+    }
+    add_objtable(1); // shadow
+    return;
+  }
+  add_objtable(2); // guard
 }
 
 // seg008:2388
