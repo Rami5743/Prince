@@ -1,4 +1,14 @@
-/** The translation's frames as PNGs, for looking at beside a capture. */
+/**
+ * The translation's frames as PNGs, for looking at beside a capture.
+ *
+ *   node --experimental-strip-types tools/dev/pop-frames.ts \
+ *       <rec.json> <outdir> <from> <to> [--late <from>:<to>:<n>]
+ *
+ * `--late` moves a press on by n ticks before replaying, the way
+ * `tools/dev/late-key.ts` does, so a recording whose capture parted
+ * company at a tap can still be put beside that capture after it. The
+ * `gate1` exit stairs are only comparable with `--late 591:592:14`.
+ */
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +26,13 @@ const from = Number(fromS ?? 0);
 const to = Number(toS ?? 4);
 const rec = parseRecording(readFileSync(recPath, 'utf8'));
 const ticks = decodeTimeline(rec.timeline);
+const lateArg = process.argv[process.argv.indexOf('--late') + 1];
+if (process.argv.includes('--late') && lateArg) {
+  const [a, b, d] = lateArg.split(':').map(Number);
+  const was = ticks.map((c) => ({ ...c }));
+  for (let t = a; t <= b; t++) ticks[t] = { ...ticks[t], x: 0 };
+  for (let t = a; t <= b; t++) if (t + d < ticks.length) ticks[t + d] = { ...ticks[t + d], x: was[t].x };
+}
 let game = await PopGame.start(assets, exe, rec.level);
 mkdirSync(outdir, { recursive: true });
 function write(index: number): void {

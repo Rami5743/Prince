@@ -69,7 +69,10 @@ async function boot(): Promise<void> {
     }
     void sound.wake();
   };
-  const effects = { sound: (which: number) => sound?.play(which) };
+  const effects = {
+    sound: (which: number) => sound?.play(which),
+    stopSounds: () => sound?.stop(),
+  };
 
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
@@ -258,8 +261,8 @@ async function boot(): Promise<void> {
       pressedSinceStep.clear();
       game.step(c);
       recorder.tick(c, game);
-      if (game.restartDue) { void restart(); return; }
-      if (game.levelFinished) { void nextLevel(); return; }
+      if (game.restartDue) { void changeScene(restart); return; }
+      if (game.levelFinished) { void changeScene(nextLevel); return; }
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -340,6 +343,30 @@ async function boot(): Promise<void> {
       game.drawnRoom = game.kid.room;
     }
   };
+
+  /**
+   * One scene change at a time.
+   *
+   * `frame()` runs twelve times a second, and both the ways out of a
+   * level have to await the next scene's data. Until that resolves the
+   * finished game is still there and still says it is finished, so
+   * every frame in between started another change -- and three of them
+   * in a row is how the player went out of the door on level 2 and
+   * arrived on level 5.
+   *
+   * Nothing is drawn while it is held, because `game` is the old one
+   * and its level is over.
+   */
+  let changing = false;
+  async function changeScene(what: () => Promise<void>): Promise<void> {
+    if (changing) return;
+    changing = true;
+    try {
+      await what();
+    } finally {
+      changing = false;
+    }
+  }
 
   /**
    * Out of the door and on to the next one, carrying what the Prince has

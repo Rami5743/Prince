@@ -101,6 +101,35 @@ describe('the sound player', () => {
     expect(f.sources[0].stopped).toBe(false);
   });
 
+  /**
+   * `sound_15_leveldoor_sliding`, which the game asks for on every one
+   * of the forty-two ticks the way out of the level takes to open.
+   */
+  const LEVELDOOR_SLIDING = 15;
+
+  it('lets a sound that may not be interrupted run to its end', async () => {
+    const f = fakeSink();
+    const player = new SoundPlayer(assets, f.sink);
+    await player.wake();
+    await player.preloadAll([LEVELDOOR_SLIDING, SOUND.footstep]);
+    for (let tick = 0; tick < 42; tick++) player.play(LEVELDOOR_SLIDING);
+    expect(f.sources, 'started once, not forty-two times').toHaveLength(1);
+    expect(f.sources[0].stopped).toBe(false);
+    player.play(SOUND.footstep);
+    expect(f.sources, 'and a footstep does not cut it off').toHaveLength(1);
+  });
+
+  it('plays a sound that was asked for while it was still being read', async () => {
+    const f = fakeSink();
+    const player = new SoundPlayer(assets, f.sink);
+    await player.wake();
+    player.play(SOUND.footstep); // not loaded yet: starts the read
+    expect(f.sources).toHaveLength(0);
+    await player.preload(SOUND.footstep);
+    expect(f.sources, 'it is played when it lands').toHaveLength(1);
+    expect(f.sources[0].started).toBe(true);
+  });
+
   it('plays nothing at all while it is muted', async () => {
     const f = fakeSink();
     const player = new SoundPlayer(assets, f.sink);

@@ -9189,6 +9189,9 @@ var PopGame = class _PopGame {
     out.play_sound = (which) => {
       this.effects?.sound?.(which);
     };
+    out.stop_sounds = () => {
+      this.effects?.stopSounds?.();
+    };
     out.check_sound_playing = () => this.deathMusic > 0 ? 1 : 0;
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
@@ -9562,7 +9565,7 @@ var SPEAKER_END = 18;
 function parseSound(payload) {
   if (payload.length < 2) return null;
   const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  switch (payload[0]) {
+  switch (payload[0] & 7) {
     case 1: {
       if (payload.length < 9) return null;
       const rate = dv.getUint16(1, true);
@@ -9606,11 +9609,141 @@ async function loadSound(assets, index, files = DIGI_FILES) {
   }
   return null;
 }
+var PRIORITY = [
+  20,
+  30,
+  35,
+  102,
+  50,
+  55,
+  48,
+  48,
+  75,
+  80,
+  13,
+  18,
+  12,
+  11,
+  105,
+  110,
+  115,
+  120,
+  125,
+  130,
+  145,
+  150,
+  155,
+  160,
+  1,
+  1,
+  1,
+  1,
+  1,
+  19,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  135,
+  140,
+  15,
+  16,
+  21,
+  22,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0
+];
+var INTERRUPTIBLE = [
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+];
+var priorityOf = (i) => PRIORITY[i] ?? 255;
+var interruptibleOf = (i) => (INTERRUPTIBLE[i] ?? 1) !== 0;
 var SoundPlayer = class {
   assets;
   context;
   buffers = /* @__PURE__ */ new Map();
-  pending = /* @__PURE__ */ new Set();
+  /**
+   * The reads in flight, by index.
+   *
+   * A set of indices was enough while nothing waited for one, but
+   * `play` now starts a read and leaves the sound to be played when it
+   * lands, and a second `preload` of the same index has to wait for
+   * that read rather than return as though it were done.
+   */
+  pending = /* @__PURE__ */ new Map();
   /** Nothing is played until the player has touched the page. */
   woken = false;
   /**
@@ -9619,6 +9752,18 @@ var SoundPlayer = class {
    * name. Letting them pile up turns a run into a wall of noise.
    */
   playing = null;
+  /** Which sound is in the channel, for the rule above. */
+  playingIndex = -1;
+  /**
+   * The last sound asked for that had not been read off the disc yet.
+   *
+   * A one-off -- a button, a footstep, the first drink of the game --
+   * used to be thrown away while its sample loaded, and the player
+   * heard nothing where the original made a noise. The load is quick,
+   * so the sound is still worth having when it lands; anything asked
+   * for since has already taken the channel, and this is dropped.
+   */
+  waitingFor = -1;
   muted = false;
   constructor(assets, context) {
     this.assets = assets;
@@ -9643,26 +9788,46 @@ var SoundPlayer = class {
       this.stop();
       return;
     }
+    if (!this.mayTake(index)) return;
     const buffer = this.buffers.get(index);
     if (buffer === void 0) {
+      this.waitingFor = index;
       void this.preload(index);
       return;
     }
     if (buffer === null) return;
+    this.start(index, buffer);
+  }
+  /**
+   * Whether `index` may have the channel, by the original's rule: it
+   * may if nothing is sounding, or if what is sounding may be
+   * interrupted and `index` is at least as important.
+   */
+  mayTake(index) {
+    if (!this.playing) return true;
+    return interruptibleOf(this.playingIndex) && priorityOf(index) <= priorityOf(this.playingIndex);
+  }
+  start(index, buffer) {
+    this.waitingFor = -1;
     this.stop();
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(this.context.destination);
     source.onended = () => {
-      if (this.playing === source) this.playing = null;
+      if (this.playing === source) {
+        this.playing = null;
+        this.playingIndex = -1;
+      }
     };
     source.start();
     this.playing = source;
+    this.playingIndex = index;
   }
   /** Empty the one channel, as the original does when a sound starts. */
   stop() {
     const source = this.playing;
     this.playing = null;
+    this.playingIndex = -1;
     if (!source) return;
     try {
       source.stop();
@@ -9671,8 +9836,14 @@ var SoundPlayer = class {
   }
   /** Read a sound and turn it into something playable, once. */
   async preload(index) {
-    if (this.buffers.has(index) || this.pending.has(index)) return;
-    this.pending.add(index);
+    if (this.buffers.has(index)) return;
+    const already = this.pending.get(index);
+    if (already) return already;
+    const read = this.read(index);
+    this.pending.set(index, read);
+    return read;
+  }
+  async read(index) {
     try {
       const sound = await loadSound(this.assets, index);
       if (!sound || sound.kind !== "digi") {
@@ -9685,10 +9856,14 @@ var SoundPlayer = class {
         channel[i] = (sound.samples[i] - 128) / 128;
       }
       this.buffers.set(index, buffer);
+      if (this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
+        this.start(index, buffer);
+      }
     } catch {
       this.buffers.set(index, null);
     } finally {
       this.pending.delete(index);
+      if (this.waitingFor === index) this.waitingFor = -1;
     }
   }
   /** Read every sound the game raises in play, so none of them is late. */
@@ -9747,7 +9922,10 @@ async function boot() {
     }
     void sound.wake();
   };
-  const effects = { sound: (which) => sound?.play(which) };
+  const effects = {
+    sound: (which) => sound?.play(which),
+    stopSounds: () => sound?.stop()
+  };
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
   const title = await assets.group("TITLE.DAT", 50);
@@ -9907,11 +10085,11 @@ async function boot() {
       game.step(c);
       recorder.tick(c, game);
       if (game.restartDue) {
-        void restart();
+        void changeScene(restart);
         return;
       }
       if (game.levelFinished) {
-        void nextLevel();
+        void changeScene(nextLevel);
         return;
       }
       if (roomSel.value !== String(game.drawnRoom)) roomSel.value = String(game.drawnRoom);
@@ -9989,6 +10167,16 @@ async function boot() {
       game.drawnRoom = game.kid.room;
     }
   };
+  let changing = false;
+  async function changeScene(what) {
+    if (changing) return;
+    changing = true;
+    try {
+      await what();
+    } finally {
+      changing = false;
+    }
+  }
   async function nextLevel() {
     if (!game) return;
     const v = views[current];

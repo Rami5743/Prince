@@ -62,7 +62,15 @@ export type Sound = DigiSound | MidiSound | SpeakerSound;
 export function parseSound(payload: Uint8Array): Sound | null {
   if (payload.length < 2) return null;
   const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  switch (payload[0]) {
+  // Only the bottom three bits of the first byte say which kind it is;
+  // the original masks it with 7 everywhere it looks at it. Some
+  // sounds carry 0x80 as well -- `sound_15_leveldoor_sliding` is 0x81
+  // in `DIGISND3.DAT` and 0x80 in `IBM_SND1.DAT` -- and reading the
+  // byte whole made them look like a kind there is no such thing as,
+  // so they were silently dropped. That one is the sound the way out
+  // of the level makes as it slides open, and the player heard
+  // nothing.
+  switch (payload[0] & 7) {
     case 1: {
       if (payload.length < 9) return null;
       const rate = dv.getUint16(1, true);

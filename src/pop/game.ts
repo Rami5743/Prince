@@ -66,9 +66,17 @@ export interface PopOptions {
   readonly effects?: PopEffects;
 }
 
-/** `play_sound`, for a shell that has a speaker. */
+/** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
 export interface PopEffects {
   sound?(which: number): void;
+  /**
+   * `stop_sounds`: empty the one channel.
+   *
+   * The game asks for this when the level door has finished opening and
+   * when the Prince is put back on his feet, and the slot used to go
+   * nowhere, so a sample ran on past the thing that made it.
+   */
+  stopSounds?(): void;
 }
 
 /** Which sprite bank each `chtab` id is. */
@@ -279,6 +287,7 @@ export class PopGame {
     outSlots.erase_bottom_text = erase_bottom_text;
     outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
     outSlots.play_sound = (which: number) => { this.effects?.sound?.(which); };
+    outSlots.stop_sounds = () => { this.effects?.stopSounds?.(); };
     outSlots.check_sound_playing = () => (this.deathMusic > 0 ? 1 : 0);
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
