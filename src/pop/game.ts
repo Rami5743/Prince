@@ -69,6 +69,8 @@ export interface PopOptions {
 /** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
 export interface PopEffects {
   sound?(which: number): void;
+  /** `check_sound_playing`: is there still something in the channel? */
+  soundPlaying?(): boolean;
   /**
    * `stop_sounds`: empty the one channel.
    *
@@ -142,6 +144,8 @@ export class PopGame {
   readonly scene: LevelScene;
   private readonly surface = new Surface();
   private readonly levelNumber: number;
+  /** `custom->intro_music_level`: the level whose opening has music. */
+  private introMusicLevel = 1;
   /** `is_restart_level`, which the shell acts on between ticks. */
   restartDue = false;
   /** The first tick of a level does nothing, as the original's does. */
@@ -229,6 +233,9 @@ export class PopGame {
       g.hitp_curr = carried.hitp_beg_lev;
       g.hitp_delta = 1;
     }
+    // Beginning a level again is not an opening, and does not wait for
+    // one: the Prince stands straight up.
+    g.need_level1_music = 0;
     return game;
   }
 
@@ -241,6 +248,7 @@ export class PopGame {
       tables.sequences, Array.from(tables.sequenceOffsets),
     );
     const constants = readExeConstants(exe);
+    this.introMusicLevel = constants.introMusicLevel;
     const level = this.scene.level;
     const type = this.scene.options.levelType;
     drawLevelType.of = () => type;
@@ -288,7 +296,20 @@ export class PopGame {
     outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
     outSlots.play_sound = (which: number) => { this.effects?.sound?.(which); };
     outSlots.stop_sounds = () => { this.effects?.stopSounds?.(); };
-    outSlots.check_sound_playing = () => (this.deathMusic > 0 ? 1 : 0);
+    /**
+     * `check_sound_playing`.
+     *
+     * The death music is still the model the capture pins were
+     * measured with -- a count of ticks, not a real sound -- and it
+     * stays. What is added is the shell's own answer, so that the
+     * music the page really is playing holds the game where the
+     * original holds it: the Prince stays crouched at the start of
+     * level 1 until the opening has finished. Where there is no
+     * shell, and so no sound, nothing changes.
+     */
+    outSlots.check_sound_playing = () => (
+      this.deathMusic > 0 || this.effects?.soundPlaying?.() ? 1 : 0
+    );
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
       blit: (chtab, id, x, y, blit) => this.blit(chtab, id, x, y, blit),
@@ -352,6 +373,22 @@ export class PopGame {
     // `have_sword = (level_number == 0 || level_number >= 2)`: the
     // Prince starts every level but the first with a sword in his hand.
     g.have_sword = (this.levelNumber === 0 || this.levelNumber >= 2) ? 1 : 0;
+    /**
+     * `need_level1_music = (level == custom->intro_music_level)`.
+     *
+     * It holds the Prince crouched at the start of the level while the
+     * opening plays, and `control_crouched` lets him up when the
+     * channel falls quiet. `restart` clears it, because beginning a
+     * level again is not an opening and does not wait for one.
+     *
+     * Only where there is a speaker. A shell with no sound -- the
+     * measuring apparatus, every test that is not the browser's --
+     * would still spend the two ticks it takes to find that the
+     * channel is empty, and those two ticks are at the start of every
+     * level-1 recording the captures are compared against.
+     */
+    g.need_level1_music = this.effects?.sound && this.levelNumber === this.introMusicLevel
+      ? 1 : 0;
     g.drawn_room = g.Kid.room;
     load_room_links();
     get_room_address(g.drawn_room);

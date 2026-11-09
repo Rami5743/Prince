@@ -9155,6 +9155,8 @@ var PopGame = class _PopGame {
   scene;
   surface = new Surface();
   levelNumber;
+  /** `custom->intro_music_level`: the level whose opening has music. */
+  introMusicLevel = 1;
   /** `is_restart_level`, which the shell acts on between ticks. */
   restartDue = false;
   /** The first tick of a level does nothing, as the original's does. */
@@ -9236,6 +9238,7 @@ var PopGame = class _PopGame {
       g.hitp_curr = carried.hitp_beg_lev;
       g.hitp_delta = 1;
     }
+    g.need_level1_music = 0;
     return game;
   }
   /** `start_level`: the level's data into the globals, once. */
@@ -9250,6 +9253,7 @@ var PopGame = class _PopGame {
       Array.from(tables.sequenceOffsets)
     );
     const constants = readExeConstants(exe);
+    this.introMusicLevel = constants.introMusicLevel;
     const level = this.scene.level;
     const type = this.scene.options.levelType;
     levelType2.of = () => type;
@@ -9294,7 +9298,7 @@ var PopGame = class _PopGame {
     out.stop_sounds = () => {
       this.effects?.stopSounds?.();
     };
-    out.check_sound_playing = () => this.deathMusic > 0 ? 1 : 0;
+    out.check_sound_playing = () => this.deathMusic > 0 || this.effects?.soundPlaying?.() ? 1 : 0;
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
       blit: (chtab, id, x, y, blit) => this.blit(chtab, id, x, y, blit),
@@ -9351,6 +9355,7 @@ var PopGame = class _PopGame {
     loadkid();
     do_startpos();
     g.have_sword = this.levelNumber === 0 || this.levelNumber >= 2 ? 1 : 0;
+    g.need_level1_music = this.effects?.sound && this.levelNumber === this.introMusicLevel ? 1 : 0;
     g.drawn_room = g.Kid.room;
     load_room_links();
     get_room_address(g.drawn_room);
@@ -9838,8 +9843,174 @@ function parseSound(payload) {
   }
 }
 
+// src/render/music.ts
+var hzOf = (note) => 440 * 2 ** ((note - 69) / 12);
+var DRUMS = 9;
+function midiNotes(sound) {
+  const b = sound.bytes;
+  if (b.length < 14 || b[0] !== 77 || b[1] !== 84) return [];
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const division = dv.getUint16(12, false);
+  if (division & 32768 || division === 0) return [];
+  const raw = [];
+  const tempos = [];
+  let at = 8 + dv.getUint32(4, false);
+  while (at + 8 <= b.length) {
+    const isTrack = b[at] === 77 && b[at + 1] === 84 && b[at + 2] === 114 && b[at + 3] === 107;
+    const len = dv.getUint32(at + 4, false);
+    const start = at + 8;
+    const end = Math.min(b.length, start + len);
+    at = start + len;
+    if (!isTrack) continue;
+    let p = start;
+    let tick = 0;
+    let status = 0;
+    const varLen = () => {
+      let v = 0;
+      for (let i = 0; i < 4 && p < end; i++) {
+        const c = b[p++];
+        v = v << 7 | c & 127;
+        if (!(c & 128)) break;
+      }
+      return v;
+    };
+    while (p < end) {
+      tick += varLen();
+      if (p >= end) break;
+      let byte = b[p];
+      if (byte & 128) {
+        status = byte;
+        p++;
+      }
+      byte = status;
+      if (byte === 255) {
+        const type = b[p++];
+        const n = varLen();
+        if (type === 81 && n === 3) {
+          tempos.push({ tick, usPerBeat: b[p] << 16 | b[p + 1] << 8 | b[p + 2] });
+        }
+        p += n;
+        if (type === 47) break;
+      } else if (byte === 240 || byte === 247) {
+        p += varLen();
+      } else {
+        const kind = byte & 240;
+        const ch = byte & 15;
+        const a = b[p++];
+        const two = kind !== 192 && kind !== 208;
+        const c = two ? b[p++] : 0;
+        if (kind === 144 && c > 0) raw.push({ tick, on: true, note: a, vel: c, ch });
+        else if (kind === 128 || kind === 144) raw.push({ tick, on: false, note: a, vel: 0, ch });
+      }
+    }
+  }
+  tempos.sort((x, y) => x.tick - y.tick);
+  raw.sort((x, y) => x.tick - y.tick || (x.on ? 1 : 0) - (y.on ? 1 : 0));
+  let ti = 0;
+  let usPerBeat = 5e5;
+  let lastTick = 0;
+  let lastSec = 0;
+  const seconds = (tick) => {
+    while (ti < tempos.length && tempos[ti].tick <= tick) {
+      const t = tempos[ti++];
+      lastSec += (t.tick - lastTick) * usPerBeat / (division * 1e6);
+      lastTick = t.tick;
+      usPerBeat = t.usPerBeat;
+    }
+    return lastSec + (tick - lastTick) * usPerBeat / (division * 1e6);
+  };
+  const notes = [];
+  const open = /* @__PURE__ */ new Map();
+  for (const e of raw) {
+    const key = e.ch * 128 + e.note;
+    const when = seconds(e.tick);
+    if (e.on) {
+      open.set(key, { at: when, vel: e.vel });
+    } else {
+      const was = open.get(key);
+      if (!was) continue;
+      open.delete(key);
+      if (e.ch === DRUMS) continue;
+      notes.push({
+        at: was.at,
+        dur: Math.max(0.03, when - was.at),
+        hz: hzOf(e.note),
+        level: was.vel / 127,
+        channel: e.ch
+      });
+    }
+  }
+  return notes.sort((a, b2) => a.at - b2.at);
+}
+function speakerNotes(sound) {
+  const notes = [];
+  let at = 0;
+  const tempo = sound.tempo || 1e3;
+  for (const n of sound.notes) {
+    const dur = n.length / tempo;
+    if (n.divisor > 1) {
+      notes.push({ at, dur, hz: n.divisor, level: 1, channel: 0 });
+    }
+    at += dur;
+  }
+  return notes;
+}
+var Tune = class {
+  nodes = [];
+  sink;
+  /** When the last note ends, in the sink's own clock. */
+  endsAt;
+  onended = null;
+  constructor(sink, notes, wave) {
+    this.sink = sink;
+    const t0 = sink.currentTime + 0.03;
+    let end = t0;
+    for (const n of notes.slice(0, 600)) {
+      const osc = sink.createOscillator();
+      const gain = sink.createGain();
+      osc.type = wave;
+      osc.frequency.value = n.hz;
+      const start = t0 + n.at;
+      const stop = start + n.dur;
+      const peak = 0.11 * n.level;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 8e-3);
+      gain.gain.setValueAtTime(peak, Math.max(start + 9e-3, stop - 0.02));
+      gain.gain.linearRampToValueAtTime(0, stop);
+      osc.connect(gain);
+      gain.connect(sink.destination);
+      osc.start(start);
+      osc.stop(stop + 0.01);
+      this.nodes.push({ osc, gain });
+      if (stop > end) end = stop;
+    }
+    this.endsAt = end;
+    const last = this.nodes[this.nodes.length - 1];
+    if (last) last.osc.onended = () => {
+      this.onended?.();
+    };
+  }
+  get empty() {
+    return this.nodes.length === 0;
+  }
+  stop() {
+    const now = this.sink.currentTime;
+    for (const { osc, gain } of this.nodes) {
+      try {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
+        osc.stop(now);
+      } catch {
+      }
+    }
+    this.nodes.length = 0;
+  }
+};
+
 // src/render/audio.ts
 var DIGI_FILES = ["DIGISND1.DAT", "DIGISND2.DAT", "DIGISND3.DAT"];
+var MIDI_FILES = ["MIDISND1.DAT", "MIDISND2.DAT"];
+var SPEAKER_FILES = ["IBM_SND1.DAT", "IBM_SND2.DAT"];
 async function loadSound(assets, index, files = DIGI_FILES) {
   for (const name of files) {
     let dat;
@@ -10052,11 +10223,26 @@ var SoundPlayer = class {
     if (!this.playing) return true;
     return interruptibleOf(this.playingIndex) && priorityOf(index) <= priorityOf(this.playingIndex);
   }
-  start(index, buffer) {
+  start(index, what) {
     this.waitingFor = -1;
     this.stop();
+    if (what.kind === "tune") {
+      const sink = this.context;
+      if (typeof this.context.createOscillator !== "function") return;
+      const tune = new Tune(sink, what.notes, what.wave);
+      if (tune.empty) return;
+      tune.onended = () => {
+        if (this.playing === tune) {
+          this.playing = null;
+          this.playingIndex = -1;
+        }
+      };
+      this.playing = tune;
+      this.playingIndex = index;
+      return;
+    }
     const source = this.context.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = what.buffer;
     source.connect(this.context.destination);
     source.onended = () => {
       if (this.playing === source) {
@@ -10067,6 +10253,28 @@ var SoundPlayer = class {
     source.start();
     this.playing = source;
     this.playingIndex = index;
+  }
+  /**
+   * `check_sound_playing`: something is still in the channel.
+   *
+   * A tune is asked its own end time rather than trusted to report
+   * itself finished. `onended` fires on one oscillator of the many a
+   * tune schedules, and a tune that lost that event -- or never
+   * scheduled a note at all -- would leave the channel looking busy
+   * for ever, which is not a quiet bug: the Prince waits crouched at
+   * the start of level 1 until the opening has finished, and he would
+   * wait there for good.
+   */
+  get isPlaying() {
+    const playing = this.playing;
+    if (!playing) return false;
+    if (playing instanceof Tune) {
+      if ((this.context.currentTime ?? 0) < playing.endsAt) return true;
+      this.playing = null;
+      this.playingIndex = -1;
+      return false;
+    }
+    return true;
   }
   /** Empty the one channel, as the original does when a sound starts. */
   stop() {
@@ -10079,6 +10287,37 @@ var SoundPlayer = class {
     } catch {
     }
   }
+  /**
+   * What an index turned out to be.
+   *
+   * A recording is looked for first, because that is what the game
+   * sounded like on the hardware this port is measured against. Where
+   * there is none -- all of the music, and four of the effects -- the
+   * MIDI is used, and where there is no MIDI either, the tune the
+   * original wrote for the PC speaker.
+   */
+  async readPlayable(index) {
+    const digi = await loadSound(this.assets, index, DIGI_FILES);
+    if (digi && digi.kind === "digi") {
+      const buffer = this.context.createBuffer(1, digi.samples.length, digi.rate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < digi.samples.length; i++) {
+        channel[i] = (digi.samples[i] - 128) / 128;
+      }
+      return { kind: "digi", buffer };
+    }
+    const midi = await loadSound(this.assets, index, MIDI_FILES);
+    if (midi && midi.kind === "midi") {
+      const notes = midiNotes(midi);
+      if (notes.length) return { kind: "tune", notes, wave: "triangle" };
+    }
+    const beep = await loadSound(this.assets, index, SPEAKER_FILES);
+    if (beep && beep.kind === "speaker") {
+      const notes = speakerNotes(beep);
+      if (notes.length) return { kind: "tune", notes, wave: "square" };
+    }
+    return null;
+  }
   /** Read a sound and turn it into something playable, once. */
   async preload(index) {
     if (this.buffers.has(index)) return;
@@ -10090,19 +10329,10 @@ var SoundPlayer = class {
   }
   async read(index) {
     try {
-      const sound = await loadSound(this.assets, index);
-      if (!sound || sound.kind !== "digi") {
-        this.buffers.set(index, null);
-        return;
-      }
-      const buffer = this.context.createBuffer(1, sound.samples.length, sound.rate);
-      const channel = buffer.getChannelData(0);
-      for (let i = 0; i < sound.samples.length; i++) {
-        channel[i] = (sound.samples[i] - 128) / 128;
-      }
-      this.buffers.set(index, buffer);
-      if (this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
-        this.start(index, buffer);
+      const playable = await this.readPlayable(index);
+      this.buffers.set(index, playable);
+      if (playable && this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
+        this.start(index, playable);
       }
     } catch {
       this.buffers.set(index, null);
@@ -10158,16 +10388,19 @@ async function boot() {
       const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
+      const ALL_SOUNDS = Array.from({ length: 57 }, (_, i) => i);
       void sound.preloadAll([
         ...Object.values(SOUND),
-        ...SEQUENCE_SOUND.filter((i) => i !== SOUND_SILENCE)
+        ...SEQUENCE_SOUND.filter((i) => i !== SOUND_SILENCE),
+        ...ALL_SOUNDS
       ]);
     }
     void sound.wake();
   };
   const effects = {
     sound: (which) => sound?.play(which),
-    stopSounds: () => sound?.stop()
+    stopSounds: () => sound?.stop(),
+    soundPlaying: () => sound?.isPlaying ?? false
   };
   const titlePalette = new ScreenPalette();
   const titleSurface = new Surface();
@@ -10347,9 +10580,7 @@ async function boot() {
     aspectSel.blur();
     display.setAspect(aspectSel.value);
   });
-  const CHEAT_WORD = "megahit";
-  let cheats = true;
-  let typed = "";
+  const cheats = true;
   function keyName(e) {
     const mod = (e.ctrlKey || e.metaKey ? "ctrl+" : "") + (e.shiftKey ? "shift+" : "");
     const code = e.code;
@@ -10455,16 +10686,6 @@ async function boot() {
     if (e.altKey) return;
     wakeSound();
     document.activeElement?.blur?.();
-    if (/^[a-z]$/i.test(e.key)) {
-      typed = (typed + e.key.toLowerCase()).slice(-CHEAT_WORD.length);
-      if (typed === CHEAT_WORD) {
-        cheats = !cheats;
-        typed = "";
-        game?.say(cheats ? "CHEATS ON" : "CHEATS OFF");
-        e.preventDefault();
-        return;
-      }
-    }
     if (!game) {
       e.preventDefault();
       void changeScene(async () => {

@@ -102,9 +102,12 @@ describe('played in the browser', () => {
    * count, the way it does on the original's keyboard handler.
    */
   it('a tap far shorter than a frame still moves him', async () => {
+    // Level 3, not level 1: level 1 opens with the music, and the
+    // Prince waits crouched through it the way the original has him
+    // wait, which is not what this is about.
     await page.evaluate(() => (window as unknown as {
       __princeShow(level: number, room: number): Promise<void>;
-    }).__princeShow(1, 1));
+    }).__princeShow(3, 1));
     await pause(true);
     await page.evaluate(() => (window as unknown as {
       __princeStep(n: number, c: object): unknown;
@@ -235,17 +238,26 @@ describe('played in the browser', () => {
     const died = await page.evaluate(() => {
       const w = window as unknown as {
         __princeStep(n: number, c: object): unknown;
-        __princeState(): { dead: boolean; awaitingButton: boolean } | null;
+        __princeState(): { dead: boolean } | null;
       };
       // Stand there and let him do it.
       for (let i = 0; i < 600; i++) {
         w.__princeStep(1, {});
-        if (w.__princeState()?.awaitingButton) return true;
+        if (w.__princeState()?.dead) return true;
       }
       return false;
     });
     expect(died, 'the guard should see to him').toBe(true);
     await pause(false);
+    // The words come up when the death music has finished, which is a
+    // wall-clock wait and not a number of steps.
+    await page.waitForFunction(
+      () => (window as unknown as {
+        __princeState(): { awaitingButton: boolean } | null;
+      }).__princeState()?.awaitingButton === true,
+      null,
+      { timeout: 30000 },
+    );
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(900);
     const after = await state();

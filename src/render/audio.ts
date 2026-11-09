@@ -22,9 +22,14 @@
 import type { Assets } from './assets.ts';
 import { parseSound, SOUND_RESOURCE_BASE, type Sound } from '../dat/sound.ts';
 import { SOUND_SILENCE } from '../game/sequence.ts';
+import { midiNotes, speakerNotes, Tune, type Note, type MusicSink } from './music.ts';
 
 /** The files that hold the recorded sounds, in the order to look in them. */
 export const DIGI_FILES = ['DIGISND1.DAT', 'DIGISND2.DAT', 'DIGISND3.DAT'] as const;
+/** The same sounds as standard MIDI files, for the music. */
+export const MIDI_FILES = ['MIDISND1.DAT', 'MIDISND2.DAT'] as const;
+/** And as tunes for the PC speaker, which four of them only have. */
+export const SPEAKER_FILES = ['IBM_SND1.DAT', 'IBM_SND2.DAT'] as const;
 
 /** Just enough of `AudioContext` to play a sample, so a test can stand in. */
 export interface AudioSink {
@@ -34,7 +39,24 @@ export interface AudioSink {
   createBuffer(channels: number, length: number, rate: number): AudioBuffer;
   createBufferSource(): AudioBufferSourceNode;
   readonly destination: AudioNode;
+  /**
+   * The three a tune needs. They are optional so that a stand-in in a
+   * test can leave them out; without them the music is simply not
+   * played and the recordings still are.
+   */
+  readonly currentTime?: number;
+  createOscillator?(): OscillatorNode;
+  createGain?(): GainNode;
 }
+
+/**
+ * What a sound turned out to be: a recording to put in the channel, or
+ * a tune to play on oscillators. Null is an index with neither.
+ */
+type Playable =
+  | { readonly kind: 'digi'; readonly buffer: AudioBuffer }
+  | { readonly kind: 'tune'; readonly notes: readonly Note[]; readonly wave: OscillatorType }
+  | null;
 
 /**
  * Find a sound by its index, looking in each file that might hold it.
@@ -101,7 +123,7 @@ const interruptibleOf = (i: number): boolean => (INTERRUPTIBLE[i] ?? 1) !== 0;
 export class SoundPlayer {
   private readonly assets: Assets;
   private readonly context: AudioSink;
-  private readonly buffers = new Map<number, AudioBuffer | null>();
+  private readonly buffers = new Map<number, Playable>();
   /**
    * The reads in flight, by index.
    *
@@ -118,7 +140,7 @@ export class SoundPlayer {
    * whatever was in it, which is why the byte-code can ask for silence by
    * name. Letting them pile up turns a run into a wall of noise.
    */
-  private playing: AudioBufferSourceNode | null = null;
+  private playing: { stop(): void } | null = null;
   /** Which sound is in the channel, for the rule above. */
   private playingIndex = -1;
   /**
@@ -162,7 +184,7 @@ export class SoundPlayer {
       void this.preload(index);
       return;
     }
-    if (buffer === null) return; // no recorded version of this one
+    if (buffer === null) return; // neither a recording nor a tune
     this.start(index, buffer);
   }
 
@@ -177,11 +199,23 @@ export class SoundPlayer {
       && priorityOf(index) <= priorityOf(this.playingIndex);
   }
 
-  private start(index: number, buffer: AudioBuffer): void {
+  private start(index: number, what: NonNullable<Playable>): void {
     this.waitingFor = -1;
     this.stop();
+    if (what.kind === 'tune') {
+      const sink = this.context as unknown as MusicSink;
+      if (typeof this.context.createOscillator !== 'function') return;
+      const tune = new Tune(sink, what.notes, what.wave);
+      if (tune.empty) return;
+      tune.onended = (): void => {
+        if (this.playing === tune) { this.playing = null; this.playingIndex = -1; }
+      };
+      this.playing = tune;
+      this.playingIndex = index;
+      return;
+    }
     const source = this.context.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = what.buffer;
     source.connect(this.context.destination);
     source.onended = (): void => {
       if (this.playing === source) { this.playing = null; this.playingIndex = -1; }
@@ -191,6 +225,29 @@ export class SoundPlayer {
     this.playingIndex = index;
   }
 
+  /**
+   * `check_sound_playing`: something is still in the channel.
+   *
+   * A tune is asked its own end time rather than trusted to report
+   * itself finished. `onended` fires on one oscillator of the many a
+   * tune schedules, and a tune that lost that event -- or never
+   * scheduled a note at all -- would leave the channel looking busy
+   * for ever, which is not a quiet bug: the Prince waits crouched at
+   * the start of level 1 until the opening has finished, and he would
+   * wait there for good.
+   */
+  get isPlaying(): boolean {
+    const playing = this.playing;
+    if (!playing) return false;
+    if (playing instanceof Tune) {
+      if ((this.context.currentTime ?? 0) < playing.endsAt) return true;
+      this.playing = null;
+      this.playingIndex = -1;
+      return false;
+    }
+    return true;
+  }
+
   /** Empty the one channel, as the original does when a sound starts. */
   stop(): void {
     const source = this.playing;
@@ -198,6 +255,41 @@ export class SoundPlayer {
     this.playingIndex = -1;
     if (!source) return;
     try { source.stop(); } catch { /* already finished */ }
+  }
+
+  /**
+   * What an index turned out to be.
+   *
+   * A recording is looked for first, because that is what the game
+   * sounded like on the hardware this port is measured against. Where
+   * there is none -- all of the music, and four of the effects -- the
+   * MIDI is used, and where there is no MIDI either, the tune the
+   * original wrote for the PC speaker.
+   */
+  private async readPlayable(index: number): Promise<Playable> {
+    const digi = await loadSound(this.assets, index, DIGI_FILES);
+    if (digi && digi.kind === 'digi') {
+      const buffer = this.context.createBuffer(1, digi.samples.length, digi.rate);
+      const channel = buffer.getChannelData(0);
+      // Unsigned eight-bit with silence at 128, which is what the DAC took.
+      for (let i = 0; i < digi.samples.length; i++) {
+        channel[i] = (digi.samples[i] - 128) / 128;
+      }
+      return { kind: 'digi', buffer };
+    }
+    const midi = await loadSound(this.assets, index, MIDI_FILES);
+    if (midi && midi.kind === 'midi') {
+      const notes = midiNotes(midi);
+      // A triangle is the nearest a plain oscillator comes to the
+      // AdLib's softer voices; a square for the beeps below.
+      if (notes.length) return { kind: 'tune', notes, wave: 'triangle' };
+    }
+    const beep = await loadSound(this.assets, index, SPEAKER_FILES);
+    if (beep && beep.kind === 'speaker') {
+      const notes = speakerNotes(beep);
+      if (notes.length) return { kind: 'tune', notes, wave: 'square' };
+    }
+    return null;
   }
 
   /** Read a sound and turn it into something playable, once. */
@@ -212,19 +304,13 @@ export class SoundPlayer {
 
   private async read(index: number): Promise<void> {
     try {
-      const sound = await loadSound(this.assets, index);
-      if (!sound || sound.kind !== 'digi') { this.buffers.set(index, null); return; }
-      const buffer = this.context.createBuffer(1, sound.samples.length, sound.rate);
-      const channel = buffer.getChannelData(0);
-      // Unsigned eight-bit with silence at 128, which is what the DAC took.
-      for (let i = 0; i < sound.samples.length; i++) {
-        channel[i] = (sound.samples[i] - 128) / 128;
-      }
-      this.buffers.set(index, buffer);
+      const playable = await this.readPlayable(index);
+      this.buffers.set(index, playable);
       // It was asked for while it was being read, and nothing has
       // taken the channel since.
-      if (this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
-        this.start(index, buffer);
+      if (playable && this.waitingFor === index && !this.muted && this.woken
+        && this.mayTake(index)) {
+        this.start(index, playable);
       }
     } catch {
       this.buffers.set(index, null);

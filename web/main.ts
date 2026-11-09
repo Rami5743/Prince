@@ -60,9 +60,19 @@ async function boot(): Promise<void> {
       const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
+      /**
+       * Every index the game ever raises, read in behind the play.
+       *
+       * The effects stop at 51; the rest are the music -- the opening,
+       * the death, the end of a level, winning a fight, the mirror --
+       * which lives in the MIDI files and the speaker tunes rather
+       * than among the recordings.
+       */
+      const ALL_SOUNDS = Array.from({ length: 57 }, (_, i) => i);
       void sound.preloadAll([
         ...Object.values(SOUND),
         ...SEQUENCE_SOUND.filter((i) => i !== SOUND_SILENCE),
+        ...ALL_SOUNDS,
       ]);
     }
     void sound.wake();
@@ -70,6 +80,7 @@ async function boot(): Promise<void> {
   const effects = {
     sound: (which: number) => sound?.play(which),
     stopSounds: () => sound?.stop(),
+    soundPlaying: () => sound?.isPlaying ?? false,
   };
 
   const titlePalette = new ScreenPalette();
@@ -294,16 +305,14 @@ async function boot(): Promise<void> {
    * There is no command line here, so the word is typed instead: the
    * letters of it in a row, anywhere, and the keys below wake up.
    */
-  const CHEAT_WORD = 'megahit';
   /**
-   * On, and the word turns them off again.
+   * The cheats are on.
    *
-   * The original wants `prince megahit` on a command line; there is no
-   * command line here and no reason to hide them from a player who has
-   * come to look at the game, so they start on.
+   * The original wants `prince megahit` on its command line. There is
+   * no command line here, so there is nothing to type and nothing to
+   * turn on: the keys below simply work.
    */
-  let cheats = true;
-  let typed = '';
+  const cheats = true;
 
   /** Which of the original's keys this is, as `process_key` names them. */
   function keyName(e: KeyboardEvent): string {
@@ -376,19 +385,6 @@ async function boot(): Promise<void> {
     if (e.altKey) return; // leave the browser's own chords alone
     wakeSound();
     (document.activeElement as HTMLElement | null)?.blur?.();
-
-    // The word that turns the cheats on, typed rather than given on a
-    // command line the page has not got.
-    if (/^[a-z]$/i.test(e.key)) {
-      typed = (typed + e.key.toLowerCase()).slice(-CHEAT_WORD.length);
-      if (typed === CHEAT_WORD) {
-        cheats = !cheats;
-        typed = '';
-        game?.say(cheats ? 'CHEATS ON' : 'CHEATS OFF');
-        e.preventDefault();
-        return;
-      }
-    }
 
     // Nothing is on but a title screen: any key begins the game, which
     // is what `process_key` does while `start_level < 0`.
