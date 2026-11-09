@@ -449,12 +449,27 @@ var Surface = class {
    * from being drawn through the floor he came through.
    */
   clipTop;
+  /**
+   * `obj_clip_left` and `obj_clip_right`.
+   *
+   * The original clips sideways as well, and the level door is what
+   * needs it: `clip_char` sets `obj_clip_right` to `leveldoor_right`
+   * for the frames of the climb up the stairs, so the Prince is cut
+   * off at the door's right edge as he goes through it, and to the
+   * right edge of the tile for a door top. The surface had no
+   * horizontal clip at all, so both were dropped and the Prince's
+   * legs were drawn sticking out past the level door on the way up.
+   */
+  clipLeft;
+  clipRight;
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
     this.clipBottom = height;
     this.clipTop = 0;
+    this.clipLeft = 0;
+    this.clipRight = width;
   }
   clear(color = 0) {
     this.pixels.fill(color);
@@ -494,9 +509,9 @@ var Surface = class {
     });
   }
   each(src, x, y, fn) {
-    const sx0 = Math.max(0, -x);
+    const sx0 = Math.max(Math.max(0, -x), this.clipLeft - x);
     const sy0 = Math.max(Math.max(0, -y), this.clipTop - y);
-    const sx1 = Math.min(src.width, this.width - x);
+    const sx1 = Math.min(src.width, Math.min(this.width, this.clipRight) - x);
     const sy1 = Math.min(src.height, this.clipBottom - y);
     for (let sy = sy0; sy < sy1; sy++) {
       let sp = sy * src.width + sx0;
@@ -9306,9 +9321,13 @@ var PopGame = class _PopGame {
     if (rect) {
       this.surface.clipTop = rect.top;
       this.surface.clipBottom = Math.min(rect.bottom, floor);
+      this.surface.clipLeft = rect.left;
+      this.surface.clipRight = rect.right;
     } else {
       this.surface.clipTop = 0;
       this.surface.clipBottom = floor;
+      this.surface.clipLeft = 0;
+      this.surface.clipRight = 320;
     }
   }
   blit(chtab, id, x, y, blit) {

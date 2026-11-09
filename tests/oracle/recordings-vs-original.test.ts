@@ -135,6 +135,12 @@ const EXPECTED: Record<string, number> = {
   // forty-odd presses in it of a single tick, which is well under what
   // the emulator takes reliably.
   'gate2': 616,
+  // `exitdoor` is `gate1`'s timeline with every press stretched to
+  // four ticks so the emulator takes all of them. It reaches the climb
+  // up the level door on the same ticks the player's own run does, 762
+  // to 774, which is what it is here for -- though its capture parts
+  // company at 336 and again at 595 and so does not reach that far.
+  'exitdoor': 571,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and

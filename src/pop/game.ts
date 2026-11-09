@@ -407,9 +407,13 @@ export class PopGame {
     if (rect) {
       this.surface.clipTop = rect.top;
       this.surface.clipBottom = Math.min(rect.bottom, floor);
+      this.surface.clipLeft = rect.left;
+      this.surface.clipRight = rect.right;
     } else {
       this.surface.clipTop = 0;
       this.surface.clipBottom = floor;
+      this.surface.clipLeft = 0;
+      this.surface.clipRight = 320;
     }
   }
 
