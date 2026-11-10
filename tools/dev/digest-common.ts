@@ -396,7 +396,20 @@ export function exactAgreement(
     // the port, and a tick on which the player's keys changed, because
     // the emulator is sent the edge on the clock and the game reads the
     // keyboard on its own tick -- see `recording_to_script.mjs`.
-    const slip = wholeScreen(digest.ticks[i]) || freeSlipAt.has(i)
+    /**
+     * And free across a tick the capture repeats.
+     *
+     * `split_ticks` numbers the capture by the game's own clock and
+     * leaves a slot wherever it saw no change, so a capture can carry
+     * more tick slots than it has pictures: `13ab6867` is 734 slots
+     * over 730 changes, and the three it repeats are at 161, 482 and
+     * 500. The port gains a tick against it at exactly 483 and 501.
+     * A repeated picture says nothing about when anything happened,
+     * so stepping over it must not be charged for.
+     */
+    const repeat = (k: number): boolean => dos[k] != null && dos[k] === dos[k - 1];
+    const repeated = repeat(i - 1) || repeat(i) || repeat(i + 1);
+    const slip = repeated || wholeScreen(digest.ticks[i]) || freeSlipAt.has(i)
       || freeSlipAt.has(i - 1) || freeSlipAt.has(i + 1) ? 0 : SLIP;
     for (let j = 0; j < m; j++) {
       let pick = j;

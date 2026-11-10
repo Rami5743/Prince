@@ -108,23 +108,23 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * `game.js` now run -- see `docs/sdlpop-translation.md`.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 630,
+  '0fbffa60': 640,
   '13ab6867': 572,
   '25c4ebb8': 388,
   '33e8ace7': 308,
   '3764b76d': 218,
   '5920a8c2': 413,
   '72b3522f': 384,
-  '756b259c': 508,
-  '760c3e74': 1502,
-  '848ee3c4': 1420,
-  '9b60bf3a': 454,
+  '756b259c': 509,
+  '760c3e74': 1513,
+  '848ee3c4': 1421,
+  '9b60bf3a': 456,
   'a356bdd6': 184,
-  'b4ff4672': 393,
+  'b4ff4672': 394,
   'e209b01a': 214,
   'ec99dc5b': 237,
   'f6874819': 1189,
-  'gate1': 593,
+  'gate1': 596,
   // `gate1`'s pin measures the replay, not the port: its two-tick tap
   // of Right at 591 reached DOSBox fourteen ticks late, and with the
   // tap moved there the port draws 790 of the 796 -- see
@@ -141,7 +141,7 @@ const EXPECTED: Record<string, number> = {
   // statics it scored 616 where the same digest scored 235 on its own.
   // A capture is a fresh run of `PRINCE.EXE`, so the lone number is
   // the honest one, and this is it.
-  'gate2': 108,
+  'gate2': 110,
   // `exitdoor` is `gate1`'s timeline with every press stretched to
   // four ticks so the emulator takes all of them. It reaches the climb
   // up the level door on the same ticks the player's own run does, 762
@@ -152,7 +152,7 @@ const EXPECTED: Record<string, number> = {
   // and the new one does not, which was the capture and not the port.
   // What is left begins at 595, in a strip at x 201 to 225 beside the
   // Prince as he drops, and no slip of up to ten ticks resolves it.
-  'exitdoor': 591,
+  'exitdoor': 593,
   // `gate2b` is `gate2` with every stretch of unchanged keys given
   // four ticks, by `tools/oracle/stretch.mjs`. The same moves in the
   // same order, far enough apart for DOSBox to take them, and level 2
@@ -171,17 +171,17 @@ const EXPECTED: Record<string, number> = {
   // So what this pin really measures is level 2 up to tick 98, which
   // is exact, and `level2` is the probe that measures the rest of it
   // without a guard in the room.
-  'gate2b': 1183,
+  'gate2b': 1197,
   // `level2` is the same level `gate2` is a fight on, walked instead:
   // 424 ticks of stepping, running, climbing, dropping and landing,
   // every press four ticks or longer, and nobody to draw a sword at.
   // The port draws **every one of its 424 ticks** exactly. Level 2
   // itself was never what `gate2` was measuring.
-  'level2': 424,
+  'level2': 425,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
-  'palace4': 512,
+  'palace4': 514,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and
