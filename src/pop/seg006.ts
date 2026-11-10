@@ -227,6 +227,30 @@ export function obj_dx_forward(delta_x: number): number {
 }
 
 // seg006:0254
+/**
+ * Where the port reaches the next sequence a tick before the
+ * original, and what that is not.
+ *
+ * `13ab6867` is exact for 482 ticks and then gains a tick twice --
+ * at 483 and at 501 -- and the 156 it loses all follow from those
+ * two. The first is at the end of a climb: frames 148, 149, 118, 119
+ * and then 15, standing. The capture draws frame 15 on ticks 482 and
+ * 483 and turns on 484; the port draws it once, on 482, and turns on
+ * 483. The second gain is the same shape inside the jump at frames
+ * 27 and 28.
+ *
+ * Read against the C and faithful, so none of them is the fault:
+ * this function and every one of its opcodes, `play_kid`,
+ * `control_kid` with `rest_ctrl_1`, `do_paused`, `read_user_control`,
+ * `user_control` and `save_ctrl_1` in that order, `flip_control_x`,
+ * `control`'s branch table, `control_standing`, `back_pressed`,
+ * `forward_pressed`, and `set_char_collision`.
+ *
+ * So the question is why the original spends one more tick on the
+ * last frame of those sequences. Nothing in the control path
+ * explains it, and the sequence bytes come from the same table in
+ * the same EXE.
+ */
 export function play_seq(): void {
   for (;;) {
     const command = seqByte(g.Char.curr_seq);
