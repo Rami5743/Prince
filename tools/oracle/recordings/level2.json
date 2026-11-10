@@ -1,0 +1,119 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-10T10:12:40.184Z",
+ "level": 2,
+ "ticksPerSecond": 12,
+ "timeline": "20.,40r,8.,40r,8.,30r,10.,40l,8.,40l,10.,20u,10.,40r,10.,20d,10.,40r,20.",
+ "events": [
+  {
+   "ms": 1667,
+   "tick": 20,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 5000,
+   "tick": 60,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 5667,
+   "tick": 68,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 9000,
+   "tick": 108,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 9667,
+   "tick": 116,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 12167,
+   "tick": 146,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 13000,
+   "tick": 156,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 16333,
+   "tick": 196,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 17000,
+   "tick": 204,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 20333,
+   "tick": 244,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 21167,
+   "tick": 254,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 22833,
+   "tick": 274,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 23667,
+   "tick": 284,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 27000,
+   "tick": 324,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 27833,
+   "tick": 334,
+   "type": "down",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 29500,
+   "tick": 354,
+   "type": "up",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 30333,
+   "tick": 364,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 33667,
+   "tick": 404,
+   "type": "up",
+   "key": "Numpad6"
+  }
+ ],
+ "states": []
+}

@@ -156,9 +156,21 @@ const EXPECTED: Record<string, number> = {
   // `gate2b` is `gate2` with every stretch of unchanged keys given
   // four ticks, by `tools/oracle/stretch.mjs`. The same moves in the
   // same order, far enough apart for DOSBox to take them, and level 2
-  // goes from 108 ticks of 1309 to **1183 of 1649**. What is left is
-  // the port's: the first real break is at 99, where it runs eleven
-  // ticks ahead of the capture and then rejoins by 113.
+  // goes from 108 ticks of 1309 to **1183 of 1649**.
+  //
+  // The 466 that are left are not the port's to answer for. It parts
+  // company at 99, and `tools/dev/kid-trace.ts` has the Prince on
+  // frames 158 to 172 from tick 93 on -- the sword frames. He is in a
+  // fight, and a guard's every choice in the C comes out of
+  // `prandom`: `advprob`, `impblockprob`, `blockprob`, `restrikeprob`
+  // and `strikeprob` in seg002 all compare against `prandom(255)`,
+  // and `prandom` seeds itself from `time(NULL)`. The capture's guard
+  // is one sample and the port's is another. Nothing can be
+  // translated to make them agree.
+  //
+  // So what this pin really measures is level 2 up to tick 98, which
+  // is exact, and `level2` is the probe that measures the rest of it
+  // without a guard in the room.
   'gate2b': 1183,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
