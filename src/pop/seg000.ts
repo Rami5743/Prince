@@ -217,10 +217,25 @@ export function gen_palace_wall_colors(): void {
 }
 
 // seg000:0FBD
+/**
+ * `win_level` and `win_room`: where the game is won.
+ *
+ * Not at a known place in this release of the executable, so they are
+ * written out here, as `GUARD_TYPE_BY_LEVEL` is. Level 14 is the last
+ * and its room 5 is the one the Prince walks into at the end.
+ */
+const WIN_LEVEL = 14;
+const WIN_ROOM = 5;
+
 export function check_the_end(): void {
   if (g.next_room !== 0 && g.next_room !== g.drawn_room) {
     g.drawn_room = g.next_room;
     load_room_links();
+    // Special event: the end of the game. The original runs the
+    // ending here; this port has no cutscenes, so it says so and the
+    // shell takes it from there. Nothing said it before, and walking
+    // into the last room simply went on playing.
+    if (g.current_level === WIN_LEVEL && g.drawn_room === WIN_ROOM) g.game_won = 1;
     screen.different_room = 1;
     loadkid();
     anim_tile_modif();

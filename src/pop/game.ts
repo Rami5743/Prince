@@ -834,6 +834,15 @@ export class PopGame {
    */
   get timeExpired() { return g.current_level < 13 && g.rem_min === 0; }
 
+  /**
+   * The Prince has walked into the last room of the last level.
+   *
+   * `check_the_end` runs the ending there in the original. This port
+   * has no cutscenes, so the game says it is won and the shell ends
+   * it; before this nothing said it at all and the game carried on.
+   */
+  get gameWon() { return g.game_won !== 0; }
+
   /** `have_sword`, which the shell carries from one level to the next. */
   get hasSword() { return g.have_sword !== 0; }
   set hasSword(has: boolean) { g.have_sword = has ? 1 : 0; }

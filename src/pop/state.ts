@@ -340,6 +340,8 @@ class Globals {
   /** `current_sound`: which sound is playing, or -1. */
   current_sound = -1;
   random_seed = 0;
+  /** `end_sequence` has been reached: the last room of the last level. */
+  game_won = 0;
   upside_down = 0;
   need_level1_music = 0;
   is_blind_mode = 0;

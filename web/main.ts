@@ -280,6 +280,12 @@ async function boot(): Promise<void> {
       pressedSinceStep.clear();
       game.step(c);
       recorder.tick(c, game);
+      if (game.gameWon) {
+        // The last room of the last level: the original plays its
+        // ending here, and this is where the shell ends the game.
+        void changeScene(() => select(1));
+        return;
+      }
       if (game.timeExpired) {
         // `expired()`: the hour is up, and the original goes back to
         // the title through the hourglass. The hourglass is a cutscene
