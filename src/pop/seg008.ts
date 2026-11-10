@@ -1496,3 +1496,13 @@ function draw_mobs(): void { mobs.draw_mobs(); }
 export const UNUSED = {
   get_tile_div_mod, load_frame, get_curr_tile, x_bump, byteOf, sbyteOf, TILE_SIZEX,
 };
+
+/** The file's own statics, back to where a fresh run has them. */
+export function resetSeg008(): void {
+  peels_table.length = 0;
+  n_curr_objs = 0;
+  curr_objs.length = 0;
+  gate_top_y = 0;
+  gate_openness = 0;
+  gate_bottom_y = 0;
+}

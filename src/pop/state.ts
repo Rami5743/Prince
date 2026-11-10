@@ -359,6 +359,36 @@ class Globals {
 
 export const g = new Globals();
 
+/**
+ * Every global back to what it is before a game is loaded.
+ *
+ * `g` is one object for the life of the process, which is what makes
+ * the translation readable against the disassembly, and `startLevel`
+ * sets by hand the fields a level begins with. Anything it does not
+ * name is left as the last game left it -- and that showed: scoring
+ * `gate2` on its own gave 235 ticks of 1309 and scoring it after the
+ * twenty-one recordings before it in the same process gave 616. The
+ * same digest, the same port, a different answer, which makes the
+ * suite's numbers depend on the order its cases run in.
+ *
+ * So a game starts by putting every field back to the value the class
+ * declares. It has to run before the loader fills `chtab_addrs` and
+ * `tile_table`, which is why `PopGame.start` calls it first of all.
+ */
+export function resetGlobals(): void {
+  const fresh = new Globals() as unknown as Record<string, unknown>;
+  const live = g as unknown as Record<string, unknown>;
+  // Two of them belong to the run of the program and not to the game:
+  // the cheats the player turned on. `upside_down` and `is_blind_mode`
+  // are set from the keyboard in the C and nothing in `start_level`
+  // puts them back, so turning the screen over and then walking
+  // through the level door has to leave it over.
+  const keep = { upside_down: g.upside_down, is_blind_mode: g.is_blind_mode };
+  for (const key of Object.keys(fresh)) live[key] = fresh[key];
+  g.upside_down = keep.upside_down;
+  g.is_blind_mode = keep.is_blind_mode;
+}
+
 /** The C's `(byte)`, `(sbyte)` and `(word)` casts, which it relies on. */
 export const byteOf = (v: number): number => v & 0xff;
 export const sbyteOf = (v: number): number => ((v & 0xff) << 24) >> 24;

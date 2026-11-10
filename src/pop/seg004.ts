@@ -497,3 +497,17 @@ export function dist_from_wall_behind(tiletype: number): number {
 
 /** `bump_into_opponent` is in seg002; the port keeps its own there. */
 export const COLLISION_UNUSED = { release_arrows, get_tilepos, l7 };
+
+/**
+ * The file's own statics, back to where they start.
+ *
+ * `collision_row` and the two checked columns are the C's
+ * file-scope variables; a fresh run of `PRINCE.EXE` has them at nought
+ * and the port has to as well, or the second game in a process is not
+ * the game the capture is of. See `resetGlobals`.
+ */
+export function resetSeg004(): void {
+  collision_row = 0;
+  right_checked_col = 0;
+  left_checked_col = 0;
+}

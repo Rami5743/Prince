@@ -997,3 +997,10 @@ export function play_door_sound_if_visible(sound_id: number): void {
     : gate_room === g.drawn_room && tilepos % 10 !== 9;
   if (has_sound) out.play_sound(sound_id);
 }
+
+/** The file's own statics, back to where a fresh run has them. */
+export function resetSeg007(): void {
+  last_loose_sound = 0;
+  curmob_index = 0;
+  curr_tile_temp = 0;
+}

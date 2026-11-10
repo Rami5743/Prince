@@ -20,7 +20,7 @@ import { readExeTables } from '../game/exe-tables.ts';
 import { flipHorizontally } from '../render/room.ts';
 import { readFont, drawTextCentred, type Font } from '../render/font.ts';
 
-import { g, newChar, type RectType } from './state.ts';
+import { g, newChar, resetGlobals, type RectType } from './state.ts';
 import { chtabs, blitters, directions } from './types.ts';
 import { setFrameTables, loadkid, savekid, loadshad, saveshad } from './seg006.ts';
 import {
@@ -30,7 +30,7 @@ import {
   show_level, display_text_bottom, erase_bottom_text, type Peel,
 } from './seg008.ts';
 import { out as outSlots } from './link.ts';
-import { clear_tile_wipes, levelType as looseLevelType } from './seg007.ts';
+import { clear_tile_wipes, levelType as looseLevelType, resetSeg007 } from './seg007.ts';
 import { do_startpos, find_start_level_door, pos_guards, timers, dist as seg003dist, rooms as seg003rooms } from './seg003.ts';
 import {
   guards as guardTables, enter_guard, char_opp_dist, goto_other_room,
@@ -38,7 +38,7 @@ import {
   control_guard_inactive, load_room_links, hp as guardHp, guardColor,
 } from './seg002.ts';
 import { control, seqtbl_offset_char, spiked, do_fall, dist as seg005dist } from './seg005.ts';
-import { clear_coll_rooms } from './seg004.ts';
+import { clear_coll_rooms, resetSeg004 } from './seg004.ts';
 import {
   start_chompers, make_loose_fall, trigger_button, is_spike_harmful,
   start_anim_spike, set_wipe, set_redraw_full, set_redraw_fore, set_redraw2,
@@ -48,7 +48,7 @@ import {
   play_frame, check_the_end, screen, redraw_screen, anim_tile_modif, draw_hp,
   draw_kid_hp, draw_guard_hp, add_life, gen_palace_wall_colors,
 } from './seg000.ts';
-import { add_objtable, mark_obj_tile_redraw } from './seg008.ts';
+import { add_objtable, mark_obj_tile_redraw, resetSeg008 } from './seg008.ts';
 import { l2, l5, l6, l7, l8, out } from './link.ts';
 import { set_seed } from './seg009.ts';
 
@@ -208,6 +208,13 @@ export class PopGame {
     assets: Assets, exe: Uint8Array, levelNumber: number,
     options: PopOptions = {},
   ): Promise<PopGame> {
+    // Before anything else, and before the loader fills the sprite
+    // banks: a game begins with the globals the class declares, not
+    // with whatever the game before it left in them.
+    resetGlobals();
+    resetSeg004();
+    resetSeg007();
+    resetSeg008();
     link();
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? 'V');
     const game = new PopGame(scene, levelNumber);

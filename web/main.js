@@ -2841,6 +2841,14 @@ var Globals = class {
   tile_table = [];
 };
 var g = new Globals();
+function resetGlobals() {
+  const fresh = new Globals();
+  const live = g;
+  const keep = { upside_down: g.upside_down, is_blind_mode: g.is_blind_mode };
+  for (const key of Object.keys(fresh)) live[key] = fresh[key];
+  g.upside_down = keep.upside_down;
+  g.is_blind_mode = keep.is_blind_mode;
+}
 var byteOf = (v) => v & 255;
 var sbyteOf = (v) => (v & 255) << 24 >> 24;
 var wordOf = (v) => v & 65535;
@@ -4770,6 +4778,11 @@ function dist_from_wall_behind(tiletype) {
   }
   return wall_dist_from_left[type] + g.coll_tile_left_xpos - g.char_x_right_coll;
 }
+function resetSeg004() {
+  collision_row = 0;
+  right_checked_col = 0;
+  left_checked_col = 0;
+}
 
 // src/pop/seg005.ts
 var TILE_SIZEX2 = 14;
@@ -6185,6 +6198,11 @@ function play_door_sound_if_visible(sound_id) {
   const gate_room = g.trob.room;
   const has_sound = gate_room === g.room_L ? tilepos % 10 === 9 : gate_room === g.drawn_room && tilepos % 10 !== 9;
   if (has_sound) out.play_sound(sound_id);
+}
+function resetSeg007() {
+  last_loose_sound = 0;
+  curmob_index = 0;
+  curr_tile_temp = 0;
 }
 
 // src/pop/seg003.ts
@@ -8896,6 +8914,14 @@ var mobs = { draw_mobs: () => {
 function draw_mobs2() {
   mobs.draw_mobs();
 }
+function resetSeg008() {
+  peels_table.length = 0;
+  n_curr_objs = 0;
+  curr_objs.length = 0;
+  gate_top_y = 0;
+  gate_openness = 0;
+  gate_bottom_y = 0;
+}
 
 // src/pop/seg000.ts
 var screen = { different_room: 0 };
@@ -9222,6 +9248,10 @@ var PopGame = class _PopGame {
     this.levelNumber = levelNumber;
   }
   static async start(assets, exe, levelNumber, options = {}) {
+    resetGlobals();
+    resetSeg004();
+    resetSeg007();
+    resetSeg008();
     link();
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? "V");
     const game = new _PopGame(scene, levelNumber);
