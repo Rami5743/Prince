@@ -144,6 +144,31 @@ seconds before the pictures they are compared against; `gate2` scored
 143 ticks of 1313 that way, with the capture's Prince standing at the
 level door while the port's played the level.
 
+### A press goes out a tick early; a release does not
+
+The game looks at the keyboard once a tick, so a key has to be *down*
+before the tick that is to see it: that is the `t - 1` in the
+schedule, and it is measured -- `probeE` lines up at offset nought for
+all 165 of its ticks.
+
+A release is not the mirror of that. The tick at `t - 1` is the last
+one that still sees the key held, so lifting it then takes the key
+away a tick too soon, and the original acts on the release one tick
+before the port does.
+
+It stays invisible until a release decides something. `palace4` lets
+go of Left in the middle of a run, and `control_running` stops a run
+only on frame 7 or frame 11: a tick either way lands on a different
+frame of the stride. The original stops on the frame before the port's,
+carries half as far -- 26 screen pixels against 58 -- and ends the run
+four ticks sooner. Measured with `tools/dev/late-key.ts`, moving that
+one release a tick later is worth 46 ticks of 521:
+
+    late-key palace4 195 195 -1,0   ->   512 of 521, 466 of 521
+
+So the schedule now sends a press at `(t - 1) / 12` and a release at
+`t / 12`.
+
 ### A press too short for the emulator
 
 Give a press four ticks at least. A shorter one is a coin toss, and the
