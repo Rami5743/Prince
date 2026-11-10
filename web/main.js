@@ -3543,7 +3543,9 @@ var l2 = {
   died_on_button: slot("died_on_button"),
   set_start_pos: slot("set_start_pos"),
   on_guard_killed: slot("on_guard_killed"),
-  inc_curr_row: slot("inc_curr_row")
+  inc_curr_row: slot("inc_curr_row"),
+  /** `add_life`, which lives in seg000 and the potions in seg006 want. */
+  add_life: slot("add_life")
 };
 var out = {
   play_sound: (_which) => {
@@ -4387,8 +4389,7 @@ function proc_get_object() {
         out.play_sound(soundids.sound_30_big_potion);
         g.flash_color = 4;
         g.flash_time = 4;
-        g.hitp_max++;
-        g.hitp_delta = g.hitp_max;
+        l2.add_life.fn();
         break;
       case 3:
         g.is_feather_fall = 1;
@@ -4398,11 +4399,16 @@ function proc_get_object() {
         out.play_sound(soundids.sound_39_low_weight);
         break;
       case 4:
+        g.upside_down = ~g.upside_down;
+        break;
+      case 6:
+        get_tile(8, 0, 0);
+        l7.trigger_button.fn(0, 0, -1);
+        break;
+      case 5:
         out.stop_sounds();
-        out.play_sound(soundids.sound_38_blink);
-        g.flash_color = 15;
-        g.flash_time = 5;
-        take_hp(1);
+        out.play_sound(soundids.sound_13_kid_hurt);
+        g.hitp_delta = g.current_level === 15 ? -(g.hitp_max + 1 >> 1) : -1;
         break;
       default:
         break;
@@ -9201,6 +9207,7 @@ function link() {
   hp2.draw_hp = draw_hp;
   hp.draw_guard_hp = draw_guard_hp;
   hp.add_life = add_life;
+  l2.add_life.fn = add_life;
 }
 var DEATH_MUSIC_TICKS = 36;
 var TEXT_RECT = { top: 193, left: 70, bottom: 202, right: 250 };

@@ -68,6 +68,8 @@ export const l2 = {
   set_start_pos: slot<() => void>('set_start_pos'),
   on_guard_killed: slot<() => void>('on_guard_killed'),
   inc_curr_row: slot<() => void>('inc_curr_row'),
+  /** `add_life`, which lives in seg000 and the potions in seg006 want. */
+  add_life: slot<() => void>('add_life'),
 };
 
 /**

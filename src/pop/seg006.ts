@@ -1065,22 +1065,35 @@ export function proc_get_object(): void {
         out.play_sound(soundids.sound_30_big_potion);
         g.flash_color = 4;
         g.flash_time = 4;
-        g.hitp_max++;
-        g.hitp_delta = g.hitp_max;
+        // `add_life`, which stops at ten flasks and sets the delta
+        // from what he is short of, not from the new maximum.
+        l2.add_life.fn();
         break;
       case 3: // feather
+        // `feather_fall`, in its vanilla form: SDLPoP's timer is one
+        // of its own fixes.
         g.is_feather_fall = 1;
         g.flash_color = 2; // green
         g.flash_time = 3;
         out.stop_sounds();
         out.play_sound(soundids.sound_39_low_weight);
         break;
-      case 4: // poison
+      case 4: // invert
+        // `toggle_upside`. The shell turns the picture over when it
+        // presents it, so there is nothing else to do.
+        g.upside_down = ~g.upside_down;
+        break;
+      case 6: // open
+        // The potion that throws every gate of the level open.
+        get_tile(8, 0, 0);
+        l7.trigger_button.fn(0, 0, -1);
+        break;
+      case 5: // hurt
         out.stop_sounds();
-        out.play_sound(soundids.sound_38_blink);
-        g.flash_color = 15; // white
-        g.flash_time = 5;
-        take_hp(1);
+        out.play_sound(soundids.sound_13_kid_hurt);
+        // Special event: a blue potion on the potions level takes
+        // half of what he has.
+        g.hitp_delta = g.current_level === 15 ? -((g.hitp_max + 1) >> 1) : -1;
         break;
       default:
         break;

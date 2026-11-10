@@ -126,6 +126,7 @@ function link(): void {
   drawHp.draw_hp = draw_hp;
   guardHp.draw_guard_hp = draw_guard_hp;
   guardHp.add_life = add_life;
+  l2.add_life.fn = add_life;
 }
 
 /** How long `play_death_music` sounds, in ticks. */
