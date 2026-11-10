@@ -274,7 +274,23 @@ export class PopGame {
     drawMirror.level = constants.mirrorLevel;
     drawMirror.room = constants.mirrorRoom;
     guardTables.hp = (n) => constants.guardHitPoints[n] ?? 0;
-    guardTables.type = () => this.scene.guardType === 4 ? 2 : 0;
+    /**
+     * `tbl_guard_type`, and it used to be two levels' worth of wrong.
+     *
+     * The shell's `GUARD_TYPE_BY_LEVEL` already holds the C's own
+     * numbering -- 0 a guard, 1 the fat one, 2 a skeleton, 3 the
+     * vizier, 4 the shadow -- and this handed the translation
+     * `guardType === 4 ? 2 : 0`, which says the shadow of level 12 is
+     * a skeleton and the skeletons of level 3 are ordinary guards.
+     *
+     * `enter_guard` reads it twice. A skeleton comes back with his
+     * sword drawn and `seq_63_guard_active_after_fall`; a guard comes
+     * back sheathed and standing idle. So the skeleton knocked into
+     * the pit on level 3 climbed out as a guard who would not fight,
+     * which is exactly what it looked like. The other reading of it
+     * decides who gets recoloured, and only an ordinary guard does.
+     */
+    guardTables.type = () => this.scene.guardType;
 
     // The level's tiles are the ones `LevelState` keeps, so that the
     // page and the translation are looking at the same bytes.
@@ -652,7 +668,52 @@ export class PopGame {
       draw_tables();
     }
     this.tickBottomText();
+    this.flash();
     return this.surface;
+  }
+
+  /** The background colour a flash took, to put back on the next tick. */
+  private savedBackground: [number, number, number] | null = null;
+
+  /**
+   * `flash_if_hurt` and `remove_flash_if_hurt`, which the port never
+   * had at all.
+   *
+   * `play_level` runs the two of them straight after
+   * `draw_game_frame`, so the flash is on the frame that has just been
+   * drawn and the countdown happens after it. The original does it by
+   * filling the screen with the colour and blitting the frame back
+   * over it with black punched out, which is the same as giving the
+   * background entry of the palette that colour for one frame.
+   *
+   * Eight ticks of bright yellow for a sword picked up, four or two of
+   * red for a hit point lost or gained, three of green for a potion,
+   * eighteen of white when Jaffar falls. Every one of them was set in
+   * `g` and none of them ever reached the screen.
+   *
+   * `flash_if_hurt` has a second branch -- red whenever `hitp_delta`
+   * is negative, whether or not `flash_time` was set -- and it is
+   * deliberately left out. The captures say the original does not do
+   * it. `3764b76d` loses three hit points at tick 195 and not one of
+   * the 17670 black pixels of its screen changes colour on that tick
+   * or any other in the run; swept over the whole capture, no frame
+   * has even half its usual count of black. Putting that branch in
+   * costs one to three ticks on thirteen of the twenty-five
+   * recordings -- 14069 of 16599 down to 14045 -- which is the
+   * measurement saying the same thing twice.
+   */
+  private flash(): void {
+    const pal = this.scene.screenPalette;
+    if (this.savedBackground) {
+      pal.setEntry(0, ...this.savedBackground);
+      this.savedBackground = null;
+    }
+    const colour = g.flash_time !== 0 ? g.flash_color : 0;
+    if (colour > 0) {
+      this.savedBackground = pal.entry(0);
+      pal.setEntry(0, ...pal.entry(colour));
+    }
+    if (g.flash_time !== 0) --g.flash_time;
   }
 
   /**

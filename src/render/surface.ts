@@ -45,6 +45,22 @@ export class ScreenPalette {
     this.dirty = true;
   }
 
+  /** One entry's six-bit components. */
+  entry(i: number): [number, number, number] {
+    const o = i * 3;
+    return [this.rgb6[o], this.rgb6[o + 1], this.rgb6[o + 2]];
+  }
+
+  /** Put one entry's six-bit components back, as `set_bg_attr` does. */
+  setEntry(i: number, r: number, g: number, b: number): void {
+    const o = i * 3;
+    if (this.rgb6[o] === r && this.rgb6[o + 1] === g && this.rgb6[o + 2] === b) return;
+    this.rgb6[o] = r;
+    this.rgb6[o + 1] = g;
+    this.rgb6[o + 2] = b;
+    this.dirty = true;
+  }
+
   /** RGBA bytes, expanding each 6-bit component the way the DAC did. */
   toRgba(): Uint8Array {
     if (this.dirty) {

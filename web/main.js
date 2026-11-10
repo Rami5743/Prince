@@ -416,6 +416,20 @@ var ScreenPalette = class {
     }
     this.dirty = true;
   }
+  /** One entry's six-bit components. */
+  entry(i) {
+    const o = i * 3;
+    return [this.rgb6[o], this.rgb6[o + 1], this.rgb6[o + 2]];
+  }
+  /** Put one entry's six-bit components back, as `set_bg_attr` does. */
+  setEntry(i, r, g2, b) {
+    const o = i * 3;
+    if (this.rgb6[o] === r && this.rgb6[o + 1] === g2 && this.rgb6[o + 2] === b) return;
+    this.rgb6[o] = r;
+    this.rgb6[o + 1] = g2;
+    this.rgb6[o + 2] = b;
+    this.dirty = true;
+  }
   /** RGBA bytes, expanding each 6-bit component the way the DAC did. */
   toRgba() {
     if (this.dirty) {
@@ -9310,7 +9324,7 @@ var PopGame = class _PopGame {
     mirror.level = constants.mirrorLevel;
     mirror.room = constants.mirrorRoom;
     guards.hp = (n) => constants.guardHitPoints[n] ?? 0;
-    guards.type = () => this.scene.guardType === 4 ? 2 : 0;
+    guards.type = () => this.scene.guardType;
     g.level = {
       fg: this.scene.state.fg,
       bg: this.scene.state.modifiers,
@@ -9623,7 +9637,50 @@ var PopGame = class _PopGame {
       draw_tables();
     }
     this.tickBottomText();
+    this.flash();
     return this.surface;
+  }
+  /** The background colour a flash took, to put back on the next tick. */
+  savedBackground = null;
+  /**
+   * `flash_if_hurt` and `remove_flash_if_hurt`, which the port never
+   * had at all.
+   *
+   * `play_level` runs the two of them straight after
+   * `draw_game_frame`, so the flash is on the frame that has just been
+   * drawn and the countdown happens after it. The original does it by
+   * filling the screen with the colour and blitting the frame back
+   * over it with black punched out, which is the same as giving the
+   * background entry of the palette that colour for one frame.
+   *
+   * Eight ticks of bright yellow for a sword picked up, four or two of
+   * red for a hit point lost or gained, three of green for a potion,
+   * eighteen of white when Jaffar falls. Every one of them was set in
+   * `g` and none of them ever reached the screen.
+   *
+   * `flash_if_hurt` has a second branch -- red whenever `hitp_delta`
+   * is negative, whether or not `flash_time` was set -- and it is
+   * deliberately left out. The captures say the original does not do
+   * it. `3764b76d` loses three hit points at tick 195 and not one of
+   * the 17670 black pixels of its screen changes colour on that tick
+   * or any other in the run; swept over the whole capture, no frame
+   * has even half its usual count of black. Putting that branch in
+   * costs one to three ticks on thirteen of the twenty-five
+   * recordings -- 14069 of 16599 down to 14045 -- which is the
+   * measurement saying the same thing twice.
+   */
+  flash() {
+    const pal = this.scene.screenPalette;
+    if (this.savedBackground) {
+      pal.setEntry(0, ...this.savedBackground);
+      this.savedBackground = null;
+    }
+    const colour = g.flash_time !== 0 ? g.flash_color : 0;
+    if (colour > 0) {
+      this.savedBackground = pal.entry(0);
+      pal.setEntry(0, ...pal.entry(colour));
+    }
+    if (g.flash_time !== 0) --g.flash_time;
   }
   /**
    * The tail of `draw_game_frame`: a message counts down and is rubbed
