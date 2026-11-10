@@ -302,6 +302,43 @@ export function clear_coll_rooms(): void {
 }
 
 // seg004:0657
+/**
+ * Whether an opening gate still counts as a wall.
+ *
+ * One tick of this decides `b4ff4672`'s remaining 35, and the whole
+ * chain around it has been read against the C and matches line for
+ * line -- `check_collisions`, `get_row_collision_data`, `wall_type`,
+ * `get_tile`, `is_obstacle`, `check_bumped`, `bumped_floor`,
+ * `set_char_collision` with its thin-frame narrowing, `read_user_control`
+ * with its IGNORE latch, `control_standing` down to its last branch,
+ * `forward_pressed`, `animate_door` and `trigger_gate`. None of them
+ * is the fault.
+ *
+ * What happens: at `b4ff4672` 251 the Prince is standing against the
+ * left edge of room 6 with Left held, `control_forward` latched to
+ * IGNORE. The gate of room 8 at tilepos 9 is opening, four to the
+ * modifier every tick. `control_standing`'s last branch calls
+ * `forward_pressed` on `control_x` alone, and that starts a run
+ * unless the edge in front is a wall -- so the question is whether
+ * the gate is still a wall, and this is the test.
+ *
+ *     tick 250   modifier 136   (136 >> 2) + 6 = 40 < 41   a wall
+ *     tick 251   modifier 140   (140 >> 2) + 6 = 41 < 41   not a wall
+ *
+ * so the port starts a run at 251, the collision box moves, the gate
+ * bumps him and he staggers. The capture has him standing still
+ * through 262 with no stagger at all, so the original was still
+ * walled at 251 and the two accounts differ by exactly one step of
+ * the modifier.
+ *
+ * Two candidates are left, and they cannot be told apart from here:
+ * the gate's modifier is one tick behind the original's -- the button
+ * that opened it is in a room the capture never draws, so nothing on
+ * screen pins the start -- or `char_height` for frame 15 is 41 here
+ * and 42 there, which would make 41 < 42 true and keep the wall. The
+ * height comes straight from the image header in the DAT, so the
+ * first is the likelier of the two.
+ */
 export function can_bump_into_gate(): boolean {
   return (g.curr_room_modif[g.curr_tilepos] >> 2) + 6 < g.char_height;
 }
