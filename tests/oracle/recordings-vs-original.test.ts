@@ -109,7 +109,7 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 630,
-  '13ab6867': 569,
+  '13ab6867': 572,
   '25c4ebb8': 388,
   '33e8ace7': 308,
   '3764b76d': 218,
@@ -124,7 +124,7 @@ const EXPECTED: Record<string, number> = {
   'e209b01a': 214,
   'ec99dc5b': 237,
   'f6874819': 1189,
-  'gate1': 591,
+  'gate1': 593,
   // `gate1`'s pin measures the replay, not the port: its two-tick tap
   // of Right at 591 reached DOSBox fourteen ticks late, and with the
   // tap moved there the port draws 790 of the 796 -- see
@@ -153,6 +153,13 @@ const EXPECTED: Record<string, number> = {
   // What is left begins at 595, in a strip at x 201 to 225 beside the
   // Prince as he drops, and no slip of up to ten ticks resolves it.
   'exitdoor': 591,
+  // `gate2b` is `gate2` with every stretch of unchanged keys given
+  // four ticks, by `tools/oracle/stretch.mjs`. The same moves in the
+  // same order, far enough apart for DOSBox to take them, and level 2
+  // goes from 108 ticks of 1309 to **1183 of 1649**. What is left is
+  // the port's: the first real break is at 99, where it runs eleven
+  // ticks ahead of the capture and then rejoins by 113.
+  'gate2b': 1183,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
