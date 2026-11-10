@@ -172,6 +172,12 @@ const EXPECTED: Record<string, number> = {
   // is exact, and `level2` is the probe that measures the rest of it
   // without a guard in the room.
   'gate2b': 1183,
+  // `level2` is the same level `gate2` is a fight on, walked instead:
+  // 424 ticks of stepping, running, climbing, dropping and landing,
+  // every press four ticks or longer, and nobody to draw a sword at.
+  // The port draws **every one of its 424 ticks** exactly. Level 2
+  // itself was never what `gate2` was measuring.
+  'level2': 424,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
