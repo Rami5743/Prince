@@ -72,6 +72,12 @@ export const l2 = {
   add_life: slot<() => void>('add_life'),
 };
 
+/** `draw_kid_hp` and `draw_guard_hp`, which live in seg000. */
+export const hud = {
+  draw_kid_hp: slot<(curr: number, max: number) => void>('draw_kid_hp'),
+  draw_guard_hp: slot<(curr: number, max: number) => void>('draw_guard_hp'),
+};
+
 /**
  * What the game tells the world about: a sound to play, the level
  * being over. The shell fills these in; by default they do nothing,

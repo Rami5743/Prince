@@ -49,7 +49,7 @@ import {
   draw_kid_hp, draw_guard_hp, add_life, gen_palace_wall_colors,
 } from './seg000.ts';
 import { add_objtable, mark_obj_tile_redraw, resetSeg008 } from './seg008.ts';
-import { l2, l5, l6, l7, l8, out } from './link.ts';
+import { l2, l5, l6, l7, l8, out, hud } from './link.ts';
 import { set_seed } from './seg009.ts';
 
 /** `tbl_guard_hp` and `tbl_guard_type`, read out of PRINCE.EXE. */
@@ -127,6 +127,8 @@ function link(): void {
   guardHp.draw_guard_hp = draw_guard_hp;
   guardHp.add_life = add_life;
   l2.add_life.fn = add_life;
+  hud.draw_kid_hp.fn = draw_kid_hp;
+  hud.draw_guard_hp.fn = draw_guard_hp;
 }
 
 /** How long `play_death_music` sounds, in ticks. */

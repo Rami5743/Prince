@@ -9,17 +9,18 @@
  * here is what a tick of the game needs.
  */
 import { g, byteOf, copyChar } from './state.ts';
-import { x_bump, y_land } from './data.ts';
+import { x_bump, y_land, y_clip } from './data.ts';
 import {
   tiles, charids, directions, frameids, seqids, sword_status, actions, soundids,
 } from './types.ts';
 import {
   get_tile, get_tile_div_mod_m7, distance_to_edge_weight, play_seq, take_hp,
   savekid, loadkid, get_tilepos, tile_is_floor,
+  load_frame, get_tile_at_char, load_frame_to_obj, reset_obj_clip,
 } from './seg006.ts';
 import { seqtbl_offset_char } from './seg005.ts';
 import { trigger_button, start_level_door, do_knock } from './seg007.ts';
-import { l8, out } from './link.ts';
+import { l8, out, hud } from './link.ts';
 
 const TILE_SIZEX = 14;
 const TILE_MIDX = 7;
@@ -199,6 +200,34 @@ export function timers(): void {
 export function check_mirror(): void {
   if (g.jumped_through_mirror === -1) {
     jump_through_mirror();
+    return;
+  }
+  /**
+   * The Prince's reflection, which this port never drew.
+   *
+   * Standing on the mirror tile of level 4 the original loads his own
+   * frame, puts it where the glass would show it -- that is what
+   * `check_mirror_image` works out, and it leaves `Char` changed,
+   * which is why `loadkid` comes first and nothing is saved back --
+   * and adds it to the object table as kind 4, clipped so that only
+   * the part inside the glass appears.
+   *
+   * `check_mirror_image` was translated and had no caller but the
+   * jump, so the mirror on level 4 reflected nothing at all.
+   */
+  if (get_tile_at_char() !== tiles.tiles_13_mirror) return;
+  loadkid();
+  load_frame();
+  check_mirror_image();
+  if (distance_mirror >= 0 && g.Char.room === g.drawn_room) {
+    load_frame_to_obj();
+    reset_obj_clip();
+    const clip_top = y_clip[g.Char.curr_row + 1];
+    if (clip_top < g.obj_y) {
+      g.obj_clip_top = clip_top;
+      g.obj_clip_left = (g.Char.curr_col << 5) + 9;
+      l8.add_objtable.fn(4); // the mirror image
+    }
   }
 }
 
@@ -213,6 +242,12 @@ export function jump_through_mirror(): void {
   out.play_sound(soundids.sound_45_jump_through_mirror);
   g.guardhp_max = g.hitp_max;
   g.guardhp_curr = g.guardhp_max;
+  // The shadow takes his strength and leaves him one point. The
+  // translation gave the shadow the number and never took it off the
+  // Prince, so he came through the glass at full health.
+  g.hitp_curr = 1;
+  hud.draw_kid_hp.fn(1, g.hitp_max);
+  hud.draw_guard_hp.fn(g.guardhp_curr, g.guardhp_max);
   copyChar(g.Guard, g.Char);
   loadkid();
 }

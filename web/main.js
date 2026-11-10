@@ -3547,6 +3547,10 @@ var l2 = {
   /** `add_life`, which lives in seg000 and the potions in seg006 want. */
   add_life: slot("add_life")
 };
+var hud = {
+  draw_kid_hp: slot("draw_kid_hp"),
+  draw_guard_hp: slot("draw_guard_hp")
+};
 var out = {
   play_sound: (_which) => {
   },
@@ -6373,6 +6377,21 @@ function timers() {
 function check_mirror() {
   if (g.jumped_through_mirror === -1) {
     jump_through_mirror();
+    return;
+  }
+  if (get_tile_at_char() !== tiles.tiles_13_mirror) return;
+  loadkid();
+  load_frame();
+  check_mirror_image();
+  if (distance_mirror >= 0 && g.Char.room === g.drawn_room) {
+    load_frame_to_obj();
+    reset_obj_clip();
+    const clip_top = y_clip[g.Char.curr_row + 1];
+    if (clip_top < g.obj_y) {
+      g.obj_clip_top = clip_top;
+      g.obj_clip_left = (g.Char.curr_col << 5) + 9;
+      l8.add_objtable.fn(4);
+    }
   }
 }
 function jump_through_mirror() {
@@ -6383,6 +6402,9 @@ function jump_through_mirror() {
   out.play_sound(soundids.sound_45_jump_through_mirror);
   g.guardhp_max = g.hitp_max;
   g.guardhp_curr = g.guardhp_max;
+  g.hitp_curr = 1;
+  hud.draw_kid_hp.fn(1, g.hitp_max);
+  hud.draw_guard_hp.fn(g.guardhp_curr, g.guardhp_max);
   copyChar(g.Guard, g.Char);
   loadkid();
 }
@@ -9208,6 +9230,8 @@ function link() {
   hp.draw_guard_hp = draw_guard_hp;
   hp.add_life = add_life;
   l2.add_life.fn = add_life;
+  hud.draw_kid_hp.fn = draw_kid_hp;
+  hud.draw_guard_hp.fn = draw_guard_hp;
 }
 var DEATH_MUSIC_TICKS = 36;
 var TEXT_RECT = { top: 193, left: 70, bottom: 202, right: 250 };
