@@ -98,7 +98,19 @@ for (let t = from; t <= Math.min(to, available - 1); t++) {
   if (!dos) continue;
   let bestK = 0;
   let bestN = Infinity;
-  for (let k = -slip; k <= slip; k++) {
+  /**
+   * Nearest first, so a tie goes to the smallest shift.
+   *
+   * It used to walk from `-slip` upward and keep the first of the
+   * best, which is the furthest. A Prince standing still draws the
+   * same picture for twenty ticks, every one of them a tie, and the
+   * column then read `-3` all the way down and said nothing. Offsets
+   * 0, -1, +1, -2, +2 in that order make the column mean what it
+   * looks like it means.
+   */
+  const order: number[] = [0];
+  for (let k = 1; k <= slip; k++) order.push(-k, k);
+  for (const k of order) {
     const p = port[t + k];
     if (!p) continue;
     let n = 0;
