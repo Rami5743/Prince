@@ -145,9 +145,14 @@ const EXPECTED: Record<string, number> = {
   // `exitdoor` is `gate1`'s timeline with every press stretched to
   // four ticks so the emulator takes all of them. It reaches the climb
   // up the level door on the same ticks the player's own run does, 762
-  // to 774, which is what it is here for -- though its capture parts
-  // company at 336 and again at 595 and so does not reach that far.
-  'exitdoor': 571,
+  // to 774, which is what it is here for.
+  //
+  // The capture it is measured against was taken again once the
+  // release schedule was put back; the old one parted company at 336
+  // and the new one does not, which was the capture and not the port.
+  // What is left begins at 595, in a strip at x 201 to 225 beside the
+  // Prince as he drops, and no slip of up to ten ticks resolves it.
+  'exitdoor': 591,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
