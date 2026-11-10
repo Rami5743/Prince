@@ -714,6 +714,32 @@ export function remove_loose(_room: number, tilepos: number): number {
 }
 
 // seg007:0ED5
+/**
+ * The tick a loose floor is told to go, which is one earlier here.
+ *
+ * Measured on `9b60bf3a`: exact to 78, 49 pixels out at 79, exact at
+ * 80 to 82, 478 pixels out at 83 in the strip the falling tile
+ * occupies, one tick apart from 84 to 91, and exact again at 92.
+ * Eight ticks, and nothing else in the run.
+ *
+ * What the port does: the Prince steps on room 1's tile 26 at tick
+ * 65, this adds the trob with modifier 1, `animate_loose` adds one a
+ * tick, the modifier reaches 11 at tick 75 and the tile becomes a mob
+ * at y 191. It falls y 2, 8, 17, 29, 44, 62, 83, 107 on speeds 3 to
+ * 24 and lands at the end of 83. The capture lands at 84.
+ *
+ * None of the machinery is the fault -- `move_mob`, `move_loose` with
+ * its row crossing, `loose_fall`, `loose_land`, `mob_down_a_row`,
+ * `animate_loose` with its shake branch and its `>= 11`, this
+ * function, `loose_shake` down to the roll it throws away, `add_trob`,
+ * `find_trob`, `process_trobs`, and `do_mobs` before `process_trobs`
+ * in `play_frame` -- all read against the C and all faithful. The two
+ * callers here are the two vanilla ones; SDLPoP's other three are
+ * inside `USE_JUMP_GRAB` and `USE_SUPER_HIGH_JUMP`.
+ *
+ * So what is left is the tick `check_press` fires on. The Prince's own
+ * frames are identical on either side of it.
+ */
 export function make_loose_fall(modifier: number): void {
   // Is it a "solid" loose floor, which never falls?
   if ((g.curr_room_tiles[g.curr_tilepos] & 0x20) === 0) {
