@@ -30,6 +30,9 @@ const TILE_RIGHTX = 13;
 const SCREENSPACE_X = 58;
 const FALLING_SPEED_ACCEL = 3;
 const FALLING_SPEED_MAX = 33;
+/** And how a feather falls, which is what the green potion is for. */
+const FALLING_SPEED_ACCEL_FEATHER = 1;
+const FALLING_SPEED_MAX_FEATHER = 4;
 
 const CONTROL_HELD = -1;
 const CONTROL_RELEASED = 0;
@@ -406,10 +409,25 @@ export function x_to_xh_and_xl(xpos: number): { xh: number; xl: number } {
 
 // seg006:057C
 export function fall_accel(): void {
-  if (g.Char.action === actions.actions_4_in_freefall) {
-    g.Char.fall_y += FALLING_SPEED_ACCEL;
-    if (g.Char.fall_y > FALLING_SPEED_MAX) g.Char.fall_y = FALLING_SPEED_MAX;
+  if (g.Char.action !== actions.actions_4_in_freefall) return;
+  /**
+   * The feather potion, which did nothing at all until now.
+   *
+   * `proc_get_object` set `is_feather_fall`, played the sound and
+   * flashed the screen green, and the only other place that read the
+   * flag was `play_seq`'s jump-if-feather. Falling itself ignored it,
+   * so the one thing the potion is for -- coming down slowly and
+   * living through a drop that would otherwise kill -- never
+   * happened. A feather gathers one to the fall each tick instead of
+   * three, and never goes faster than four.
+   */
+  if (g.is_feather_fall) {
+    g.Char.fall_y += FALLING_SPEED_ACCEL_FEATHER;
+    if (g.Char.fall_y > FALLING_SPEED_MAX_FEATHER) g.Char.fall_y = FALLING_SPEED_MAX_FEATHER;
+    return;
   }
+  g.Char.fall_y += FALLING_SPEED_ACCEL;
+  if (g.Char.fall_y > FALLING_SPEED_MAX) g.Char.fall_y = FALLING_SPEED_MAX;
 }
 
 // seg006:05AE

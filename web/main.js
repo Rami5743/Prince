@@ -3571,6 +3571,8 @@ var TILE_SIZEY = 63;
 var TILE_RIGHTX = 13;
 var FALLING_SPEED_ACCEL2 = 3;
 var FALLING_SPEED_MAX2 = 33;
+var FALLING_SPEED_ACCEL_FEATHER = 1;
+var FALLING_SPEED_MAX_FEATHER = 4;
 var CONTROL_HELD = -1;
 var CONTROL_RELEASED = 0;
 var CONTROL_IGNORE = 1;
@@ -3858,10 +3860,14 @@ function x_to_xh_and_xl(xpos) {
   return { xh: sbyteOf(Math.abs(xpos) >> 3), xl: sbyteOf(xpos % 8) };
 }
 function fall_accel() {
-  if (g.Char.action === actions.actions_4_in_freefall) {
-    g.Char.fall_y += FALLING_SPEED_ACCEL2;
-    if (g.Char.fall_y > FALLING_SPEED_MAX2) g.Char.fall_y = FALLING_SPEED_MAX2;
+  if (g.Char.action !== actions.actions_4_in_freefall) return;
+  if (g.is_feather_fall) {
+    g.Char.fall_y += FALLING_SPEED_ACCEL_FEATHER;
+    if (g.Char.fall_y > FALLING_SPEED_MAX_FEATHER) g.Char.fall_y = FALLING_SPEED_MAX_FEATHER;
+    return;
   }
+  g.Char.fall_y += FALLING_SPEED_ACCEL2;
+  if (g.Char.fall_y > FALLING_SPEED_MAX2) g.Char.fall_y = FALLING_SPEED_MAX2;
 }
 function fall_speed() {
   g.Char.y = byteOf(g.Char.y + g.Char.fall_y);
