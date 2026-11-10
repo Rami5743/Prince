@@ -17,9 +17,26 @@
 ## solved.
 ##
 ## The only thing that ends this is the player telling you, in so
-## many words, to stop or to do something else. Running low on
-## context does not: say so in one line and carry on with what room
-## is left. A measurement you took and wrote up has fixed nothing.
+## many words, to stop or to do something else. A measurement you
+## took and wrote up has fixed nothing.
+##
+## ## Running out of room is a problem to solve, not an excuse
+##
+## "I ran out of context" is not an ending. It is a thing you fix,
+## and here is how. The moment you notice the window getting short,
+## **write the state down in the repository** and carry straight on:
+##
+## 1. Put what you have learnt where the next session will find it --
+##    the task's own description, `CLAUDE.md`, or a note next to the
+##    code. Numbers, not impressions: what was measured, what the
+##    score was before and after, which hypotheses are dead and what
+##    each one cost.
+## 2. Commit and push it. A note that is not pushed does not exist.
+## 3. Then keep working. You still have the room you have; use it on
+##    the bug and not on prose about the bug.
+##
+## Written down properly, running out costs the next session nothing
+## but the reading. Stopping instead costs the player another round.
 ##
 ## ============================================================
 
