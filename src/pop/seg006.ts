@@ -715,7 +715,9 @@ export function play_kid(): void {
     g.is_show_time = 0;
     if (g.Char.alive < 0 || g.Char.alive >= 6) {
       if (g.Char.alive === 6) {
-        out.play_death_music();
+        // `is_sound_on && current_level != 0 && current_level != 15`:
+        // no death music on the demo level or the potions level.
+        if (g.current_level !== 0 && g.current_level !== 15) play_death_music();
       } else {
         if (g.Char.alive !== 7 || out.check_sound_playing()) return;
         if (g.current_level !== 0 && g.current_level !== 15) {
@@ -1085,6 +1087,25 @@ export function proc_get_object(): void {
     }
   }
   g.pickup_obj_type = 0;
+}
+
+/**
+ * `play_death_music`, which is three different sounds.
+ *
+ * The shadow's music if the shadow killed him, the fight music if he
+ * died with a sword in his hand -- that is what `holding_sword` is
+ * for, and nothing in the translation read it -- and the ordinary
+ * death otherwise. `out.play_death_music` is the shell's own timer,
+ * which counts the music out in ticks and is what the capture pins
+ * were measured against; it stays, and the sound goes with it.
+ */
+export function play_death_music(): void {
+  const id = g.Guard.charid === charids.charid_1_shadow
+    ? soundids.sound_32_shadow_music
+    : (g.holding_sword ? soundids.sound_28_death_in_fight
+      : soundids.sound_24_death_regular);
+  out.play_sound(id);
+  out.play_death_music();
 }
 
 // seg006:1599

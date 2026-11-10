@@ -4112,7 +4112,7 @@ function play_kid() {
     g.is_show_time = 0;
     if (g.Char.alive < 0 || g.Char.alive >= 6) {
       if (g.Char.alive === 6) {
-        out.play_death_music();
+        if (g.current_level !== 0 && g.current_level !== 15) play_death_music();
       } else {
         if (g.Char.alive !== 7 || out.check_sound_playing()) return;
         if (g.current_level !== 0 && g.current_level !== 15) {
@@ -4409,6 +4409,11 @@ function proc_get_object() {
     }
   }
   g.pickup_obj_type = 0;
+}
+function play_death_music() {
+  const id = g.Guard.charid === charids.charid_1_shadow ? soundids.sound_32_shadow_music : g.holding_sword ? soundids.sound_28_death_in_fight : soundids.sound_24_death_regular;
+  out.play_sound(id);
+  out.play_death_music();
 }
 function is_dead() {
   return g.Char.frame >= frameids.frame_177_spiked && (g.Char.frame <= frameids.frame_178_chomped || g.Char.frame === frameids.frame_185_dead);
