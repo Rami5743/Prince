@@ -252,24 +252,8 @@ if (rawMs) {
     for (const key of ['Left', 'Right', 'Up', 'Down', 'shift']) {
       if (now[key] === held[key]) continue;
       held[key] = now[key];
-      /**
-       * A press goes out a tick early; a release does not.
-       *
-       * The game looks at the keyboard once a tick, so a key has to
-       * be down before the tick that is to see it -- that is the
-       * `t - 1`, and it is measured. A release is the other way
-       * round: the tick at `t - 1` is the last one that still sees
-       * the key, so lifting it then takes the key away a tick too
-       * soon.
-       *
-       * It shows wherever a release decides something. `palace4`
-       * lets go of Left in the middle of a run: the original stops
-       * on the frame before the one the port stops on, carries half
-       * as far, and the run ends four ticks sooner. Moving that one
-       * release a tick later is worth 46 ticks of 521 on its own.
-       */
       edges.push({
-        want: (t - (now[key] ? 1 : 0) + shift) * TICK,
+        want: (t - 1 + shift) * TICK,
         type: now[key] ? 'down' : 'up',
         key: key === 'shift' ? 'shift' : key,
       });

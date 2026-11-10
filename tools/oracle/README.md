@@ -144,30 +144,31 @@ seconds before the pictures they are compared against; `gate2` scored
 143 ticks of 1313 that way, with the capture's Prince standing at the
 level door while the port's played the level.
 
-### A press goes out a tick early; a release does not
+### A press goes out a tick early -- and so does a release
 
-The game looks at the keyboard once a tick, so a key has to be *down*
-before the tick that is to see it: that is the `t - 1` in the
-schedule, and it is measured -- `probeE` lines up at offset nought for
-all 165 of its ticks.
+Both edges are scheduled at `(t - 1) / 12`. The game reads the
+keyboard once a tick, so an edge has to be in the emulator before the
+tick that is to see it, and that holds for a key going up exactly as
+it does for one going down.
 
-A release is not the mirror of that. The tick at `t - 1` is the last
-one that still sees the key held, so lifting it then takes the key
-away a tick too soon, and the original acts on the release one tick
-before the port does.
+This was tried the other way round and measured, and the measurement
+is kept here so it is not tried again. Sending a release at `t / 12`
+instead -- a tick later than the press schedule -- and capturing all
+twenty-two recordings again dropped the suite from **12849 ticks of
+14521 to 6503 of 14549**. `13ab6867` alone fell from 569 to 46: it
+lets go of Right at tick 38, and from tick 40 on the capture's Prince
+is still running, falling a tick behind the port and then five and
+then nine.
 
-It stays invisible until a release decides something. `palace4` lets
-go of Left in the middle of a run, and `control_running` stops a run
-only on frame 7 or frame 11: a tick either way lands on a different
-frame of the stride. The original stops on the frame before the port's,
-carries half as far -- 26 screen pixels against 58 -- and ends the run
-four ticks sooner. Measured with `tools/dev/late-key.ts`, moving that
-one release a tick later is worth 46 ticks of 521:
-
-    late-key palace4 195 195 -1,0   ->   512 of 521, 466 of 521
-
-So the schedule now sends a press at `(t - 1) / 12` and a release at
-`t / 12`.
+The one recording it flattered was `palace4`, from 466 of 521 to 511,
+and that is the trap. `palace4` lets go of Left in the middle of a run
+at tick 196, and `control_running` stops a run only on frame 7 or
+frame 11, so a tick either way lands on a different frame of the
+stride. Moving the release later in *the emulator* made the original
+run on until it agreed with the port. That is tuning the oracle to the
+port, which is the one thing the oracle is for not doing. The capture
+taken on the measured schedule is the truth, and what it says is that
+the port's own run stops a tick early -- task 28, still open.
 
 ### A press too short for the emulator
 
