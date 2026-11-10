@@ -158,17 +158,37 @@ twenty-two recordings again dropped the suite from **12849 ticks of
 14521 to 6503 of 14549**. `13ab6867` alone fell from 569 to 46: it
 lets go of Right at tick 38, and from tick 40 on the capture's Prince
 is still running, falling a tick behind the port and then five and
-then nine.
+then nine. `gate2` fell from 616 to 172, `72b3522f` from 384 to 59,
+`848ee3c4` from 1420 to 211. One of the new videos split again with
+the old numbering scored the same 46, so the numbering is not in it:
+the captures themselves are different, and worse.
 
-The one recording it flattered was `palace4`, from 466 of 521 to 511,
-and that is the trap. `palace4` lets go of Left in the middle of a run
-at tick 196, and `control_running` stops a run only on frame 7 or
-frame 11, so a tick either way lands on a different frame of the
-stride. Moving the release later in *the emulator* made the original
-run on until it agreed with the port. That is tuning the oracle to the
-port, which is the one thing the oracle is for not doing. The capture
-taken on the measured schedule is the truth, and what it says is that
-the port's own run stops a tick early -- task 28, still open.
+### The capture's phase is not the schedule's, and `palace4` sits on it
+
+The argument for the later release came from `palace4`, which went
+from 466 of 521 to 511 on it. That reading was wrong, and what is
+really going on is worth knowing before any other run is read as a
+fault.
+
+The script's `origin` has no fixed relation to the DOS game's own
+12 Hz timer. An edge scheduled at `(t - 1) / 12` therefore lands at
+some unknown point inside a tick, the same point for every edge of
+one capture and a different one in the next. That phase is what
+`digests/shifts.txt` is really recording, and most of the time it is
+comfortably inside a tick and the capture comes out the same twice.
+
+`palace4` lands on the boundary. Three captures of it, the same
+recording at the same shift on the same schedule, scored **466, 512
+and 428** against an unchanged port, and the 428 one has the familiar
+signature: exact to 195, then -1, -2, -3 from the release of Left at
+196 on. The 512 one has no difference there at all.
+
+So the port is within one tick of the original at that release -- as
+close as this oracle can resolve -- and task 28, "letting go of a
+direction during a run", was never a fault in the port. The digest
+kept here is the 512 capture. A `palace4` that scores in the 400s
+after a change is not evidence that the change broke anything; capture
+it twice before reading anything into it.
 
 ### A press too short for the emulator
 
