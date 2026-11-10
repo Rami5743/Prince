@@ -35,6 +35,22 @@ let curr_tile_temp = 0;
 export const levelType = { of: (_level: number): number => 0 };
 
 // seg007:0000
+/**
+ * A dead end, measured, so that it is not tried again.
+ *
+ * Two runs part company by one tick on a tile that was just set
+ * going -- `b4ff4672`'s gate at 251 and `9b60bf3a`'s loose floor at
+ * 83 -- and in both the port's tile is a tick ahead of the capture's.
+ * The obvious cure is to let a trob sit out the first tick after it
+ * is added. Tried: marking a new trob here and skipping its first
+ * animation takes the suite from 14019 ticks of 16599 to **10982**.
+ * `probeF` alone falls from 1193 to 65. Every chomper, torch, gate
+ * and spike in the game is a trob, and they are all right as they
+ * are.
+ *
+ * So whatever is a tick out in those two runs is in the tick the
+ * trob is *added*, not in how it is animated afterwards.
+ */
 export function process_trobs(): void {
   let need_delete = false;
   if (g.trobs_count === 0) return;
