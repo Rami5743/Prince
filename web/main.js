@@ -6267,9 +6267,11 @@ function do_startpos() {
   g.Char.curr_row = Math.trunc(x / SCREEN_TILECOUNTX2);
   g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX3);
   g.Char.direction = ~g.level.start_dir;
-  x = g.hitp_beg_lev;
-  g.hitp_max = x;
-  g.hitp_curr = x;
+  if (g.seamless === 0) {
+    x = g.hitp_beg_lev;
+    g.hitp_max = x;
+    g.hitp_curr = x;
+  }
   if (g.current_level === 1) {
     get_tile(5, 2, 0);
     trigger_button(0, 0, -1);

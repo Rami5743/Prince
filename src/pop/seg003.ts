@@ -56,9 +56,20 @@ export function do_startpos(): void {
   g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN] + TILE_SIZEX);
   // He starts facing the wrong way and turns into the right one.
   g.Char.direction = ~g.level.start_dir;
-  x = g.hitp_beg_lev;
-  g.hitp_max = x;
-  g.hitp_curr = x;
+  /**
+   * `if (seamless == 0)`, which the translation did not have.
+   *
+   * `seamless` is level 12's running exit: the Prince runs out of the
+   * right of the last room and into level 13 without a pause, and the
+   * original leaves his hit points exactly as they were. Resetting
+   * them from `hitp_beg_lev` here handed him a fresh set of flasks
+   * halfway through the run.
+   */
+  if (g.seamless === 0) {
+    x = g.hitp_beg_lev;
+    g.hitp_max = x;
+    g.hitp_curr = x;
+  }
   if (g.current_level === 1) {
     // Special event: the button is pressed and he falls in.
     get_tile(5, 2, 0);
