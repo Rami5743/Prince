@@ -331,7 +331,15 @@ export class PopGame {
     outSlots.display_text_bottom = display_text_bottom;
     outSlots.erase_bottom_text = erase_bottom_text;
     outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
-    outSlots.play_sound = (which: number) => { this.effects?.sound?.(which); };
+    outSlots.play_sound = (which: number) => {
+      // `play_next_sound` keeps `current_sound` as it takes each one,
+      // and `play_kid` reads it: a Prince who dies while a gate is
+      // opening does not wait for the gate to finish sounding. The
+      // translation read it and nothing ever wrote it, so that one
+      // exception never applied.
+      g.current_sound = which;
+      this.effects?.sound?.(which);
+    };
     outSlots.stop_sounds = () => { this.effects?.stopSounds?.(); };
     /**
      * `check_sound_playing`.

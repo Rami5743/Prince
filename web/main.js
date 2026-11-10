@@ -9370,6 +9370,7 @@ var PopGame = class _PopGame {
       this.deathMusic = DEATH_MUSIC_TICKS;
     };
     out.play_sound = (which) => {
+      g.current_sound = which;
       this.effects?.sound?.(which);
     };
     out.stop_sounds = () => {
