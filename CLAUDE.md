@@ -49,16 +49,36 @@ and it is now the game the player plays: `web/main.ts` starts
 `docs/sdlpop-translation.md`.
 
 Where it stands, measured by `tools/dev/pop-report.ts` against the
-nineteen captures of a real PRINCE.EXE:
+twenty-three captures of a real PRINCE.EXE:
 
-* the translation draws **10605 of 11094** ticks exactly;
-* the hand-written port, which it replaced, drew 10380. That port is
-  still in `src/game` and on `backup/handwritten-port`; nothing but
-  its own unit tests uses it now.
-* Thirteen of the nineteen runs are exact or within one tick. What is
-  left is mostly `13ab6867` (158), `9b60bf3a` (104), `0fbffa60` (94),
-  `760c3e74` (63) and `b4ff4672` (35); tasks 35, 37 and 38 say what is
-  known about three of them.
+* the translation draws **12407 of 14521** ticks exactly;
+* the hand-written port, which it replaced, is still in `src/game` and
+  on `backup/handwritten-port`; nothing but its own unit tests uses it
+  now.
+* Eleven of the twenty-three runs are exact or within one tick. What is
+  left is `gate2` (1201), `exitdoor` (210), `gate1` (205), `13ab6867`
+  (158), `9b60bf3a` (104), `0fbffa60` (94), `760c3e74` (63) and
+  `b4ff4672` (35).
+
+### Three things about the oracle, measured the hard way
+
+Read these before calling any difference a fault. Each cost a round.
+
+1. **The schedule is `(t - 1) / 12` for a key going up as well as one
+   going down.** Sending a release at `t / 12` instead took the suite
+   from 12849 to 6503. `tools/oracle/README.md` has the numbers.
+2. **The capture's phase is not the schedule's.** `origin` has no fixed
+   relation to the DOS game's own 12 Hz timer, so every edge of one
+   capture lands at the same unknown point inside a tick and at a
+   different one in the next. Three captures of `palace4`, same
+   recording, same shift, unchanged port: **466, 512 and 428** of 521.
+   A run that reads worse after a change may simply be a new capture.
+   Capture twice before believing it.
+3. **A capture is a fresh run of `PRINCE.EXE`, so the port has to be
+   one too.** `g` and the segments' own statics used to carry over, and
+   `gate2` scored 235 alone and 616 after the twenty-one recordings
+   before it. `resetGlobals` and the three `resetSeg*` fix that; do not
+   undo them to make a number look better.
 
 **Do not stop while ticks are still different.** The tools:
 
