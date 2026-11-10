@@ -9796,6 +9796,22 @@ var PopGame = class _PopGame {
     g.rem_min = Math.max(0, Math.floor(ticks / 720));
     g.rem_tick = Math.max(1, ticks - g.rem_min * 720);
   }
+  /**
+   * `if (current_level < 13 && rem_min == 0) expired();`
+   *
+   * The last line of the original's `play_frame`. `expired()` throws
+   * the screen away, plays the hourglass out and starts the game from
+   * the title again, and the cutscene is the shell's business -- but
+   * nothing in this port watched the clock at all, so the hour ran
+   * out and the game simply carried on. The shell asks this each tick
+   * and goes back to the title.
+   *
+   * Not on level 13 or after: the original says expiring does not
+   * count on Jaffar's level or the princess's.
+   */
+  get timeExpired() {
+    return g.current_level < 13 && g.rem_min === 0;
+  }
   /** `have_sword`, which the shell carries from one level to the next. */
   get hasSword() {
     return g.have_sword !== 0;
@@ -10711,6 +10727,11 @@ async function boot() {
       pressedSinceStep.clear();
       game.step(c);
       recorder.tick(c, game);
+      if (game.timeExpired) {
+        effects.sound?.(36);
+        void changeScene(restartGame);
+        return;
+      }
       if (game.restartDue) {
         void changeScene(restart);
         return;

@@ -22,6 +22,22 @@ import { g } from '../../src/pop/state.ts';
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
+describe('the hour', () => {
+  it('is up when the clock reaches nought, and not on Jaffar\'s level', async () => {
+    const game = await PopGame.start(assets, exe, 1);
+    expect(game.timeExpired).toBe(false);
+    game.remainingTicks = 1;
+    game.step({ x: 0, y: 0, shift: false });
+    expect(game.timeExpired).toBe(true);
+
+    // `expiring doesn't count on Jaffar/princess level`.
+    const jaffar = await PopGame.start(assets, exe, 13);
+    jaffar.remainingTicks = 1;
+    jaffar.step({ x: 0, y: 0, shift: false });
+    expect(jaffar.timeExpired).toBe(false);
+  });
+});
+
 describe('the flash', () => {
   it('gives the background the flash colour for as long as it lasts', async () => {
     const game = await PopGame.start(assets, exe, 1);
