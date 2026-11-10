@@ -1,5 +1,29 @@
 # Read this first
 
+## ============================================================
+## NEVER STOP WHILE A BUG YOU KNOW ABOUT IS STILL THERE
+## ============================================================
+##
+## If you know what the next step is, **take it**. Do not write it
+## down and hand it back. Do not end a turn with "the next pass
+## should...", "what is left is...", "not fixed, narrowed" or a list
+## of what you ruled out. Naming the work is not doing the work, and
+## the player has had to come back and tell you so again and again.
+##
+## If you know something is broken and it is not fixed yet, you are
+## not finished. Keep going: measure, fix, build, `npm test`,
+## `git add -A`, commit, push -- then pick up the next one and do it
+## again. Go round that loop until every problem you are aware of is
+## solved.
+##
+## The only thing that ends this is the player telling you, in so
+## many words, to stop or to do something else. Running low on
+## context does not: say so in one line and carry on with what room
+## is left. A measurement you took and wrote up has fixed nothing.
+##
+## ============================================================
+
+
 ## THE JOB IN HAND: close the last of the difference
 
 `src/pop` is a direct translation of https://github.com/NagyD/SDLPoP
