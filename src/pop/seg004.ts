@@ -331,6 +331,15 @@ export function clear_coll_rooms(): void {
  * walled at 251 and the two accounts differ by exactly one step of
  * the modifier.
  *
+ * Measured, to settle whether the comparison itself is wrong: widen
+ * it by one step to `<=` and `b4ff4672` goes from 393 of 428 to
+ * **426**, while `0fbffa60` falls from 630 of 724 to 612. Net fifteen
+ * over the suite, and the shape of it is the answer -- a comparison
+ * that is wrong is wrong everywhere, and this one is right where
+ * `0fbffa60` uses it. So the comparison stays as the C has it and
+ * what is one step out is the modifier that goes into it, in this one
+ * run.
+ *
  * Two candidates are left, and they cannot be told apart from here:
  * the gate's modifier is one tick behind the original's -- the button
  * that opened it is in a room the capture never draws, so nothing on
