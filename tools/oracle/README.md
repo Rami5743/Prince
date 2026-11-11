@@ -547,3 +547,32 @@ Until that is settled `13ab6867` cannot say where a press landed to a
 tick, and the 156 ticks it is short of exact are not evidence about
 the port. The pin stays at 572 so that a real regression here is
 still caught.
+
+## Where the last three hundred ticks are
+
+The twenty-one runs a capture can settle stand at **11649 of 12034**.
+Each of the eight below has had four captures taken of it (the
+spreads are in `tests/oracle/recordings-vs-original.test.ts`), so
+what is left is the port's, and this is where each one first parts
+company under `tools/dev/pop-first.ts`:
+
+| run        | exact        | apart | first |
+|------------|--------------|-------|-------|
+| `0fbffa60` |  642 of  724 |    83 | 266, then 589-597 and 629-657 |
+| `760c3e74` | 1513 of 1564 |    52 | 288 (+3) |
+| `b4ff4672` |  395 of  428 |    34 | 254 (-2) |
+| `9b60bf3a` |  529 of  557 |    28 | 83 (+1), then 400-417 |
+| `848ee3c4` | 1421 of 1446 |    26 | 655 (-1), then 681-703 |
+| `palace4`  |  514 of  521 |     7 | 24 (+1), then 442-446 |
+| `5920a8c2` |  413 of  415 |     2 | 1 and 289 |
+| `f6874819` | 1189 of 1190 |     2 | 432 (+1) |
+
+`0fbffa60`'s two runs both sit on the same thing: the Prince is
+running left along the top row of room 1, the player lets go, and
+`control_running` turns the run into `seq_13_stop_run` on frame 7 or
+frame 11. The port stops at 597 from frame 7 at x72 and is bumped two
+ticks later; the capture's stop is a tick out from that. The same
+sequence is what `9b60bf3a` 400 and `848ee3c4` 681 are about.
+
+`13ab6867` is not in the table: its 156 are the one press measured
+above, not the port.
