@@ -31,11 +31,27 @@ const GAME_DIR = join(REPO, 'original', 'prince1');
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-const [name, from, to, by] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const only = args.filter((a) => a.startsWith('--')).map((a) => a.slice(2));
+const [name, from, to, by] = args.filter((a) => !a.startsWith('--'));
 if (!name || from === undefined || to === undefined || by === undefined) {
-  console.error('usage: late-key.ts <name> <from-tick> <to-tick> <n,n,n>');
+  console.error('usage: late-key.ts <name> <from-tick> <to-tick> <n,n,n> [--x] [--y] [--shift]');
   process.exit(2);
 }
+/**
+ * Which of the three controls moves.
+ *
+ * It used to be the horizontal one and nothing else, which quietly
+ * answered "no difference" for every press that was Up, Down or
+ * Shift -- and those are most of the presses a divergence sits on.
+ * With no flag all three move together, which is what a late press
+ * of a combination really is.
+ */
+const moves = {
+  x: only.length === 0 || only.includes('x'),
+  y: only.length === 0 || only.includes('y'),
+  shift: only.length === 0 || only.includes('shift'),
+};
 const digest = JSON.parse(
   readFileSync(join(REPO, 'tools', 'oracle', 'digests', `${name}.json`), 'utf8'),
 ) as Digest;
@@ -51,9 +67,18 @@ for (const d of by.split(',').map(Number)) {
   // Take the press out of where the recording has it and put it back d
   // ticks later. Only the horizontal control moves; everything else the
   // player did stays where it was.
-  for (let t = a; t <= b; t++) ticks[t] = { ...ticks[t], x: 0 };
+  const blank: Record<string, number | boolean> = {};
+  if (moves.x) blank.x = 0;
+  if (moves.y) blank.y = 0;
+  if (moves.shift) blank.shift = false;
+  for (let t = a; t <= b; t++) ticks[t] = { ...ticks[t], ...blank };
   for (let t = a; t <= b; t++) {
-    if (t + d < ticks.length) ticks[t + d] = { ...ticks[t + d], x: base[t].x };
+    if (t + d >= ticks.length) continue;
+    const put: Record<string, number | boolean> = {};
+    if (moves.x) put.x = base[t].x;
+    if (moves.y) put.y = base[t].y;
+    if (moves.shift) put.shift = base[t].shift;
+    ticks[t + d] = { ...ticks[t + d], ...put };
   }
   const port = await runOf(
     () => PopGame.start(assets, exe, rec.level),
