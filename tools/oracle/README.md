@@ -567,12 +567,27 @@ company under `tools/dev/pop-first.ts`:
 | `5920a8c2` |  413 of  415 |     2 | 1 and 289 |
 | `f6874819` | 1189 of 1190 |     2 | 432 (+1) |
 
-`0fbffa60`'s two runs both sit on the same thing: the Prince is
-running left along the top row of room 1, the player lets go, and
-`control_running` turns the run into `seq_13_stop_run` on frame 7 or
-frame 11. The port stops at 597 from frame 7 at x72 and is bumped two
-ticks later; the capture's stop is a tick out from that. The same
-sequence is what `9b60bf3a` 400 and `848ee3c4` 681 are about.
+`0fbffa60`'s two runs both sit on `seq_13_stop_run`, which
+`control_running` starts when the player lets go on frame 7 or frame
+11, and both were measured frame by frame against the capture's own
+pictures.
+
+* **589 to 601.** The Prince's box in the capture at tick t is the
+  port's at t+1, exactly, for eleven ticks together: the port is one
+  tick behind. The Left press is at tick 590 in the recording and the
+  capture acts on it at 589. Moving it a tick earlier is worth five
+  ticks of the score (642 to 647), no more, because the alignment
+  already absorbs most of a uniform lag.
+* **629 to 657.** This one is not a lag. The port leaves room 1 at
+  626 still running and decelerates to x174; the capture's Prince
+  stops at the room boundary, around x195, and stands there until
+  642. Twenty pixels and two tiles apart, so one of the two stopped a
+  whole frame of the run sooner. Whichever it is, it is in the three
+  lines of `control_running` or in which tick the room changes.
+
+The same sequence is what `9b60bf3a` 400 and `848ee3c4` 681 are
+about, so it is worth about a hundred of the three hundred and
+eighty-five.
 
 `13ab6867` is not in the table: its 156 are the one press measured
 above, not the port.
