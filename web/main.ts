@@ -175,7 +175,27 @@ async function boot(): Promise<void> {
         : 'the hour is up — press any key';
       return;
     }
-    game = await Game.start(assets, exe, v.level, { effects });
+    /**
+     * Nothing may be drawn or stepped while this await is out.
+     *
+     * `PopGame.start` clears the globals -- `g.level` with them -- the
+     * moment it is called, and only fills them in when the level's
+     * data has been fetched. A frame that lands in between steps the
+     * game that is still in `game` through a `g` with no level in it,
+     * and the page takes
+     * `Cannot read properties of undefined (reading 'roomlinks')`.
+     *
+     * `changeScene` holds `changing` over the same gap, but not every
+     * caller of this goes through it -- `__princeShow` does not -- so
+     * the flag belongs here as well, and it is a count because the
+     * two nest.
+     */
+    building += 1;
+    try {
+      game = await Game.start(assets, exe, v.level, { effects });
+    } finally {
+      building -= 1;
+    }
     watchRoom = null;
   }
 
@@ -270,6 +290,8 @@ async function boot(): Promise<void> {
 
   /** Held while a scene change is in flight; see `changeScene`. */
   let changing = false;
+  /** How many level fetches are out; see `select`. */
+  let building = 0;
 
   function frame(): void {
     if (!game) return;
@@ -286,7 +308,7 @@ async function boot(): Promise<void> {
      * under load and never when they ran alone, which is what a race
      * against a fetch looks like.
      */
-    if (changing) return;
+    if (changing || building > 0) return;
     // Esc: `do_paused` stops the game where it stands and leaves the
     // screen up until a key comes.
     if (game.paused) {
@@ -650,7 +672,7 @@ async function boot(): Promise<void> {
     frame();
   };
   w.__princeStep = (n: number, c: Partial<Controls> = {}) => {
-    if (!game) return null;
+    if (!game || changing || building > 0) return null;
     watchRoom = null;
     for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
     display.present(game.render(), game.scene.screenPalette.toRgba());

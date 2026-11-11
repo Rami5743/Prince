@@ -10706,7 +10706,12 @@ async function boot() {
       status.textContent = v.kind === "title" ? "press any key to begin" : "the hour is up \u2014 press any key";
       return;
     }
-    game = await PopGame.start(assets, exe, v.level, { effects });
+    building += 1;
+    try {
+      game = await PopGame.start(assets, exe, v.level, { effects });
+    } finally {
+      building -= 1;
+    }
     watchRoom = null;
   }
   const recordBtn = document.getElementById("record");
@@ -10783,9 +10788,10 @@ async function boot() {
     display.present(flipped, g2.scene.screenPalette.toRgba());
   }
   let changing = false;
+  let building = 0;
   function frame() {
     if (!game) return;
-    if (changing) return;
+    if (changing || building > 0) return;
     if (game.paused) {
       present(game);
       status.textContent = "paused \u2014 press any key";
@@ -11124,7 +11130,7 @@ async function boot() {
     frame();
   };
   w.__princeStep = (n, c = {}) => {
-    if (!game) return null;
+    if (!game || changing || building > 0) return null;
     watchRoom = null;
     for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
     display.present(game.render(), game.scene.screenPalette.toRgba());

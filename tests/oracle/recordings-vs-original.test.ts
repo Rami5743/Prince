@@ -119,17 +119,18 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  *     palace4    514  468  511  514   of 521
  *
  * Only `9b60bf3a` had anything to gain: its pin went from 456 to 529
- * and its digest is the best of those four. For the other five the
- * best capture is the one already here, give or take a tick or two,
- * so what each of them is short of exact is stable across four
- * independent captures and is therefore the port's -- or, for
+ * and its digest is the best of those four. `0fbffa60` and
+ * `b4ff4672` gained two ticks and one, and their digests are the new
+ * ones; `5920a8c2`, `palace4` and `13ab6867` were already on their
+ * best capture. So what the five are short of exact is stable across
+ * four independent captures and is therefore the port's -- or, for
  * `13ab6867`, the one press `tools/oracle/README.md` measures.
  *
  * That is the answer to "recapture it and see": it has been done, it
  * is written down, and it does not have to be done again.
  */
 const EXPECTED: Record<string, number> = {
-  '0fbffa60': 640,
+  '0fbffa60': 642,
   '13ab6867': 572,
   '25c4ebb8': 388,
   '33e8ace7': 308,
@@ -145,7 +146,7 @@ const EXPECTED: Record<string, number> = {
   // is in `digests/` and this is its number.
   '9b60bf3a': 529,
   'a356bdd6': 184,
-  'b4ff4672': 394,
+  'b4ff4672': 395,
   'e209b01a': 214,
   'ec99dc5b': 237,
   'f6874819': 1189,
