@@ -11,7 +11,7 @@
  * timing, which is why this file is short and worth being exact
  * about.
  */
-import { g, copyChar } from './state.ts';
+import { g, copyChar, byteOf } from './state.ts';
 import { tiles, charids, actions, directions, frameids, soundids } from './types.ts';
 import {
   loadkid, loadkid_and_opp, savekid_and_opp, loadshad_and_opp, saveshad_and_opp,
@@ -59,6 +59,37 @@ export function play_frame(): void {
   exit_room();
   check_the_end();
   check_guard_fallout();
+  /**
+   * The two levels that are left by something other than their door,
+   * neither of which the translation had.
+   *
+   * Level 6 is left by falling out of the bottom of room 1:
+   * `leave_room` answers -2 there and nowhere else, and the original
+   * puts the Prince just above the top of the screen, stops the
+   * sounds and moves on. Without it he fell out and the level simply
+   * went on, with nowhere to fall to.
+   *
+   * Level 12 is left at a run: reaching room 23 moves on and sets
+   * `seamless`, which is what tells `do_startpos` to leave his
+   * strength alone and `draw_game_frame` not to announce a new level.
+   * Nothing ever set it, so the run out of the last room went
+   * nowhere and the flag it turns on could never be true.
+   */
+  if (g.current_level === FALLING_EXIT_LEVEL) {
+    if (g.roomleave_result === -2) {
+      g.Kid.y = byteOf(-1);
+      out.stop_sounds();
+      ++g.next_level;
+    }
+  } else if (g.current_level === SEAMLESS_EXIT_LEVEL) {
+    if (g.Kid.room === SEAMLESS_EXIT_ROOM) {
+      ++g.next_level;
+      // The sounds have to stop: the level only changes when nothing
+      // is sounding.
+      out.stop_sounds();
+      g.seamless = 1;
+    }
+  }
   show_time();
   // `expired()` -- the hour running out and the game starting again --
   // is the shell's, not the game's, and no recording gets near it.
@@ -226,6 +257,12 @@ export function gen_palace_wall_colors(): void {
  */
 const WIN_LEVEL = 14;
 const WIN_ROOM = 5;
+
+/** `falling_exit_level`: level 6 is left by falling out of room 1. */
+const FALLING_EXIT_LEVEL = 6;
+/** `tbl_seamless_exit`: level 12 is left at a run, through room 23. */
+const SEAMLESS_EXIT_LEVEL = 12;
+const SEAMLESS_EXIT_ROOM = 23;
 
 export function check_the_end(): void {
   if (g.next_room !== 0 && g.next_room !== g.drawn_room) {

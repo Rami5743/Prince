@@ -9000,6 +9000,19 @@ function play_frame() {
   exit_room();
   check_the_end();
   check_guard_fallout();
+  if (g.current_level === FALLING_EXIT_LEVEL) {
+    if (g.roomleave_result === -2) {
+      g.Kid.y = byteOf(-1);
+      out.stop_sounds();
+      ++g.next_level;
+    }
+  } else if (g.current_level === SEAMLESS_EXIT_LEVEL) {
+    if (g.Kid.room === SEAMLESS_EXIT_ROOM) {
+      ++g.next_level;
+      out.stop_sounds();
+      g.seamless = 1;
+    }
+  }
   show_time();
 }
 function draw_kid_hp(curr_hp, max_hp) {
@@ -9123,6 +9136,9 @@ function gen_palace_wall_colors() {
 }
 var WIN_LEVEL = 14;
 var WIN_ROOM = 5;
+var FALLING_EXIT_LEVEL = 6;
+var SEAMLESS_EXIT_LEVEL = 12;
+var SEAMLESS_EXIT_ROOM = 23;
 function check_the_end() {
   if (g.next_room !== 0 && g.next_room !== g.drawn_room) {
     g.drawn_room = g.next_room;
