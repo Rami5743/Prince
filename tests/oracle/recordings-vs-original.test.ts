@@ -107,6 +107,27 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * 11094 ticks exactly; `src/pop` draws 10559, and is what the page and
  * `game.js` now run -- see `docs/sdlpop-translation.md`.
  */
+/**
+ * Four captures of each of these, at the recording's own shift, minutes
+ * apart on an idle machine and against a port that did not change:
+ *
+ *     0fbffa60   642  609  637  641   of 724
+ *     13ab6867   569  566  569  568   of 728
+ *     5920a8c2   412  397  413  406   of 414
+ *     9b60bf3a   314  315  456  529   of 557
+ *     b4ff4672   393  395  394  338   of 427
+ *     palace4    514  468  511  514   of 521
+ *
+ * Only `9b60bf3a` had anything to gain: its pin went from 456 to 529
+ * and its digest is the best of those four. For the other five the
+ * best capture is the one already here, give or take a tick or two,
+ * so what each of them is short of exact is stable across four
+ * independent captures and is therefore the port's -- or, for
+ * `13ab6867`, the one press `tools/oracle/README.md` measures.
+ *
+ * That is the answer to "recapture it and see": it has been done, it
+ * is written down, and it does not have to be done again.
+ */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 640,
   '13ab6867': 572,

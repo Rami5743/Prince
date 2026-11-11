@@ -48,7 +48,10 @@ mkdir -p "$work"
 node "$repo/tools/oracle/recording_to_script.mjs" \
   "$repo/tools/oracle/recordings/$name.json" "$work/$name.txt" \
   --settle 0.04 --shift "$shift_" >/dev/null
-keep="$repo/tools/oracle/digests/$name.json.keep"
+# Kept outside the repository: scoring a candidate means putting it
+# in `digests/` for a moment, and a stray file there is a stray file
+# in a commit.
+keep="$work/$name.json.was"
 cp "$digest" "$keep"
 trap 'cp "$keep" "$digest"; rm -f "$keep"' EXIT
 best=; bestscore=-1
