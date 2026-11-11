@@ -31,8 +31,22 @@ const names = (named.length ? named : readdirSync(DIGESTS)
   .filter((n) => existsSync(join(RECORDINGS, `${n}.json`)))
   .sort();
 
+/**
+ * The four recordings whose captures measure something other than the
+ * port, and what each one measures instead. `tests/oracle/
+ * recordings-vs-original.test.ts` has the numbers behind them.
+ */
+const RETIRED: Record<string, string> = {
+  gate1: 'a two-tick tap DOSBox took fourteen ticks late',
+  exitdoor: 'a four-tick press DOSBox took three ticks late, in four captures of four',
+  gate2: 'forty one-tick taps, half of which DOSBox drops',
+  gate2b: "a sword fight, and the guard's choices come from a clock-seeded generator",
+};
+
 let total = 0;
 let totalTicks = 0;
+let retiredAgreed = 0;
+let retiredTicks = 0;
 for (const name of names) {
   const digest = JSON.parse(readFileSync(join(DIGESTS, `${name}.json`), 'utf8')) as Digest;
   const rec = parseRecording(readFileSync(join(RECORDINGS, `${name}.json`), 'utf8'));
@@ -44,9 +58,15 @@ for (const name of names) {
     digest,
   );
   const { agreed, ticks: n } = exactAgreement(digest, port, inputChanges(ticks));
-  total += agreed;
-  totalTicks += n;
+  if (name in RETIRED) { retiredAgreed += agreed; retiredTicks += n; }
+  else { total += agreed; totalTicks += n; }
   const pct = n ? Math.round((agreed * 100) / n) : 0;
-  console.log(`${name.padEnd(10)} ${String(agreed).padStart(5)} of ${String(n).padStart(5)} ${String(pct).padStart(4)}%`);
+  const why = RETIRED[name] ? `  -- retired: ${RETIRED[name]}` : '';
+  console.log(`${name.padEnd(10)} ${String(agreed).padStart(5)} of ${String(n).padStart(5)} ${String(pct).padStart(4)}%${why}`);
 }
-console.log(`${'all'.padEnd(10)} ${String(total).padStart(5)} of ${String(totalTicks).padStart(5)} ${String(Math.round((total * 100) / totalTicks)).padStart(4)}%`);
+const line = (label: string, a: number, n: number): string => `${label.padEnd(10)} ${String(a).padStart(5)} of ${String(n).padStart(5)} ${String(n ? Math.round((a * 100) / n) : 0).padStart(4)}%`;
+console.log(line('measured', total, totalTicks));
+if (retiredTicks) {
+  console.log(line('retired', retiredAgreed, retiredTicks));
+  console.log(line('all', total + retiredAgreed, totalTicks + retiredTicks));
+}
