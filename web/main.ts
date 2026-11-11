@@ -268,8 +268,25 @@ async function boot(): Promise<void> {
     display.present(flipped, g.scene.screenPalette.toRgba());
   }
 
+  /** Held while a scene change is in flight; see `changeScene`. */
+  let changing = false;
+
   function frame(): void {
     if (!game) return;
+    /**
+     * Not while the next level is being fetched.
+     *
+     * Both ways out of a level await the new scene's data, and
+     * `PopGame.start` clears the globals the moment it is called --
+     * `g.level` among them -- while the frame loop goes on running.
+     * The frame that landed in that gap stepped the old game through
+     * a `g` with no level in it and threw
+     * `Cannot read properties of undefined (reading 'roomlinks')`
+     * into the page. It showed up as three browser tests failing
+     * under load and never when they ran alone, which is what a race
+     * against a fetch looks like.
+     */
+    if (changing) return;
     // Esc: `do_paused` stops the game where it stands and leaves the
     // screen up until a key comes.
     if (game.paused) {
@@ -487,7 +504,6 @@ async function boot(): Promise<void> {
    * Nothing is drawn while it is held, because `game` is the old one
    * and its level is over.
    */
-  let changing = false;
   async function changeScene(what: () => Promise<void>): Promise<void> {
     if (changing) return;
     changing = true;
@@ -559,7 +575,7 @@ async function boot(): Promise<void> {
         return;
       }
       if (!game) return;
-      await restart();
+      await changeScene(restart);
       recorder.start();
       recordBtn.textContent = 'stop recording';
       if (saveBtn) saveBtn.disabled = true;

@@ -124,54 +124,36 @@ const EXPECTED: Record<string, number> = {
   'e209b01a': 214,
   'ec99dc5b': 237,
   'f6874819': 1189,
-  'gate1': 596,
-  // `gate1`'s pin measures the replay, not the port: its two-tick tap
-  // of Right at 591 reached DOSBox fourteen ticks late, and with the
-  // tap moved there the port draws 790 of the 796 -- see
-  // `tools/dev/late-key.ts`.
-  //
-  // `gate2` is the first level-2 capture. Its recording is a fight,
-  // and a fight is tapped: `tools/dev/short-presses.ts` finds
-  // forty-odd presses in it of a single tick, which is well under what
-  // the emulator takes reliably.
-  //
-  // It read 616 until the globals were made to start clean. That
-  // number was borrowed: `gate2` runs after `gate1` here, and with the
-  // state of the game before it still in `g` and in the segments' own
-  // statics it scored 616 where the same digest scored 235 on its own.
-  // A capture is a fresh run of `PRINCE.EXE`, so the lone number is
-  // the honest one, and this is it.
-  'gate2': 110,
-  // `exitdoor` is `gate1`'s timeline with every press stretched to
-  // four ticks so the emulator takes all of them. It reaches the climb
-  // up the level door on the same ticks the player's own run does, 762
-  // to 774, which is what it is here for.
-  //
-  // The capture it is measured against was taken again once the
-  // release schedule was put back; the old one parted company at 336
-  // and the new one does not, which was the capture and not the port.
-  // What is left begins at 595, in a strip at x 201 to 225 beside the
-  // Prince as he drops, and no slip of up to ten ticks resolves it.
-  'exitdoor': 593,
-  // `gate2b` is `gate2` with every stretch of unchanged keys given
-  // four ticks, by `tools/oracle/stretch.mjs`. The same moves in the
-  // same order, far enough apart for DOSBox to take them, and level 2
-  // goes from 108 ticks of 1309 to **1183 of 1649**.
-  //
-  // The 466 that are left are not the port's to answer for. It parts
-  // company at 99, and `tools/dev/kid-trace.ts` has the Prince on
-  // frames 158 to 172 from tick 93 on -- the sword frames. He is in a
-  // fight, and a guard's every choice in the C comes out of
-  // `prandom`: `advprob`, `impblockprob`, `blockprob`, `restrikeprob`
-  // and `strikeprob` in seg002 all compare against `prandom(255)`,
-  // and `prandom` seeds itself from `time(NULL)`. The capture's guard
-  // is one sample and the port's is another. Nothing can be
-  // translated to make them agree.
-  //
-  // So what this pin really measures is level 2 up to tick 98, which
-  // is exact, and `level2` is the probe that measures the rest of it
-  // without a guard in the room.
-  'gate2b': 1197,
+  /**
+   * Four recordings are no longer measured here, and each one has a
+   * measurement saying why. The files stay in the repository; what
+   * has gone is the pretence that they say anything about the port.
+   *
+   * `gate1` -- its two-tick tap of Right at 591 reached DOSBox
+   * fourteen ticks late. Moved there the port draws 790 of 796, so
+   * the capture is the port's own run with a press delivered late.
+   *
+   * `exitdoor` -- `gate1` stretched to four-tick presses, and four is
+   * the threshold. Its press at 591 to 594 is taken three ticks late
+   * every time: four captures scored 593, 594, 592 and 593, and
+   * `late-key` moved on by three scores **785 of 801**. Systematic,
+   * not luck, and not the port.
+   *
+   * `gate2` -- from tick 88 the recording is one-tick taps of Left
+   * and Up, a sword fight played on the keyboard, and DOSBox takes a
+   * press that short about half the time. Two captures agreed with
+   * the port on 108 and 107 of 1309.
+   *
+   * `gate2b` -- `gate2` stretched, exact to tick 98 and then a fight.
+   * A guard's every choice in the C comes out of `prandom`, which
+   * seeds itself from `time(NULL)`: the capture's guard is one sample
+   * and the port's is another, and no translation makes them agree.
+   * `level2` measures that level instead, and measures it exactly.
+   *
+   * Between them they were 4555 ticks of the count and 2059 of what
+   * was missing from it. What is left in this table is what a capture
+   * can actually settle.
+   */
   // `level2` is the same level `gate2` is a fight on, walked instead:
   // 424 ticks of stepping, running, climbing, dropping and landing,
   // every press four ticks or longer, and nobody to draw a sword at.

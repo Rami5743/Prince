@@ -10782,8 +10782,10 @@ async function boot() {
     }
     display.present(flipped, g2.scene.screenPalette.toRgba());
   }
+  let changing = false;
   function frame() {
     if (!game) return;
+    if (changing) return;
     if (game.paused) {
       present(game);
       status.textContent = "paused \u2014 press any key";
@@ -11001,7 +11003,6 @@ async function boot() {
       game.drawnRoom = game.kid.room;
     }
   };
-  let changing = false;
   async function changeScene(what) {
     if (changing) return;
     changing = true;
@@ -11061,7 +11062,7 @@ async function boot() {
         return;
       }
       if (!game) return;
-      await restart();
+      await changeScene(restart);
       recorder.start();
       recordBtn.textContent = "stop recording";
       if (saveBtn) saveBtn.disabled = true;
