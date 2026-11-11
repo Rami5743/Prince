@@ -2,7 +2,7 @@
  * The translation's frames as PNGs, for looking at beside a capture.
  *
  *   node --experimental-strip-types tools/dev/pop-frames.ts \
- *       <rec.json> <outdir> <from> <to> [--late <from>:<to>:<n>]
+ *       <rec.json> <outdir> <from> <to> [--late <from>:<to>:<n>[:x+y+shift]]
  *
  * `--late` moves a press on by n ticks before replaying, the way
  * `tools/dev/late-key.ts` does, so a recording whose capture parted
@@ -29,9 +29,26 @@ const ticks = decodeTimeline(rec.timeline);
 const lateArg = process.argv[process.argv.indexOf('--late') + 1];
 if (process.argv.includes('--late') && lateArg) {
   const [a, b, d] = lateArg.split(':').map(Number);
+  // Which of the three controls moves, the way `late-key.ts` takes it:
+  // `--late a:b:n` moves all three, and a trailing `x`, `y` or `shift`
+  // moves only those. Moving the horizontal control alone -- which is
+  // all this used to do -- answers nothing about a press that was Up
+  // or Shift, and it blanks a Right the player was still holding.
+  const which = (lateArg.split(':')[3] ?? 'x:y:shift').split(/[,+]/);
   const was = ticks.map((c) => ({ ...c }));
-  for (let t = a; t <= b; t++) ticks[t] = { ...ticks[t], x: 0 };
-  for (let t = a; t <= b; t++) if (t + d < ticks.length) ticks[t + d] = { ...ticks[t + d], x: was[t].x };
+  const blank: Record<string, number | boolean> = {};
+  if (which.includes('x')) blank.x = 0;
+  if (which.includes('y')) blank.y = 0;
+  if (which.includes('shift')) blank.shift = false;
+  for (let t = a; t <= b; t++) ticks[t] = { ...ticks[t], ...blank };
+  for (let t = a; t <= b; t++) {
+    if (t + d >= ticks.length) continue;
+    const put: Record<string, number | boolean> = {};
+    if (which.includes('x')) put.x = was[t].x;
+    if (which.includes('y')) put.y = was[t].y;
+    if (which.includes('shift')) put.shift = was[t].shift;
+    ticks[t + d] = { ...ticks[t + d], ...put };
+  }
 }
 let game = await PopGame.start(assets, exe, rec.level);
 mkdirSync(outdir, { recursive: true });

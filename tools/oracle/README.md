@@ -495,3 +495,55 @@ disagree for 111.
 So treat a divergence that begins on a press of a tick or two as the
 replay's own limit, and look for the first difference that begins
 somewhere else.
+
+### `13ab6867` 571: the capture jumps three ticks before the key
+
+Worth reading before any other long run is called a fault, because
+the measurement took a round and the answer is not in the port.
+
+The recording holds Right from tick 528, adds Shift at 573 and Up at
+574, and lets both go at 587. The port reads Up at 574, `run_jump`
+starts `seq_4_run_jump`, and `check_on_floor` ends it inside the same
+tick: frame 34's weight is three, so `dx_weight()` is `x - 3` = 150,
+which is column 6, the gap. He falls from x158, lands in the room
+below and is hurt.
+
+The capture does something else, and two independent captures of it
+do exactly the same thing: frames **34, 35 and 36 at ticks 571, 572
+and 573** -- matched pixel for pixel against the port's own rendering
+of those frames, so there is no doubt which they are -- then frame
+102 at 574 from five pixels further right, then the ledge of room 2
+grabbed and held until the Shift goes up. The run-jump therefore
+began at 571, three ticks before the recording's Up.
+
+Nothing in the way of that is different from the C: `control_running`,
+`run_jump` and its two-tile scan, `read_user_control`, `check_action`,
+`check_on_floor`, `dx_weight` and frame 34's own table entry
+(`{33, 0, 0, 0, 0x43}`) were each put beside `seg005.c` and `seg006.c`
+and each is the same.
+
+`tools/dev/late-key.ts 13ab6867 572 588 --y --shift` scores:
+
+    -4: 608   -3: 609   -2: 570   -1: 570    0: 570
+     1: 570    2: 718    3: 594    4: 592   (of 728)
+
+So the port draws 718 of the 728 with that one press delivered two
+ticks later, and 570 as recorded. It is not the whole schedule's
+phase: `pick-shift` measured shift 1 at **47** of 728, so moving every
+edge of the run by a tick destroys it. It is this press, and it is
+worth two or three ticks.
+
+What is still open is why. The two captures were taken minutes
+apart on an idle machine and agree with each other to the tick, so it
+is not the emulator being busy, and it is not the phase, which is a
+tick wide and moves between runs. The remaining suspect is the
+numbering: `split_ticks.py` recovers which video frame is which game
+tick from the screen changes, and a run of this length has forty-odd
+ticks in it where the Prince stands still and only a torch moves.
+A tick miscounted there moves every tick after it, and the run-jump
+sits forty-five ticks after the longest such stretch.
+
+Until that is settled `13ab6867` cannot say where a press landed to a
+tick, and the 156 ticks it is short of exact are not evidence about
+the port. The pin stays at 572 so that a real regression here is
+still caught.
