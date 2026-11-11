@@ -229,13 +229,34 @@ def main():
             # last change on, and again. Three rounds is well past
             # where it settles.
             def number(per):
-                taken = {}
-                for n, f in enumerate(changes):
-                    t = max(0, int(round((f - base) / per)))
-                    while t in taken:
-                        t += 1
-                    taken[t] = n
-                return taken
+                # Forward: every change on its own tick, never before
+                # the one before it.
+                ideal = [max(0.0, (f - base) / per) for f in changes]
+                ts = []
+                for n, want in enumerate(ideal):
+                    t = max(0, int(round(want)))
+                    if ts and t <= ts[-1]:
+                        t = ts[-1] + 1
+                    ts.append(t)
+                # And back again, pulling each one earlier where that
+                # is closer to where the clock says it belongs.
+                #
+                # Forward alone cascades: two changes that round to the
+                # same tick push the second to the next, and the next,
+                # and every tick after a busy moment reads late. The
+                # backward pass undoes exactly that much and no more --
+                # it never moves a change onto another, and never
+                # further than the clock wants.
+                for n in range(len(ts) - 2, -1, -1):
+                    limit = ts[n + 1] - 1
+                    want = int(round(ideal[n]))
+                    t = min(ts[n], limit)
+                    if t < want:
+                        t = min(want, limit)
+                    if n > 0:
+                        t = max(t, ts[n - 1] + 1)
+                    ts[n] = max(0, t)
+                return {t: n for n, t in enumerate(ts)}
             per = a.fps / a.rate
             for _ in range(3):
                 taken = number(per)
