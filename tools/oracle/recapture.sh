@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Capture one recording several times and keep the best of them.
 #
-#   tools/oracle/recapture.sh <name> <shift> [tries] [workdir]
+#   tools/oracle/recapture.sh <name> <shift> [tries] [workdir] [rate]
 #
 # It writes the winner to <workdir>/<name>.json and prints every
 # try's score, so the spread is on the record.
@@ -40,6 +40,10 @@ name=${1:?usage: recapture.sh <name> <shift> [tries] [workdir]}
 shift_=${2:?}
 tries=${3:-3}
 work=${4:-/tmp/recapture}
+# The tick rate the key schedule is written at. Twelve a second is the
+# nominal one; the emulator's own game clock is a shade slower, and
+# over a long run that difference is whole ticks of key timing.
+rate=${5:-12}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 digest="$repo/tools/oracle/digests/$name.json"
 level=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$repo/tools/oracle/recordings/$name.json','utf8')).level||1)")
@@ -47,7 +51,7 @@ start=$((49 + 10 * (level - 1)))
 mkdir -p "$work"
 node "$repo/tools/oracle/recording_to_script.mjs" \
   "$repo/tools/oracle/recordings/$name.json" "$work/$name.txt" \
-  --settle 0.04 --shift "$shift_" >/dev/null
+  --settle 0.04 --shift "$shift_" --rate "$rate" >/dev/null
 # Kept outside the repository: scoring a candidate means putting it
 # in `digests/` for a moment, and a stray file there is a stray file
 # in a commit.
