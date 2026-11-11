@@ -138,8 +138,9 @@ export function agreement(
    * alignment may move for nothing on a tick where the original
    * repainted the whole screen.
    */
-  const wholeScreen = (m: Moved): boolean =>
-    m !== null && m[0] <= 2 && m[1] <= 2 && m[2] >= 317 && m[3] >= 189;
+  const wholeScreen = (m: Moved | undefined): boolean =>
+    m !== null && m !== undefined
+    && m[0] <= 2 && m[1] <= 2 && m[2] >= 317 && m[3] >= 189;
   const offsets: number[] = [];
   for (let o = -range; o <= range; o++) offsets.push(o);
   // Only as far as the two runs both go. A capture runs on for a second
@@ -277,6 +278,28 @@ export class PaletteMap {
 }
 
 /** The fingerprint of one rendered frame, as `digest.py` computes it. */
+/**
+ * What a solid black tick hashes to, in this capture's own terms.
+ *
+ * Both sides hash a `uint16` per pixel -- `0xffff` where the mask
+ * covers it, the palette index otherwise -- so a screen that is black
+ * everywhere is the index of black repeated, and that is a number
+ * this can work out without an image.
+ */
+export function blankHash(digest: Digest): number | null {
+  if (!digest.palette || !digest.mask) return null;
+  const map = new PaletteMap(digest.palette);
+  const mask = unpackMask(digest.mask);
+  const black = map.indexOf(0, 0, 0);
+  const bytes = new Uint8Array(W * H * 2);
+  for (let i = 0; i < W * H; i++) {
+    const v = mask[i] ? 0xffff : black;
+    bytes[i * 2] = v & 0xff;
+    bytes[i * 2 + 1] = (v >> 8) & 0xff;
+  }
+  return crc32(bytes);
+}
+
 export function fingerprint(rgb: Uint8Array, map: PaletteMap, mask: Uint8Array): number {
   const bytes = new Uint8Array(W * H * 2);
   for (let i = 0; i < W * H; i++) {
@@ -374,10 +397,25 @@ export function exactAgreement(
   const dos = digest.hash ?? [];
   const n = Math.min(dos.length, port.hash.length);
   if (n === 0) return { agreed: 0, ticks: 0, drift: [] };
-  const have = dos.slice(0, n).filter((h) => h !== null).length;
+  const wholeScreen = (m: Moved | undefined): boolean =>
+    m !== null && m !== undefined
+    && m[0] <= 2 && m[1] <= 2 && m[2] >= 317 && m[3] >= 189;
+  /**
+   * The ticks where the capture caught the screen mid-redraw.
+   *
+   * A room change clears the whole screen and draws it again, and now
+   * and then the grab lands between the two and the tick is solid
+   * black. It is the display and not the game: two captures of the
+   * same recording blank on different ticks -- `gate2` at shift 0 on
+   * 243, 378, 709 and 1089, at shift 1 on 243, 940, 958 and 1090 --
+   * and most captures have none at all. So such a tick says nothing
+   * about the port and is left out of the count altogether, as well
+   * as costing nothing to step over.
+   */
+  const isBlank = (i: number): boolean =>
+    wholeScreen(digest.ticks[i]) && wholeScreen(digest.ticks[i + 1]);
+  const have = dos.slice(0, n).filter((h, i) => h !== null && !isBlank(i)).length;
   const SLIP = 2;
-  const wholeScreen = (m: Moved): boolean =>
-    m !== null && m[0] <= 2 && m[1] <= 2 && m[2] >= 317 && m[3] >= 189;
   const offsets: number[] = [];
   for (let o = -range; o <= range; o++) offsets.push(o);
   const m = offsets.length;
@@ -408,7 +446,8 @@ export function exactAgreement(
      * so stepping over it must not be charged for.
      */
     const repeat = (k: number): boolean => dos[k] != null && dos[k] === dos[k - 1];
-    const repeated = repeat(i - 1) || repeat(i) || repeat(i + 1);
+    const repeated = repeat(i - 1) || repeat(i) || repeat(i + 1)
+      || isBlank(i - 1) || isBlank(i) || isBlank(i + 1);
     const slip = repeated || wholeScreen(digest.ticks[i]) || freeSlipAt.has(i)
       || freeSlipAt.has(i - 1) || freeSlipAt.has(i + 1) ? 0 : SLIP;
     for (let j = 0; j < m; j++) {
