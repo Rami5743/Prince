@@ -8926,7 +8926,7 @@ function erase_bottom_text(arg_0) {
   }
 }
 function show_time() {
-  if (g.rem_min !== 0 && g.current_level < 13 && g.current_level < 15) {
+  if (g.rem_min !== 0 && (g.current_level < 13 || g.current_level === 13 && g.leveldoor_open === 0) && g.current_level < 15) {
     --g.rem_tick;
     if (g.rem_tick === 0) {
       g.rem_tick = 719;

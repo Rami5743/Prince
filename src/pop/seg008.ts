@@ -1442,7 +1442,12 @@ export function show_time(): void {
    * clock crosses a minute.
    */
   if (g.rem_min !== 0
-    && g.current_level < 13
+    // `victory_stops_time_level`: on Jaffar's level the hour runs
+    // until his door opens, and stops the moment it does. The
+    // translation had only the first half of that -- `< 13` -- so the
+    // clock never moved at all on 13, and the minutes a player spent
+    // reaching Jaffar cost nothing.
+    && (g.current_level < 13 || (g.current_level === 13 && g.leveldoor_open === 0))
     && g.current_level < 15) {
     // Time passes.
     --g.rem_tick;
