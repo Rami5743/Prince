@@ -49,32 +49,53 @@ and it is now the game the player plays: `web/main.ts` starts
 `docs/sdlpop-translation.md`.
 
 Where it stands, measured by `tools/dev/pop-report.ts` against the
-twenty-three captures of a real PRINCE.EXE:
+captures of a real PRINCE.EXE:
 
-* the translation draws **12407 of 14521** ticks exactly;
+* the translation draws **11646 of 12033** ticks exactly -- 97 per cent
+  -- of the twenty-one runs a capture can settle;
+* four more recordings are captured and kept but no longer counted,
+  because their captures measure the emulator's keyboard or the
+  original's clock-seeded guard rather than the port. Each one has the
+  measurement that says so written beside it in
+  `tests/oracle/recordings-vs-original.test.ts`. With them the number
+  is 14142 of 16588.
 * the hand-written port, which it replaced, is still in `src/game` and
   on `backup/handwritten-port`; nothing but its own unit tests uses it
   now.
-* Eleven of the twenty-three runs are exact or within one tick. What is
-  left is `gate2` (1201), `exitdoor` (210), `gate1` (205), `13ab6867`
-  (158), `9b60bf3a` (104), `0fbffa60` (94), `760c3e74` (63) and
-  `b4ff4672` (35).
+* Thirteen of the twenty-one are exact or within one tick. What is
+  left is `13ab6867` (156, and measured not to be the port's --
+  `tools/oracle/README.md`), `0fbffa60` (84), `760c3e74` (51),
+  `b4ff4672` (33), `9b60bf3a` (28), `848ee3c4` (25), `palace4` (7),
+  `5920a8c2` (2) and `f6874819` (1).
 
-### Three things about the oracle, measured the hard way
+**Before reading any of those as a fault, recapture.** The oracle's
+phase moves between captures of the same recording: four captures of
+`9b60bf3a` at the same shift, minutes apart on an idle machine, scored
+314, 315, 456 and **529** of its 557 ticks against a port that did not
+change. `tools/oracle/recapture.sh` takes a recording several times
+and keeps the best, and says in its own comments why that is sound and
+not fitting the oracle to the port.
+
+### Four things about the oracle, measured the hard way
 
 Read these before calling any difference a fault. Each cost a round.
 
 1. **The schedule is `(t - 1) / 12` for a key going up as well as one
    going down.** Sending a release at `t / 12` instead took the suite
    from 12849 to 6503. `tools/oracle/README.md` has the numbers.
-2. **The capture's phase is not the schedule's.** `origin` has no fixed
+2. **A capture is worth taking four times.** The phase is not the only
+   thing that moves: four captures of `9b60bf3a` at the same shift
+   scored 314, 315, 456 and 529 of 557 against an unchanged port.
+   `tools/oracle/recapture.sh` does this for you. Never read a run of
+   differences as a fault until the capture has been taken again.
+3. **The capture's phase is not the schedule's.** `origin` has no fixed
    relation to the DOS game's own 12 Hz timer, so every edge of one
    capture lands at the same unknown point inside a tick and at a
    different one in the next. Three captures of `palace4`, same
    recording, same shift, unchanged port: **466, 512 and 428** of 521.
    A run that reads worse after a change may simply be a new capture.
    Capture twice before believing it.
-3. **A capture is a fresh run of `PRINCE.EXE`, so the port has to be
+4. **A capture is a fresh run of `PRINCE.EXE`, so the port has to be
    one too.** `g` and the segments' own statics used to carry over, and
    `gate2` scored 235 alone and 616 after the twenty-one recordings
    before it. `resetGlobals` and the three `resetSeg*` fix that; do not
