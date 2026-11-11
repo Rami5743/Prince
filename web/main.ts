@@ -90,6 +90,8 @@ async function boot(): Promise<void> {
 
   type View = { kind: 'title' | 'opening' } | { kind: 'level'; level: number };
   const views: View[] = [{ kind: 'title' }, { kind: 'opening' }];
+  /** Ticks played since the page opened, for tests that wait on game time. */
+  let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: 'level', level: n });
   const label = (v: View): string =>
     v.kind === 'level' ? `level ${v.level}` : `${v.kind} screen`;
@@ -279,6 +281,7 @@ async function boot(): Promise<void> {
       const c = controls();
       pressedSinceStep.clear();
       game.step(c);
+      ticksPlayed++;
       recorder.tick(c, game);
       if (game.gameWon) {
         // The last room of the last level: the original plays its
@@ -639,6 +642,11 @@ async function boot(): Promise<void> {
   };
   w.__princePause = (on: boolean): void => { paused = on; };
   w.__princeState = () => (game ? {
+    // How many ticks the page has played. A test that has to wait for
+    // the game rather than for the clock waits on this: under load the
+    // wall clock and the game's own time come apart, and three of the
+    // browser tests used to fail for that and nothing else.
+    ticks: ticksPlayed,
     frame: game.kid.frame, room: game.kid.room, x: game.kid.x, y: game.kid.y,
     hitPoints: game.hitPoints, dead: game.isDead, held: [...held].sort(),
     awaitingButton: game.awaitingButton, level: w0Level(),

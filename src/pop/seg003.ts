@@ -16,7 +16,7 @@ import {
 import {
   get_tile, get_tile_div_mod_m7, distance_to_edge_weight, play_seq, take_hp,
   savekid, loadkid, get_tilepos, tile_is_floor,
-  load_frame, get_tile_at_char, load_frame_to_obj, reset_obj_clip,
+  load_frame, get_tile_at_char, load_frame_to_obj, reset_obj_clip, setDroppedout,
 } from './seg006.ts';
 import { seqtbl_offset_char } from './seg005.ts';
 import { trigger_button, start_level_door, do_knock } from './seg007.ts';
@@ -97,6 +97,10 @@ export function set_start_pos(): void {
   g.Char.fall_x = 0;
   g.offguard = 0;
   g.Char.sword = sword_status.sword_0_sheathed;
+  // `droppedout = 0`: a level starts with no memory of a guard having
+  // dropped out of the last one. The line was missing here, so the
+  // flag could carry over.
+  setDroppedout(0);
   play_seq();
   if (g.current_level === 7 && g.Char.room === 17) {
     // Special event: level 7 drops him in, so the room below is shown.

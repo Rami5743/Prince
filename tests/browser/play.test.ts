@@ -25,6 +25,8 @@ let page: Page;
 const consoleErrors: string[] = [];
 
 interface PageState {
+  /** Ticks the page has played; a test waits on game time, not the clock. */
+  ticks: number;
   frame: number; room: number; x: number; y: number;
   hitPoints: number; dead: boolean; held: string[]; sword: number;
   awaitingButton: boolean; level: number; maxHitPoints: number;
@@ -153,6 +155,24 @@ describe('played in the browser', () => {
    * is watched over the frames that follow it, so a sample landing between
    * two of the game's own frames cannot miss it.
    */
+  /**
+   * Wait for the page to play one more tick of the game.
+   *
+   * Sampling on the wall clock is what made these tests fail when the
+   * machine was busy: the sleep passed and the game had not moved. The
+   * page counts its own ticks now and this waits on that.
+   */
+  async function advanceOneTick(): Promise<void> {
+    const before = (await state())?.ticks ?? 0;
+    await page.waitForFunction(
+      (was: number) => ((window as unknown as {
+        __princeState(): { ticks: number } | null;
+      }).__princeState()?.ticks ?? 0) > was,
+      before,
+      { timeout: 30000 },
+    );
+  }
+
   async function tapAndWatch(key: 'Shift' | 'ArrowUp', hit: (f: number) => boolean) {
     const seen: number[] = [];
     for (let i = 0; i < 15 && !seen.some(hit); i++) {
@@ -160,7 +180,7 @@ describe('played in the browser', () => {
       await page.waitForTimeout(100);
       await page.keyboard.up(key);
       for (let k = 0; k < 5; k++) {
-        await page.waitForTimeout(60);
+        await advanceOneTick();
         const now = await state();
         if (now?.dead) break;
         if (now) seen.push(now.frame);
@@ -256,10 +276,18 @@ describe('played in the browser', () => {
         __princeState(): { awaitingButton: boolean } | null;
       }).__princeState()?.awaitingButton === true,
       null,
-      { timeout: 30000 },
+      // The death music really is about twenty seconds, and on a busy
+      // machine the page gets through it more slowly still.
+      { timeout: 120000 },
     );
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(900);
+    await page.waitForFunction(
+      () => (window as unknown as {
+        __princeState(): { dead: boolean } | null;
+      }).__princeState()?.dead === false,
+      null,
+      { timeout: 60000 },
+    );
     const after = await state();
     expect(after?.dead, 'an arrow key, not Shift, began it again').toBe(false);
     expect(after?.hitPoints, 'and with his strength back').toBe(3);

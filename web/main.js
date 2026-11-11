@@ -6233,8 +6233,9 @@ function fell_on_your_head() {
 function play_door_sound_if_visible(sound_id) {
   const tilepos = g.trob.tilepos;
   const gate_room = g.trob.room;
-  const has_sound = gate_room === g.room_L ? tilepos % 10 === 9 : gate_room === g.drawn_room && tilepos % 10 !== 9;
-  if (has_sound) out.play_sound(sound_id);
+  const visible = gate_room === g.room_L ? tilepos % 10 === 9 : gate_room === g.drawn_room && tilepos % 10 !== 9;
+  const alwaysHeard = g.current_level === 3 && gate_room === 2;
+  if (visible || alwaysHeard) out.play_sound(sound_id);
 }
 function resetSeg007() {
   last_loose_sound = 0;
@@ -6295,6 +6296,7 @@ function set_start_pos() {
   g.Char.fall_x = 0;
   g.offguard = 0;
   g.Char.sword = sword_status.sword_0_sheathed;
+  setDroppedout(0);
   play_seq();
   if (g.current_level === 7 && g.Char.room === 17) {
     rooms.goto_other_room(3);
@@ -10621,6 +10623,7 @@ async function boot() {
   const title = await assets.group("TITLE.DAT", 50);
   const opening = await assets.group("TITLE.DAT", 40);
   const views = [{ kind: "title" }, { kind: "opening" }];
+  let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
   const label = (v) => v.kind === "level" ? `level ${v.level}` : `${v.kind} screen`;
   let current = 0;
@@ -10774,6 +10777,7 @@ async function boot() {
       const c = controls();
       pressedSinceStep.clear();
       game.step(c);
+      ticksPlayed++;
       recorder.tick(c, game);
       if (game.gameWon) {
         void changeScene(() => select(1));
@@ -11113,6 +11117,11 @@ async function boot() {
     paused = on;
   };
   w.__princeState = () => game ? {
+    // How many ticks the page has played. A test that has to wait for
+    // the game rather than for the clock waits on this: under load the
+    // wall clock and the game's own time come apart, and three of the
+    // browser tests used to fail for that and nothing else.
+    ticks: ticksPlayed,
     frame: game.kid.frame,
     room: game.kid.room,
     x: game.kid.x,

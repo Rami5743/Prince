@@ -1034,10 +1034,15 @@ export function fell_on_your_head(): void {
 export function play_door_sound_if_visible(sound_id: number): void {
   const tilepos = g.trob.tilepos;
   const gate_room = g.trob.room;
-  const has_sound = gate_room === g.room_L
+  const visible = gate_room === g.room_L
     ? tilepos % 10 === 9
     : gate_room === g.drawn_room && tilepos % 10 !== 9;
-  if (has_sound) out.play_sound(sound_id);
+  // Special event: the gates of room 2 on level 3 are heard wherever
+  // the Prince is, and the translation had only the visibility test,
+  // so they closed in silence unless he happened to be looking at
+  // them.
+  const alwaysHeard = g.current_level === 3 && gate_room === 2;
+  if (visible || alwaysHeard) out.play_sound(sound_id);
 }
 
 /** The file's own statics, back to where a fresh run has them. */
