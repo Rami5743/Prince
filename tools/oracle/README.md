@@ -554,10 +554,10 @@ something.
 |------------|--------------|-------|------------------------------|
 | `13ab6867` |  572 of  728 |   156 | 573 two later: **721** |
 | `0fbffa60` |  642 of  724 |    83 | 626 one earlier: **714** |
-| `760c3e74` | 1513 of 1564 |    52 | (being measured) |
+| `760c3e74` | 1513 of 1564 |    52 | 263 two later: 1540 |
 | `b4ff4672` |  395 of  428 |    34 | 251 one earlier: **428, exact** |
 | `9b60bf3a` |  529 of  557 |    28 | 424 one later: 531 |
-| `848ee3c4` | 1421 of 1446 |    26 | (being measured) |
+| `848ee3c4` | 1421 of 1446 |    26 | none of its 157 edges |
 | `palace4`  |  514 of  521 |     7 | 20 one earlier: 516 |
 | `5920a8c2` |  413 of  415 |     2 | 240 one earlier: 414 |
 | `f6874819` | 1189 of 1190 |     2 | (being measured) |
@@ -569,8 +569,42 @@ cannot place an edge to better than a tick, and where the edge
 decides which frame of the run `control_running` stops on, one tick
 is thirty of them.
 
-What remains that no edge explains: `9b60bf3a` 26, `848ee3c4` and
-`760c3e74` pending, `palace4` 5, `5920a8c2` 1.
+What remains that no edge explains, and is therefore the port's:
+
+    9b60bf3a   26      848ee3c4   25      760c3e74   24
+    0fbffa60   10      13ab6867    7      palace4     5
+    5920a8c2    1      b4ff4672    0
+
+About a hundred ticks of twelve thousand: **99.2 per cent**.
+
+### `9b60bf3a` 400 to 429: a run-turn the original does not do
+
+The largest of them, measured against the capture's own pictures.
+The Prince is running right, the player lets go on tick 405 and
+presses Left on 406. The port's `control_running` sees
+`control_x == CONTROL_HELD_BACKWARD` and starts `seq_6_run_turn`,
+which carries him from x89 out to x112 over thirteen frames and then
+flips him with a `dx` of -14. Every one of those thirteen was checked
+against the sequence bytes in the executable and against SDLPoP's
+`seqtbl.c`, frame by frame and `dx` by `dx`: `35 36 37 38 39 3a 3b 3c
+3d 3e 3f 40 41` with `+1 +1 +8 +0 +7 +3 +1 +0 +2 -1 0 0 -1` and then
+`fb f2 fe`. The port draws exactly that and nothing else.
+
+The capture's Prince does not travel: he turns on the spot. The only
+way out of `control_running` that does that is the branch above it,
+`control_x == CONTROL_RELEASED && (frame == 7 || frame == 11)`, which
+stops the run first. The port's frame at the start of 405 is 6 and
+the capture's would have to be 7 -- so the whole twenty-six ticks
+turn on the run having started one tick earlier in the capture than
+in the port.
+
+That is the same one-tick key read as the rest of the table, and the
+tools say so from both ends: moving the window from 394 by two ticks
+scores 537 of 557 against 529, and no single edge moved by one does
+anything. What stops it being settled either way is that this
+capture has 557 ticks where the recording has 558 -- it is missing
+one, and the alignment is already carrying +3 by tick 400 -- so the
+capture cannot say which tick its run began on to better than three.
 
 `0fbffa60`'s two runs both sit on `seq_13_stop_run`, which
 `control_running` starts when the player lets go on frame 7 or frame
