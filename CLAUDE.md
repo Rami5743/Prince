@@ -68,13 +68,29 @@ captures of a real PRINCE.EXE:
   `b4ff4672` (33), `9b60bf3a` (28), `848ee3c4` (25), `palace4` (7),
   `5920a8c2` (2) and `f6874819` (1).
 
-**Before reading any of those as a fault, recapture.** The oracle's
-phase moves between captures of the same recording: four captures of
-`9b60bf3a` at the same shift, minutes apart on an idle machine, scored
-314, 315, 456 and **529** of its 557 ticks against a port that did not
-change. `tools/oracle/recapture.sh` takes a recording several times
-and keeps the best, and says in its own comments why that is sound and
-not fitting the oracle to the port.
+**Before reading any of those as a fault, run
+`tools/dev/which-key.ts`.** It moves every key edge of the recording a
+tick and two ticks either way and scores each one. The oracle cannot
+place an edge to better than a tick, and where the edge decides which
+frame of the run `control_running` stops on -- frame 7 or frame 11 --
+one tick is thirty of them:
+
+    13ab6867   edge 573 two ticks later:   721 of 728, from 572
+    0fbffa60   edge 626 one tick earlier:  714 of 724, from 642
+    b4ff4672   edge 251 one tick earlier:  428 of 428, from 395
+    9b60bf3a   edge 424 one tick later:    531, from 529
+    palace4    edge  20 one tick earlier:  516, from 514
+    5920a8c2   edge 240 one tick earlier:  414, from 413
+
+Three edges are 254 of the 385 the suite is short, and `b4ff4672` is
+exact once its one edge is where the emulator took it.
+
+**And recapture.** The oracle's phase moves between captures of the
+same recording: four captures of `9b60bf3a` at the same shift, minutes
+apart on an idle machine, scored 314, 315, 456 and **529** of its 557
+ticks against a port that did not change. `tools/oracle/recapture.sh`
+takes a recording several times and keeps the best, and says in its
+own comments why that is sound and not fitting the oracle to the port.
 
 ### Four things about the oracle, measured the hard way
 

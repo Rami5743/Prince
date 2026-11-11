@@ -533,39 +533,44 @@ phase: `pick-shift` measured shift 1 at **47** of 728, so moving every
 edge of the run by a tick destroys it. It is this press, and it is
 worth two or three ticks.
 
-What is still open is why. The two captures were taken minutes
-apart on an idle machine and agree with each other to the tick, so it
-is not the emulator being busy, and it is not the phase, which is a
-tick wide and moves between runs. The remaining suspect is the
-numbering: `split_ticks.py` recovers which video frame is which game
-tick from the screen changes, and a run of this length has forty-odd
-ticks in it where the Prince stands still and only a torch moves.
-A tick miscounted there moves every tick after it, and the run-jump
-sits forty-five ticks after the longest such stretch.
-
-Until that is settled `13ab6867` cannot say where a press landed to a
-tick, and the 156 ticks it is short of exact are not evidence about
-the port. The pin stays at 572 so that a real regression here is
-still caught.
+`tools/dev/which-key.ts` then tried **every** edge of the recording
+moved a tick and two ticks either way, and exactly one of them is
+worth anything: the edge at 573, two ticks later, scores **721 of
+728**. Nothing else in the run moves the number at all. So the 156
+ticks are that one edge and nothing else, and the pin stays at 572
+only to catch a regression.
 
 ## Where the last three hundred ticks are
 
 The twenty-one runs a capture can settle stand at **11649 of 12034**.
 Each of the eight below has had four captures taken of it (the
 spreads are in `tests/oracle/recordings-vs-original.test.ts`), so
-what is left is the port's, and this is where each one first parts
-company under `tools/dev/pop-first.ts`:
+the phase is not what is left. What is left is mostly one key edge
+apiece: `tools/dev/which-key.ts` moves every edge of a recording a
+tick and two ticks either way and reports the ones that are worth
+something.
 
-| run        | exact        | apart | first |
-|------------|--------------|-------|-------|
-| `0fbffa60` |  642 of  724 |    83 | 266, then 589-597 and 629-657 |
-| `760c3e74` | 1513 of 1564 |    52 | 288 (+3) |
-| `b4ff4672` |  395 of  428 |    34 | 254 (-2) |
-| `9b60bf3a` |  529 of  557 |    28 | 83 (+1), then 400-417 |
-| `848ee3c4` | 1421 of 1446 |    26 | 655 (-1), then 681-703 |
-| `palace4`  |  514 of  521 |     7 | 24 (+1), then 442-446 |
-| `5920a8c2` |  413 of  415 |     2 | 1 and 289 |
-| `f6874819` | 1189 of 1190 |     2 | 432 (+1) |
+| run        | exact        | apart | one edge moved a tick or two |
+|------------|--------------|-------|------------------------------|
+| `13ab6867` |  572 of  728 |   156 | 573 two later: **721** |
+| `0fbffa60` |  642 of  724 |    83 | 626 one earlier: **714** |
+| `760c3e74` | 1513 of 1564 |    52 | (being measured) |
+| `b4ff4672` |  395 of  428 |    34 | 251 one earlier: **428, exact** |
+| `9b60bf3a` |  529 of  557 |    28 | 424 one later: 531 |
+| `848ee3c4` | 1421 of 1446 |    26 | (being measured) |
+| `palace4`  |  514 of  521 |     7 | 20 one earlier: 516 |
+| `5920a8c2` |  413 of  415 |     2 | 240 one earlier: 414 |
+| `f6874819` | 1189 of 1190 |     2 | (being measured) |
+
+So three single key edges -- `13ab6867` 573, `0fbffa60` 626 and
+`b4ff4672` 251 -- are **254** of the suite's missing ticks, and what
+is left of those three runs is seven, ten and nothing. The oracle
+cannot place an edge to better than a tick, and where the edge
+decides which frame of the run `control_running` stops on, one tick
+is thirty of them.
+
+What remains that no edge explains: `9b60bf3a` 26, `848ee3c4` and
+`760c3e74` pending, `palace4` 5, `5920a8c2` 1.
 
 `0fbffa60`'s two runs both sit on `seq_13_stop_run`, which
 `control_running` starts when the player lets go on frame 7 or frame

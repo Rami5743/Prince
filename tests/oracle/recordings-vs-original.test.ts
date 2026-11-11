@@ -128,6 +128,28 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  *
  * That is the answer to "recapture it and see": it has been done, it
  * is written down, and it does not have to be done again.
+ *
+ * What is left of them is then mostly **one key edge apiece**.
+ * `tools/dev/which-key.ts` moves every edge of a recording a tick
+ * and two ticks either way and scores each one:
+ *
+ *     13ab6867   edge 573 two ticks later:   721 of 728, from 572
+ *     0fbffa60   edge 626 one tick earlier:  714 of 724, from 642
+ *     b4ff4672   edge 251 one tick earlier:  428 of 428, from 395
+ *     9b60bf3a   edge 424 one tick later:    531, from 529
+ *     palace4    edge  20 one tick earlier:  516, from 514
+ *     5920a8c2   edge 240 one tick earlier:  414, from 413
+ *
+ * Three edges are 254 of the suite's missing ticks, and `b4ff4672`
+ * is exact once its one edge is where the emulator took it. The
+ * oracle cannot place an edge to better than a tick, and where the
+ * edge decides which frame of the run `control_running` stops on --
+ * frame 7 or frame 11 -- one tick is thirty of them and two tiles of
+ * the Prince's resting place.
+ *
+ * The pins below are the scores as recorded, not as corrected. They
+ * are regression guards, and correcting them would turn them into a
+ * way of hiding one.
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 642,
