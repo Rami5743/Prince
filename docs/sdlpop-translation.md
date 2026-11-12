@@ -453,6 +453,13 @@ pins it: which palette rows are drawn, that all three characters are
 in it, and how long it is. Backing `init_mouse_1` out of
 `end_sequence_anim` fails that test.
 
+One line of `end_sequence_anim` is deliberately not translated:
+`turn_sound_on_off(0x0F)` at the top of it. The port has no
+`is_sound_on` -- whether the page makes a noise is the player's own
+setting, through the shell -- and a scene that forces a browser tab's
+audio on is not something the translation should do on its own. It is
+the only line of the ending's animation that is not here.
+
 ### The hall of fame, and the one substitution
 
 `end_sequence` ends in it, so until now a player who finished the game
