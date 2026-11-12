@@ -577,6 +577,72 @@ What remains that no edge explains, and is therefore the port's:
 
 About a hundred ticks of twelve thousand: **99.2 per cent**.
 
+Two of those entries have since been read off the capture's own
+pixels and are **not** the port's. Both are the strip of words under
+the room, and both were found the same way: render the port's tick,
+blank the text rectangle (70,193 to 250,202), hash it in the
+capture's palette with the capture's mask, and see which of the two
+the capture's number is.
+
+### `848ee3c4` 681 to 703: the capture's hour started before the capture did
+
+Twenty-three of the twenty-five, in one block, and every one of them
+is the same two words.
+
+The Prince dies at 595, the player presses a button at 654, the level
+starts again, `show_level` puts `LEVEL 1` up for twenty-five ticks and
+`show_time` follows it with the minutes left for twenty-three. Blank
+the port's text rectangle on those twenty-three and the capture is
+**not** matched; draw `59 MINUTES LEFT` in it instead of the port's
+`60 MINUTES LEFT` and tick 684 is matched exactly, 4153230464 for
+4153230464. The port is one minute behind -- or rather the capture is
+one minute ahead.
+
+It is ahead because Ctrl+A restarts the level and not the hour, and
+`recording_to_script.mjs` lets level 1 run for `SETTLE_L1` seconds
+before it presses Ctrl+A. Whatever of that wait is left after the
+title screen's cutscene is clock the capture has spent and the port
+has not, so the capture's `rem_tick` crosses zero -- and `rem_min`
+drops to 59 -- somewhere in the first half of the run, while the
+port's crosses at 721. Nothing shows it until a restart asks for the
+minutes in words.
+
+The same arithmetic bounds the offset from both sides. `848ee3c4`
+says `59` at its tick 680, so the capture's clock crossed at or
+before 679 and the wait is worth at least 40 ticks. `probeF` restarts
+at 433 and both sides say `60` at 459 -- it scores 1193 of 1193 --
+so that capture's clock had not crossed by 459 and the wait is worth
+fewer than 260. The `SKIP_WAIT` comment in `recording_to_script.mjs`
+already names this as the reason that wait came down from seventy
+seconds to ten; `SETTLE_L1` is the same wait for a level-1 recording
+and is still 25.
+
+It also makes the measurement behind the dropped `Kid.alive < 0`
+guard in `show_time` inconclusive. `probeF` saying `59` at 735 was
+read as proof that the original's hour does not stop for a death; a
+capture whose clock is forty to two hundred and sixty ticks ahead
+says `59` there whether the hour stopped or not. Dropping the guard
+is still worth 23 ticks of `probeF` and 23 of `f6874819` and costs
+nothing, so it stays -- but it is fitted to the oracle, not measured.
+
+### `5920a8c2` 289: the one tick is the end of the same message
+
+The run restarts the level at its tick 241. The port draws the new
+level's opening picture on 241 **and** 242 -- the frame
+`draw_level_first` drew and the frame the first tick does nothing in
+-- and this capture draws it only on 241, so everything to 265 is one
+tick apart, the `LEVEL 1` text ends a tick earlier and the minutes
+after it end a tick earlier. The scoring's free slip absorbs all of
+it except the last tick, 289, where the port still has
+`60 MINUTES LEFT` up and the capture has already rubbed it out:
+blanking the port's text rectangle there gives 3995135724, which is
+the capture's number exactly.
+
+It is the capture and not the port. `probeF`'s restart has the
+opening picture **twice**, on 431 and 432, which is what the port
+does; this one has it once. Two captures of the same thing, one tick
+apart.
+
 ### `9b60bf3a` 400 to 429: a run-turn the original does not do
 
 The largest of them, measured against the capture's own pictures.
