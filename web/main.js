@@ -9417,7 +9417,7 @@ function play_kid_frame() {
     }
     check_knock();
   }
-  savekid_and_opp();
+  savekid();
   return 0;
 }
 function play_guard_frame() {
@@ -10568,14 +10568,11 @@ function play_kid_seq() {
   }
 }
 function play_opp_seq() {
-  loadshad_and_opp_cutscene();
+  loadshad_and_opp();
   if (g.Char.frame) {
     play_seq();
     saveshad();
   }
-}
-function loadshad_and_opp_cutscene() {
-  loadshad();
 }
 function draw_princess_room_bg() {
   reset_tables();

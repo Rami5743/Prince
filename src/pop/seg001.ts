@@ -26,7 +26,8 @@
 import { g, type RectType } from './state.ts';
 import { charids, directions, blitters, chtabs, seqids, soundids } from './types.ts';
 import {
-  loadkid, savekid, loadshad, saveshad, play_seq, load_frame_to_obj,
+  loadkid, savekid, loadshad, saveshad, loadshad_and_opp, play_seq,
+  load_frame_to_obj,
 } from './seg006.ts';
 import { seqtbl_offset_char } from './seg005.ts';
 import {
@@ -228,16 +229,13 @@ export function play_kid_seq(): void {
 
 // seg001:013F
 export function play_opp_seq(): void {
-  loadshad_and_opp_cutscene();
+  // `loadshad_and_opp()`, which is `loadshad(); Opp = Kid;` -- the
+  // translation had the first line and not the second.
+  loadshad_and_opp();
   if (g.Char.frame) {
     play_seq();
     saveshad();
   }
-}
-
-/** `loadshad_and_opp()`, which is what `play_opp_seq` calls. */
-function loadshad_and_opp_cutscene(): void {
-  loadshad();
 }
 
 // seg001:0156

@@ -322,6 +322,57 @@ fuzz that checks for `NaN` as well as for exceptions is the cheap way
 to find both, and `tests/pop/levels-smoke.test.ts` now plays badly
 for a thousand ticks of every level.
 
+### A third sweep, over what the cutscene round brought in
+
+The same two scripts as the second audit -- the set-compare of
+identifiers and literals, and the token diff -- run over `seg001.c`,
+`seg000.c`'s `show_title`, `seg009.c`'s `input_str` and everything
+else, and then over all eight segments again. Nearly everything they
+print is the seam this port has instead of SDL: surfaces, timers,
+`idle()`, `do_paused`, the sound queue, the `custom->` and `fixes->`
+indirections, and the generators that stand in for the C's blocking
+loops.
+
+Two were real, and they are the same mistake, once each way round.
+`Opp` is the one scratch character the C keeps beside `Kid` and
+`Guard`: `loadkid_and_opp()` is `loadkid(); Opp = Guard;` and
+`savekid_and_opp()` is `savekid(); Guard = Opp;`, so which of the
+pair a function uses decides whether what it did to the other
+character is kept or thrown away.
+
+| what | where | what it meant |
+|------|-------|---------------|
+| `savekid()`, not `savekid_and_opp()` | `play_kid_frame` | the guard was put back to what he was before the Prince's frame ran, and anything written to `Opp` inside it was applied to him |
+| `loadshad_and_opp()`, not `loadshad()` | `play_opp_seq` | the dropped `Opp = Kid`: the cutscene's other character never reached `Opp` |
+
+The first is the mirror of the `play_guard_frame` fault the second
+audit found and the docs already describe. It costs nothing today,
+and that was measured rather than assumed: `Opp.action` and
+`Opp.frame` are written only by `check_sword_hurting`, which
+`play_frame` runs *after* `play_kid_frame`, and `seqtbl_offset_opp`
+-- the only other writer in the whole of SDLPoP -- has no caller at
+all. `pop-report.ts` reads 11673 of 12038 with the line and without
+it. It is a line of the C and a trap for the next thing that writes
+`Opp`, so it is gone. `tests/pop/opp-writeback.test.ts` pins both,
+the first by putting a write to `Opp` inside the Prince's frame
+through the one link slot its subtree offers.
+
+Three more measurements the sweep settled, each of which looked like
+a dropped line and is not:
+
+* `no_mouse_in_ending` is read from two bytes of the executable at
+  0x2B8C, which are `0xEB 0x27` only in mods that patch the mouse out
+  of the ending. In `original/prince1` they are `0x0E 0xE8`, in both
+  `PRINCE.EXE` and `UNCRKD.EXE`, so the mouse belongs in the ending
+  and the port is right to have no branch.
+* `reset_cutscene`'s `next_sound = -1` has nothing to reset: this
+  port's `play_sound` goes straight to the speaker and there is no
+  `next_sound` queue to leave stale, which is the same seam
+  `proc_cutscene_frame`'s missing `play_next_sound` sits on.
+* `show_hof`'s `ALLOW_INFINITE_TIME` half and `draw_star`'s
+  `gmCga`/`gmHgaHerc` half are SDLPoP's own options and the
+  original's other video modes; neither is this game.
+
 ## The cutscenes, which the port did not have at all
 
 `check_the_end` set `game_won` and the shell stopped; `seg009.ts` was

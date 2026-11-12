@@ -14,7 +14,7 @@
 import { g, copyChar, byteOf } from './state.ts';
 import { tiles, charids, actions, directions, frameids, soundids } from './types.ts';
 import {
-  loadkid, loadkid_and_opp, savekid_and_opp, loadshad_and_opp,
+  loadkid, loadkid_and_opp, loadshad_and_opp,
   load_fram_det_col, play_seq, play_kid, play_guard, fell_out, is_dead,
   check_action, check_press, check_spiked, check_spike_below, take_hp,
   fall_accel, fall_speed, load_frame_to_obj, set_char_collision, control_kid,
@@ -206,7 +206,24 @@ export function play_kid_frame(): number {
     }
     check_knock();
   }
-  savekid_and_opp();
+  /**
+   * `savekid()`, not `savekid_and_opp()` -- the same extra line
+   * `play_guard_frame` had, the other way round.
+   *
+   * `savekid_and_opp` also writes `Opp` back over `Guard`, and `Opp`
+   * here is the copy of the guard `loadkid_and_opp` took at the top
+   * of this function, so the guard is restored to what he was before
+   * the Prince's frame ran and anything written to `Opp` inside it is
+   * applied to him. The C discards both.
+   *
+   * Nothing writes `Opp` inside this subtree today -- `Opp.action`
+   * and `Opp.frame` are only written by `check_sword_hurting`, which
+   * `play_frame` runs after this, and `seqtbl_offset_opp` has no
+   * caller at all -- so this costs nothing now and `pop-report.ts`
+   * reads the same 11673 of 12038 either way. It is a line of the C
+   * and a trap for the next thing that writes `Opp`.
+   */
+  savekid();
   return 0;
 }
 
