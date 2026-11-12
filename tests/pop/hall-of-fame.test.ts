@@ -167,3 +167,60 @@ describe('the end of the ending', () => {
     expect(after.seconds - without.seconds).toBeCloseTo(320 / 60, 1);
   }, 240000);
 });
+
+/**
+ * Typed at badly.
+ *
+ * `input_str` is the one place in the port where the player types,
+ * and no capture reaches it. Everything about it is a corner: a
+ * Backspace on an empty box, twenty-five characters into a box that
+ * holds twenty-four, a name wider than the box it is drawn in, a key
+ * that produces no character at all. This plays the ending through
+ * on a stream of them and asks only that it ends and that what comes
+ * out is what the C's two limits allow.
+ */
+describe('the name box, typed at badly', () => {
+  it('ends however the keys come, and keeps what the C would keep', async () => {
+    for (let s = 0; s < 6; s++) {
+      slot.localStorage = fakeStorage();
+      let seed = 20261112 + s * 7919;
+      const rnd = (): number => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+      };
+      const player = await CutscenePlayer.create(assets, exe);
+      g.rem_min = 30 + s;
+      g.rem_tick = 100 * s;
+      player.begin({ kind: 'ending' });
+      let typed = 0;
+      let units = 0;
+      for (; player.running && units < 300 * 60; units++) {
+        player.advance(UNIT_MS);
+        if (!player.wantsText) continue;
+        const r = rnd();
+        // Escape clears the box and `end_sequence` opens it again --
+        // `while (input_str(...) <= 0)` -- so it must not be the way
+        // out, and the loop must still end.
+        if (r < 0.04) player.pushKey('escape', '');
+        else if (r < 0.14) player.pushKey('backspace', '');
+        else if (r < 0.18) player.pushKey('delete', '');
+        else if (r < 0.22) player.pushKey('', ''); // a key with no character
+        else if (typed > 40 && r < 0.3) player.pushKey('enter', '');
+        else {
+          typed++;
+          player.pushKey('', String.fromCharCode(0x21 + Math.floor(rnd() * 94)));
+        }
+      }
+      expect(player.running, `seed ${s} ended`).toBe(false);
+      const name = hof[0]!.name;
+      // `max_length` is 24, and the box is 140 pixels wide, so the
+      // pixel guard bites first -- but never the other way round.
+      expect(name.length).toBeLessThanOrEqual(24);
+      expect([...name].every((c) => c >= ' ' && c <= '~')).toBe(true);
+      // A name was taken and written: `input_str` only returns a
+      // length greater than nought.
+      expect(name.length).toBeGreaterThan(0);
+      expect(slot.localStorage.getItem(HOF_STORAGE_KEY)).not.toBe(null);
+    }
+  }, 240000);
+});

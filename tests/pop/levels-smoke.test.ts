@@ -26,7 +26,10 @@ const CONTROLS = (t: number): { x: number; y: number; shift: boolean } => (
         : { x: 0, y: 0, shift: false });
 
 describe('every level plays', () => {
-  for (let level = 1; level <= 14; level++) {
+  // Level 0 is the demo the title falls into, and it plays itself:
+  // `control_kid`'s demo half writes the controls, so what is passed
+  // in is ignored there.
+  for (let level = 0; level <= 14; level++) {
     it(`level ${level} runs three hundred ticks and draws every room`, async () => {
       let game = await PopGame.start(assets, exe, level);
       game.render();
@@ -61,13 +64,13 @@ describe('every level plays', () => {
  * assertion is only that nothing throws and nothing goes black.
  */
 describe('played badly', () => {
-  it('fourteen levels of random keys, cheats and doors throw nothing', async () => {
+  it('fifteen levels of random keys, cheats and doors throw nothing', async () => {
     let seed = 20261112;
     const rnd = (): number => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
       return seed / 0x7fffffff;
     };
-    for (let start = 1; start <= 14; start++) {
+    for (let start = 0; start <= 14; start++) {
       let level = start;
       let game = await PopGame.start(assets, exe, level);
       let hold = { x: 0, y: 0, shift: false };
@@ -95,6 +98,12 @@ describe('played badly', () => {
         expect(game.render().pixels.some((p) => p !== 0),
           `level ${level} tick ${t} is black`).toBe(true);
         if (game.gameWon) break;
+        // The demo's two ways out, both of which are `start_game()`.
+        if (game.demoFinished || game.restartGameDue) {
+          game = await PopGame.start(assets, exe, 0);
+          level = 0;
+          continue;
+        }
         if (game.levelFinished) {
           // What `web/main.ts` carries from one level to the next.
           const carried = {
