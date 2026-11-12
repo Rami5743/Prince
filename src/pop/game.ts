@@ -100,6 +100,20 @@ export interface PopOptions {
    * starting clock. `tools/oracle/README.md` has the measurement.
    */
   readonly minutesLeft?: number;
+  /**
+   * What to seed `prandom` with, which is 1 for every level but the
+   * demo's.
+   *
+   * The original seeds itself from its own clock on the first roll,
+   * so anything that comes out of `prandom` -- a torch's flame, a
+   * potion's bubbles, the delays on level 13's falling floors, a
+   * guard's every choice -- differs between two of its own runs and
+   * no capture can adjudicate the port on it. Running a probe at a
+   * second seed and comparing the two renderings says which ticks
+   * those are, which is worth knowing before a probe is captured at
+   * all.
+   */
+  readonly seed?: number;
 }
 
 /** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
@@ -173,6 +187,8 @@ export class PopGame {
   private seamlessEntry = false;
   /** `init_game`'s sixty, unless a capture arrived with less. */
   private minutesLeft = 60;
+  /** `prandom`'s seed, for asking what the original cannot reproduce. */
+  private seed: number | undefined;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   private roomTarget = false;
   /**
@@ -225,6 +241,7 @@ export class PopGame {
     game.effects = options.effects;
     game.seamlessEntry = options.seamless === true;
     game.minutesLeft = options.minutesLeft ?? 60;
+    game.seed = options.seed;
     game.install(exe);
     game.startLevel();
     return game;
@@ -399,7 +416,7 @@ export class PopGame {
      * seed here; a test that wants one calls `set_seed` after
      * `PopGame.start`.
      */
-    set_seed(this.levelNumber === 0 ? Math.floor(Date.now() / 1000) : 1);
+    set_seed(this.seed ?? (this.levelNumber === 0 ? Math.floor(Date.now() / 1000) : 1));
     g.hitp_beg_lev = constants.startHitPoints ?? 3;
     // `init_game`: the hour the level is played against.
     g.rem_min = this.minutesLeft;

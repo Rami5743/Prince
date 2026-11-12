@@ -9638,6 +9638,8 @@ var PopGame = class _PopGame {
   seamlessEntry = false;
   /** `init_game`'s sixty, unless a capture arrived with less. */
   minutesLeft = 60;
+  /** `prandom`'s seed, for asking what the original cannot reproduce. */
+  seed;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   roomTarget = false;
   /**
@@ -9682,6 +9684,7 @@ var PopGame = class _PopGame {
     game.effects = options.effects;
     game.seamlessEntry = options.seamless === true;
     game.minutesLeft = options.minutesLeft ?? 60;
+    game.seed = options.seed;
     game.install(exe);
     game.startLevel();
     return game;
@@ -9799,7 +9802,7 @@ var PopGame = class _PopGame {
     });
     g.current_level = this.levelNumber;
     g.next_level = this.levelNumber;
-    set_seed(this.levelNumber === 0 ? Math.floor(Date.now() / 1e3) : 1);
+    set_seed(this.seed ?? (this.levelNumber === 0 ? Math.floor(Date.now() / 1e3) : 1));
     g.hitp_beg_lev = constants.startHitPoints ?? 3;
     g.rem_min = this.minutesLeft;
     g.rem_tick = 719;

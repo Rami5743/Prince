@@ -1347,3 +1347,34 @@ And a guard, once he can see the Prince, is driven by `prandom`, whose
 seed the original takes from its own clock: `gate2b` settled years of
 this and a fight cannot be adjudicated by a capture at all. A route
 long enough to reach any of these would have to go past one.
+
+### Level 13's first twenty ticks are not the port's and never can be
+
+`check_fall_flo` gives each of the six floors above the room a delay
+of `-(prandom(0xff) & 0x0f)`, and the original's `prandom` is seeded
+from its own clock. So the floors of level 13's first room come down
+in a different order in every run of the original, and no capture can
+adjudicate the port there.
+
+`tools/dev/probe-check.ts` is what says so, and it is worth running
+before any new probe is captured at all. It renders a run twice at two
+seeds and lists the ticks that differ by more than a torch's worth of
+pixels:
+
+    level 13, 408 ticks, 16 edges
+      rooms 13,23  distinct pictures 250  died -1  guard -1
+      robustness over 48 moves: mean 0.9637, worst 0.8064 at x@60-1
+      seeds 1 and 77777 differ by more than 300 pixels on 20 ticks:
+        3:338px(96-231,0-8) 4:709px ... 14:2089px ... 8 more
+
+Every other probe in the suite comes back with **nought** ticks over
+that threshold -- including `level14`, whose five torches add up to
+more than 300 pixels between them on 89 ticks but never more than 300
+in one place. `palace4` reads 0 as well, which is the check saying
+what everyone already knew about it.
+
+So `level13`'s pin of 324 of 371 cannot go much higher: about twenty
+of the forty-seven it is short are ticks the original disagrees with
+itself about, and the rest are the alignment carrying that difference
+along. It is kept as a regression guard -- the port's own floors are
+deterministic from seed 1 -- and not as a measurement.
