@@ -140,6 +140,13 @@ describe('the end of the ending', () => {
     expect(String.fromCharCode(...bytes.slice(2, 8))).toBe('JORDAN');
   }, 120000);
 
+  it('gets through the screen on a page with no localStorage at all', async () => {
+    delete slot.localStorage;
+    const seen = await play({ kind: 'ending' }, { name: 'NOWHERE', remMin: 8, remTick: 3 });
+    expect(seen.finished).toBe(true);
+    expect(hof[0]).toEqual({ name: 'NOWHERE', min: 8, tick: 3 });
+  }, 120000);
+
   it('gets through the screen on a page whose localStorage throws', async () => {
     slot.localStorage = fakeStorage(true);
     const seen = await play({ kind: 'ending' }, { name: 'NOBODY', remMin: 10, remTick: 5 });

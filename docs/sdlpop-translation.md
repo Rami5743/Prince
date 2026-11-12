@@ -373,6 +373,21 @@ a dropped line and is not:
   `gmCga`/`gmHgaHerc` half are SDLPoP's own options and the
   original's other video modes; neither is this game.
 
+What the same sweep says is *right*, which is worth as much: every
+cutscene procedure of `seg001.c` and its `init_*` setters, the
+hourglass and the stars, `load_intro`, `expired`, `show_title` and
+`transition_ltr`; `draw_full_image` and the eleven entries of
+`full_image[]`; `jump_up`, `run_jump`, `check_jump_up`,
+`control_crouched` and `load_frame`; `draw_tile_anim_right`'s torch,
+`get_tile_to_draw`, `draw_mid`, `draw_hurt_splash`,
+`draw_objtable_item`, `show_level` and `do_mouse`. Where those read
+short against the C it is one of four things and nothing else:
+`#ifdef USE_`/`FIX_`/`ALLOW_` branches (`USE_FAKE_TILES`,
+`USE_COLORED_TORCHES`, `USE_SUPER_HIGH_JUMP`, `USE_COPYPROT`,
+`FIX_LOOSE_NEXT_TO_POTION`), `custom->` indirections that resolve to
+the same constants, SDL and the two surfaces, or `round_xpos_to_byte`
+and the other SDLPoP stubs that answer with their own argument.
+
 ## The cutscenes, which the port did not have at all
 
 `check_the_end` set `game_won` and the shell stopped; `seg009.ts` was
