@@ -163,7 +163,24 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  */
 const EXPECTED: Record<string, number> = {
   '0fbffa60': 642,
-  '13ab6867': 572,
+  /**
+   * 572 against the capture this file was written for, **574**
+   * against a fresh one split with `--numbering clock`.
+   *
+   * The gap-walk loses a tick wherever a flame holds its frame for
+   * three, and four captures of this run say the same thing: 569
+   * against 572, 570 against 574, 569 against 573, 569 against 573,
+   * gaps against clock. It also changes which edge the capture
+   * wants. The old capture's best was Up at 573 three ticks earlier,
+   * 727 of 728; this one does not want that at all (573 of 728) and
+   * wants **y at 416 two ticks later, 726 of 728** -- and what is
+   * left of it then is tick 1 and the edge tick itself.
+   *
+   * Which is the same conclusion by a different road: the hundred
+   * and fifty-four are one key edge the emulator took two ticks off
+   * the recording's time, and nothing of this run is the port's.
+   */
+  '13ab6867': 574,
   '25c4ebb8': 388,
   '33e8ace7': 308,
   '3764b76d': 218,
@@ -192,7 +209,13 @@ const EXPECTED: Record<string, number> = {
   // is in `digests/` and this is its number.
   '9b60bf3a': 529,
   'a356bdd6': 184,
-  'b4ff4672': 395,
+  /**
+   * 395 of 428, and **396 of 429 -- exact** -- against a fresh
+   * capture split with `--numbering clock`, with its Right at 251
+   * one tick earlier. It was 428 of 428 under the old numbering, so
+   * this is the same answer with one more tick of capture in it.
+   */
+  'b4ff4672': 396,
   'e209b01a': 214,
   'ec99dc5b': 237,
   // Recaptured at the shorter `SETTLE_L1`, like `760c3e74` and

@@ -1687,6 +1687,40 @@ ways and keep the better, exactly as they already do for the two
 `--start` values. It costs one more split per try and it is the only
 way to know which numbering a capture wanted.
 
+### What the clock numbering is worth on the rest of the suite
+
+Not much, and the measurement is worth keeping so nobody spends
+another round on it. The four shortest runs of the old twenty-one
+were captured again, four times each, split both ways:
+
+    13ab6867   gaps 569 570 569 569   clock 572 574 573 573   (kept 572)
+    0fbffa60   gaps 626 621 626  93   clock 629 ... 629   85   (kept 642)
+    b4ff4672   gaps ... 374 ...       clock 395 396 373 ...    (kept 395)
+    9b60bf3a   gaps 310 186 ...       clock 313 312 ...        (kept 529)
+
+The clock numbering wins every pair it is compared with, by two to
+four ticks, and it never loses. But two to four ticks is all it is:
+`level10b` lost six because it holds one picture for a hundred and
+twenty-five ticks, and no other run in the suite stands still for
+anything like that long. `0fbffa60` and `9b60bf3a` came back far
+below their kept digests for the ordinary reason -- the phase
+lottery this file has described four times -- and their digests
+stay.
+
+Two pins move: **`13ab6867` 572 to 574** and **`b4ff4672` 395 to
+396**. And the fresh `13ab6867` changes which edge it wants, which
+matters more than the two ticks: the old capture's best was Up at
+573 three ticks earlier (727 of 728) and the new one does not want
+that at all (573 of 728), wanting **y at 416 two ticks later, 726 of
+728**, with tick 1 and the edge tick itself all that is left. Two
+captures of one run, two different edges, the same conclusion --
+which is the clearest statement yet of what `which-key` is really
+measuring. It is not finding the port's fault; it is finding where
+*this* capture put *this* edge.
+
+`b4ff4672` with its Right at 251 one tick earlier is **429 of 429**,
+exact.
+
 ### The old reading, kept because it was wrong in an instructive way
 
 What follows is what this file said before the numbering was measured.
