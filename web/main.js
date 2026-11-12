@@ -12554,7 +12554,7 @@ async function boot() {
     }
     present(game);
     const v = views[current];
-    status.textContent = game.awaitingButton ? `${label(v)} \u2014 press any key to begin the level again` : watchRoom === null ? `${label(v)} \u2014 ${CONTROLS}` : `${label(v)}, room ${watchRoom} \u2014 looking around; press a key to play`;
+    status.textContent = game.isDemo ? "the demo \u2014 press any key to play" : game.awaitingButton ? `${label(v)} \u2014 press any key to begin the level again` : watchRoom === null ? `${label(v)} \u2014 ${CONTROLS}` : `${label(v)}, room ${watchRoom} \u2014 looking around; press a key to play`;
   }
   aspectSel?.addEventListener("change", () => {
     aspectSel.blur();

@@ -411,11 +411,15 @@ async function boot(): Promise<void> {
     }
     present(game);
     const v = views[current];
-    status.textContent = game.awaitingButton
-      ? `${label(v)} — press any key to begin the level again`
-      : watchRoom === null
-        ? `${label(v)} — ${CONTROLS}`
-        : `${label(v)}, room ${watchRoom} — looking around; press a key to play`;
+    status.textContent = game.isDemo
+      // The demo plays itself and any key begins the real game, which
+      // is what `control_kid`'s own `key_test_quit()` does.
+      ? 'the demo — press any key to play'
+      : game.awaitingButton
+        ? `${label(v)} — press any key to begin the level again`
+        : watchRoom === null
+          ? `${label(v)} — ${CONTROLS}`
+          : `${label(v)}, room ${watchRoom} — looking around; press a key to play`;
   }
 
   aspectSel?.addEventListener('change', () => {
