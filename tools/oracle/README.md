@@ -577,6 +577,25 @@ What remains that no edge explains, and is therefore the port's:
 
 About a hundred ticks of twelve thousand: **99.2 per cent**.
 
+**That column has since been taken apart and almost none of it is
+the port's.** Five of `palace4`'s were a real fault and are fixed --
+`blitters_2_or` is an OR and was drawn as a plain transparent blit,
+which is the same picture over black and a different one over the
+Prince. The rest were read off the captures' own pixels and are the
+harness:
+
+| run        | what it is | where it is written |
+|------------|------------|---------------------|
+| `760c3e74` | 24 | the release at 292, taken two ticks early |
+| `848ee3c4` | 23 | the capture's hour, started before the capture |
+| `0fbffa60` |  4 | the spikes, compared across the Prince's own tick |
+| `0fbffa60` |  6 | the stop on frame 7 against frame 11 |
+| `9b60bf3a` | 26 | the run started a tick earlier (above) |
+| `palace4`  |  5 | the OR blitter -- **fixed** |
+| `palace4`  |  2 | the edge at 20, a tick early |
+| `5920a8c2` |  1 | the restart's opening frame, drawn once not twice |
+| `f6874819` |  1 | the room-change blank |
+
 Two of those entries have since been read off the capture's own
 pixels and are **not** the port's. Both are the strip of words under
 the room, and both were found the same way: render the port's tick,
@@ -624,6 +643,48 @@ capture whose clock is forty to two hundred and sixty ticks ahead
 says `59` there whether the hour stopped or not. Dropping the guard
 is still worth 23 ticks of `probeF` and 23 of `f6874819` and costs
 nothing, so it stays -- but it is fitted to the oracle, not measured.
+
+### `760c3e74` 288 to 320: a release the emulator took two ticks early
+
+Twenty-four of its fifty-one, and the whole of what no edge was
+thought to explain. Settled against a fresh capture, pixel for pixel.
+
+The Prince runs left along the ledge of room 8 and the player lets
+Left go at tick 292. The port reads it on 292, which is frame 9;
+`control_running` can only stop a run on frame 7 or frame 11, so he
+runs on to 11, the first frame of `seq_13_stop_run` carries him past
+the lip, and he falls at 295 and lands at 300.
+
+The capture does the same thing three ticks sooner. Its tick 289 is
+**frame 54 at x152** -- found by rendering the port's Prince at every
+frame and every x within thirty and comparing the hundred-by-sixty
+box around him, and only that one is a pixel-for-pixel match -- so
+the original was already two frames into `seq_13_stop_run` there, and
+it can only have started it on frame 7.
+
+Give the port the release two ticks earlier and it draws the capture
+exactly: every tick from 286 to 326 agrees to the pixel, where the
+unshifted port has a twelve-tick hole and comes out four ticks late.
+
+The shift is not kept, because the same recording's later edges are
+*not* early: from 340 to 400 the unshifted port matches the capture
+on every tick and the shifted one does not, and over the whole run
+the shift scores 361 of 1564 against 1513. That is the thing the
+harness cannot help -- the schedule's clock and the game's part
+company over a long run, so one edge of a twenty-six-second recording
+can be two ticks early while the next is on time.
+
+### `0fbffa60` 594 to 597: the spikes are the alignment, not the game
+
+Four more of its eighty-two. The spikes of room 6 go back in on
+tick 595 of the capture and tick 595 of the port -- the same absolute
+tick, counted from the restart, and the same three pictures as they
+retract (176, 188, 106, 26 lit pixels). But the Prince at that moment
+is a tick apart, the scoring aligns on him, and the spikes are then
+compared across that tick and disagree for the four ticks they are
+moving. They agree again the moment the spikes stop moving. There is
+nothing in the port to fix: `animate_spike` and `start_anim_spike`
+are the C line for line, and the clock they run on is the same one.
 
 ### `5920a8c2` 289: the one tick is the end of the same message
 
