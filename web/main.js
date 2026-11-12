@@ -4352,10 +4352,14 @@ function clip_char() {
       }
     }
   }
-  const col = get_tile_div_mod(g.char_x_left_coll - 4);
+  let col = get_tile_div_mod(g.char_x_left_coll - 4);
   if (get_tile(room, col + 1, row) === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_12_doortop) {
     g.obj_clip_right = (g.tile_col << 5) + 32;
-  } else if (get_tile(room, col, row) !== tiles.tiles_7_doortop_with_floor && g.curr_tile2 !== tiles.tiles_12_doortop || action === actions.actions_3_in_midair || action === actions.actions_4_in_freefall && frame === frameids.frame_106_fall || action === actions.actions_5_bumped && frame === frameids.frame_107_fall_land_1) {
+  } else if (get_tile(room, col, row) !== tiles.tiles_7_doortop_with_floor && g.curr_tile2 !== tiles.tiles_12_doortop || action === actions.actions_3_in_midair || action === actions.actions_4_in_freefall && frame === frameids.frame_106_fall || action === actions.actions_5_bumped && frame === frameids.frame_107_fall_land_1 || g.Char.direction < directions.dir_0_right && (action === actions.actions_2_hang_climb || action === actions.actions_6_hang_straight || action === actions.actions_1_run_jump && frame >= frameids.frame_137_climbing_3 && frame < frameids.frame_140_climbing_6)) {
+    col = get_tile_div_mod(g.char_x_right_coll);
+    if ((get_tile(room, col, row) === tiles.tiles_20_wall || g.curr_tile2 === tiles.tiles_13_mirror && g.Char.direction === directions.dir_0_right) && (get_tile(room, col, g.char_top_row) === tiles.tiles_20_wall || g.curr_tile2 === tiles.tiles_13_mirror) && room === g.curr_room) {
+      g.obj_clip_right = g.tile_col << 5;
+    }
   } else {
     g.obj_clip_right = (g.tile_col << 5) + 32;
   }
