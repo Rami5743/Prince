@@ -274,7 +274,19 @@ const CUTSCENE_SECONDS = { 2: 12, 4: 12, 6: 12, 8: 12, 9: 12, 12: 12 };
  * 14 and only level 7 died.
  */
 const DEADLY_LEVELS = new Set([7]);
-const DEADLY_WAIT = arg('deadly-wait', 4);
+/**
+ * Two, and it was four.
+ *
+ * The comment above is the measurement and the constant disagreed
+ * with it: "Two seconds is after the fall ... Four was tried and is
+ * not safe", and the default was four. Four is on the edge -- the
+ * prompt was measured on the screen 5.5 seconds after the chain
+ * reached level 7, and a chain that is running a little late loses
+ * the skip to it. Three captures of `level10b` in a row came back
+ * showing level 9 and scored nought, where the round that made the
+ * probe got three good ones out of five.
+ */
+const DEADLY_WAIT = arg('deadly-wait', 2);
 let skipSeconds = 0;
 let lastWait = SETTLE_L1;
 for (let l = 1; l < rec.level; l++) {
@@ -399,20 +411,77 @@ if (rawMs) {
    * edge goes out at, which is long enough that the tick cannot miss
    * it and short enough that it cannot repeat.
    *
-   * Only the single-key cheats are written this way. One with Shift in
-   * it would hold `control_shift` down for the ticks of the tap as
-   * well, and the Prince would step or stoop for it.
+   * A cheat with Shift in it -- `shift+i`, `shift+w`, `shift+t` --
+   * goes out in the shape `shift+l` already uses and which is taken
+   * every time: Shift down, a sixth of a second of air, the letter
+   * tapped, more air, Shift up. `xdotool key shift+i` presses and
+   * releases the pair as fast as X will take them and DOSBox's
+   * keyboard does not reliably see Shift down at the moment the
+   * letter arrives.
+   *
+   * That holds Shift for about five ticks around the cheat's own, and
+   * the game reads those as `control_shift` -- so the recording has
+   * to hold Shift over them too, or the two sides are playing
+   * different runs. The timeline is checked for it below rather than
+   * patched, because which ticks a probe wants Shift on is the
+   * probe's business: standing still it is nothing, in front of a
+   * potion it is a drink.
    */
   const CHEAT_HOLD = 0.25;
+  const SHIFT_LEAD = 0.15;
+  const SHIFT_TAP = 0.08;
+  const SHIFT_TAIL = 0.15;
   for (const c of rec.cheats ?? []) {
-    if (!/^[a-z]$/.test(c.key)) {
-      throw new Error(`cheat ${JSON.stringify(c.key)} is not one key`);
+    const at = (c.tick - 1 + shift) * TICK;
+    /** What xdotool calls the keys that are not a plain letter. */
+    const XKEY = { '+': 'KP_Add', '-': 'KP_Subtract' };
+    const plain = XKEY[c.key] ?? (/^[a-z]$/.test(c.key) ? c.key : null);
+    if (plain) {
+      edges.push({ want: at, type: 'down', key: plain });
+      edges.push({ want: at + CHEAT_HOLD, type: 'up', key: plain });
+      sent += 2;
+      continue;
     }
-    edges.push({ want: (c.tick - 1 + shift) * TICK, type: 'down', key: c.key });
-    edges.push({
-      want: (c.tick - 1 + shift) * TICK + CHEAT_HOLD, type: 'up', key: c.key,
-    });
-    sent += 2;
+    const m = /^shift\+([a-z])$/.exec(c.key);
+    if (!m) throw new Error(`cheat ${JSON.stringify(c.key)} is not a cheat key`);
+    // The ticks Shift is down for, which the timeline has to agree to.
+    const from = Math.max(0, Math.ceil(c.tick - 1 - SHIFT_LEAD * RATE));
+    const to = Math.min(ticks.length - 1,
+      Math.floor(c.tick - 1 + (SHIFT_TAP + SHIFT_TAIL) * RATE));
+    for (let t = from; t <= to; t++) {
+      if (!ticks[t].shift) {
+        throw new Error(`cheat ${c.key} at ${c.tick} needs Shift held`
+          + ` on ticks ${from}..${to}; the timeline has it off at ${t}`);
+      }
+    }
+    edges.push({ want: at - SHIFT_LEAD, type: 'down', key: 'shift' });
+    edges.push({ want: at, type: 'down', key: m[1] });
+    edges.push({ want: at + SHIFT_TAP, type: 'up', key: m[1] });
+    edges.push({ want: at + SHIFT_TAP + SHIFT_TAIL, type: 'up', key: 'shift' });
+    sent += 4;
+  }
+  /**
+   * Two edges of the same key cannot cross.
+   *
+   * The timeline's own Shift and a `shift+x` cheat's both write the
+   * key, and the cheat's pair sits inside the timeline's press -- so
+   * the run would read `down down up up` and let Shift go in the
+   * middle of the window the timeline asked for it. Keeping the first
+   * `down` and the last `up` of any overlapping pair is what the
+   * keyboard would really have done.
+   */
+  {
+    const held = new Map();
+    const keep = [];
+    for (const e of edges.slice().sort((a, b) => a.want - b.want)) {
+      const down = e.type === 'down';
+      const n = held.get(e.key) ?? 0;
+      if (down ? n === 0 : n === 1) keep.push(e);
+      held.set(e.key, Math.max(0, n + (down ? 1 : -1)));
+    }
+    edges.length = 0;
+    edges.push(...keep);
+    sent = edges.length;
   }
   edges.sort((a, b) => a.want - b.want);
   // Nothing is scheduled before the origin.

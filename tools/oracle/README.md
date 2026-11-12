@@ -1412,6 +1412,142 @@ capture's three minutes, so `firstcapture.sh` and `recapture.sh` now
 split each capture at both and keep the better, printing which won.
 
 
+## Every cheat the original has, and which of them a capture can use
+
+The capture chain already runs the original as **`prince megahit`** --
+it has to, because `shift+l` past level 3 is refused without it
+(`seg000.c`: `if (current_level < custom->shift_L_allowed_until_level
+/* 4 */ || cheats_enabled)`). So the whole of `process_key`'s
+`if (cheats_enabled)` block is available to a probe, and it was never
+used. This is what is in it, read off `seg000.c` with the
+`USE_DEBUG_CHEATS` and SDLPoP-only cases (`ctrl+v`, `ctrl+c`, F6, F9,
+`ctrl+tab`, `t`, `f`) left out:
+
+| key | what it does | can a capture use it |
+|-----|--------------|----------------------|
+| `h` `j` `u` `n` | `next_room = room_L/R/A/B` -- draw another room | **yes, and it is the useful one** |
+| `ctrl+b` | `next_room = Kid.room` -- back to the Prince | yes |
+| `k` | `guardhp_delta = -guardhp_curr; Guard.alive = 0` | yes |
+| `r` | revive: `resurrect_time = 20; Kid.alive = -1` | yes |
+| `shift+i` | `toggle_upside()` -- the screen turns over | needs a two-key tap |
+| `shift+w` | `feather_fall()` | needs a two-key tap |
+| `shift+b` | blind mode | needs a two-key tap |
+| `shift+s` | a hit point back, with the small potion's flash | needs a two-key tap |
+| `shift+t` | `add_life()` -- another flask on the bar | needs a two-key tap |
+| `+` `-` | a minute on the clock either way | yes |
+| `c` `shift+c` | the room numbers, as words under the room | yes |
+
+**None of them opens the exit door.** `leveldoor_open` is written in
+exactly five places and not one of them is a cheat: `seg007.c:455`
+(the button's `trigger_button`), `seg002.c:88` and `:558` (level 6's
+shadow and the victory music), `seg003.c:97` (`start_level` clearing
+it) and `seg003.c:530` (level 8's mouse). So **the mirror of level 4
+and the skeleton of level 3 stay out of reach**: the mirror is
+`curr_room_tiles[tilepos] = tiles_13_mirror` under `leveldoor_open`,
+and `check_skel` tests `leveldoor_open != 0 ||
+!custom->skeleton_require_open_level_door`, whose default is 1
+(`data.h:799`). Both need the button pressed, which is real play.
+
+### What H, J, U and N open, which is most of the rest
+
+`check_the_end` is the whole of what a view costs:
+
+    if (next_room != 0 && next_room != drawn_room) {
+        drawn_room = next_room; load_room_links();
+        different_room = 1; loadkid();
+        anim_tile_modif(); start_chompers();
+        check_fall_flo(); check_shadow();
+    }
+
+-- and `check_shadow` ends in `enter_guard`. So drawing a room is
+enough to raise the shadow of level 5 (room 24, while tile 3 of it is
+still a potion), the shadow of level 6 (room 1), to set level 13's
+floors falling (rooms 23 and 16), and to put *whoever that room's
+guard is* on the screen, Jaffar included. None of it needs the Prince
+to go there, so none of it needs a route past a guard who can see him
+-- which is the wall that `gate2b` ran into and the reason the last
+round called these unreachable.
+
+Three probes use it, and the routes avoid what cannot be measured:
+
+* **`shadow5`** -- level 5, 7 -> *up* 10 -> *right* 11 -> *right* 24.
+* **`shadow6`** -- level 6, 24 -> *left* 2 -> 15 -> 6 -> 18 -> 1, with
+  the guard of room 6 drawn on the way.
+* **`jaffar`** -- level 13, 23 -> *up* 17 -> *left* 1. That is the one
+  way to his room that does not pass through room 16, whose own
+  `check_fall_flo` would start six floors falling at
+  `-(prandom(0xff) & 0x0f)` ticks each and make the rest of the run
+  unmeasurable.
+
+The level 12 shadow is **not** reachable this way: `check_shadow`
+returns early while `get_tile(15, 1, 0) == tiles_22_sword`, and level
+12's sword is in room 15 at tile 1, five rooms from the start.
+
+A cheat goes into a recording as `{ tick, key }` in its `cheats`
+array (`RecordedCheat`), `make_probe.mjs --cheat 40:j` writes one,
+`PopGame.cheat` applies it where `control_kid` reads the keyboard,
+and `recording_to_script.mjs` sends the key to the emulator as a
+quarter-second tap at the same `(t - 1) / 12` every control edge goes
+out at. A quarter of a second is right because `process_key` is
+driven by the keyboard interrupt's scancode and not by what is held:
+the tap is one event however long it lasts, and the typematic repeat
+is half a second away.
+
+### The wait at level 7 was four seconds and its own comment said two
+
+`recording_to_script.mjs` gives level 7 a wait of its own because the
+level drops the Prince down a shaft and kills him, and once
+`Press Button to Continue` is up a `shift+l` is eaten by the prompt
+instead of changing the level. The comment beside the constant read
+"Two seconds is after the fall ... Four was tried and is not safe",
+and the constant was **four**. Both went in in the same commit.
+
+Four is on the edge rather than wrong: the prompt was measured on the
+screen 5.5 seconds after a chain reached level 7, so a chain running
+a little late loses the skip and every level after it is one behind.
+That is the whole of the "nought from two that stopped at level 9"
+in `level10b`'s spread, and this round it was three captures of three
+-- `0 of 374`, `0 of 373`, `0 of 372` -- against a port that scores
+361 on the kept digest. It is now **two**.
+
+Two seconds is after the level is drawn (two tenths) and after the
+fall (1.42 seconds), and nowhere near the prompt.
+
+One thing to watch when a probe past level 8 is recaptured: two
+seconds off the chain is twenty-four ticks of the hour it spends, and
+the hour is what `startMinutes` carries. The crossing from `60` to
+`59` is somewhere between level 8 and level 9, so a recapture of
+`level9` to `level13` may want `startMinutes` of 60 where the
+recording says 59. Read it off the capture's own tick 26, as ever.
+
+### Turning the screen over, which nothing had ever measured
+
+`toggle_upside` is one of the cheats and it is also what the type-4
+potion does, and the port's flip was in `web/main.ts` -- the finished
+picture turned over on its way to the canvas. The comment said that
+"looks the same and leaves everything measured against a capture
+alone", and the second half was the trouble: `PopGame.render` handed
+back the picture the right way up, so a capture of the original with
+the screen over could not be compared with the port at all. In the C
+it is `draw_game_frame`'s own business:
+
+    if (upside_down) flip_screen(offscreen_surface);
+    while (drects_count) { ... copy_screen_rect(&drects[...]); }
+    if (upside_down) flip_screen(offscreen_surface);
+
+so it is in `PopGame.render` now, as a mirror of all two hundred rows
+-- which is what `flip_not_ega` does to the offscreen surface, and
+what the shell was already doing, so nothing the player sees changes.
+
+What is **not** settled by reading is whether the row of flasks and
+the words under the room come out at the top with the room or stay
+where they are. `flip_not_ega` mirrors the whole surface about row
+99.5, but `copy_screen_rect` mirrors each dirty rect about
+`SCREEN_GAMEPLAY_HEIGHT`, which is 192 and not 200 -- two different
+axes, seven rows apart. `invert2` is the probe for it: level 2, the
+Prince standing still in room 5 the whole time, `shift+i` at tick 60
+and again at 190.
+
 ### The three ticks of level 10, which nothing yet explains
 
 This is the one run in the suite whose difference is the port's, is

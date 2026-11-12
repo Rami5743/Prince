@@ -333,15 +333,40 @@ const EXPECTED: Record<string, number> = {
    * and captured. `level5b` is **416 of 416** -- three captures of it
    * scored 416, 415 and 414 of 416, 415 and 415 -- so the nineteen
    * `level5` is short were the guard and nothing else, and level 5 is
-   * drawn perfectly. `level10b` is 360 of 401 and its best single
-   * edge is 370, so level 10's room 1 has something in it that is not
-   * the guard and not a key edge: the capture's Prince climbs seven
-   * or eight pixels lower than the port's over ticks 233 to 295, and
-   * `which-tick.ts` says the picture is `nothing the port ever
-   * draws`. That one is still open.
+   * drawn perfectly.
+   *
+   * `level10b` was "the one difference in the suite that is the
+   * port's and has no account": with its Down release moved it read
+   * 371 of 403, and what was left was the crouch going down and
+   * every tick the Prince moved from 253 to 296 **at a drift of
+   * +3** -- through a standstill, a run, a bump and a turn. A lag
+   * does not survive a standstill, so it was not a lag.
+   *
+   * It was the splitter's numbering, and `--numbering clock` says so
+   * with a number. The gap-walk made this capture's 460 changes into
+   * 460 ticks and read the emulator at **11.8503 ticks a second**;
+   * the clock numbering made the same 460 changes span **466** at
+   * **12.0052**, which is the rate the game keeps. Six ticks lost
+   * over four hundred, and six lost ticks of numbering is exactly a
+   * run that reads three ahead by its middle.
+   *
+   * The score hardly moves, because the alignment absorbs a slow
+   * drift: 360 for the gap-walk against 361 for the clock. What
+   * moves is what the score is made of. Against the gap-walk
+   * `which-key --by 1,2,3` found one edge worth ten ticks (the Down
+   * release, 361 to 371); against the clock numbering it finds a
+   * different one worth **twenty-eight** -- Right at tick 68 taken
+   * two ticks later, **389 of 403**. With that edge where the
+   * emulator took it the whole +3 is gone, and fourteen ticks are
+   * left: 58, the three of the crouch going down at a drift of +1,
+   * and ten on a four-tick period from 240 to 296.
+   *
+   * So `firstcapture.sh` and `recapture.sh` now split every capture
+   * both ways and keep the better, as they already do for the two
+   * `--start` values.
    */
   'level5b': 416,
-  'level10b': 360,
+  'level10b': 361,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
@@ -352,6 +377,54 @@ const EXPECTED: Record<string, number> = {
   // original mixes the two: at (220,0) of a fresh capture's tick 437
   // his colour is 113, the tapestry's is 85, and the capture has 117.
   'palace4': 519,
+  /**
+   * The four probes that use `megahit`'s own cheats.
+   *
+   * The capture chain has always run the original as
+   * `prince megahit` -- `shift+l` past level 3 is refused without it
+   * -- so every cheat of `process_key` was there to be used and none
+   * had been. `h`, `j`, `u` and `n` set `next_room`, and
+   * `check_the_end` then does `loadkid`, `anim_tile_modif`,
+   * `start_chompers`, `check_fall_flo` and `check_shadow`, whose own
+   * tail is `enter_guard`. So drawing a room is enough to raise the
+   * shadow of level 5 and of level 6, and to put whoever a room's
+   * guard is on the screen -- Jaffar included -- with the Prince
+   * nowhere near, which is what makes them measurable at all: a
+   * guard who can see him is driven by `prandom`, and `gate2b`
+   * settled years ago that no capture can adjudicate that.
+   *
+   * No cheat opens the exit door: `leveldoor_open` is written in
+   * five places and not one is a cheat, so the mirror of level 4 and
+   * the skeleton of level 3 stay out of reach.
+   *
+   * * `shadow5` -- level 5, room 7 -> 10 -> 11 -> 24, where
+   *   `check_shadow` raises the shadow because tile 3 of room 24 is
+   *   still a potion. **Exact in all four captures**: 300 of 300,
+   *   then 299 of 299 three times.
+   * * `shadow6` -- level 6, 24 -> 2 -> 15 -> 6 -> 18 -> 1, with the
+   *   guard of room 6 drawn on the way. 279 of 280, and 279 in all
+   *   four captures.
+   * * `jaffar` -- level 13, 23 -> 17 -> 1, the one way to his room
+   *   that does not pass through room 16, whose own `check_fall_flo`
+   *   would start six floors falling at `-(prandom(0xff) & 0x0f)`
+   *   ticks each. 253 of 298, and 252, 253, 253 over the three
+   *   captures that reached level 13; about twenty of what it is
+   *   short are level 13's own floors, which no two runs of the
+   *   original agree about.
+   * * `potion8` -- a potion drunk, measured by its effect and not by
+   *   its `prandom` bubbles. Level 8's potion is one room from the
+   *   start on the same row and its modifier is 40, so
+   *   `curr_room_modif >> 3` is 5 and it is the one that hurts. The
+   *   Prince runs right into room 2, bumps the wall at column 6,
+   *   Shift crouches him (`get_item`) and Shift again drinks
+   *   (`seq_78_drink`, frames 191 to 205): the flask goes out of the
+   *   room at tick 139 and off the bar at 158, 3/3 to 2/3. 223 of
+   *   246, the same 223 in three captures of four.
+   */
+  'jaffar': 253,
+  'potion8': 223,
+  'shadow5': 300,
+  'shadow6': 279,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and

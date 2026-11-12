@@ -1,0 +1,48 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-12T20:20:21.295Z",
+ "level": 8,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "16.,60r,60.,20s,30.,20s,40.",
+ "events": [
+  {
+   "ms": 1333,
+   "tick": 16,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 6333,
+   "tick": 76,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 11333,
+   "tick": 136,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 13000,
+   "tick": 156,
+   "type": "up",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 15500,
+   "tick": 186,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 17167,
+   "tick": 206,
+   "type": "up",
+   "key": "ShiftLeft"
+  }
+ ],
+ "states": []
+}

@@ -335,21 +335,13 @@ async function boot(): Promise<void> {
   };
 
   /**
-   * Shift+I turns the screen over.
-   *
-   * The original redraws the room the other way up; this turns the
-   * finished picture over on its way to the canvas, which looks the
-   * same and leaves the drawing -- and everything measured against a
-   * capture -- alone.
+   * Shift+I turns the screen over, and `PopGame.render` is where that
+   * happens now -- `draw_game_frame` wraps the copy to the screen in
+   * `flip_screen`, so it belongs to the game and not to the canvas.
+   * While it was here no capture could measure it.
    */
-  const flipped = new Surface();
   function present(g: Game): void {
-    const drawn = g.render();
-    if (!g.upsideDown) { display.present(drawn, g.scene.screenPalette.toRgba()); return; }
-    for (let y = 0; y < 200; y++) {
-      flipped.pixels.set(drawn.pixels.subarray(y * 320, y * 320 + 320), (199 - y) * 320);
-    }
-    display.present(flipped, g.scene.screenPalette.toRgba());
+    display.present(g.render(), g.scene.screenPalette.toRgba());
   }
 
   /** Held while a scene change is in flight; see `changeScene`. */

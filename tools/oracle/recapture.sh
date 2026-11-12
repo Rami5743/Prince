@@ -73,14 +73,34 @@ for i in $(seq 1 "$tries"); do
     --out "$d/rep" --record "$d/run.mkv" --fps 30 --cycles 20000 >/dev/null 2>&1 || true
   # Two places to start looking for the restart flash; see
   # `firstcapture.sh` for why one is not enough.
+  # And both numberings, because the gap-walk is measurably wrong.
+  #
+  # `split_ticks.py --hybrid` numbers by walking the gaps between
+  # picture changes and rounding each one short; `--numbering clock`
+  # puts tick n at `base + n * per` with `per` measured from the
+  # capture's own one-tick gaps. On the `level10b` capture of this
+  # round the gap-walk made 460 changes into 460 ticks and read the
+  # emulator at **11.8503 ticks a second**, where the clock numbering
+  # made the same 460 changes span **466** ticks at **12.0052** --
+  # which is the rate the game actually keeps. Six ticks lost over
+  # four hundred.
+  #
+  # It is worth little on the score, because the alignment absorbs a
+  # slow drift (360 against 361 there), and a great deal on what the
+  # score is *made of*: against the gap-walk `which-key` found one
+  # edge worth ten ticks, and against the clock numbering it found a
+  # different one worth twenty-eight. So both are tried and the
+  # better kept, as with the two `--start` values.
+  for numbering in gaps clock; do
   for st in "$start" "$late"; do
   rm -rf "$d/dos"
   nice -n 19 python3 "$repo/tools/oracle/split_ticks.py" "$d/run.mkv" "$d/dos" \
     --crop 640:400:0:0 --scale 320:200 --start "$st" --after-blank \
-    --fps 30 --rate 12 --hybrid --anchor-text 25 >/dev/null 2>&1 || true
-  [ -d "$d/dos" ] || { echo "  try $i start $st: no ticks"; continue; }
-  python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$st.json" >/dev/null 2>&1 || continue
-  cp "$d/$name-$st.json" "$digest"
+    --fps 30 --rate 12 --hybrid --numbering "$numbering" \
+      --anchor-text 25 >/dev/null 2>&1 || true
+  [ -d "$d/dos" ] || { echo "  try $i $numbering start $st: no ticks"; continue; }
+  python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$st-$numbering.json" >/dev/null 2>&1 || continue
+  cp "$d/$name-$st-$numbering.json" "$digest"
   # The whole of the report and then its first line, not `| head -1`.
   # `set -o pipefail` is on, and `head` closing the pipe after one line
   # kills `tsx` with SIGPIPE often enough to matter: the substitution
@@ -90,10 +110,11 @@ for i in $(seq 1 "$tries"); do
   out=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null || true)
   line=${out%%$'\n'*}
   score=$(awk '{print $2}' <<<"$line")
-  echo "  try $i start $st: $line"
+  echo "  try $i $numbering start $st: $line"
   if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then
-    bestscore=$score; best=$i; cp "$d/$name-$st.json" "$d/$name.json"
+    bestscore=$score; best=$i; cp "$d/$name-$st-$numbering.json" "$d/$name.json"
   fi
+  done
   done
 done
 cp "$keep" "$digest"

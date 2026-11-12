@@ -763,7 +763,38 @@ export class PopGame {
     }
     this.tickBottomText();
     this.flash();
-    return this.surface;
+    return this.upsideDown ? this.flipped() : this.surface;
+  }
+
+  /** The picture the screen gets while `upside_down` is on. */
+  private flipSurface: Surface | null = null;
+
+  /**
+   * `flip_screen(offscreen_surface)`, which `draw_game_frame` wraps
+   * the copy to the screen in while `upside_down` is set.
+   *
+   * It was in the shell, on the grounds that turning the finished
+   * picture over on its way to the canvas looks the same and leaves
+   * the comparison with a capture alone. The second half of that is
+   * the problem: a capture of the original with the screen turned
+   * over could not be compared with the port at all, because the
+   * port's `render` handed back the picture the right way up. It is
+   * `draw_game_frame`'s business in the C and it is here now.
+   *
+   * All two hundred rows, which is what `flip_not_ega` does to the
+   * offscreen surface. Whether the original's status bar comes out at
+   * the top with the room, or stays where it is -- `copy_screen_rect`
+   * mirrors a rect about `SCREEN_GAMEPLAY_HEIGHT`, which is 192 and
+   * not 200 -- is what the `invert2` probe is for.
+   */
+  private flipped(): Surface {
+    const out = this.flipSurface ??= new Surface();
+    const w = this.surface.width;
+    const h = this.surface.height;
+    for (let y = 0; y < h; y++) {
+      out.pixels.set(this.surface.pixels.subarray(y * w, y * w + w), (h - 1 - y) * w);
+    }
+    return out;
   }
 
   /** The background colour a flash took, to put back on the next tick. */
