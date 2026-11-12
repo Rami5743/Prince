@@ -222,7 +222,7 @@ Six were real, and none of them moves the score by a tick:
 | `draw_guard_hp(0, guardhp_curr)` | `clear_char` | the shadows of levels 4, 5 and 12 and the mouse of level 8 left their flasks painted under the room |
 | `saveshad()`, not `saveshad_and_opp()` | `play_guard_frame` | the extra line wrote the stale `Opp` back over `Kid`, which undid the `savekid()` that moves the Prince to where the shadow stood on level 12 |
 | `Char.charid` and then `saveshad()` | `jump_through_mirror` | the port set `Guard.charid` and then copied `Char` over `Guard`, so what came through the mirror on level 4 was a guard, not the shadow |
-| `load_frame()` | `jump_through_mirror` | `check_mirror_image` reads `cur_frame.weight`, so the shadow came out of the glass from the wrong x |
+| `load_frame()` | `jump_through_mirror` | nothing visible, and the claim that it moved the shadow was wrong: `check_mirror_image` uses the frame only for `distance_mirror`, which is recomputed before anything reads it. Put back for faithfulness |
 | the `else` halves of both pairs | `load_room_links` | `room_AL`, `room_AR`, `room_BL` and `room_BR` stayed nought whenever the room had nothing above or below it |
 
 A seventh is the shell's rather than the translation's: `seamless` is

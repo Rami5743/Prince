@@ -250,14 +250,18 @@ export function check_mirror(): void {
 export function jump_through_mirror(): void {
   loadkid();
   /**
-   * `load_frame()`, which the translation had dropped.
+   * `load_frame()`, which the translation had dropped. Put back for
+   * faithfulness, and **it changes nothing that can be seen** -- said
+   * here because the commit that added it claimed it did.
    *
-   * `check_mirror_image` works the reflection's place out from
-   * `distance_to_edge_weight`, and that reads `cur_frame.weight`.
-   * Without this the weight is whatever frame was loaded last -- the
-   * guard's, or the Prince's from an earlier tick -- so the shadow
-   * came out of the glass a pixel or two from where the original puts
-   * him.
+   * `check_mirror_image` reads `cur_frame` through
+   * `distance_to_edge_weight`, but only to set `distance_mirror`;
+   * where it puts the shadow, `(xpos << 1) - Char.x`, does not depend
+   * on the frame at all. And the one place that reads
+   * `distance_mirror` is `check_mirror`'s other branch, which calls
+   * `load_frame` and `check_mirror_image` itself first. So a stale
+   * `cur_frame` here is harmless; the line is back because the C has
+   * it, not because anything was wrong.
    */
   load_frame();
   check_mirror_image();
