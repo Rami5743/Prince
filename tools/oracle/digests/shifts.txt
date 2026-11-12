@@ -71,8 +71,13 @@ level14 0
 # `level5b` and `level10b`: the same two levels with the guard left
 # out of the route. Three captures each at shift 0.
 #   level5b   416, 415, 414  of 416, 415, 415   -- exact every time
-#   level10b  360 of 401 at --start restart-1; nought at restart-4,
-#             which is back inside the fade into the level. Both
-#             starts are tried now and the better kept.
+#   level10b  361, 361, 360 over three captures that reached level 10,
+#             nought from two that stopped at level 9 and 323 from a
+#             sixth. `agree.py` between two of them: 431 of 434 ticks
+#             agree outside the mask, so the original reproduces
+#             itself there.
+#             Its `--start` matters: 360 at restart-1 and nought at
+#             restart-4, which is back inside the fade into the
+#             level. Both are tried now and the better kept.
 level5b 0
 level10b 0

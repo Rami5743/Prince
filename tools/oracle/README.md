@@ -1400,13 +1400,9 @@ searched for and captured:
 * **`level5b`: 416 of 416, and 416, 415, 414 over three captures.**
   So the nineteen `level5` is short of exact were the guard and
   nothing else, and level 5 is drawn perfectly.
-* **`level10b`: 360 of 401**, best single edge 370. Level 10's room 1
-  has something in it that is neither a guard nor a key edge: from
-  tick 233 to 295 the capture's Prince climbs seven or eight pixels
-  lower than the port's -- its moved box runs to y 181 where the
-  port's stops at 173 -- and `which-tick.ts` says the picture is
-  `nothing the port ever draws`. That one is open, and it is the only
-  difference in the suite that is not accounted for.
+* **`level10b`: 361 of 403**, and it is the one difference in the
+  suite that is the port's and is not understood. It is written up
+  under **the three ticks of level 10** below.
 
 `level10b` also caught the other half of the flash-search problem.
 `restart - 4` is right for `level3` and wrong for `level10b`, which
@@ -1414,3 +1410,52 @@ reads nought from four seconds before and 360 from one: four is back
 inside the fade into the level. A split costs forty seconds against a
 capture's three minutes, so `firstcapture.sh` and `recapture.sh` now
 split each capture at both and keep the better, printing which won.
+
+
+### The three ticks of level 10, which nothing yet explains
+
+This is the one run in the suite whose difference is the port's, is
+reproducible, and has no account.
+
+**The measurement.** Five captures of `level10b`: 361, 361 and 360
+from the three that reached level 10, nought from two that stopped at
+level 9, and 323 from a sixth. `agree.py` between two of the good
+ones says **431 of 434 ticks agree outside the mask** -- the original
+reproduces itself there, so the capture can adjudicate the port.
+
+**What the run does.** The Prince crouches at tick 108 -- the probe
+holds Down from 108 to 235, which is `seq_50_crouch`, frames 107, 108
+and 109 and then frame 109 held -- and stands up when Down is let go,
+frames 110 to 118.
+
+**What the capture says.** Its tick 236 is the port's own picture from
+tick **239**, matched by eye against `pop-frames.ts`: the capture's
+Prince is half way up where the port's is still in a deep crouch. So
+the original stood up three ticks before the port did.
+`which-key.ts --by 1,2,3` agrees from the other end -- the Down
+release three ticks earlier is worth ten ticks, 361 to 371 -- and
+nothing else it tries is worth anything.
+
+**What is left, and why it is odd.** With that release moved, the
+ticks still apart are 0, the three of the crouch going down (108, 109,
+110), and then **every tick the Prince moves from 253 to 296, all at
+a drift of +3**. The port is three ticks behind the original for the
+rest of the run -- through a standstill, a run right, a bump into the
+wall, a turn and a run left.
+
+Three things that would explain it, and do not:
+
+* a lag does not survive a standstill, and the Prince stands still
+  from 246 to 255 with both runs' keys read on the same ticks;
+* the scoring's alignment is already carrying the +3, so it is not
+  the comparison -- the pictures differ *at* that offset;
+* it is not one capture's numbering, because three independent
+  captures put it on the same ticks.
+
+What has not been tried: `--rate`. `recording_to_script.mjs` takes
+one, and the splitter measures the capture's own rate (`level3` came
+out at 11.9703 ticks a second). Three ticks in two hundred and fifty
+is 1.2 per cent, which is larger than that, but a schedule written at
+a rate the emulator is not keeping is the shape of thing that would
+put every key of the second half of a run three ticks out while
+leaving the first half alone.
