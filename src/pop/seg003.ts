@@ -38,6 +38,10 @@ export const dist = { char_opp_dist: (): number => 0 };
 export const rooms = { goto_other_room: (_direction: number): void => {} };
 
 // seg003:0239
+/** `custom->demo_hitp` and `custom->demo_end_room`, out of the executable. */
+export const demo = { hitp: 4, end_room: 24 };
+
+// seg003:01A3
 export function do_startpos(): void {
   // Special event: level 3 starts at a checkpoint once he has died there.
   if (g.current_level === 3 && g.checkpoint) {
@@ -66,7 +70,9 @@ export function do_startpos(): void {
    * halfway through the run.
    */
   if (g.seamless === 0) {
-    x = g.hitp_beg_lev;
+    // `custom->demo_hitp` on the demo level, which is four, against
+    // the three the first real level begins with.
+    x = g.current_level !== 0 ? g.hitp_beg_lev : demo.hitp;
     g.hitp_max = x;
     g.hitp_curr = x;
   }

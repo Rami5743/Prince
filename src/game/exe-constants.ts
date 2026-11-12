@@ -39,6 +39,11 @@ export interface ExeConstants {
   readonly guardHitPoints: Uint8Array;
   readonly demoHitPoints: number;
   readonly demoEndRoom: number;
+  /**
+   * `demo_moves`: what the Prince does on the demo level, as
+   * `[time, move]` pairs. 25 of them, two 16-bit words each.
+   */
+  readonly demoMoves: readonly (readonly [number, number])[];
   readonly introMusicLevel: number;
   readonly checkpointLevel: number;
   readonly checkpointRespawnDir: number;
@@ -73,6 +78,7 @@ const OFF = {
   vgaPalette: 0x1d141,
   demoHitPoints: 0x04c28,
   demoEndRoom: 0x00b40,
+  demoMoves: 0x1b8ee,
   introMusicLevel: 0x04c37,
   checkpointLevel: 0x04b9e,
   checkpointRespawnDir: 0x04bac,
@@ -86,6 +92,9 @@ const OFF = {
   mirrorRoom: 0x08dcb,
   enableWdaInPalace: 0x0a7bb,
 } as const;
+
+/** `auto_move_type demo_moves[25]`. */
+const DEMO_MOVE_COUNT = 25;
 
 export const SUPPORTED_EXE_SIZE = 123335;
 
@@ -114,6 +123,12 @@ export function readExeConstants(exe: Uint8Array): ExeConstants {
   const u16 = (o: number) => dv.getUint16(o, true);
   const u8 = (o: number) => exe[o];
 
+  const demoMoves: [number, number][] = [];
+  for (let i = 0; i < DEMO_MOVE_COUNT; i++) {
+    const o = OFF.demoMoves + i * 4;
+    demoMoves.push([dv.getInt16(o, true), dv.getInt16(o + 2, true)]);
+  }
+
   const vgaPalette: Rgb6[] = [];
   for (let i = 0; i < 16; i++) {
     const o = OFF.vgaPalette + i * 3;
@@ -136,6 +151,7 @@ export function readExeConstants(exe: Uint8Array): ExeConstants {
     guardHitPoints: exe.slice(OFF.guardHitPoints, OFF.guardHitPoints + 16),
     demoHitPoints: u8(OFF.demoHitPoints),
     demoEndRoom: u8(OFF.demoEndRoom),
+    demoMoves,
     introMusicLevel: u8(OFF.introMusicLevel),
     checkpointLevel: u8(OFF.checkpointLevel),
     checkpointRespawnDir: (u8(OFF.checkpointRespawnDir) << 24) >> 24,

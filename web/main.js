@@ -2119,6 +2119,7 @@ var OFF = {
   vgaPalette: 119105,
   demoHitPoints: 19496,
   demoEndRoom: 2880,
+  demoMoves: 112878,
   introMusicLevel: 19511,
   checkpointLevel: 19358,
   checkpointRespawnDir: 19372,
@@ -2132,6 +2133,7 @@ var OFF = {
   mirrorRoom: 36299,
   enableWdaInPalace: 42939
 };
+var DEMO_MOVE_COUNT = 25;
 var SUPPORTED_EXE_SIZE = 123335;
 function checkExe(exe) {
   if (exe.length !== SUPPORTED_EXE_SIZE) {
@@ -2152,6 +2154,11 @@ function readExeConstants(exe) {
   const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
   const u16 = (o) => dv.getUint16(o, true);
   const u8 = (o) => exe[o];
+  const demoMoves = [];
+  for (let i = 0; i < DEMO_MOVE_COUNT; i++) {
+    const o = OFF.demoMoves + i * 4;
+    demoMoves.push([dv.getInt16(o, true), dv.getInt16(o + 2, true)]);
+  }
   const vgaPalette = [];
   for (let i = 0; i < 16; i++) {
     const o = OFF.vgaPalette + i * 3;
@@ -2173,6 +2180,7 @@ function readExeConstants(exe) {
     guardHitPoints: exe.slice(OFF.guardHitPoints, OFF.guardHitPoints + 16),
     demoHitPoints: u8(OFF.demoHitPoints),
     demoEndRoom: u8(OFF.demoEndRoom),
+    demoMoves,
     introMusicLevel: u8(OFF.introMusicLevel),
     checkpointLevel: u8(OFF.checkpointLevel),
     checkpointRespawnDir: u8(OFF.checkpointRespawnDir) << 24 >> 24,
@@ -2953,6 +2961,14 @@ var Globals = class {
    * is. Here the shell watches this and plays the hourglass.
    */
   game_expired = 0;
+  /**
+   * The demo level has been run out of.
+   *
+   * `play_frame`'s `current_level == 0` branch ends in
+   * `start_level = -1; start_game()` -- back to the title -- and the
+   * shell does that where the C does it directly.
+   */
+  demo_finished = 0;
   upside_down = 0;
   need_level1_music = 0;
   is_blind_mode = 0;
@@ -3669,7 +3685,9 @@ var l2 = {
   on_guard_killed: slot("on_guard_killed"),
   inc_curr_row: slot("inc_curr_row"),
   /** `add_life`, which lives in seg000 and the potions in seg006 want. */
-  add_life: slot("add_life")
+  add_life: slot("add_life"),
+  /** `do_auto_moves(custom->demo_moves)`, which `do_demo` calls. */
+  do_demo_moves: slot("do_demo_moves")
 };
 var hud = {
   draw_kid_hp: slot("draw_kid_hp"),
@@ -4263,13 +4281,31 @@ function play_kid() {
     ++g.Char.alive;
   }
 }
+function do_demo() {
+  if (g.checkpoint) {
+    g.control_shift2 = release_arrows();
+    g.control_forward = CONTROL_HELD;
+    g.control_x = CONTROL_HELD_FORWARD;
+  } else if (g.Char.sword) {
+    g.guard_skill = 10;
+    l2.autocontrol_opponent.fn();
+    g.guard_skill = 11;
+  } else {
+    l2.do_demo_moves.fn();
+  }
+}
 function control_kid() {
   if (g.Char.alive < 0 && g.hitp_curr === 0) g.Char.alive = 0;
   if (g.grab_timer !== 0) --g.grab_timer;
-  rest_ctrl_1();
-  read_user_control();
-  user_control();
-  save_ctrl_1();
+  if (g.current_level === 0) {
+    do_demo();
+    l5.control.fn();
+  } else {
+    rest_ctrl_1();
+    read_user_control();
+    user_control();
+    save_ctrl_1();
+  }
 }
 function play_guard() {
   if (g.Char.charid === charids.charid_24_mouse) {
@@ -6516,6 +6552,7 @@ var distance_mirror = 0;
 var dist2 = { char_opp_dist: () => 0 };
 var rooms = { goto_other_room: (_direction) => {
 } };
+var demo = { hitp: 4, end_room: 24 };
 function do_startpos() {
   if (g.current_level === 3 && g.checkpoint) {
     g.level.start_dir = directions.dir_FF_left;
@@ -6532,7 +6569,7 @@ function do_startpos() {
   g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX3);
   g.Char.direction = ~g.level.start_dir;
   if (g.seamless === 0) {
-    x = g.hitp_beg_lev;
+    x = g.current_level !== 0 ? g.hitp_beg_lev : demo.hitp;
     g.hitp_max = x;
     g.hitp_curr = x;
   }
@@ -6780,6 +6817,9 @@ var guards = {
   hp: (_level) => 0,
   type: (_level) => 0
 };
+var demo2 = {
+  moves: [[0, -1]]
+};
 var curr_guard_color = 0;
 var guardColor = { value: 0 };
 function char_opp_dist() {
@@ -6800,7 +6840,11 @@ function inc_curr_row() {
   ++g.Char.curr_row;
 }
 function on_guard_killed() {
-  if (g.current_level === 13) {
+  if (g.current_level === 0) {
+    g.checkpoint = 1;
+    g.demo_index = 0;
+    g.demo_time = 0;
+  } else if (g.current_level === 13) {
     g.flash_color = 15;
     g.flash_time = 18;
     g.is_show_time = 1;
@@ -6912,6 +6956,7 @@ function do_auto_moves(moves) {
   if (g.demo_time >= 254) return;
   ++g.demo_time;
   let demoindex = g.demo_index;
+  if (moves[demoindex] === void 0) return;
   if (moves[demoindex][0] <= g.demo_time) ++g.demo_index;
   else demoindex = g.demo_index - 1;
   switch (moves[demoindex][1]) {
@@ -9280,7 +9325,9 @@ function play_frame() {
   exit_room();
   check_the_end();
   check_guard_fallout();
-  if (g.current_level === FALLING_EXIT_LEVEL) {
+  if (g.current_level === 0) {
+    if (g.Kid.room === demo.end_room) g.demo_finished = 1;
+  } else if (g.current_level === FALLING_EXIT_LEVEL) {
     if (g.roomleave_result === -2) {
       g.Kid.y = byteOf(-1);
       out.stop_sounds();
@@ -9533,6 +9580,7 @@ function link() {
   hp.draw_guard_hp = draw_guard_hp;
   hp.add_life = add_life;
   l2.add_life.fn = add_life;
+  l2.do_demo_moves.fn = () => do_auto_moves(demo2.moves);
   hud.draw_kid_hp.fn = draw_kid_hp;
   hud.draw_guard_hp.fn = draw_guard_hp;
 }
@@ -9559,6 +9607,11 @@ var PopGame = class _PopGame {
   levelNumber;
   /** `custom->intro_music_level`: the level whose opening has music. */
   introMusicLevel = 1;
+  /**
+   * `start_level = -1; start_game()`: the whole game again, from the
+   * title. The shell acts on it between ticks.
+   */
+  restartGameDue = false;
   /** `is_restart_level`, which the shell acts on between ticks. */
   restartDue = false;
   /** The first tick of a level does nothing, as the original's does. */
@@ -9681,6 +9734,9 @@ var PopGame = class _PopGame {
     mirror.room = constants.mirrorRoom;
     guards.hp = (n) => constants.guardHitPoints[n] ?? 0;
     guards.type = () => this.scene.guardType;
+    demo2.moves = constants.demoMoves;
+    demo.hitp = constants.demoHitPoints;
+    demo.end_room = constants.demoEndRoom;
     g.level = {
       fg: this.scene.state.fg,
       bg: this.scene.state.modifiers,
@@ -9740,7 +9796,7 @@ var PopGame = class _PopGame {
     });
     g.current_level = this.levelNumber;
     g.next_level = this.levelNumber;
-    set_seed(1);
+    set_seed(this.levelNumber === 0 ? Math.floor(Date.now() / 1e3) : 1);
     g.hitp_beg_lev = constants.startHitPoints ?? 3;
     g.rem_min = 60;
     g.rem_tick = 719;
@@ -9922,9 +9978,11 @@ var PopGame = class _PopGame {
       this.pendingFirstTick = false;
       return;
     }
-    g.control_x = controls.x < 0 ? -1 : controls.x > 0 ? 1 : 0;
-    g.control_y = controls.y < 0 ? -1 : controls.y > 0 ? 1 : 0;
-    g.control_shift = controls.shift ? -1 : 0;
+    if (g.current_level !== 0) {
+      g.control_x = controls.x < 0 ? -1 : controls.x > 0 ? 1 : 0;
+      g.control_y = controls.y < 0 ? -1 : controls.y > 0 ? 1 : 0;
+      g.control_shift = controls.shift ? -1 : 0;
+    }
     g.guardhp_delta = 0;
     g.hitp_delta = 0;
     if (this.deathMusic > 0) --this.deathMusic;
@@ -10055,7 +10113,7 @@ var PopGame = class _PopGame {
     }
     if (g.text_time_remaining === 1) {
       if (g.text_time_total === 36 || g.text_time_total === 288) {
-        erase_bottom_text(1);
+        this.restartGameDue = true;
       } else {
         erase_bottom_text(1);
       }
@@ -10193,6 +10251,19 @@ var PopGame = class _PopGame {
    */
   get gameWon() {
     return g.game_won !== 0;
+  }
+  /** This is the demo level, which plays itself. */
+  get isDemo() {
+    return this.levelNumber === 0;
+  }
+  /**
+   * The demo has run out of its last room.
+   *
+   * `play_frame`'s `current_level == 0` branch is
+   * `start_level = -1; start_game()`, which is the title again.
+   */
+  get demoFinished() {
+    return g.demo_finished !== 0;
   }
   /** `have_sword`, which the shell carries from one level to the next. */
   get hasSword() {
@@ -12236,6 +12307,7 @@ async function boot() {
   const fetchFile = custom ?? browserFetcher(DATA_URL);
   const assets = new Assets(fetchFile);
   const exe = await fetchFile("UNCRKD.EXE");
+  const firstLevel = readExeConstants(exe).firstLevel;
   let sound = null;
   const wakeSound = () => {
     if (!sound) {
@@ -12295,7 +12367,8 @@ async function boot() {
   const views = [{ kind: "title" }, { kind: "opening" }];
   let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
-  const label = (v) => v.kind === "level" ? `level ${v.level}` : `${v.kind} screen`;
+  views.push({ kind: "level", level: 0 });
+  const label = (v) => v.kind !== "level" ? `${v.kind} screen` : v.level === 0 ? "the demo" : `level ${v.level}`;
   let current = 0;
   let game = null;
   let watchRoom = null;
@@ -12471,6 +12544,10 @@ async function boot() {
         void changeScene(restart);
         return;
       }
+      if (game.demoFinished || game.restartGameDue) {
+        void changeScene(restartGame);
+        return;
+      }
       if (game.levelFinished) {
         void changeScene(nextLevel);
         return;
@@ -12613,13 +12690,28 @@ async function boot() {
         cutscene.pushKey(textInputKey(e), e.key.length === 1 ? e.key : "");
         return;
       }
-      if (cutscene.skippable || keyName(e) === "escape") endScene();
+      if (cutscene.skippable) {
+        cutscene.cancel();
+        afterScene = null;
+        void changeScene(async () => {
+          await select(levelView(firstLevel));
+        });
+        return;
+      }
+      if (keyName(e) === "escape") endScene();
       return;
     }
     if (!game) {
       e.preventDefault();
       void changeScene(async () => {
-        await select(levelView(1));
+        await select(levelView(firstLevel));
+      });
+      return;
+    }
+    if (game.isDemo) {
+      e.preventDefault();
+      void changeScene(async () => {
+        await select(levelView(firstLevel));
       });
       return;
     }
@@ -12746,9 +12838,11 @@ async function boot() {
   const levelView = (level) => views.findIndex((v) => v.kind === "level" && v.level === level);
   async function restartGame() {
     held.clear();
-    await playScene({ kind: "title" }, async () => {
-      await select(levelView(1));
-    });
+    await playScene({ kind: "title" }, startDemo);
+  }
+  async function startDemo() {
+    held.clear();
+    await select(levelView(0));
   }
   async function restart() {
     if (!game) return;
@@ -12871,6 +12965,8 @@ async function boot() {
     held: [...held].sort(),
     awaitingButton: game.awaitingButton,
     level: w0Level(),
+    /** `current_level == 0`: the attract-mode level is playing itself. */
+    demo: game.isDemo,
     maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_DIRECTION ? null : {

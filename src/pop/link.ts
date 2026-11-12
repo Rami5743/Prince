@@ -70,6 +70,8 @@ export const l2 = {
   inc_curr_row: slot<() => void>('inc_curr_row'),
   /** `add_life`, which lives in seg000 and the potions in seg006 want. */
   add_life: slot<() => void>('add_life'),
+  /** `do_auto_moves(custom->demo_moves)`, which `do_demo` calls. */
+  do_demo_moves: slot<() => void>('do_demo_moves'),
 };
 
 /** `draw_kid_hp` and `draw_guard_hp`, which live in seg000. */

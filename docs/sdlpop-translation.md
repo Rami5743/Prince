@@ -519,9 +519,77 @@ A key begins the game, which is what `do_paused` lets through while
 and so does the hourglass, because all three of them end in
 `start_game()`.
 
-The C's `show_title` ends in `init_game(0)` -- the demo level, which
-plays itself through and comes back round to the title. This port has
-no demo level, so it ends at the top of level 1 instead.
+### The demo, and the title that now loops
+
+The C's `show_title` ends in `init_game(0)`: level 0 of `LEVELS.DAT`
+plays itself from the timeline in the executable and comes back round
+to the title. The port stopped at the top of level 1, so the title
+played once and the demo never played at all.
+
+Everything it needed was already in the game's own files:
+
+* **`demo_moves`**, twenty-five `[time, move]` pairs at **0x1B8EE** of
+  the 123 335-byte release -- the offset SDLPoP's `options.c` reads it
+  from for `dos_10_packed`, which is the build in `original/prince1`.
+  `readExeConstants` reads it beside the frame and sequence tables,
+  and `game.ts` hands it to `seg002.ts`'s `demo.moves`. Nothing is
+  typed out.
+* **`demo_hitp`** (4) and **`demo_end_room`** (24), which
+  `readExeConstants` already had and nothing used.
+* **level 0**, resource 2000 of `LEVELS.DAT`, loaded by the loader
+  that loads every other level.
+
+The lines that were missing: `do_demo` in `seg006.ts`,
+`control_kid`'s demo half, `on_guard_killed`'s `current_level == 0`
+branch, `do_startpos`'s `demo_hitp`, and `play_frame`'s level 0
+running exit.
+
+#### Three things the demo found that the player meets too
+
+**`do_paused` is only called in the other half of `control_kid`.**
+The port read the player's keys into `control_x`, `control_y` and
+`control_shift` at the top of every `step`, and the C reads them in
+`do_paused`, which `control_kid` calls only in its non-demo branch.
+Reading them on the demo level wiped what `do_demo` had just written
+a tick earlier: `move_6_shift` holds Shift down so the Prince catches
+the ledge he has jumped at, nobody was pressing anything, so
+`control_shift` went back to nought, he let go and fell on the spikes
+of room 2. With the three left alone on level 0 he goes 1, 2, 4 and
+fights the guard.
+
+**`do_auto_moves` can walk off the end of `demo_moves`, and cannot
+walk off `shad_drink_move`.** It stops at `demo_time >= 0xFE`, which
+is 254. The shadow's table ends on `{0xFF, -2}` -- beyond that guard,
+so its index can never run out. The demo's ends on `{0xE9, -1}`,
+which is 233, so from tick 234 the original is reading whatever lies
+after the table: in SDLPoP the next member of the same struct, in the
+executable the bytes before it, and there is no one answer to copy.
+It is reachable -- a demo whose Prince loses the fight goes on calling
+this while he lies there -- and in JavaScript it threw
+`Cannot read properties of undefined` and took the page down. Past
+the end the port does what the last entry says, which is nothing:
+the same answer `roomLinksOf` gives for a room that is not a room.
+
+**`Press Button to Continue`, left unanswered, restarts the whole
+game.** `draw_game_frame` watches for `text_time_remaining == 1` and,
+when `text_time_total` is 36 (a death on the demo or the potions
+level) or 288 (the words), does `start_level = -1; start_game()`.
+The port had the branch with a comment saying it was the shell's
+business, and the shell did not do it, so a player who died and
+walked away was left looking at a dead Prince for ever where the
+original goes back to the title after twenty-four seconds. It does
+now, and it is also the second of the demo's two ways out.
+
+#### The demo's fight is not the same twice
+
+`do_demo`'s middle branch is `guard_skill = 10; autocontrol_opponent();
+guard_skill = 11`, and `autocontrol_opponent` reads `prandom`, whose
+seed in the C is `(dword)time(NULL)`. So the original's Prince wins
+the demo's fight some runs and loses it others, and the port seeds
+level 0 from the clock the same way -- every other level keeps the
+fixed seed the oracle replays need. Measured over eight seeds: four
+reach room 24 and four die, and every one of the eight ends within
+1100 ticks, by one road or the other.
 
 ### Jaffar's flash, which would never have been seen
 
@@ -543,5 +611,3 @@ putting the colour back where the C puts it reads nought.
   never reaches level 15 or `show_copyprot`'s dialog, and the dialog
   asks the player to look a word up in a printed manual that is not
   among the game's files.
-* **The demo level**, which `show_title` falls into and which plays
-  itself from a recorded timeline in the executable.

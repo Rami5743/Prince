@@ -31,9 +31,12 @@ import {
 } from './seg008.ts';
 import { out as outSlots } from './link.ts';
 import { clear_tile_wipes, levelType as looseLevelType, resetSeg007 } from './seg007.ts';
-import { do_startpos, find_start_level_door, pos_guards, timers, dist as seg003dist, rooms as seg003rooms } from './seg003.ts';
 import {
-  guards as guardTables, enter_guard, char_opp_dist, goto_other_room,
+  do_startpos, find_start_level_door, pos_guards, timers, dist as seg003dist,
+  rooms as seg003rooms, demo as demoNumbers,
+} from './seg003.ts';
+import {
+  guards as guardTables, demo as demoMoves, enter_guard, char_opp_dist, goto_other_room,
   autocontrol_opponent, clear_char, on_guard_killed, inc_curr_row,
   control_guard_inactive, load_room_links, hp as guardHp, guardColor,
 } from './seg002.ts';
@@ -120,6 +123,11 @@ export class PopGame {
   private readonly levelNumber: number;
   /** `custom->intro_music_level`: the level whose opening has music. */
   private introMusicLevel = 1;
+  /**
+   * `start_level = -1; start_game()`: the whole game again, from the
+   * title. The shell acts on it between ticks.
+   */
+  restartGameDue = false;
   /** `is_restart_level`, which the shell acts on between ticks. */
   restartDue = false;
   /** The first tick of a level does nothing, as the original's does. */
@@ -267,6 +275,12 @@ export class PopGame {
      * decides who gets recoloured, and only an ordinary guard does.
      */
     guardTables.type = () => this.scene.guardType;
+    // `custom->demo_moves`, `demo_hitp` and `demo_end_room`: the
+    // demo level's own recorded timeline and its two numbers, read
+    // out of `PRINCE.EXE` like the frame and sequence tables.
+    demoMoves.moves = constants.demoMoves;
+    demoNumbers.hitp = constants.demoHitPoints;
+    demoNumbers.end_room = constants.demoEndRoom;
 
     // The level's tiles are the ones `LevelState` keeps, so that the
     // page and the translation are looking at the same bytes.
@@ -347,11 +361,23 @@ export class PopGame {
 
     g.current_level = this.levelNumber;
     g.next_level = this.levelNumber;
-    // `prandom`'s seed is the clock in the original. A replay wants it
-    // the same every time, and the capture it is measured against was
-    // taken from one particular run of it, so neither value is more
-    // right than the other; this one at least is reproducible.
-    set_seed(1);
+    /**
+     * `prandom`'s seed is the clock in the original. A replay wants it
+     * the same every time, and the capture it is measured against was
+     * taken from one particular run of it, so neither value is more
+     * right than the other; this one at least is reproducible.
+     *
+     * The demo level is the exception, and it is the C's own:
+     * `random_seed = (dword)time(NULL)`. The demo's fight is driven
+     * by `autocontrol_opponent`, which reads `prandom`, so the
+     * original's Prince wins it some runs and loses it others -- and
+     * either way the demo ends, because a death there is
+     * `text_time_total = 36` and that is `start_game()` too. No
+     * capture reaches level 0, so nothing is measured against a fixed
+     * seed here; a test that wants one calls `set_seed` after
+     * `PopGame.start`.
+     */
+    set_seed(this.levelNumber === 0 ? Math.floor(Date.now() / 1000) : 1);
     g.hitp_beg_lev = constants.startHitPoints ?? 3;
     // `init_game`: the hour the level is played against.
     g.rem_min = 60;
@@ -571,9 +597,24 @@ export class PopGame {
       this.pendingFirstTick = false;
       return;
     }
-    g.control_x = controls.x < 0 ? -1 : controls.x > 0 ? 1 : 0;
-    g.control_y = controls.y < 0 ? -1 : controls.y > 0 ? 1 : 0;
-    g.control_shift = controls.shift ? -1 : 0;
+    /**
+     * `do_paused`, which is where the C clears these three and reads
+     * the keyboard into them -- and it is called from the *else* half
+     * of `control_kid`, so on the demo level it never runs at all.
+     *
+     * Reading the keyboard there too wiped what `do_demo` had just
+     * written: `move_6_shift` holds Shift down so that the Prince
+     * catches the ledge he has jumped at, and the next tick put
+     * `control_shift` back to nought because nobody was pressing
+     * anything, so he let go and fell on the spikes below. It is the
+     * same three globals the demo and the player both write, which
+     * is why `control_kid` keeps them apart.
+     */
+    if (g.current_level !== 0) {
+      g.control_x = controls.x < 0 ? -1 : controls.x > 0 ? 1 : 0;
+      g.control_y = controls.y < 0 ? -1 : controls.y > 0 ? 1 : 0;
+      g.control_shift = controls.shift ? -1 : 0;
+    }
     g.guardhp_delta = 0;
     g.hitp_delta = 0;
     if (this.deathMusic > 0) --this.deathMusic;
@@ -715,9 +756,21 @@ export class PopGame {
       return;
     }
     if (g.text_time_remaining === 1) {
+      // Note: texts are identified by their total time.
       if (g.text_time_total === 36 || g.text_time_total === 288) {
-        // The original starts the game again here; the shell's business.
-        erase_bottom_text(1);
+        /**
+         * 36 is a death on the demo or the potions level, 288 is
+         * `Press Button to Continue`, and in both cases the C does
+         * `start_level = -1; need_quotes = 1; start_game()` -- the
+         * title again, and the demo after it.
+         *
+         * The shell does the starting, so this says so and the shell
+         * reads it. Nothing read it before, so a player who died and
+         * walked away was left looking at a dead Prince for ever
+         * where the original goes back to the title after
+         * twenty-four seconds.
+         */
+        this.restartGameDue = true;
       } else {
         erase_bottom_text(1);
       }
@@ -844,6 +897,17 @@ export class PopGame {
    * all and the game carried on.
    */
   get gameWon() { return g.game_won !== 0; }
+
+  /** This is the demo level, which plays itself. */
+  get isDemo() { return this.levelNumber === 0; }
+
+  /**
+   * The demo has run out of its last room.
+   *
+   * `play_frame`'s `current_level == 0` branch is
+   * `start_level = -1; start_game()`, which is the title again.
+   */
+  get demoFinished() { return g.demo_finished !== 0; }
 
   /** `have_sword`, which the shell carries from one level to the next. */
   get hasSword() { return g.have_sword !== 0; }

@@ -54,6 +54,17 @@ export const guards = {
   type: (_level: number): number => 0,
 };
 
+/**
+ * `custom->demo_moves`, which is `demo_moves[]` in the executable.
+ *
+ * Twenty-five `[time, move]` pairs, read out of `PRINCE.EXE` by
+ * `readExeConstants` rather than copied here, the same way the frame
+ * and sequence tables are. `game.ts` fills this in.
+ */
+export const demo = {
+  moves: [[0, -1]] as readonly (readonly [number, number])[],
+};
+
 export let curr_guard_color = 0;
 /** `curr_guard_color`, where the shell can read it. */
 export const guardColor = { value: 0 };
@@ -98,7 +109,13 @@ export function inc_curr_row(): void {
 
 // seg006:15E8
 export function on_guard_killed(): void {
-  if (g.current_level === 13) {
+  if (g.current_level === 0) {
+    // The demo level: once the guard is dead the Prince runs out of
+    // the room, which is what `do_demo`'s `checkpoint` branch does.
+    g.checkpoint = 1;
+    g.demo_index = 0;
+    g.demo_time = 0;
+  } else if (g.current_level === 13) {
     // Jaffar's level: the screen flashes.
     g.flash_color = 15;
     g.flash_time = 18;
@@ -259,9 +276,31 @@ export function do_auto_moves(moves: readonly (readonly [number, number])[]): vo
   if (g.demo_time >= 0xfe) return;
   ++g.demo_time;
   let demoindex = g.demo_index;
-  if (moves[demoindex][0] <= g.demo_time) ++g.demo_index;
+  /**
+   * Past the end of the table, which `demo_moves` can reach and
+   * `shad_drink_move` cannot.
+   *
+   * `do_auto_moves` stops at `demo_time >= 0xFE`, which is 254.
+   * `shad_drink_move` ends on `{0xFF, -2}` -- a time beyond that
+   * guard, so its index can never walk off the end. `demo_moves`
+   * ends on `{0xE9, -1}`, which is 233, so from tick 234 the
+   * original is reading whatever lies after the table: in SDLPoP
+   * that is `shad_drink_move`, the next member of the same struct,
+   * and in the executable it is the bytes before it, so there is no
+   * one answer to copy. It is reachable: a demo whose Prince loses
+   * the fight and dies goes on calling this while he lies there, and
+   * before this guard the twenty-one ticks between 234 and 254 threw
+   * `Cannot read properties of undefined` and took the page down.
+   *
+   * `-1` is what the last entry says to do, so that is what the
+   * table says to go on doing -- which stops the wander instead of
+   * carrying it on, the same answer `roomLinksOf` gives for a room
+   * that is not a room.
+   */
+  if (moves[demoindex] === undefined) return;
+  if (moves[demoindex]![0] <= g.demo_time) ++g.demo_index;
   else demoindex = g.demo_index - 1;
-  switch (moves[demoindex][1]) {
+  switch (moves[demoindex]![1]) {
     case -1: break;
     case 0: move_0_nothing(); break;
     case 1: move_1_forward(); break;

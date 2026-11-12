@@ -30,6 +30,7 @@ import {
 } from './seg002.ts';
 import {
   check_can_guard_see_kid, check_knock, timers, check_mirror, bump_into_opponent,
+  demo,
 } from './seg003.ts';
 import {
   do_mobs, process_trobs, start_chompers, start_anim_potion, start_anim_torch,
@@ -75,7 +76,14 @@ export function play_frame(): void {
    * Nothing ever set it, so the run out of the last room went
    * nowhere and the flag it turns on could never be true.
    */
-  if (g.current_level === FALLING_EXIT_LEVEL) {
+  if (g.current_level === 0) {
+    // Special event: level 0 running exit.
+    //
+    // The demo level is left by running into `demo_end_room`, and
+    // what the C does there is `start_level = -1; start_game()` --
+    // the title again. The shell reads this and plays it.
+    if (g.Kid.room === demo.end_room) g.demo_finished = 1;
+  } else if (g.current_level === FALLING_EXIT_LEVEL) {
     if (g.roomleave_result === -2) {
       g.Kid.y = byteOf(-1);
       out.stop_sounds();

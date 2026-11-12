@@ -350,6 +350,14 @@ class Globals {
    * is. Here the shell watches this and plays the hourglass.
    */
   game_expired = 0;
+  /**
+   * The demo level has been run out of.
+   *
+   * `play_frame`'s `current_level == 0` branch ends in
+   * `start_level = -1; start_game()` -- back to the title -- and the
+   * shell does that where the C does it directly.
+   */
+  demo_finished = 0;
   upside_down = 0;
   need_level1_music = 0;
   is_blind_mode = 0;

@@ -19,6 +19,7 @@ import { control, seqtbl_offset_char, spiked, do_fall, dist as seg005dist } from
 import {
   enter_guard, char_opp_dist, goto_other_room, autocontrol_opponent, clear_char,
   on_guard_killed, inc_curr_row, control_guard_inactive, hp as guardHp,
+  do_auto_moves, demo as demoMoves,
 } from './seg002.ts';
 import { dist as seg003dist, rooms as seg003rooms } from './seg003.ts';
 import { draw_hp, draw_kid_hp, draw_guard_hp, add_life } from './seg000.ts';
@@ -63,6 +64,9 @@ export function link(): void {
   guardHp.draw_guard_hp = draw_guard_hp;
   guardHp.add_life = add_life;
   l2.add_life.fn = add_life;
+  // `do_auto_moves(custom->demo_moves)`: `do_demo` is in seg006 and
+  // both halves of this are in seg002.
+  l2.do_demo_moves.fn = () => do_auto_moves(demoMoves.moves);
   hud.draw_kid_hp.fn = draw_kid_hp;
   hud.draw_guard_hp.fn = draw_guard_hp;
 }

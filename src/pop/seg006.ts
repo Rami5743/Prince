@@ -758,19 +758,57 @@ export function play_kid(): void {
   }
 }
 
-// seg006:0CD1 -- the part of `control_kid` that is not the demo or the menu.
+// seg006:0D49
+/**
+ * `do_demo`: what plays the attract-mode level.
+ *
+ * Three minds in one. Once the guard is dead `on_guard_killed` sets
+ * `checkpoint`, and from there the Prince simply runs forward out of
+ * the room. While he has his sword out he is driven by the guard's
+ * own mind, `autocontrol_opponent`, at skill 10. Otherwise he follows
+ * `demo_moves`, the recorded timeline in the executable.
+ */
+export function do_demo(): void {
+  if (g.checkpoint) {
+    g.control_shift2 = release_arrows();
+    g.control_forward = CONTROL_HELD;
+    g.control_x = CONTROL_HELD_FORWARD;
+  } else if (g.Char.sword) {
+    g.guard_skill = 10;
+    l2.autocontrol_opponent.fn();
+    g.guard_skill = 11;
+  } else {
+    l2.do_demo_moves.fn();
+  }
+}
+
+// seg006:0CD1
+/**
+ * `control_kid`, both halves of it.
+ *
+ * On level 0 -- the demo the title falls into -- the game plays
+ * itself: `do_demo` writes the controls and `control()` acts on them,
+ * with none of the player's own latching round it. The C then reads
+ * the keyboard here and starts the real game on any key; that half is
+ * the shell's, which watches `isDemo`.
+ */
 export function control_kid(): void {
   if (g.Char.alive < 0 && g.hitp_curr === 0) g.Char.alive = 0;
   if (g.grab_timer !== 0) --g.grab_timer;
-  // The four `control_` latches are one set of globals and the guard's
-  // `autocontrol_` writes them too, so the Prince's are put back before
-  // he is asked and put away after. Without this the guard's last word
-  // stood as the player's, and a guard walking towards the Prince
-  // turned him round with nothing pressed.
-  rest_ctrl_1();
-  read_user_control();
-  user_control();
-  save_ctrl_1();
+  if (g.current_level === 0) {
+    do_demo();
+    l5.control.fn();
+  } else {
+    // The four `control_` latches are one set of globals and the guard's
+    // `autocontrol_` writes them too, so the Prince's are put back before
+    // he is asked and put away after. Without this the guard's last word
+    // stood as the player's, and a guard walking towards the Prince
+    // turned him round with nothing pressed.
+    rest_ctrl_1();
+    read_user_control();
+    user_control();
+    save_ctrl_1();
+  }
 }
 
 // seg006:0D3E

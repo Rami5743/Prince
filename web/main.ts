@@ -24,6 +24,7 @@ import { SoundPlayer } from '../src/render/audio.ts';
 import { SOUND } from '../src/game/traps.ts';
 import { SEQUENCE_SOUND, SOUND_SILENCE } from '../src/game/sequence.ts';
 import type { Controls } from '../src/game/kid.ts';
+import { readExeConstants } from '../src/game/exe-constants.ts';
 
 const DATA_URL =
   (window as unknown as { __princeDataUrl?: string }).__princeDataUrl
@@ -45,6 +46,8 @@ async function boot(): Promise<void> {
   const fetchFile = custom ?? browserFetcher(DATA_URL);
   const assets = new Assets(fetchFile);
   const exe = await fetchFile('UNCRKD.EXE');
+  /** `custom->first_level`, which is what a key during the demo starts. */
+  const firstLevel = readExeConstants(exe).firstLevel;
 
   /**
    * Sound. A browser will not let a page make a noise until the player
@@ -142,8 +145,11 @@ async function boot(): Promise<void> {
   /** Ticks played since the page opened, for tests that wait on game time. */
   let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: 'level', level: n });
-  const label = (v: View): string =>
-    v.kind === 'level' ? `level ${v.level}` : `${v.kind} screen`;
+  // `init_game(0)`: the attract-mode level the title falls into.
+  views.push({ kind: 'level', level: 0 });
+  const label = (v: View): string => (v.kind !== 'level'
+    ? `${v.kind} screen`
+    : v.level === 0 ? 'the demo' : `level ${v.level}`);
 
   let current = 0;
   let game: Game | null = null;
@@ -389,6 +395,16 @@ async function boot(): Promise<void> {
         return;
       }
       if (game.restartDue) { void changeScene(restart); return; }
+      /**
+       * Back to the title, which is what `start_game()` does from
+       * three places the shell reaches: the demo run out of its last
+       * room, a death on the demo level, and `Press Button to
+       * Continue` left unanswered for its 288 ticks.
+       */
+      if (game.demoFinished || game.restartGameDue) {
+        void changeScene(restartGame);
+        return;
+      }
       if (game.levelFinished) { void changeScene(nextLevel); return; }
     } else if (game.drawnRoom !== watchRoom) {
       game.showRoom(watchRoom);
@@ -532,7 +548,19 @@ async function boot(): Promise<void> {
         cutscene.pushKey(textInputKey(e), e.key.length === 1 ? e.key : '');
         return;
       }
-      if (cutscene.skippable || keyName(e) === 'escape') endScene();
+      /**
+       * `process_key` while `start_level < 0`: any key sets
+       * `start_level = custom->first_level` and stops the title, so
+       * the game begins at level 1 -- not at the demo the title
+       * would otherwise have fallen into.
+       */
+      if (cutscene.skippable) {
+        cutscene.cancel();
+        afterScene = null;
+        void changeScene(async () => { await select(levelView(firstLevel)); });
+        return;
+      }
+      if (keyName(e) === 'escape') endScene();
       return;
     }
 
@@ -541,8 +569,21 @@ async function boot(): Promise<void> {
     if (!game) {
       e.preventDefault();
       void changeScene(async () => {
-        await select(levelView(1));
+        await select(levelView(firstLevel));
       });
+      return;
+    }
+
+    /**
+     * The demo is playing: any key begins the real game.
+     *
+     * `control_kid`'s demo half reads the keyboard itself --
+     * `if (key) { start_level = custom->first_level; start_game(); }`
+     * -- so no key of it is a cheat, a pause or a direction.
+     */
+    if (game.isDemo) {
+      e.preventDefault();
+      void changeScene(async () => { await select(levelView(firstLevel)); });
       return;
     }
 
@@ -700,17 +741,23 @@ async function boot(): Promise<void> {
    * `start_level = -1; start_game()`, which is `show_title()`.
    *
    * The opening titles, the story of Jaffar and the princess, and the
-   * credits. The C's `show_title` ends in `init_game(0)` -- the demo
-   * level, which plays itself and comes back round to the title --
-   * and this port has no demo, so it ends where the player wants to
-   * be, at the top of level 1. A key during it does the same, which
-   * is what `do_paused` lets through while `start_level < 0`.
+   * credits -- and then `init_game(0)`, which is where `show_title`
+   * ends: the demo level, which plays itself from the timeline in the
+   * executable and comes back round to the title. So the page loops
+   * the way the original's does, and a key breaks out of either half
+   * into the real game -- which is `do_paused` while `start_level < 0`
+   * for the title, and `control_kid`'s own `key_test_quit()` for the
+   * demo.
    */
   async function restartGame(): Promise<void> {
     held.clear();
-    await playScene({ kind: 'title' }, async () => {
-      await select(levelView(1));
-    });
+    await playScene({ kind: 'title' }, startDemo);
+  }
+
+  /** `init_game(0)`, the last line of `show_title`. */
+  async function startDemo(): Promise<void> {
+    held.clear();
+    await select(levelView(0));
   }
 
   /** Start the level again, as the original does after a death. */
@@ -848,6 +895,8 @@ async function boot(): Promise<void> {
     frame: game.kid.frame, room: game.kid.room, x: game.kid.x, y: game.kid.y,
     hitPoints: game.hitPoints, dead: game.isDead, held: [...held].sort(),
     awaitingButton: game.awaitingButton, level: w0Level(),
+    /** `current_level == 0`: the attract-mode level is playing itself. */
+    demo: game.isDemo,
     maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_GUARD ? null : {
