@@ -17,6 +17,8 @@
  */
 export interface Playable {
   step(controls: Controls): void;
+  /** `process_key`'s cheats; only `src/pop` has them. */
+  cheat?(key: string): void;
   render(): { toRgb(palette: Uint8Array): Uint8Array };
   pressButton(): void;
   readonly restartDue: boolean;
@@ -312,6 +314,18 @@ export function fingerprint(rgb: Uint8Array, map: PaletteMap, mask: Uint8Array):
   return crc32(bytes);
 }
 
+/** A recording's cheats, grouped by the tick they are read on. */
+export function cheatsByTick(
+  cheats: readonly { tick: number; key: string }[] | undefined,
+): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  for (const c of cheats ?? []) {
+    const at = out.get(c.tick);
+    if (at) at.push(c.key); else out.set(c.tick, [c.key]);
+  }
+  return out;
+}
+
 /** The ticks on which what the player was holding changed. */
 export function inputChanges(ticks: readonly Controls[]): Set<number> {
   const out = new Set<number>();
@@ -334,6 +348,15 @@ export async function runOf<T extends Playable>(
   restart: (g: T) => Promise<T>,
   ticks: readonly Controls[],
   digest: Digest,
+  /**
+   * The cheats a probe asks for, by the tick they are read on.
+   *
+   * `process_key` runs where `control_kid` reads the keyboard, which
+   * is at the start of the tick and before `play_frame` has done
+   * anything -- so a cheat goes in just before `step`, exactly like
+   * the four keys beside it.
+   */
+  cheats: ReadonlyMap<number, readonly string[]> = new Map(),
 ): Promise<Run> {
   const mask = digest.mask ? unpackMask(digest.mask) : new Uint8Array(W * H);
   const map = new PaletteMap(digest.palette ?? []);
@@ -368,6 +391,10 @@ export async function runOf<T extends Playable>(
   }
   for (let t = 0; t < ticks.length; t++) {
     if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
+    for (const key of cheats.get(t) ?? []) {
+      if (!game.cheat) throw new Error('this game has no cheats');
+      game.cheat(key);
+    }
     game.step(ticks[t]);
     // The level is built again *before* the tick is drawn: the original
     // reads the button and shows the new level in the same tick -- see

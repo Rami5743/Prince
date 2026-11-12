@@ -1,0 +1,25 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-12T19:27:16.615Z",
+ "level": 5,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "300.",
+ "events": [],
+ "states": [],
+ "cheats": [
+  {
+   "tick": 40,
+   "key": "u"
+  },
+  {
+   "tick": 100,
+   "key": "j"
+  },
+  {
+   "tick": 160,
+   "key": "j"
+  }
+ ]
+}

@@ -27,6 +27,32 @@ export interface RecordedEvent {
   key: string;
 }
 
+/**
+ * One of `process_key`'s cheats, asked for on a tick.
+ *
+ * The player's own recordings never have any: the browser's recorder
+ * writes down the four keys the game is played on and nothing else.
+ * A probe can, and that is what they are for -- half the game is
+ * behind something a short route cannot reach, and `megahit` is how
+ * the original itself reaches it. H, J, U and N draw a room the
+ * Prince is not in, which is the only way a capture can be shown the
+ * shadow of level 5, 6 or 12 or Jaffar's room without a fight whose
+ * every move comes out of a clock-seeded generator; `shift+w` and
+ * `shift+i` are the feather and the inversion a potion gives; `k`
+ * kills a guard, which is what makes a room with one in it
+ * measurable at all.
+ *
+ * `PopGame.cheat` applies one and `recording_to_script.mjs` sends the
+ * same key to the emulator on the same tick, at the same
+ * `(tick - 1) / 12` every other edge goes out at.
+ */
+export interface RecordedCheat {
+  /** The tick it is read on -- before that tick's `play_frame`. */
+  tick: number;
+  /** `h`, `j`, `u`, `n`, `k`, `r`, `shift+w`, `shift+i`, ... */
+  key: string;
+}
+
 export interface RecordedState {
   tick: number;
   frame: number;
@@ -68,6 +94,8 @@ export interface Recording {
   timeline: string;
   events: RecordedEvent[];
   states: RecordedState[];
+  /** The cheats a probe asks for; see `RecordedCheat`. */
+  cheats?: RecordedCheat[];
 }
 
 /**
@@ -141,5 +169,6 @@ export function parseRecording(text: string): Recording {
     timeline: r.timeline,
     events: r.events ?? [],
     states: r.states ?? [],
+    ...(r.cheats?.length ? { cheats: r.cheats } : {}),
   };
 }

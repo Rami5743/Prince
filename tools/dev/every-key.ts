@@ -59,7 +59,8 @@ import { fileURLToPath } from 'node:url';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
-import { runOf, exactAgreement, inputChanges, type Digest } from './digest-common.ts';
+import { runOf, exactAgreement, inputChanges, type Digest, cheatsByTick,
+} from './digest-common.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
@@ -101,6 +102,7 @@ for (const name of names) {
       (g) => g.restart(assets, exe),
       ticks,
       digest,
+      cheatsByTick(rec.cheats),
     );
     const got = exactAgreement(digest, port, inputChanges(ticks));
     n = got.ticks;

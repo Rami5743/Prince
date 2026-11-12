@@ -64,6 +64,22 @@ if (!Number.isFinite(level) || !timeline) {
   process.exit(2);
 }
 const seed2 = Number(opt('seed', '77777'));
+/**
+ * `--cheat 40:j` -- one of `process_key`'s cheats, on a tick.
+ *
+ * Half the game is behind something a short route cannot reach, and
+ * `megahit` is how the original itself reaches it: H, J, U and N draw
+ * a room the Prince is not in, which is how a capture is shown the
+ * shadow of level 5, 6 or 12, or Jaffar. Repeat the option for each.
+ */
+const cheats = new Map<number, string[]>();
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] !== '--cheat') continue;
+  const [t, key] = argv[i + 1].split(':');
+  const at = Number(t);
+  const had = cheats.get(at);
+  if (had) had.push(key); else cheats.set(at, [key]);
+}
 const bigPixels = Number(opt('px', '300'));
 
 type Controls = { x: number; y: number; shift: boolean };
@@ -77,6 +93,7 @@ async function sim(ticks: Controls[]): Promise<Run> {
   let died = -1;
   let guard = -1;
   for (let t = 0; t < ticks.length; t++) {
+    for (const key of cheats.get(t) ?? []) game.cheat(key);
     game.step(ticks[t]);
     rooms.add(g.drawn_room);
     sig.push(`${g.drawn_room},${g.Kid.x},${g.Kid.y},${g.Kid.frame},${g.Kid.direction},`
@@ -168,6 +185,7 @@ async function render(seed: number): Promise<Uint8Array[]> {
   const game = await PopGame.start(assets, exe, level, { seed });
   const out: Uint8Array[] = [];
   for (let t = 0; t < ticks.length; t++) {
+    for (const key of cheats.get(t) ?? []) game.cheat(key);
     game.step(ticks[t]);
     out.push(Uint8Array.from(game.render().pixels));
   }

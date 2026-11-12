@@ -41,6 +41,26 @@ if (!timeline || !out) {
   process.exit(2);
 }
 const level = Number(arg('level', 1));
+/**
+ * `--cheat 40:j` -- one of `process_key`'s cheats, asked for on a
+ * tick. Repeat the option for each one.
+ *
+ * The player's four keys cannot reach half the game: the mirror, the
+ * skeleton and Jaffar are behind `leveldoor_open` or many rooms of
+ * real play, and the shadow of levels 5, 6 and 12 is raised by
+ * `check_shadow` when a particular room is *drawn*. H, J, U and N
+ * draw a room the Prince is not in, and the capture chain already
+ * runs the original as `prince megahit`, so they are there to be
+ * used.
+ */
+const cheats = [];
+for (let i = 0; i < process.argv.length; i++) {
+  if (process.argv[i] !== '--cheat') continue;
+  const [t, key] = process.argv[i + 1].split(':');
+  cheats.push({ tick: Number(t), key });
+}
+/** The minutes the capture's chain arrived with; see `startMinutes`. */
+const startMinutes = Number(arg('minutes', 60));
 const ticksPerSecond = 12;
 const ticks = decodeTimeline(timeline);
 
@@ -78,9 +98,12 @@ writeFileSync(out, JSON.stringify({
   version: RECORDING_VERSION,
   recordedAt: new Date().toISOString(),
   level,
+  startMinutes,
   ticksPerSecond,
   timeline: encodeTimeline(ticks),
   events,
   states: [],
+  ...(cheats.length ? { cheats } : {}),
 }, null, 1));
-console.log(`${out}: ${ticks.length} ticks, ${events.length} key edges, level ${level}`);
+console.log(`${out}: ${ticks.length} ticks, ${events.length} key edges, level ${level}`
+  + `${cheats.length ? `, ${cheats.length} cheats` : ''}`);

@@ -380,12 +380,27 @@ async function boot(): Promise<void> {
       status.textContent = 'paused — press any key';
       return;
     }
-    if (watchRoom === null) {
+    /**
+     * H, J, U and N do not stop the game.
+     *
+     * The original's are two lines of `process_key` -- `next_room =
+     * room_L` and nothing else -- and `play_frame` goes on playing
+     * the tick, with `check_the_end` at the end of it drawing the
+     * room asked for. The Prince plays on off the screen, and the
+     * view comes back of its own accord the moment he changes room,
+     * because `exit_room` sets `next_room` to his.
+     *
+     * This used to stop stepping altogether while a room was being
+     * looked at, which is a mode the game does not have.
+     */
+    if (watchRoom && game.drawnRoom !== watchRoom) game.showRoom(watchRoom);
+    {
       const c = controls();
       pressedSinceStep.clear();
       game.step(c);
       ticksPlayed++;
       recorder.tick(c, game);
+      if (watchRoom && game.drawnRoom !== watchRoom) watchRoom = null;
       if (game.gameWon) {
         // `check_the_end`: the last room of the last level, where the
         // original runs `end_sequence()`. It does now.
@@ -410,8 +425,6 @@ async function boot(): Promise<void> {
         return;
       }
       if (game.levelFinished) { void changeScene(nextLevel); return; }
-    } else if (game.drawnRoom !== watchRoom) {
-      game.showRoom(watchRoom);
     }
     present(game);
     const v = views[current];
@@ -867,7 +880,7 @@ async function boot(): Promise<void> {
   w.__princeShow = async (level: number, room: number) => {
     await select(views.findIndex((v) => v.kind === 'level' && v.level === level));
     watchRoom = room;
-    if (game) game.showRoom(room);
+    if (game) game.drawRoomNow(room);
     frame();
   };
   w.__princeStep = (n: number, c: Partial<Controls> = {}) => {

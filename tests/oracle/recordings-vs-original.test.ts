@@ -56,7 +56,7 @@ import { Assets } from '../../src/render/assets.ts';
 import { PopGame as Game } from '../../src/pop/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
 import {
-  runOf, exactAgreement, inputChanges, type Digest,
+  runOf, exactAgreement, inputChanges, type Digest, cheatsByTick,
 } from '../../tools/dev/digest-common.ts';
 
 const DIGESTS = join(REPO, 'tools', 'oracle', 'digests');
@@ -397,6 +397,7 @@ async function score(name: string): Promise<{ agreed: number; ticks: number }> {
     (g) => g.restart(assets, exe),
     ticks,
     digest,
+    cheatsByTick(rec.cheats),
   );
   return exactAgreement(digest, port, inputChanges(ticks));
 }

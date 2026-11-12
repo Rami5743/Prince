@@ -38,7 +38,9 @@ import { fileURLToPath } from 'node:url';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
-import { runOf, exactAgreement, inputChanges, type Digest } from './digest-common.ts';
+import {
+  runOf, exactAgreement, inputChanges, cheatsByTick, type Digest,
+} from './digest-common.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
@@ -51,12 +53,14 @@ type Which = 'x' | 'y' | 'shift' | 'all';
 
 async function score(
   name: string, ticks: Controls[], digest: Digest, level: number, minutes = 60,
+  cheats: readonly { tick: number; key: string }[] = [],
 ): Promise<number> {
   const port = await runOf(
     () => PopGame.start(assets, exe, level, { minutesLeft: minutes }),
     (g) => g.restart(assets, exe),
     ticks,
     digest,
+    cheatsByTick(cheats),
   );
   return exactAgreement(digest, port, inputChanges(ticks)).agreed;
 }
@@ -74,7 +78,7 @@ for (const name of names) {
     readFileSync(join(REPO, 'tools', 'oracle', 'recordings', `${name}.json`), 'utf8'),
   );
   const base = decodeTimeline(rec.timeline) as Controls[];
-  const was = await score(name, base, digest, rec.level, rec.startMinutes);
+  const was = await score(name, base, digest, rec.level, rec.startMinutes, rec.cheats);
   /**
    * Every tick at which any of the three controls changed, and which
    * of them did.
@@ -116,7 +120,7 @@ for (const name of names) {
         };
         if (by < 0) for (let t = at + by; t < at; t++) put(t, base[at]);
         else for (let t = at; t < at + by; t++) put(t, base[at - 1]);
-        const got = await score(name, ticks, digest, rec.level, rec.startMinutes);
+        const got = await score(name, ticks, digest, rec.level, rec.startMinutes, rec.cheats);
         if (got > was) gains.push({ at, which, by, to: got });
       }
     }

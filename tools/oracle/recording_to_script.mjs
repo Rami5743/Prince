@@ -389,6 +389,32 @@ if (rawMs) {
       sent++;
     }
   }
+  /**
+   * The cheats, as a tap of their key on the tick that reads them.
+   *
+   * `process_key` is driven by the keyboard interrupt's scancode and
+   * not by what is held, so a cheat is one event however long the key
+   * is down -- the typematic repeat is half a second away. The tap is
+   * a quarter of a second from the same `(t - 1) / 12` every control
+   * edge goes out at, which is long enough that the tick cannot miss
+   * it and short enough that it cannot repeat.
+   *
+   * Only the single-key cheats are written this way. One with Shift in
+   * it would hold `control_shift` down for the ticks of the tap as
+   * well, and the Prince would step or stoop for it.
+   */
+  const CHEAT_HOLD = 0.25;
+  for (const c of rec.cheats ?? []) {
+    if (!/^[a-z]$/.test(c.key)) {
+      throw new Error(`cheat ${JSON.stringify(c.key)} is not one key`);
+    }
+    edges.push({ want: (c.tick - 1 + shift) * TICK, type: 'down', key: c.key });
+    edges.push({
+      want: (c.tick - 1 + shift) * TICK + CHEAT_HOLD, type: 'up', key: c.key,
+    });
+    sent += 2;
+  }
+  edges.sort((a, b) => a.want - b.want);
   // Nothing is scheduled before the origin.
   for (const e of edges) if (e.want < 0) e.want = 0;
 }

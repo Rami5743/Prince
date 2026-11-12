@@ -896,7 +896,7 @@ export class PopGame {
 
   /** `drawn_room`, which the shell also sets to look round the level. */
   get drawnRoom() { return g.drawn_room; }
-  set drawnRoom(room: number) { this.showRoom(room); }
+  set drawnRoom(room: number) { this.drawRoomNow(room); }
 
   /** `Char.alive >= 0`: the death animation has begun. */
   get isDead() { return g.Kid.alive >= 0; }
@@ -1113,20 +1113,77 @@ export class PopGame {
   /**
    * Show another room without playing: the view-the-level keys.
    *
-   * `next_room = room` and the screen drawn whole, which is what the
-   * original's H, J, U and N do.
+   * H, J, U and N are two lines of the C and no more --
+   * `draw_guard_hp(0, 10); next_room = room_L;` -- and everything
+   * else is `check_the_end`, which `play_frame` runs at the end of
+   * the same tick the key was read in. That matters twice over.
+   *
+   * It used to be written out here instead, and the copy had dropped
+   * three of `check_the_end`'s calls: `loadkid`, `check_fall_flo` and
+   * `check_shadow`. So looking into room 24 of level 5, room 1 of
+   * level 6 or room 15 of level 12 met nobody where the original
+   * raises the shadow there; looking into any room with a guard in it
+   * -- Jaffar's room 1 of level 13 among them -- met nobody, because
+   * `enter_guard` is the tail of `check_shadow`; and looking into
+   * room 23 or 16 of level 13 did not set its floors falling. It is
+   * the same fault `startLevel` had, in the other place a room is
+   * drawn whole, and it was found the same way: by reading
+   * `check_the_end` beside it.
+   *
+   * And it drew the new room *before* the tick rather than inside it,
+   * so `do_mobs`, `check_skel`, `play_kid_frame` and `exit_room` all
+   * ran a tick early against the room they test `drawn_room` for.
    */
   showRoom(room: number): void {
     if (room === g.drawn_room) return;
-    g.drawn_room = room;
+    draw_guard_hp(0, 10);
     g.next_room = room;
+  }
+
+  /**
+   * The same, drawn at once rather than at the end of a tick.
+   *
+   * The shell's look-around and `__princeShow` want the picture
+   * without playing a tick for it, which the game itself never does.
+   * It is `check_the_end` and then the whole-screen redraw
+   * `draw_game_frame` would have done.
+   */
+  drawRoomNow(room: number): void {
+    this.showRoom(room);
+    check_the_end();
     if (drawLevelType.of(g.current_level)) gen_palace_wall_colors();
-    load_room_links();
-    get_room_address(room);
-    anim_tile_modif();
-    start_chompers();
     this.needFullRedraw = true;
     this.fullRedrawClears = true;
+  }
+
+  /**
+   * `process_key`'s cheats, by the key that asks for one.
+   *
+   * The shell has the same switch over the browser's key names; this
+   * is the one a recording replays through, so that a probe can ask
+   * the original a question the player's four keys cannot -- what the
+   * shadow of level 5 looks like when room 24 is drawn, or Jaffar
+   * when room 1 of level 13 is. `recording_to_script.mjs` sends the
+   * same key to the emulator on the same tick.
+   */
+  cheat(key: string): void {
+    switch (key) {
+      case 'h': this.showRoom(g.room_L); break;
+      case 'j': this.showRoom(g.room_R); break;
+      case 'u': this.showRoom(g.room_A); break;
+      case 'n': this.showRoom(g.room_B); break;
+      case 'ctrl+b': this.showRoom(g.Kid.room); break;
+      case 'k': this.killGuard(); break;
+      case 'r': this.resurrect(); break;
+      case 'shift+i': this.toggleUpsideDown(); break;
+      case 'shift+w': this.featherFall(); break;
+      case 'shift+b': this.toggleBlind(); break;
+      case 'shift+s': this.heal(); break;
+      case 'shift+t': this.addLife(); break;
+      case '+': this.addMinutes(1); break;
+      case '-': this.addMinutes(-1); break;
+      default: throw new Error(`no such cheat ${JSON.stringify(key)}`);
+    }
   }
 }
 
