@@ -66,6 +66,28 @@ captures of a real PRINCE.EXE:
   over black and a different one over the Prince. The rest are the
   harness, and `tools/oracle/README.md` says which is which, run by
   run and tick by tick.
+* **levels 3 and 5 to 14 are measured against the original now**, by
+  eleven new probes `level3` and `level5`..`level14`. Before them
+  every recording was in levels 1 to 4 and `palace4` was the only one
+  past level 2. They stand at
+
+      level3   366 of 367    level9   374 of 421
+      level5   387 of 417    level10  259 of 368
+      level6   332 of 419    level11  377 of 377
+      level7   147 of 147    level12  383 of 383
+      level8   421 of 421    level13  324 of 371
+                             level14  425 of 425
+
+  and with them `pop-report` reads **15468 of 16154**. The old
+  twenty-one are untouched at 11673 of 12038. One real fault came out
+  of it -- `check_fall_flo` and `check_shadow` were missing from the
+  port's level start, where `draw_level_first` has them, so level
+  13's floors never fell: 282 to 324. Three harness faults came with
+  it and are written up in `tools/oracle/README.md`: a `shift+l` lost
+  to each inter-level cutscene and to level 7's death, the hour the
+  skip chain spends (now carried in the recording's `startMinutes`),
+  and `split_ticks.py` given only a second to find the restart flash
+  (`level3`: 86 of 355 at the old margin, **366 of 367** at the new).
 * four more recordings are captured and kept but no longer counted,
   because their captures measure the emulator's keyboard or the
   original's clock-seeded guard rather than the port. Each one has the

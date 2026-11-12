@@ -36,7 +36,8 @@ import {
   rooms as seg003rooms, demo as demoNumbers,
 } from './seg003.ts';
 import {
-  guards as guardTables, demo as demoMoves, enter_guard, char_opp_dist, goto_other_room,
+  guards as guardTables, demo as demoMoves, enter_guard, check_shadow, char_opp_dist,
+  goto_other_room,
   autocontrol_opponent, clear_char, on_guard_killed, inc_curr_row,
   control_guard_inactive, load_room_links, hp as guardHp, guardColor,
 } from './seg002.ts';
@@ -49,7 +50,7 @@ import {
 } from './seg007.ts';
 import {
   play_frame, check_the_end, screen, redraw_screen, anim_tile_modif, draw_hp,
-  draw_kid_hp, draw_guard_hp, add_life, gen_palace_wall_colors,
+  draw_kid_hp, draw_guard_hp, add_life, gen_palace_wall_colors, check_fall_flo,
 } from './seg000.ts';
 import { add_objtable, mark_obj_tile_redraw, resetSeg008 } from './seg008.ts';
 import { l2, l5, l6, l7, l8, out, hud } from './link.ts';
@@ -81,6 +82,24 @@ export interface PopOptions {
    * into at speed.
    */
   readonly seamless?: boolean;
+  /**
+   * How many minutes the hour has left when the level begins.
+   *
+   * `init_game` sets sixty and nothing in the game changes it, so
+   * sixty is right for every real game and this is here for one
+   * thing only: a probe captured against the original on a level
+   * past the second. The oracle reaches that level with one
+   * `shift+l` per level, the hour runs the whole time it is
+   * skipping, and Ctrl+A restarts the level and not the clock -- so
+   * the capture's `show_time` says `59 MINUTES LEFT` under the room
+   * where a port that starts fresh says `60`.
+   *
+   * It is part of the state the capture's run begins in, like the
+   * level number, and the harness hands it over from the recording's
+   * `startMinutes` so that the two runs are compared from the same
+   * starting clock. `tools/oracle/README.md` has the measurement.
+   */
+  readonly minutesLeft?: number;
 }
 
 /** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
@@ -152,6 +171,8 @@ export class PopGame {
   private effects?: PopEffects;
   /** `seamless` as the level began: see `PopOptions.seamless`. */
   private seamlessEntry = false;
+  /** `init_game`'s sixty, unless a capture arrived with less. */
+  private minutesLeft = 60;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   private roomTarget = false;
   /**
@@ -203,6 +224,7 @@ export class PopGame {
     const game = new PopGame(scene, levelNumber);
     game.effects = options.effects;
     game.seamlessEntry = options.seamless === true;
+    game.minutesLeft = options.minutesLeft ?? 60;
     game.install(exe);
     game.startLevel();
     return game;
@@ -380,7 +402,7 @@ export class PopGame {
     set_seed(this.levelNumber === 0 ? Math.floor(Date.now() / 1000) : 1);
     g.hitp_beg_lev = constants.startHitPoints ?? 3;
     // `init_game`: the hour the level is played against.
-    g.rem_min = 60;
+    g.rem_min = this.minutesLeft;
     g.rem_tick = 719;
     g.text_time_remaining = 0;
     g.text_time_total = 0;
@@ -443,7 +465,33 @@ export class PopGame {
     anim_tile_modif();
     loadkid();
     start_chompers();
-    enter_guard();
+    /**
+     * `check_fall_flo()` and `check_shadow()`, which `draw_level_first`
+     * runs here and the translation did not.
+     *
+     * `check_the_end` -- the other place a room is drawn whole -- has
+     * the same four calls in the same order: `anim_tile_modif`,
+     * `start_chompers`, `check_fall_flo`, `check_shadow`. This had
+     * `enter_guard()` in place of the last two, which is the tail of
+     * `check_shadow` and nothing else, so two of the game's own
+     * special events never fired at a level's start.
+     *
+     * The one a capture can see is level 13's. `check_fall_flo` makes
+     * the floors of the room above fall of their own accord while the
+     * Prince stands in room 23 or 16, and the whole top right of
+     * level 13's first room is them coming down: the capture of
+     * `level13` has something moving in the box (192,1)-(319,118)
+     * from its third tick and `which-tick.ts` says it is `nothing the
+     * port ever draws`.
+     *
+     * The other is the shadow of levels 5, 6 and 12, which
+     * `check_shadow` places when the drawn room is 24, 1 or 15. None
+     * of those is the room its level starts in, so no capture here
+     * sees it, but a Prince who begins a level in one -- as he would
+     * after a `Ctrl+A` in the browser -- met nobody.
+     */
+    check_fall_flo();
+    check_shadow();
     // `draw_level_first`: a palace wall's brick colours are rolled
     // once for the room, before the room is drawn.
     if (drawLevelType.of(g.current_level)) gen_palace_wall_colors();

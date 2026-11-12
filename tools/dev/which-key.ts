@@ -49,9 +49,11 @@ type Controls = { x: number; y: number; shift: boolean };
 /** Which of the three controls of an edge to move, or all of them. */
 type Which = 'x' | 'y' | 'shift' | 'all';
 
-async function score(name: string, ticks: Controls[], digest: Digest, level: number): Promise<number> {
+async function score(
+  name: string, ticks: Controls[], digest: Digest, level: number, minutes = 60,
+): Promise<number> {
   const port = await runOf(
-    () => PopGame.start(assets, exe, level),
+    () => PopGame.start(assets, exe, level, { minutesLeft: minutes }),
     (g) => g.restart(assets, exe),
     ticks,
     digest,
@@ -72,7 +74,7 @@ for (const name of names) {
     readFileSync(join(REPO, 'tools', 'oracle', 'recordings', `${name}.json`), 'utf8'),
   );
   const base = decodeTimeline(rec.timeline) as Controls[];
-  const was = await score(name, base, digest, rec.level);
+  const was = await score(name, base, digest, rec.level, rec.startMinutes);
   /**
    * Every tick at which any of the three controls changed, and which
    * of them did.
@@ -114,7 +116,7 @@ for (const name of names) {
         };
         if (by < 0) for (let t = at + by; t < at; t++) put(t, base[at]);
         else for (let t = at; t < at + by; t++) put(t, base[at - 1]);
-        const got = await score(name, ticks, digest, rec.level);
+        const got = await score(name, ticks, digest, rec.level, rec.startMinutes);
         if (got > was) gains.push({ at, which, by, to: got });
       }
     }

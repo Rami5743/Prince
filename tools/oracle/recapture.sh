@@ -46,16 +46,18 @@ work=${4:-/tmp/recapture}
 rate=${5:-12}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 digest="$repo/tools/oracle/digests/$name.json"
-level=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$repo/tools/oracle/recordings/$name.json','utf8')).level||1)")
-# One second before the Ctrl+A, which `recording_to_script.mjs` sends at
-# BOOT + SETTLE_L1 + SKIP_WAIT * (level - 1) = 25 + 3 + 10 * (level - 1).
-# The level's own fade, a tenth of a second after Return, is over by 26.5,
-# so looking from 27 finds the restart's flash and not that one.
-start=$((27 + 10 * (level - 1)))
 mkdir -p "$work"
-node "$repo/tools/oracle/recording_to_script.mjs" \
+# One second before the Ctrl+A, which the generator prints: the level's
+# own fade, a tenth of a second after Return, is over by 26.5, so
+# looking from one second before the restart finds its flash and not
+# that one. It used to be `27 + 10 * (level - 1)` here, which stopped
+# being right when the skip wait grew for the levels the game plays a
+# cutscene before.
+start=$(node "$repo/tools/oracle/recording_to_script.mjs" \
   "$repo/tools/oracle/recordings/$name.json" "$work/$name.txt" \
-  --settle 0.04 --shift "$shift_" --rate "$rate" >/dev/null
+  --settle 0.04 --shift "$shift_" --rate "$rate" 2>&1 >/dev/null \
+  | sed -n 's/^search from //p')
+[ -n "$start" ] || { echo "$name: the generator did not say where to search"; exit 2; }
 # Kept outside the repository: scoring a candidate means putting it
 # in `digests/` for a moment, and a stray file there is a stray file
 # in a commit.

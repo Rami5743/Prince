@@ -36,3 +36,34 @@ level2 1  (-1: 418 of 424, 0: 422 of 424, 1: 424 of 424)
 #   probeF     468,  464, 464, 1153  of ~1193   (1176 once the C's
 #                                                `Kid.alive` guard in
 #                                                `show_time` was back)
+#
+# The eleven probes of levels 3 and 5 to 14, all at shift 0. They were
+# not put through `pick-shift.ts`: each was captured once or twice at
+# shift 0 and then re-split at three different `--start` values, which
+# is the thing that actually moved their numbers.
+#
+#   level3   86 at --start 59, 366 at 56 and 366 again from a second
+#            capture -- the splitter was taking a dark frame 6.1
+#            seconds past the restart for the flash
+#   level5   386, 386, 386, 386, 387 over two captures and three splits
+#   level6   331, 331, 331, 331, 332 over two captures and three splits
+#   level7   147 of 147, first try
+#   level8   421 of 421, first try
+#   level9   374, 374 (and 24 from a --start that missed the flash)
+#   level10  259, 259 (and 59 from a bad --start)
+#   level11  377 of 377
+#   level12  383 of 383
+#   level13  282 at first, 324 once `check_fall_flo` went back into
+#            the port's level start
+#   level14  425 of 425, first try
+level3 0
+level5 0
+level6 0
+level7 0
+level8 0
+level9 0
+level10 0
+level11 0
+level12 0
+level13 0
+level14 0

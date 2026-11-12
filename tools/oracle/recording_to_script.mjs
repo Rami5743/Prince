@@ -150,9 +150,30 @@ const EDGE_COST = 0.0130;
  * is eleven pixels of difference on every tick the line is on screen.
  * Ctrl+A restarts the level but not the hour.
  *
- * Ten seconds is comfortably enough for the fade, the load and the
- * level's own title, and leaves the whole run inside the first minute
- * for anything up to level 4.
+ * Ten seconds, and it cannot usefully be shorter.
+ *
+ * Two things pull against each other here, and they were measured
+ * against each other until one of them gave.
+ *
+ * The shorter the wait, the less of the hour the chain spends -- and
+ * the hour runs while the chain skips. A capture that has spent a
+ * minute of it says `59 MINUTES LEFT` under the room where the port,
+ * which starts every level with a fresh hour, says `60`, and that is
+ * eleven pixels of difference on each of the 23 ticks that line is
+ * up. It is the whole of what `level9` to `level13` were short.
+ *
+ * The longer the wait, the more reliably each `shift+l` is taken.
+ * Five seconds flat loses five of the thirteen skips of a chain to
+ * level 14 -- it ends on level 9 -- because the game plays a scene
+ * before levels 2, 4, 6, 8, 9 and 12 and a `shift+l` sent while one
+ * is playing changes nothing. Three with a scene's own length added
+ * for those levels still loses two.
+ *
+ * The two cannot both be had: reaching level 13 at all costs about a
+ * hundred seconds of play, and the hour's first minute is sixty. So
+ * the wait is the generous one that works, and the clock the capture
+ * arrived with is handed to the port instead -- see `startMinutes`
+ * in `src/game/recording.ts`.
  */
 const SKIP_WAIT = arg('skip-wait', 10);
 /** When the game is at the title screen, in seconds from the start. */
@@ -200,12 +221,74 @@ const lines = [
  * Holding Shift either side of L, with a sixth of a second of air
  * around it, is taken every time.
  */
+/**
+ * The levels the game plays a cutscene before, and how long to wait
+ * for one.
+ *
+ * `tbl_cutscenes` in `src/pop/seg001.ts` has a scene before levels 2,
+ * 4, 6, 8, 9 and 12, and the one before level 8 runs for 8.2 seconds
+ * and the one before level 9 for 9.3 -- measured by running
+ * `CutscenePlayer` to the end of each. A `shift+l` sent while one is
+ * playing does not change the level, so with the flat ten-second wait
+ * the eighth skip was simply lost: a capture of `level9` came back
+ * showing `LEVEL 8` and one of `level10` showing `LEVEL 9`, and both
+ * scored nought against a port that was playing the level asked for.
+ *
+ * Twelve seconds on top covers the longest of them with a margin, and
+ * costs nothing but wall clock: the hour is reset at every level, so
+ * unlike the wait before a level-1 Ctrl+A (see `SETTLE_L1`) this one
+ * is not spent out of the clock the run is played against.
+ */
+/**
+ * How long the scene before each of those levels runs, measured by
+ * driving `CutscenePlayer` to the end of each: 4.8 seconds for the
+ * ones before 2, 4, 6 and 12, 8.2 before level 8 and 9.3 before
+ * level 9. The wait after arriving at one of those levels has to
+ * cover its scene and then leave a moment for the level itself.
+ */
+const CUTSCENE_SECONDS = { 2: 12, 4: 12, 6: 12, 8: 12, 9: 12, 12: 12 };
+/**
+ * Level 7 drops the Prince down a shaft and kills him, and a dead
+ * Prince stops the chain.
+ *
+ * `start_level` puts him in room 17 with nothing under him -- see
+ * `set_start_pos`'s own `goto_other_room(3)` for level 7 -- and he
+ * falls through room 1 into room 3 and dies on tick 17, a second and
+ * a half after the level is drawn. The game then lies him there and
+ * after a few seconds puts up `Press Button to Continue`, and from
+ * that moment a `shift+l` is eaten by the prompt instead of changing
+ * the level: a capture of `level9` came back on level 8 with the
+ * video showing the dead Prince and that prompt at the moment the
+ * eighth skip went out.
+ *
+ * Two seconds is after the fall -- he is dead by 1.42 seconds, plus
+ * a couple of tenths for the level to load -- and well before the
+ * prompt. Four was tried and is not safe: a chain to level 14 at
+ * four seconds had `Press Button to Continue` on the screen 5.5
+ * seconds after it arrived at level 7, so the skip was eaten, and
+ * the whole chain then ran a level behind and lost a second skip to
+ * the scene before level 9. It ended on level 12.
+ *
+ * Nothing else in the game kills a Prince who is left standing: the
+ * port was run for 150 ticks with no keys on every level from 2 to
+ * 14 and only level 7 died.
+ */
+const DEADLY_LEVELS = new Set([7]);
+const DEADLY_WAIT = arg('deadly-wait', 4);
+let skipSeconds = 0;
+let lastWait = SETTLE_L1;
 for (let l = 1; l < rec.level; l++) {
+  // `shift+l` takes the game from level `l` to level `l + 1`, and it
+  // is the level arrived at that may have a scene before it.
+  const w = DEADLY_LEVELS.has(l + 1) ? DEADLY_WAIT
+    : SKIP_WAIT + (CUTSCENE_SECONDS[l + 1] ?? 0);
+  skipSeconds += w;
+  lastWait = w;
   lines.push(
     'xdo keydown --window @W shift sleep 0.15'
     + ' keydown --window @W l sleep 0.08 keyup --window @W l'
     + ' sleep 0.15 keyup --window @W shift',
-    `wait ${SKIP_WAIT}`,
+    `wait ${w}`,
   );
 }
 // Ctrl+A restarts the level, which is where the recording starts too.
@@ -214,7 +297,28 @@ lines.push('key ctrl+a', `wait ${settle.toFixed(3)}`);
  * When Ctrl+A goes out, which is where `split_ticks.py --after-blank`
  * has to start looking for the flash.
  */
-const restartAt = BOOT + SETTLE_L1 + SKIP_WAIT * (rec.level - 1);
+const restartAt = BOOT + SETTLE_L1 + skipSeconds;
+/**
+ * Where `split_ticks.py --after-blank` should start looking for that
+ * flash, which is not the same second.
+ *
+ * It used to be `restartAt - 1`, and one second is not enough margin:
+ * the chain's own clock runs a little early or late, and when the
+ * flash falls before the search starts the splitter takes the next
+ * dark frame it finds instead. A capture of `level3` was numbered
+ * from a frame 6.1 seconds past the real restart -- its tick 0 is the
+ * port's tick 51 -- and scored 86 of 355 against a port that was
+ * drawing the run exactly. Split again from four seconds earlier the
+ * same video scores **366 of 367**.
+ *
+ * Four seconds, or as much of it as there is between the restart and
+ * whatever happened before it: the level's own fade is in there, and
+ * the search must start after that. For a level-1 recording the thing
+ * before is the title screen going, a tenth of a second before the
+ * room is drawn, so one second is all there is and one second is what
+ * it was always given.
+ */
+const searchFrom = restartAt - (rec.level === 1 ? 1 : Math.min(4, Math.max(1, lastWait - 1)));
 
 /**
  * The schedule, in blocks that each start at an absolute time.
@@ -322,7 +426,23 @@ for (const key of new Set(edges.filter((e) => e.type === 'down').map((e) => e.ke
     lines.push(`xdo keyup --window @W ${key}`);
   }
 }
-lines.push('wait 3');
+/**
+ * The tail, which has to cover the rest of the run and not the rest of
+ * the schedule.
+ *
+ * It was a flat `wait 3` after the last key edge, which is three
+ * seconds of video past the last thing the player did. That is enough
+ * for a recording that ends while he is still pressing something and
+ * not enough for one that does not: a probe whose last fifty ticks are
+ * the Prince standing still loses them, and a probe with no keys at
+ * all -- the opening of a level, watched -- was recorded for three
+ * seconds and nothing else. The wait now runs to the end of the
+ * timeline and three seconds past it.
+ */
+const runEnd = rawMs
+  ? (rec.events.at(-1)?.ms ?? 0) / 1000
+  : decodeTimeline(rec.timeline).length * TICK;
+lines.push(`wait ${Math.max(3, runEnd - at + 3).toFixed(3)}`);
 
 writeFileSync(out, lines.join('\n') + '\n');
 console.error(`${out}: level ${rec.level}, ${sent} key edges `
@@ -332,5 +452,6 @@ console.error(`${out}: level ${rec.level}, ${sent} key edges `
   + `${shift ? `, shifted ${shift} ticks` : ''}`
   + `, ${(EDGE_COST * 1000).toFixed(1)}ms taken off each sleep`);
 console.error(`restart at ${restartAt}`);
+console.error(`search from ${searchFrom}`);
 console.log(`python3 tools/oracle/dosbox_oracle.py --script ${out} \\
     --out /tmp/replay-${name} --record /tmp/replay-${name}/run.mkv --fps 30`);

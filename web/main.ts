@@ -312,6 +312,10 @@ async function boot(): Promise<void> {
         version: RECORDING_VERSION,
         recordedAt: new Date().toISOString(),
         level: this.level,
+        // A recording made here always starts the level with a fresh
+        // hour; only a probe captured against the original past
+        // level 2 arrives with less. See `startMinutes`.
+        startMinutes: 60,
         ticksPerSecond: FRAMES_PER_SECOND,
         timeline: encodeTimeline(this.ticks),
         events: this.events,

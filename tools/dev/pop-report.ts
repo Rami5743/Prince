@@ -52,7 +52,7 @@ for (const name of names) {
   const rec = parseRecording(readFileSync(join(RECORDINGS, `${name}.json`), 'utf8'));
   const ticks = decodeTimeline(rec.timeline);
   const port = await runOf(
-    () => PopGame.start(assets, exe, rec.level),
+    () => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes }),
     (g) => g.restart(assets, exe),
     ticks,
     digest,

@@ -1,0 +1,167 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-12T15:34:12.538Z",
+ "level": 3,
+ "ticksPerSecond": 12,
+ "timeline": "20.,34l,14.,14d,10.,20ru,10.,34ru,10.,26l,14.,14ru,20.,34ru,20.,44rs,30.",
+ "events": [
+  {
+   "ms": 1667,
+   "tick": 20,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 4500,
+   "tick": 54,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 5667,
+   "tick": 68,
+   "type": "down",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 6833,
+   "tick": 82,
+   "type": "up",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 7667,
+   "tick": 92,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 7667,
+   "tick": 92,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 9333,
+   "tick": 112,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 9333,
+   "tick": 112,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 10167,
+   "tick": 122,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 10167,
+   "tick": 122,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 13000,
+   "tick": 156,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 13000,
+   "tick": 156,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 13833,
+   "tick": 166,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 16000,
+   "tick": 192,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 17167,
+   "tick": 206,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 17167,
+   "tick": 206,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 18333,
+   "tick": 220,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 18333,
+   "tick": 220,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 20000,
+   "tick": 240,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 20000,
+   "tick": 240,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 22833,
+   "tick": 274,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 22833,
+   "tick": 274,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 24500,
+   "tick": 294,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 24500,
+   "tick": 294,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 28167,
+   "tick": 338,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 28167,
+   "tick": 338,
+   "type": "up",
+   "key": "ShiftLeft"
+  }
+ ],
+ "states": []
+}

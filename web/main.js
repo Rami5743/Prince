@@ -9636,6 +9636,8 @@ var PopGame = class _PopGame {
   effects;
   /** `seamless` as the level began: see `PopOptions.seamless`. */
   seamlessEntry = false;
+  /** `init_game`'s sixty, unless a capture arrived with less. */
+  minutesLeft = 60;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   roomTarget = false;
   /**
@@ -9679,6 +9681,7 @@ var PopGame = class _PopGame {
     const game = new _PopGame(scene, levelNumber);
     game.effects = options.effects;
     game.seamlessEntry = options.seamless === true;
+    game.minutesLeft = options.minutesLeft ?? 60;
     game.install(exe);
     game.startLevel();
     return game;
@@ -9798,7 +9801,7 @@ var PopGame = class _PopGame {
     g.next_level = this.levelNumber;
     set_seed(this.levelNumber === 0 ? Math.floor(Date.now() / 1e3) : 1);
     g.hitp_beg_lev = constants.startHitPoints ?? 3;
-    g.rem_min = 60;
+    g.rem_min = this.minutesLeft;
     g.rem_tick = 719;
     g.text_time_remaining = 0;
     g.text_time_total = 0;
@@ -9842,7 +9845,8 @@ var PopGame = class _PopGame {
     anim_tile_modif();
     loadkid();
     start_chompers();
-    enter_guard();
+    check_fall_flo();
+    check_shadow();
     if (levelType2.of(g.current_level)) gen_palace_wall_colors();
     redraw_screen();
     this.surface.clear(0);
@@ -12487,6 +12491,10 @@ async function boot() {
         version: RECORDING_VERSION,
         recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
         level: this.level,
+        // A recording made here always starts the level with a fresh
+        // hour; only a probe captured against the original past
+        // level 2 arrives with less. See `startMinutes`.
+        startMinutes: 60,
         ticksPerSecond: FRAMES_PER_SECOND,
         timeline: encodeTimeline(this.ticks),
         events: this.events,

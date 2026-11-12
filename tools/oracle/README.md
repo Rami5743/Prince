@@ -1191,3 +1191,159 @@ its ticks 286 to 326 exactly and costs more than it gains over the
 rest of a twenty-six-second run (361 of 1564 with the shift). That is
 the schedule's clock and the game's parting company over a long run,
 and no single edge can express it.
+
+## Levels 3 and 5 to 14, measured for the first time
+
+Every recording in the suite before this round was in levels 1 to 4,
+and `palace4` was the only one past level 2. Ten of the game's
+fourteen levels had never been put beside a capture at all, and the
+eleven probes `level3` and `level5` to `level14` are that ground.
+
+They are the shape of `level2` and `palace4` -- a pause either side of
+every move, so that an edge the emulator takes a tick early lands
+while the Prince is standing still -- and they were designed against
+the port before they were captured. `tools/dev/` has no tool for that
+yet; the search is in the round's scratch and the criterion is worth
+writing down: a probe is worth capturing when moving **each control of
+each edge** a tick either way leaves the run nearly unchanged.
+`palace4` scores 0.973 by that measure and `level2` 0.975, and both
+are drawn exactly; a random route scores 0.5 and measures the
+schedule.
+
+Four things came out of them. Three are the harness and one is the
+port.
+
+### The level skip loses a `shift+l` to a cutscene, and to level 7
+
+`recording_to_script.mjs` reaches the recording's level with one
+`shift+l` per level. The game plays a scene before levels 2, 4, 6, 8,
+9 and 12 -- 4.8 seconds for most of them, 8.2 before level 8 and 9.3
+before level 9, measured by running `CutscenePlayer` to the end of
+each -- and a `shift+l` sent while one is playing changes nothing.
+With a flat ten-second wait the eighth skip was simply lost: a capture
+of `level9` came back showing `LEVEL 8` and one of `level10` showing
+`LEVEL 9`, and both scored **nought** against a port that was playing
+the level asked for.
+
+Level 7 is worse. It drops the Prince down a three-room shaft with
+nothing under him -- `set_start_pos` has its own `goto_other_room(3)`
+for level 7 -- and he is dead 1.42 seconds later. A few seconds after
+that the game puts up `Press Button to Continue`, and from then a
+`shift+l` is eaten by the prompt. The wait at level 7 is now four
+seconds, which is after the fall and before the prompt.
+
+Nothing else in the game kills a Prince who is left standing: the port
+was run for 150 ticks with no keys on every level from 2 to 14 and
+only level 7 died.
+
+### The hour runs while the chain is skipping
+
+This is `SETTLE_L1` again, one level up. Ctrl+A restarts the level and
+not the hour, and neither does `shift+l`: by the time a chain has
+reached level 9 it has spent about 87 seconds of play, so the
+capture's `show_time` says `59 MINUTES LEFT` under the room where a
+port that starts every level with a fresh hour says `60`. That is 23
+ticks of every run from level 9 down, and it was the whole of what
+`level9` to `level13` were short.
+
+It cannot be fixed by waiting less. Reaching level 13 at all costs
+about a hundred seconds of play -- a flat five-second wait loses five
+of the thirteen skips of a chain to level 14 and ends on level 9, and
+three seconds with each scene's own length added still loses two --
+and the hour's first minute is sixty seconds. The two cannot both be
+had.
+
+So the clock the capture arrived with is written in the recording as
+`startMinutes`, read off the capture's own tick 26, and
+`PopGame.start` is given it through `minutesLeft`. It is the same kind
+of thing as `level`: part of the state the run begins in, not part of
+what the run measures. It took `level11` from 354 to **377 of 377**
+and `level12` from 360 to **383 of 383**.
+
+### One second is not enough margin to find the restart flash
+
+`split_ticks.py --after-blank` is told where to start looking for the
+Ctrl+A flash, and that used to be one second before the script sends
+it. The chain's own clock runs a little early or late, and when the
+flash falls before the search starts the splitter takes the next dark
+frame it finds instead. `level3`'s capture was numbered from a frame
+**6.1 seconds** past the real restart -- `which-tick.ts` says its tick
+0 is the port's tick 51 -- and scored 86 of 355 against a port that
+was drawing the run exactly. Split again from four seconds earlier,
+the same video scores **366 of 367**.
+
+The generator now prints `search from N` as well as `restart at N`,
+and `firstcapture.sh` and `recapture.sh` use it. It is four seconds,
+or as much of it as there is between the restart and whatever happened
+before: for a level-1 recording the thing before is the title screen
+going a tenth of a second earlier, so one second is all there is.
+
+Going earlier still is not safe either -- `level9` at `restart - 6`
+scores 24 and `level10` 59, because the search then finds the fade
+into the level instead.
+
+### `check_fall_flo` and `check_shadow` were missing from the level start
+
+The one in the port, and the one this round was for.
+
+`draw_level_first` ends with `anim_tile_modif`, `start_chompers`,
+`check_fall_flo`, `check_shadow` -- the same four calls, in the same
+order, that `check_the_end` makes when a room changes. `PopGame`'s
+`startLevel` had the first two and then `enter_guard()`, which is the
+tail of `check_shadow` and nothing else.
+
+What a capture can see is level 13. `check_fall_flo` makes the floors
+of the room above fall of their own accord while the Prince is in room
+23 or 16, and level 13 starts him in room 23: the whole top right of
+the first room is them coming down. The capture of `level13` has
+something moving in the box (192,1)-(319,118) from its third tick and
+`which-tick.ts` says it is `nothing the port ever draws`. With the two
+calls back the run goes from **282 to 324 of 371**.
+
+The other half of it no capture here sees, because `check_shadow`
+places the shadow of levels 5, 6 and 12 when the drawn room is 24, 1
+or 15 and none of those is the room its level starts in -- but a
+Prince who begins a level in one, as he does after Ctrl+A in the
+browser, used to meet nobody.
+
+### Where the eleven stand
+
+    level3    366 of  367     level9    374 of  421
+    level5    387 of  417     level10   259 of  368
+    level6    332 of  419     level11   377 of  377
+    level7    147 of  147     level12   383 of  383
+    level8    421 of  421     level13   324 of  371
+                              level14   425 of  425
+
+and `which-key.ts --by 1,2,3` says what is left is one key edge
+apiece, the same as the rest of the suite:
+
+    level6    x at 290 two ticks later:   418 of 419
+    level9    y at 382 one tick later:    418 of 421
+    level10   x at 260 one tick later:    343 of 368
+    level5    x at 102 three ticks later: 397 of 417
+    level3    x at  20 one tick later:    367 of 367, exact
+    level13   no single edge is worth anything
+
+### What the probes could not reach
+
+The mirror of level 4, the shadow of levels 5, 6 and 12, the skeleton
+of level 3, the fat guard of level 6 and Jaffar are all **gated behind
+real play** and none of them is reachable in a short probe:
+
+* the **mirror** appears in room 4 of level 4 only once the exit door
+  has been opened (`seg007`'s `curr_room_tiles[tilepos] = tiles_13_mirror`
+  under `leveldoor_open`), and room 4 is six rooms right of the start
+  past a skill-4 guard;
+* the **shadow** of level 5 needs room 24 (three rooms from the
+  start), of level 6 room 1 (five rooms), of level 12 room 15 with the
+  sword already taken out of it;
+* the **skeleton** of level 3 needs `leveldoor_open` as well -- it
+  rises in room 1 when the Prince stands on column 2 or 3 and the exit
+  is open -- and level 3 starts in room 9;
+* **Jaffar** is in room 1 of level 13 and the Prince starts in 23.
+
+And a guard, once he can see the Prince, is driven by `prandom`, whose
+seed the original takes from its own clock: `gate2b` settled years of
+this and a fight cannot be adjudicated by a capture at all. A route
+long enough to reach any of these would have to go past one.

@@ -41,6 +41,28 @@ export interface Recording {
   version: number;
   recordedAt: string;
   level: number;
+  /**
+   * How many minutes the hour had left when this run began.
+   *
+   * Sixty for a recording made in the browser, which starts the level
+   * with a fresh hour. A probe captured against the original on a
+   * level past the second is different: the oracle gets there with
+   * one `shift+l` per level, the hour runs the whole time it is
+   * skipping, and Ctrl+A restarts the level and not the clock. By
+   * level 9 the chain has spent a minute and the capture says
+   * `59 MINUTES LEFT` under the room where a port that starts every
+   * level fresh says `60`.
+   *
+   * The two cannot be reconciled by waiting less: reaching level 13
+   * at all costs about a hundred seconds of play -- a shorter wait
+   * loses `shift+l`s to the scenes the game plays before levels 2, 4,
+   * 6, 8, 9 and 12 -- and the hour's first minute is sixty. So the
+   * clock the capture arrived with is written down here, read off the
+   * capture's own tick 26, and the harness starts the port with it.
+   * It is the same kind of thing as `level`: part of the state the
+   * run begins in, not part of what the run measures.
+   */
+  startMinutes: number;
   ticksPerSecond: number;
   /** Run-length input, one entry per tick; see `encodeTimeline`. */
   timeline: string;
@@ -114,6 +136,7 @@ export function parseRecording(text: string): Recording {
     version: r.version ?? 0,
     recordedAt: r.recordedAt ?? '',
     level: r.level,
+    startMinutes: r.startMinutes ?? 60,
     ticksPerSecond: r.ticksPerSecond ?? 12,
     timeline: r.timeline,
     events: r.events ?? [],

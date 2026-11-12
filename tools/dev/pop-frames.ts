@@ -50,7 +50,7 @@ if (process.argv.includes('--late') && lateArg) {
     ticks[t + d] = { ...ticks[t + d], ...put };
   }
 }
-let game = await PopGame.start(assets, exe, rec.level);
+let game = await PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes });
 mkdirSync(outdir, { recursive: true });
 function write(index: number): void {
   // Always render: `draw_game_frame` counts down the words under the

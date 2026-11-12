@@ -1,0 +1,168 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-12T15:34:12.861Z",
+ "level": 9,
+ "startMinutes": 59,
+ "ticksPerSecond": 12,
+ "timeline": "20.,34l,14.,34d,20.,44lu,14.,26lu,10.,14ru,14.,26rs,20.,34u,14.,44lu,40.",
+ "events": [
+  {
+   "ms": 1667,
+   "tick": 20,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 4500,
+   "tick": 54,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 5667,
+   "tick": 68,
+   "type": "down",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 8500,
+   "tick": 102,
+   "type": "up",
+   "key": "Numpad2"
+  },
+  {
+   "ms": 10167,
+   "tick": 122,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 10167,
+   "tick": 122,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 13833,
+   "tick": 166,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 13833,
+   "tick": 166,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 15000,
+   "tick": 180,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 15000,
+   "tick": 180,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 17167,
+   "tick": 206,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 17167,
+   "tick": 206,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 18000,
+   "tick": 216,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 18000,
+   "tick": 216,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 19167,
+   "tick": 230,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 19167,
+   "tick": 230,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 20333,
+   "tick": 244,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 20333,
+   "tick": 244,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 22500,
+   "tick": 270,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 22500,
+   "tick": 270,
+   "type": "up",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 24167,
+   "tick": 290,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 27000,
+   "tick": 324,
+   "type": "up",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 28167,
+   "tick": 338,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 28167,
+   "tick": 338,
+   "type": "down",
+   "key": "Numpad8"
+  },
+  {
+   "ms": 31833,
+   "tick": 382,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 31833,
+   "tick": 382,
+   "type": "up",
+   "key": "Numpad8"
+  }
+ ],
+ "states": []
+}

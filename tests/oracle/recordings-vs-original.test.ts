@@ -239,6 +239,84 @@ const EXPECTED: Record<string, number> = {
   // The port draws **every one of its 424 ticks** exactly. Level 2
   // itself was never what `gate2` was measuring.
   'level2': 425,
+  /**
+   * Levels 3 and 5 to 14, measured against the original for the first
+   * time.
+   *
+   * Every recording in the suite before these was in levels 1 to 4,
+   * and `palace4` was the only one past level 2 -- so ten of the
+   * game's fourteen levels had never been put beside a capture at
+   * all. These eleven probes are the same shape as `level2` and
+   * `palace4`: the Prince walks, runs, climbs and drops about the
+   * room the level starts in, with a pause either side of every move
+   * so that an edge the emulator takes a tick early lands while he is
+   * standing still.
+   *
+   * They were designed against the port before they were captured --
+   * `died`, `guard` and a per-control robustness score, every edge
+   * moved a tick either way -- so that a capture of one would measure
+   * the game and not the schedule. `palace4` scores 0.973 on that
+   * measure and `level2` 0.975; these are between 0.93 and 0.98.
+   *
+   * What they found, in the order it was found:
+   *
+   * 1. **The level skip loses a `shift+l` to the scene before
+   *    levels 2, 4, 6, 8, 9 and 12, and to level 7's death.** A
+   *    capture of `level9` came back showing `LEVEL 8`, and of
+   *    `level10` showing `LEVEL 9`; both scored nought. The waits in
+   *    `recording_to_script.mjs` now allow for both.
+   * 2. **The hour runs while the chain is skipping.** By level 9 it
+   *    has spent a minute, so the capture says `59 MINUTES LEFT`
+   *    where a port that starts every level fresh says `60` -- 23
+   *    ticks of every deep run. The clock the capture arrived with is
+   *    now written in the recording as `startMinutes` and handed to
+   *    the port. It took `level11` from 354 to **exact** and
+   *    `level12` from 360 to **exact**.
+   * 3. **`split_ticks.py` was given a one-second margin to find the
+   *    restart flash and that is not enough.** `level3`'s capture was
+   *    numbered from a dark frame 6.1 seconds past the restart -- its
+   *    tick 0 is the port's tick 51 -- and scored 86 of 355. Split
+   *    again from four seconds earlier, the same video scores
+   *    **366 of 367**.
+   * 4. **`check_fall_flo` and `check_shadow` were missing from the
+   *    port's level start**, where `draw_level_first` has them. The
+   *    floors above level 13's first room fall of their own accord
+   *    and the port never started them: `level13` went from 282 to
+   *    **324 of 371** when they went in. That one is the port's, and
+   *    it is the fault this whole round was for.
+   *
+   * What is left is mostly one key edge apiece, the same as every
+   * other run in the suite. `which-key.ts --by 1,2,3`:
+   *
+   *     level6    x at 290 two later:  418 of 419, from 332
+   *     level9    y at 382 one later:  418 of 421, from 374
+   *     level10   x at 260 one later:  343 of 368, from 259
+   *     level5    x at 102 three later: 397 of 417, from 387
+   *     level3    x at  20 one later:  367 of 367, exact
+   *     level13   nothing
+   *
+   * The spread over the captures that were taken: `level3` 86 and 86
+   * at the old split and 366 and 366 at the new one, `level5` 386,
+   * 386, 386, 386 and 387, `level6` 331, 331, 331, 331 and 332 --
+   * these runs are stable to a tick, which is why what is left of
+   * them is worth chasing.
+   */
+  'level3': 366,
+  'level5': 387,
+  'level6': 332,
+  // Level 7 drops the Prince down a three-room shaft and kills him
+  // before he has touched a key, and this probe is that and nothing
+  // else: 160 ticks with no key at all, which is the most robust
+  // thing a capture can be asked. The original does it too, to the
+  // pixel.
+  'level7': 147,
+  'level8': 421,
+  'level9': 374,
+  'level10': 259,
+  'level11': 377,
+  'level12': 383,
+  'level13': 324,
+  'level14': 425,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
@@ -290,7 +368,7 @@ async function score(name: string): Promise<{ agreed: number; ticks: number }> {
   const rec = parseRecording(readFileSync(join(RECORDINGS, `${name}.json`), 'utf8'));
   const ticks = decodeTimeline(rec.timeline);
   const port = await runOf(
-    () => Game.start(assets, exe, rec.level),
+    () => Game.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes }),
     (g) => g.restart(assets, exe),
     ticks,
     digest,
