@@ -1468,19 +1468,37 @@ export function erase_bottom_text(arg_0: number): void {
 // seg008:24A5
 export function show_time(): void {
   /**
-   * The hour does not stop for a death.
+   * `Kid.alive < 0`: the hour stops while the Prince is dead.
    *
-   * The C guards this with `Kid.alive < 0` as well, and the capture
-   * says the original does not: `probeF` dies twice and its words at
-   * tick 735 are `59 MINUTES LEFT`, which needs seven hundred and
-   * nineteen ticks of the clock in seven hundred and thirty-five, and
-   * a clock that stopped for the two deaths cannot have got there.
-   * With the guard the port says `60`. Dropping it is worth
-   * twenty-three ticks of `probeF` and twenty-three of `f6874819`,
-   * and costs nothing anywhere: those two are the only runs whose
-   * clock crosses a minute.
+   * This guard is in the C and was dropped here, on the strength of
+   * the old capture of `probeF` saying `59 MINUTES LEFT` at its tick
+   * 735. That capture was taken when `recording_to_script.mjs` let
+   * level 1 run for `SETTLE_L1` = 25 seconds before Ctrl+A, which is
+   * about 298 ticks of the hour spent before the capture's own tick
+   * nought -- the fault `a9dff50` fixed -- so its clock was nowhere
+   * near the port's and it could not settle this either way.
+   *
+   * Captured again at `SETTLE_L1` = 3, where the hour is 34 ticks
+   * short instead of 298, the same recording says the opposite. Write
+   * `S` for the ticks of hour already spent and `D` for the ticks the
+   * Prince has been dead; a clock that never stops crosses the minute
+   * at tick `719 - S`, and one that stops at `719 - S + D`.
+   *
+   * * The new capture says `60 MINUTES LEFT` at 735 to 756. Never
+   *   stopping puts its crossing at 719 - 34 = **685**, which would
+   *   have it saying 59 there. So it stops.
+   * * The old capture says `60` at 459 as well. Never stopping puts
+   *   its crossing at 719 - 298 = **421**, which would have it saying
+   *   59 there too. So it also stops -- and its `59` at 735 is its
+   *   head start, not the clock running through a death.
+   *
+   * So both captures rule the dropped guard out, and the port scores
+   * 1176 of the fresh capture's 1193 with it against 1153 without:
+   * with it, ticks 734 to 756 -- the twenty-three the minutes are in
+   * words for -- agree, and without it none of them does.
    */
-  if (g.rem_min !== 0
+  if (g.Kid.alive < 0
+    && g.rem_min !== 0
     // `victory_stops_time_level`: on Jaffar's level the hour runs
     // until his door opens, and stops the moment it does. The
     // translation had only the first half of that -- `< 13` -- so the

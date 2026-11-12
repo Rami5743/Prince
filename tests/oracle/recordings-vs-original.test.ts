@@ -185,6 +185,13 @@ const EXPECTED: Record<string, number> = {
   'b4ff4672': 395,
   'e209b01a': 214,
   'ec99dc5b': 237,
+  // Recaptured at the shorter `SETTLE_L1`, like `760c3e74` and
+  // `848ee3c4` before it, because this is one of only two runs whose
+  // clock crosses a minute and the old capture had spent about 298
+  // ticks of the hour before its own tick nought. Four tries scored
+  // 466, **1189**, 468 and 467 of ~1192; the best of them is here and
+  // its three remaining ticks are 24, 25 and 48, one tick of drift at
+  // the very start.
   'f6874819': 1189,
   /**
    * Four recordings are no longer measured here, and each one has a
@@ -238,7 +245,27 @@ const EXPECTED: Record<string, number> = {
   // `probeF` is the whole of `f6874819` sent again.
   'probeC': 235,
   'probeE': 166,
-  'probeF': 1193,
+  /**
+   * 1193 of 1193 against the old capture, and this pin goes *down*,
+   * which no other one has.
+   *
+   * The old capture was taken when the script let level 1 run for
+   * twenty-five seconds before Ctrl+A, so about 298 ticks of the hour
+   * were spent before its own tick nought -- and this is one of the
+   * two runs whose clock crosses a minute. It is therefore the wrong
+   * capture to measure `show_time` against, and measuring against it
+   * is what took the C's `Kid.alive < 0` guard out of the port. See
+   * `tools/oracle/README.md`: both captures in fact rule that guard
+   * in, and with it restored the port draws 1176 of the fresh
+   * capture's 1193 and 1153 without.
+   *
+   * The seventeen it is short are one block, 1129 to 1148, where that
+   * capture holds a picture the port does not. They are the
+   * capture's, not the port's, and `f6874819` says so: it is the same
+   * run, its own fresh capture agrees with the port on 1189 of 1192,
+   * and it has nothing at all there.
+   */
+  'probeF': 1176,
 };
 
 async function score(name: string): Promise<{ agreed: number; ticks: number }> {

@@ -87,6 +87,16 @@ export function on_guard_killed(): void {
     // Jaffar's level: the screen flashes.
     g.flash_color = 15;
     g.flash_time = 18;
+    /**
+     * And the hour is announced, which the translation had dropped.
+     *
+     * `seg006.c`'s `on_guard_killed` sets `is_show_time` between the
+     * flash and `leveldoor_open`, so the moment Jaffar dies the game
+     * puts the minutes left under the room -- the player's reward for
+     * the fight, and the number the whole run is played against. The
+     * port flashed and opened the door in silence.
+     */
+    g.is_show_time = 1;
     g.leveldoor_open = 2;
     out.play_sound(soundids.sound_43_victory_Jaffar);
   } else if (g.Char.charid !== charids.charid_1_shadow) {

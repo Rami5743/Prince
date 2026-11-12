@@ -6569,6 +6569,7 @@ function on_guard_killed() {
   if (g.current_level === 13) {
     g.flash_color = 15;
     g.flash_time = 18;
+    g.is_show_time = 1;
     g.leveldoor_open = 2;
     out.play_sound(soundids.sound_43_victory_Jaffar);
   } else if (g.Char.charid !== charids.charid_1_shadow) {
@@ -8964,7 +8965,7 @@ function erase_bottom_text(arg_0) {
   }
 }
 function show_time() {
-  if (g.rem_min !== 0 && (g.current_level < 13 || g.current_level === 13 && g.leveldoor_open === 0) && g.current_level < 15) {
+  if (g.Kid.alive < 0 && g.rem_min !== 0 && (g.current_level < 13 || g.current_level === 13 && g.leveldoor_open === 0) && g.current_level < 15) {
     --g.rem_tick;
     if (g.rem_tick === 0) {
       g.rem_tick = 719;

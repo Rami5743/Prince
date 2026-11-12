@@ -74,7 +74,14 @@ for i in $(seq 1 "$tries"); do
   [ -d "$d/dos" ] || { echo "  try $i: no ticks"; continue; }
   python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name.json" >/dev/null 2>&1 || continue
   cp "$d/$name.json" "$digest"
-  line=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null | head -1)
+  # The whole of the report and then its first line, not `| head -1`.
+  # `set -o pipefail` is on, and `head` closing the pipe after one line
+  # kills `tsx` with SIGPIPE often enough to matter: the substitution
+  # comes back non-zero, `set -e` takes the script out through its own
+  # trap, and the run ends after one try with no winner and no error.
+  # It cost a whole capture of `f6874819`.
+  out=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null || true)
+  line=${out%%$'\n'*}
   score=$(awk '{print $2}' <<<"$line")
   echo "  try $i: $line"
   if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then bestscore=$score; best=$i; fi

@@ -924,3 +924,57 @@ arrived in one tick, where the recording has them three apart. 201 of
 `exitdoor`'s 208 missing ticks are that one coincidence, and nothing
 in the port tells the two timings apart -- `forward_pressed` and
 `control_standing` are the C line for line.
+
+### The hour does stop for a death, and the old captures could not say
+
+`show_time` has a `Kid.alive < 0` guard in the C -- the clock only
+runs while the Prince is alive -- and the translation dropped it,
+because the capture of `probeF` said `59 MINUTES LEFT` at its tick
+735 and a clock that stopped for that run's two deaths could not have
+got there. `docs/sdlpop-translation.md` called that measurement
+inconclusive once `SETTLE_L1` came down; it is worse than
+inconclusive, it was backwards.
+
+Write `S` for the ticks of the hour already spent when the capture's
+own tick nought begins, and `D` for the ticks the Prince has been
+dead. A clock that never stops crosses the minute at tick `719 - S`;
+one that stops crosses at `719 - S + D`.
+
+* **Old capture**, `SETTLE_L1` = 25, so `S` is about 298. Never
+  stopping puts its crossing at **421** -- and the run restarts the
+  level at 433 and both sides say `60 MINUTES LEFT` at 459. A clock
+  that crossed at 421 says 59 there. So that capture's clock stopped
+  too, and its `59` at 735 is the 298 ticks it had already spent.
+* **New capture**, `SETTLE_L1` = 3, so `S` is about 34. Never
+  stopping puts its crossing at **685**, and it says `60` at 735 to
+  756. So it stops.
+
+Both captures rule out the dropped guard, and the fresh one measures
+it: against it the port scores **1176 of 1193 with the guard and 1153
+without**, the difference being exactly ticks 734 to 756, the
+twenty-three the minutes are in words for. The guard is back in
+`src/pop/seg008.ts`.
+
+`probeF` and `f6874819` are the only two runs whose clock crosses a
+minute, and both digests were from the old wait. Both are recaptured;
+`tools/oracle/recapture.sh probeF 0 4` scored 468, 464, 464 and
+**1153** over four tries before the guard went back, which is the
+phase lottery and not the clock.
+
+Both were recaptured at the corrected wait, with the guard back in:
+
+    f6874819   466, 1189, 468, 467   of ~1192   -> keeping 1189
+    probeF     468,  464, 464, 1153  of ~1193   -> keeping 1153 (1176 with the guard)
+
+`f6874819`'s three remaining ticks are 24, 25 and 48 -- one tick of
+drift at the very start. `probeF`'s seventeen are one block, 1129 to
+1148, where its capture holds a picture the port does not; that is the
+capture and not the port, and `f6874819` says so, because it is the
+same run and its own fresh capture has nothing there at all. A second
+round of four probeF captures all came out at 467 to 469, which is the
+phase lottery and the reason the suite keeps the best of several.
+
+The suite stands at **11673 of 12038**. It was 11690 of 12036 against
+the two old digests, and the seventeen are `probeF`'s capture, not a
+regression: the two numbers are taken against different captures and
+only the later pair is honest about the clock.
