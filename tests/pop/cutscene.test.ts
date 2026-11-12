@@ -232,3 +232,29 @@ describe('the scenes between the levels', () => {
     expect(hurried.seconds).toBe(unhurried.seconds);
   }, 60000);
 });
+
+describe('the title sequence', () => {
+  it('is the titles, the story, Jaffar\'s scene and the credits',
+    async () => {
+      const seen = await play({ kind: 'title' });
+      // TITLE.DAT group 50 is row 12 -- the picture, `Broderbund
+      // Software presents`, `a game by Jordan Mechner` -- and group
+      // 40 is row 11, the story frame and its text.
+      expect(seen.rows.has(12)).toBe(true);
+      expect(seen.rows.has(11)).toBe(true);
+      // `load_intro(0, pv_scene, 0)` in the middle of it: the
+      // princess's room out of PV.DAT, with the princess and the
+      // Grand Vizier in it.
+      expect(seen.rows.has(13)).toBe(true);
+      expect([...seen.charids].sort((a, b) => a - b)).toEqual([
+        charids.charid_5_princess, charids.charid_6_vizier,
+      ]);
+      // The sounds, in the order the C asks for them: the main theme,
+      // story 1, story 2, the gate closing, the princess's door, story
+      // 3 as Jaffar comes and story 4 as he leaves.
+      expect(seen.sounds).toEqual([54, 55, 50, 4, 51, 53, 52]);
+      // A minute or so, with no speaker to wait for.
+      expect(seen.seconds).toBeGreaterThan(50);
+      expect(seen.seconds).toBeLessThan(90);
+    }, 120000);
+});

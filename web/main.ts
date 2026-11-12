@@ -511,7 +511,7 @@ async function boot(): Promise<void> {
     if (!game) {
       e.preventDefault();
       void changeScene(async () => {
-        await select(views.findIndex((v) => v.kind === 'level' && v.level === 1));
+        await select(levelView(1));
       });
       return;
     }
@@ -632,9 +632,8 @@ async function boot(): Promise<void> {
     held.clear();
     const level = was + 1;
     const next = views.findIndex((x) => x.kind === 'level' && x.level === level);
-    // Out of the last level and the game is over: the screen the
-    // original ends on, and then the title again.
-    if (next < 0) { await select(1); return; }
+    // Out of the last level: the game is over, which is the ending.
+    if (next < 0) { await playScene({ kind: 'ending' }, restartGame); return; }
 
     const arrive = async (): Promise<void> => {
       await select(next, { seamless: carried.seamless });
@@ -663,10 +662,25 @@ async function boot(): Promise<void> {
     await arrive();
   }
 
-  /** Ctrl+R: `start_level = -1; start_game()` -- back to the title. */
+  /** The index of a level in `views`. */
+  const levelView = (level: number): number =>
+    views.findIndex((v) => v.kind === 'level' && v.level === level);
+
+  /**
+   * `start_level = -1; start_game()`, which is `show_title()`.
+   *
+   * The opening titles, the story of Jaffar and the princess, and the
+   * credits. The C's `show_title` ends in `init_game(0)` -- the demo
+   * level, which plays itself and comes back round to the title --
+   * and this port has no demo, so it ends where the player wants to
+   * be, at the top of level 1. A key during it does the same, which
+   * is what `do_paused` lets through while `start_level < 0`.
+   */
   async function restartGame(): Promise<void> {
     held.clear();
-    await select(0);
+    await playScene({ kind: 'title' }, async () => {
+      await select(levelView(1));
+    });
   }
 
   /** Start the level again, as the original does after a death. */
@@ -714,7 +728,7 @@ async function boot(): Promise<void> {
     setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 10000);
   });
 
-  await select(0);
+  await restartGame();
 
   /**
    * The original steps the game twelve times a second. Driving that from the

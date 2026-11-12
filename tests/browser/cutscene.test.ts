@@ -68,6 +68,32 @@ const litOnCanvas = (): Promise<number> => page.evaluate(() => {
 });
 
 describe('a cutscene on the page', () => {
+  /**
+   * The page opens on `show_title`, which is what `start_game` does
+   * while `start_level < 0`. Before this it opened on one still
+   * picture out of TITLE.DAT and nothing moved.
+   */
+  it('opens on the title sequence, and a key begins the game', async () => {
+    expect((await sceneState())?.playing).toEqual({ kind: 'title' });
+    expect((await sceneState())?.running).toBe(true);
+    // `fade_in_2(offscreen_surface, 0x1000)` is sixty-four shades at
+    // a sixtieth of a second each, so the picture takes a second to
+    // come up out of black.
+    await page.waitForTimeout(1500);
+    expect(await litOnCanvas()).toBeGreaterThan(30000);
+    // `do_paused` lets a key through the title, and the original
+    // begins the game on it.
+    await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(
+      () => (window as unknown as {
+        __princeState(): { level: number } | null;
+      }).__princeState()?.level === 1,
+      null, { timeout: 20000 },
+    );
+    expect((await sceneState())?.running).toBe(false);
+    expect(consoleErrors).toEqual([]);
+  }, 60000);
+
   it('draws the princess\'s room onto the canvas', async () => {
     await page.evaluate(() => (window as unknown as {
       __princePause(on: boolean): void;
@@ -141,8 +167,10 @@ describe('a cutscene on the page', () => {
     await page.waitForTimeout(200);
     expect((await sceneState())?.running, 'an arrow key is ignored').toBe(true);
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
-    expect((await sceneState())?.running, 'Escape stops it').toBe(false);
+    await page.waitForTimeout(500);
+    // Escape stops it, and what follows the ending is `start_game()`:
+    // the title, which is why this is not simply "nothing is playing".
+    expect((await sceneState())?.playing).toEqual({ kind: 'title' });
     expect(consoleErrors).toEqual([]);
   }, 60000);
 });

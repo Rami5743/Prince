@@ -440,3 +440,39 @@ glass.
 Shift+L out of level 1 puts the scene on the canvas, it ends by
 itself and level 2 begins. Taking the two lines out of `nextLevel`
 fails it.
+
+### The title sequence and the story
+
+The page used to open on one still picture out of `TITLE.DAT` with
+"press any key to begin" under it. It opens on `show_title()` now:
+the palace fading up, `Broderbund Software presents`, `a game by
+Jordan Mechner`, the title with Jordan Mechner's name under it, *In
+the Sultan's absence the Grand Vizier JAFFAR rules with the iron fist
+of tyranny* wiped on from the left, and then `load_intro(0, pv_scene,
+0)` -- the princess in her room, the gate closing, Jaffar walking in
+and conjuring the hourglass and walking out again -- and then *they
+would be married* and the credits. Sixty-eight seconds with no
+speaker; longer with one, because four of its waits are
+`while (check_sound_playing())`.
+
+A key begins the game, which is what `do_paused` lets through while
+`start_level < 0`. Ctrl+R comes back to it, and so does the ending
+and so does the hourglass, because all three of them end in
+`start_game()`.
+
+The C's `show_title` ends in `init_game(0)` -- the demo level, which
+plays itself through and comes back round to the title. This port has
+no demo level, so it ends at the top of level 1 instead.
+
+### What is deliberately not here
+
+* **The copy-protection screen.** `enable_copyprot` is nought in
+  SDLPoP and in its `SDLPoP.ini`, so the original's own default flow
+  never reaches level 15 or `show_copyprot`'s dialog, and the dialog
+  asks the player to look a word up in a printed manual that is not
+  among the game's files.
+* **The hall of fame** at the end of `end_sequence`: it asks for a
+  name to be typed into a box and writes it to `PRINCE.HOF` beside
+  the game's files.
+* **The demo level**, which `show_title` falls into and which plays
+  itself from a recorded timeline in the executable.

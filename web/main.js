@@ -12179,7 +12179,7 @@ async function boot() {
     if (!game) {
       e.preventDefault();
       void changeScene(async () => {
-        await select(views.findIndex((v) => v.kind === "level" && v.level === 1));
+        await select(levelView(1));
       });
       return;
     }
@@ -12285,7 +12285,7 @@ async function boot() {
     const level = was + 1;
     const next = views.findIndex((x) => x.kind === "level" && x.level === level);
     if (next < 0) {
-      await select(1);
+      await playScene({ kind: "ending" }, restartGame);
       return;
     }
     const arrive = async () => {
@@ -12303,9 +12303,12 @@ async function boot() {
     }
     await arrive();
   }
+  const levelView = (level) => views.findIndex((v) => v.kind === "level" && v.level === level);
   async function restartGame() {
     held.clear();
-    await select(0);
+    await playScene({ kind: "title" }, async () => {
+      await select(levelView(1));
+    });
   }
   async function restart() {
     if (!game) return;
@@ -12346,7 +12349,7 @@ async function boot() {
       URL.revokeObjectURL(url);
     }, 1e4);
   });
-  await select(0);
+  await restartGame();
   const STEP_MS = 1e3 / FRAMES_PER_SECOND;
   let paused = false;
   let owed = 0;
