@@ -137,6 +137,26 @@ export class Surface {
     this.blit(src, x, y, base, false);
   }
 
+  /**
+   * `blitters_0_no_transp`, with the sprite's colour 0 written as the
+   * screen's own black rather than as colour 0 of the sprite's bank.
+   *
+   * The two are the same picture -- colour 0 of every bank in the
+   * game is black -- and nothing in a room can tell them apart. The
+   * princess's room can: `load_intro` lays the room down and then ORs
+   * the bed into it with `blitters_2_or`, and the bed's pixels are
+   * only where the room's are nought. OR the bed's 224+v into the
+   * room's own 208 and the result is 240+v, a row of the palette the
+   * game never loads -- a bed painted in black. OR it into nought and
+   * the bed is in its own colours, which is the picture the original
+   * shows.
+   */
+  blitOpaqueBlack(src: Sprite, x: number, y: number, base = 0): void {
+    this.each(src, x, y, (dp, v) => {
+      this.pixels[dp] = v === 0 ? 0 : base + v;
+    });
+  }
+
   /** Copy every pixel except the sprite's colour 0, which is see-through. */
   blitTransparent(src: Sprite, x: number, y: number, base = 0): void {
     this.blit(src, x, y, base, true);

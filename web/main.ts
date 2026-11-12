@@ -19,6 +19,7 @@ import {
  * `tools/dev/pop-report.ts` and `docs/sdlpop-translation.md`.
  */
 import { PopGame as Game } from '../src/pop/game.ts';
+import { CutscenePlayer, type SceneName } from '../src/pop/cutscene.ts';
 import { SoundPlayer } from '../src/render/audio.ts';
 import { SOUND } from '../src/game/traps.ts';
 import { SEQUENCE_SOUND, SOUND_SILENCE } from '../src/game/sequence.ts';
@@ -87,6 +88,52 @@ async function boot(): Promise<void> {
   const titleSurface = new Surface();
   const title = await assets.group('TITLE.DAT', 50);
   const opening = await assets.group('TITLE.DAT', 40);
+
+  /**
+   * The cutscenes, the title and the ending: `src/pop/cutscene.ts`.
+   *
+   * It is built once, on the first scene that needs it, because it
+   * reads `PV.DAT` and `TITLE.DAT` and nothing before the first
+   * cutscene wants them.
+   */
+  let cutscene: CutscenePlayer | null = null;
+  let cutsceneBuilding = false;
+  /** What to do once the scene has played itself out. */
+  let afterScene: (() => Promise<void>) | null = null;
+
+  async function playScene(
+    scene: SceneName, then: () => Promise<void>,
+  ): Promise<void> {
+    if (!cutscene) {
+      cutsceneBuilding = true;
+      try {
+        cutscene = await CutscenePlayer.create(assets, exe, effects);
+      } finally {
+        cutsceneBuilding = false;
+      }
+    }
+    game = null;
+    afterScene = then;
+    cutscene.begin(scene);
+    display.present(cutscene.render(), cutscene.palette.toRgba());
+    status.textContent = 'press Escape to skip';
+  }
+
+  /** One frame of a scene; answers whether one is still playing. */
+  function sceneFrame(ms: number): boolean {
+    if (!cutscene || !cutscene.running) return false;
+    const going = cutscene.advance(ms);
+    display.present(cutscene.render(), cutscene.palette.toRgba());
+    if (!going) endScene();
+    return true;
+  }
+
+  function endScene(): void {
+    cutscene?.cancel();
+    const then = afterScene;
+    afterScene = null;
+    if (then) void changeScene(then);
+  }
 
   type View = { kind: 'title' | 'opening' } | { kind: 'level'; level: number };
   const views: View[] = [{ kind: 'title' }, { kind: 'opening' }];
@@ -308,7 +355,7 @@ async function boot(): Promise<void> {
      * under load and never when they ran alone, which is what a race
      * against a fetch looks like.
      */
-    if (changing || building > 0) return;
+    if (changing || building > 0 || cutsceneBuilding) return;
     // Esc: `do_paused` stops the game where it stands and leaves the
     // screen up until a key comes.
     if (game.paused) {
@@ -323,9 +370,9 @@ async function boot(): Promise<void> {
       ticksPlayed++;
       recorder.tick(c, game);
       if (game.gameWon) {
-        // The last room of the last level: the original plays its
-        // ending here, and this is where the shell ends the game.
-        void changeScene(() => select(1));
+        // `check_the_end`: the last room of the last level, where the
+        // original runs `end_sequence()`. It does now.
+        void changeScene(() => playScene({ kind: 'ending' }, restartGame));
         return;
       }
       if (game.timeExpired) {
@@ -441,6 +488,20 @@ async function boot(): Promise<void> {
     if (e.altKey) return; // leave the browser's own chords alone
     wakeSound();
     (document.activeElement as HTMLElement | null)?.blur?.();
+
+    /**
+     * A scene is playing.
+     *
+     * `disable_keys` is set for the ending and for the hourglass, and
+     * the original will not let a key past it; the title and the
+     * between-level scenes it will. Escape stops any of them, which
+     * is what `do_paused` does there.
+     */
+    if (cutscene?.running) {
+      e.preventDefault();
+      if (cutscene.skippable || keyName(e) === 'escape') endScene();
+      return;
+    }
 
     // Nothing is on but a title screen: any key begins the game, which
     // is what `process_key` does while `start_level < 0`.
@@ -653,6 +714,10 @@ async function boot(): Promise<void> {
     last = now;
     if (owed > STEP_MS * 5) owed = STEP_MS; // came back from a pause
     if (paused) { owed = 0; return; }
+    // A scene runs on its own clock: `cutscene_frame_time` is six
+    // sixtieths of a second where the game's tick is five, and the
+    // waits between the title's pictures are counted in sixtieths too.
+    if (sceneFrame(Math.min(owed, STEP_MS * 5))) { owed = 0; return; }
     let stepped = false;
     while (owed >= STEP_MS) {
       owed -= STEP_MS;
@@ -687,6 +752,20 @@ async function boot(): Promise<void> {
     return { ...game.kid };
   };
   w.__princePause = (on: boolean): void => { paused = on; };
+  /**
+   * The cutscenes, for the browser tests: start one, run its clock by
+   * hand, and read back what it is doing.
+   */
+  w.__princePlayScene = async (scene: SceneName): Promise<void> => {
+    await playScene(scene, restartGame);
+  };
+  w.__princeSceneStep = (ms: number): boolean => sceneFrame(ms);
+  w.__princeSceneState = () => (cutscene ? {
+    running: cutscene.running,
+    playing: cutscene.playing,
+    /** How many of the screen's pixels are not black. */
+    lit: cutscene.render().pixels.reduce((n, v) => n + (v !== 0 ? 1 : 0), 0),
+  } : null);
   w.__princeState = () => (game ? {
     // How many ticks the page has played. A test that has to wait for
     // the game rather than for the clock waits on this: under load the

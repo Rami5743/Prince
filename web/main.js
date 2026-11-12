@@ -501,6 +501,25 @@ var Surface = class {
   blitOpaque(src, x, y, base = 0) {
     this.blit(src, x, y, base, false);
   }
+  /**
+   * `blitters_0_no_transp`, with the sprite's colour 0 written as the
+   * screen's own black rather than as colour 0 of the sprite's bank.
+   *
+   * The two are the same picture -- colour 0 of every bank in the
+   * game is black -- and nothing in a room can tell them apart. The
+   * princess's room can: `load_intro` lays the room down and then ORs
+   * the bed into it with `blitters_2_or`, and the bed's pixels are
+   * only where the room's are nought. OR the bed's 224+v into the
+   * room's own 208 and the result is 240+v, a row of the palette the
+   * game never loads -- a bed painted in black. OR it into nought and
+   * the bed is in its own colours, which is the picture the original
+   * shows.
+   */
+  blitOpaqueBlack(src, x, y, base = 0) {
+    this.each(src, x, y, (dp, v) => {
+      this.pixels[dp] = v === 0 ? 0 : base + v;
+    });
+  }
   /** Copy every pixel except the sprite's colour 0, which is see-through. */
   blitTransparent(src, x, y, base = 0) {
     this.blit(src, x, y, base, true);
@@ -9272,19 +9291,7 @@ function redraw_screen() {
   g.exit_room_timer = 2;
 }
 
-// src/pop/game.ts
-var CHTAB_NAME = [
-  "sword",
-  "flameSwordPotion",
-  "kid",
-  null,
-  null,
-  "guard",
-  "environment",
-  "environmentWall",
-  null,
-  null
-];
+// src/pop/wire.ts
 var linked = false;
 function link() {
   if (linked) return;
@@ -9326,6 +9333,20 @@ function link() {
   hud.draw_kid_hp.fn = draw_kid_hp;
   hud.draw_guard_hp.fn = draw_guard_hp;
 }
+
+// src/pop/game.ts
+var CHTAB_NAME = [
+  "sword",
+  "flameSwordPotion",
+  "kid",
+  null,
+  null,
+  "guard",
+  "environment",
+  "environmentWall",
+  null,
+  null
+];
 var DEATH_MUSIC_TICKS = 36;
 var TEXT_RECT = { top: 193, left: 70, bottom: 202, right: 250 };
 var TEXT_WHITE = 15;
@@ -10130,6 +10151,1087 @@ var PopGame = class _PopGame {
   }
 };
 
+// src/pop/screen.ts
+var full_image_id = {
+  TITLE_MAIN: 0,
+  TITLE_PRESENTS: 1,
+  TITLE_GAME: 2,
+  TITLE_POP: 3,
+  TITLE_MECHNER: 4,
+  HOF_POP: 5,
+  STORY_FRAME: 6,
+  STORY_ABSENCE: 7,
+  STORY_MARRY: 8,
+  STORY_HAIL: 9,
+  STORY_CREDITS: 10
+};
+var FADE_CUTSCENE_ROWS = 26249;
+function missing2(name) {
+  throw new Error(`screen.${name} has not been linked in`);
+}
+var scr = {
+  copy_screen_rect: () => missing2("copy_screen_rect"),
+  present: () => missing2("present"),
+  rect: () => missing2("rect"),
+  clear_screen: () => missing2("clear_screen"),
+  set_bg_attr: () => missing2("set_bg_attr"),
+  fade_start: () => missing2("fade_start"),
+  fade_active: () => false,
+  blit_image: () => missing2("blit_image"),
+  load_intro_images: () => missing2("load_intro_images"),
+  free_intro_images: () => missing2("free_intro_images"),
+  now: () => 0,
+  clear_screen_and_sounds: () => missing2("clear_screen_and_sounds"),
+  draw_full_image: () => missing2("draw_full_image"),
+  load_title_images: () => missing2("load_title_images"),
+  release_title_images: () => missing2("release_title_images"),
+  target: () => missing2("target")
+};
+function setScreen(ops) {
+  Object.assign(scr, ops);
+}
+
+// src/pop/seg001.ts
+var cutscene_wait_frames = 0;
+var cutscene_frame_time = 6;
+var disable_keys = 0;
+var hourglass_sandflow = -1;
+var hourglass_state = 0;
+var which_torch = 0;
+var N_STARS = 6;
+function* proc_cutscene_frame(wait_frames) {
+  cutscene_wait_frames = wait_frames;
+  do {
+    play_both_seq();
+    draw_proom_drects();
+    if (g.flash_time) {
+      do_flash(g.flash_color);
+    }
+    if (g.flash_time) {
+      --g.flash_time;
+      remove_flash();
+    }
+    yield cutscene_frame_time;
+    --cutscene_wait_frames;
+  } while (cutscene_wait_frames);
+}
+function play_both_seq() {
+  play_kid_seq();
+  play_opp_seq();
+}
+function draw_proom_drects() {
+  draw_princess_room_bg();
+  scr.present();
+  if (cutscene_wait_frames & 1) {
+    draw_star(prandom(N_STARS - 1), 1);
+  }
+}
+function play_kid_seq() {
+  loadkid();
+  if (g.Char.frame) {
+    play_seq();
+    savekid();
+  }
+}
+function play_opp_seq() {
+  loadshad_and_opp_cutscene();
+  if (g.Char.frame) {
+    play_seq();
+    saveshad();
+  }
+}
+function loadshad_and_opp_cutscene() {
+  loadshad();
+}
+function draw_princess_room_bg() {
+  reset_tables();
+  loadkid();
+  if (g.Char.frame) {
+    load_frame_to_obj();
+    g.obj_tilepos = 30;
+    add_objtable(0);
+  }
+  loadshad();
+  if (g.Char.frame) {
+    load_frame_to_obj();
+    g.obj_tilepos = 30;
+    add_objtable(0);
+  }
+  redraw_needed_tiles();
+  add_foretable(
+    chtabs.id_chtab_8_princessroom,
+    2,
+    30,
+    0,
+    167,
+    blitters.blitters_10h_transp,
+    0
+  );
+  princess_room_torch();
+  draw_hourglass();
+  draw_tables();
+}
+function seqtbl_offset_shad_char(seq_index) {
+  loadshad();
+  seqtbl_offset_char(seq_index);
+  saveshad();
+}
+function seqtbl_offset_kid_char(seq_index) {
+  loadkid();
+  seqtbl_offset_char(seq_index);
+  savekid();
+}
+function init_mouse_cu8() {
+  init_mouse_go();
+  g.Char.x = 144;
+  seqtbl_offset_char(seqids.seq_106_mouse);
+  play_seq();
+}
+function init_mouse_go() {
+  g.Char.charid = charids.charid_24_mouse;
+  g.Char.x = 199;
+  g.Char.y = 167;
+  g.Char.direction = directions.dir_FF_left;
+  seqtbl_offset_char(seqids.seq_105_mouse_forward);
+  play_seq();
+}
+function princess_crouching() {
+  init_princess();
+  g.Char.x = 131;
+  g.Char.y = 169;
+  seqtbl_offset_char(seqids.seq_110_princess_crouching_PV2);
+  play_seq();
+}
+function princess_stand() {
+  init_princess_right();
+  g.Char.x = 144;
+  g.Char.y = 169;
+  seqtbl_offset_char(seqids.seq_94_princess_stand_PV1);
+  play_seq();
+}
+function init_princess_x156() {
+  init_princess();
+  g.Char.x = 156;
+}
+function princess_lying() {
+  init_princess();
+  g.Char.x = 92;
+  g.Char.y = 162;
+  seqtbl_offset_char(seqids.seq_103_princess_lying_PV2);
+  play_seq();
+}
+function init_princess_right() {
+  init_princess();
+  g.Char.direction = directions.dir_0_right;
+}
+function init_ending_princess() {
+  init_princess();
+  g.Char.x = 136;
+  g.Char.y = 164;
+  seqtbl_offset_char(seqids.seq_109_princess_stand_PV2);
+  play_seq();
+}
+function init_mouse_1() {
+  init_mouse_go();
+  g.Char.x -= 2;
+  g.Char.y = 164;
+}
+function init_princess() {
+  g.Char.charid = charids.charid_5_princess;
+  g.Char.x = 120;
+  g.Char.y = 166;
+  g.Char.direction = directions.dir_FF_left;
+  seqtbl_offset_char(seqids.seq_94_princess_stand_PV1);
+  play_seq();
+}
+function init_vizier() {
+  g.Char.charid = charids.charid_6_vizier;
+  g.Char.x = 198;
+  g.Char.y = 166;
+  g.Char.direction = directions.dir_FF_left;
+  seqtbl_offset_char(seqids.seq_95_Jaffar_stand_PV1);
+  play_seq();
+}
+function init_ending_kid() {
+  g.Char.charid = charids.charid_0_kid;
+  g.Char.x = 198;
+  g.Char.y = 164;
+  g.Char.direction = directions.dir_FF_left;
+  seqtbl_offset_char(seqids.seq_1_start_run);
+  play_seq();
+}
+function* cutscene_8() {
+  out.play_sound(soundids.sound_35_cutscene_8_9);
+  set_hourglass_state(hourglass_frame());
+  init_mouse_cu8();
+  savekid();
+  princess_crouching();
+  saveshad();
+  yield* fade_in_1();
+  yield* proc_cutscene_frame(20);
+  seqtbl_offset_kid_char(seqids.seq_107_mouse_stand_up_and_go);
+  yield* proc_cutscene_frame(20);
+  seqtbl_offset_shad_char(seqids.seq_111_princess_stand_up_PV2);
+  yield* proc_cutscene_frame(20);
+  g.Kid.frame = 0;
+  yield* fade_out_1();
+}
+function* cutscene_9() {
+  out.play_sound(soundids.sound_35_cutscene_8_9);
+  set_hourglass_state(hourglass_frame());
+  princess_stand();
+  saveshad();
+  yield* fade_in_1();
+  init_mouse_go();
+  savekid();
+  yield* proc_cutscene_frame(5);
+  seqtbl_offset_shad_char(seqids.seq_112_princess_crouch_down_PV2);
+  yield* proc_cutscene_frame(9);
+  seqtbl_offset_kid_char(seqids.seq_114_mouse_stand);
+  yield* proc_cutscene_frame(58);
+  yield* fade_out_1();
+}
+function* end_sequence_anim() {
+  disable_keys = 1;
+  scr.present();
+  out.play_sound(soundids.sound_26_embrace);
+  init_ending_princess();
+  saveshad();
+  init_ending_kid();
+  savekid();
+  yield* proc_cutscene_frame(8);
+  seqtbl_offset_shad_char(seqids.seq_108_princess_turn_and_hug);
+  yield* proc_cutscene_frame(5);
+  seqtbl_offset_kid_char(seqids.seq_13_stop_run);
+  yield* proc_cutscene_frame(2);
+  g.Kid.frame = 0;
+  yield* proc_cutscene_frame(39);
+  init_mouse_1();
+  savekid();
+  yield* proc_cutscene_frame(9);
+  seqtbl_offset_kid_char(seqids.seq_101_mouse_stands_up);
+  yield* proc_cutscene_frame(41);
+  yield* fade_out_1();
+  while (out.check_sound_playing()) yield 1;
+}
+function* time_expired() {
+  disable_keys = 1;
+  set_hourglass_state(7);
+  hourglass_sandflow = -1;
+  out.play_sound(soundids.sound_36_out_of_time);
+  yield* fade_in_1();
+  yield* proc_cutscene_frame(2);
+  yield* proc_cutscene_frame(100);
+  yield* fade_out_1();
+  while (out.check_sound_playing()) yield 1;
+}
+function* cutscene_12() {
+  const frame_num = hourglass_frame();
+  if (frame_num >= 6) {
+    set_hourglass_state(frame_num);
+    init_princess_x156();
+    saveshad();
+    out.play_sound(soundids.sound_40_cutscene_12_short_time);
+    yield* fade_in_1();
+    yield* proc_cutscene_frame(2);
+    seqtbl_offset_shad_char(98);
+    yield* proc_cutscene_frame(24);
+    yield* fade_out_1();
+  } else {
+    yield* cutscene_2_6();
+  }
+}
+function* cutscene_4() {
+  out.play_sound(soundids.sound_27_cutscene_2_4_6_12);
+  set_hourglass_state(hourglass_frame());
+  princess_lying();
+  saveshad();
+  yield* fade_in_1();
+  yield* proc_cutscene_frame(26);
+  yield* fade_out_1();
+}
+function* cutscene_2_6() {
+  out.play_sound(soundids.sound_27_cutscene_2_4_6_12);
+  set_hourglass_state(hourglass_frame());
+  init_princess_right();
+  saveshad();
+  yield* fade_in_1();
+  yield* proc_cutscene_frame(26);
+  yield* fade_out_1();
+}
+function* pv_scene() {
+  init_princess();
+  saveshad();
+  yield* fade_in_1();
+  init_vizier();
+  savekid();
+  yield* proc_cutscene_frame(2);
+  out.play_sound(soundids.sound_50_story_2_princess);
+  do {
+    yield* proc_cutscene_frame(1);
+  } while (out.check_sound_playing());
+  cutscene_frame_time = 8;
+  yield* proc_cutscene_frame(5);
+  out.play_sound(soundids.sound_4_gate_closing);
+  do {
+    yield* proc_cutscene_frame(1);
+  } while (out.check_sound_playing());
+  out.play_sound(soundids.sound_51_princess_door_opening);
+  yield* proc_cutscene_frame(3);
+  seqtbl_offset_shad_char(98);
+  yield* proc_cutscene_frame(5);
+  seqtbl_offset_kid_char(96);
+  yield* proc_cutscene_frame(6);
+  out.play_sound(soundids.sound_53_story_3_Jaffar_comes);
+  seqtbl_offset_kid_char(97);
+  yield* proc_cutscene_frame(4);
+  yield* proc_cutscene_frame(18);
+  seqtbl_offset_kid_char(96);
+  yield* proc_cutscene_frame(30);
+  seqtbl_offset_kid_char(97);
+  yield* proc_cutscene_frame(35);
+  seqtbl_offset_kid_char(102);
+  cutscene_frame_time = 7;
+  yield* proc_cutscene_frame(1);
+  seqtbl_offset_shad_char(99);
+  yield* proc_cutscene_frame(17);
+  hourglass_state = 1;
+  g.flash_time = 5;
+  g.flash_color = 15;
+  do {
+    yield* proc_cutscene_frame(1);
+  } while (out.check_sound_playing());
+  seqtbl_offset_kid_char(100);
+  hourglass_sandflow = 0;
+  yield* proc_cutscene_frame(6);
+  out.play_sound(soundids.sound_52_story_4_Jaffar_leaves);
+  yield* proc_cutscene_frame(24);
+  hourglass_state = 2;
+  yield* proc_cutscene_frame(9);
+  seqtbl_offset_shad_char(113);
+  yield* proc_cutscene_frame(28);
+  yield* fade_out_1();
+}
+function set_hourglass_state(state) {
+  hourglass_sandflow = 0;
+  hourglass_state = state;
+}
+var time_bound = [6, 17, 33, 65];
+function hourglass_frame() {
+  let bound_index;
+  for (bound_index = 0; bound_index < 4; ++bound_index) {
+    if (time_bound[bound_index] > g.rem_min) break;
+  }
+  return 6 - bound_index;
+}
+var princess_torch_pos_xh = [11, 26];
+var princess_torch_pos_xl = [5, 3];
+var princess_torch_frame = [1, 6];
+function princess_room_torch() {
+  for (let which = 2; which--; ) {
+    which_torch = which_torch ? 0 : 1;
+    princess_torch_frame[which_torch] = get_torch_frame(princess_torch_frame[which_torch]);
+    add_backtable(
+      chtabs.id_chtab_1_flameswordpotion,
+      princess_torch_frame[which_torch] + 1,
+      princess_torch_pos_xh[which_torch],
+      princess_torch_pos_xl[which_torch],
+      116,
+      0,
+      0
+    );
+  }
+}
+function draw_hourglass() {
+  if (hourglass_sandflow >= 0) {
+    hourglass_sandflow = (hourglass_sandflow + 1) % 3;
+    if (hourglass_state >= 7) return;
+    add_foretable(
+      chtabs.id_chtab_8_princessroom,
+      hourglass_sandflow + 10,
+      20,
+      0,
+      164,
+      blitters.blitters_10h_transp,
+      0
+    );
+  }
+  if (hourglass_state) {
+    add_midtable(
+      chtabs.id_chtab_8_princessroom,
+      hourglass_state + 2,
+      19,
+      0,
+      168,
+      blitters.blitters_10h_transp,
+      1
+    );
+  }
+}
+function reset_cutscene() {
+  g.Guard.frame = 0;
+  g.Kid.frame = 0;
+  which_torch = 0;
+  disable_keys = 0;
+  hourglass_state = 0;
+  hourglass_sandflow = -1;
+  cutscene_frame_time = 6;
+  clear_tile_wipes();
+}
+function do_flash(color) {
+  if (color) scr.set_bg_attr(color);
+}
+function remove_flash() {
+  scr.set_bg_attr(0);
+}
+function* fade_in_1() {
+  scr.fade_start("in", FADE_CUTSCENE_ROWS);
+  while (scr.fade_active()) {
+    yield* proc_cutscene_frame(1);
+  }
+}
+function* fade_out_1() {
+  scr.fade_start("out", FADE_CUTSCENE_ROWS);
+  while (scr.fade_active()) {
+    yield* proc_cutscene_frame(1);
+  }
+}
+var stars = [
+  { x: 20, y: 97, color: 0 },
+  { x: 16, y: 104, color: 1 },
+  { x: 23, y: 110, color: 2 },
+  { x: 17, y: 116, color: 3 },
+  { x: 24, y: 120, color: 4 },
+  { x: 18, y: 128, color: 0 }
+];
+var N_STAR_COLORS = 5;
+var star_colors = [8, 7, 15, 15, 7];
+function draw_star(which_star, _mark_dirty) {
+  const star = stars[which_star];
+  star.color = (star.color + 1) % N_STAR_COLORS;
+  scr.rect(star.x, star.y, star.x + 1, star.y + 1, star_colors[star.color]);
+}
+function draw_all_stars() {
+  for (let current_star = 0; current_star < N_STARS; ++current_star) {
+    draw_star(current_star, 0);
+  }
+}
+function reset_stars() {
+  const initial = [0, 1, 2, 3, 4, 0];
+  for (let i = 0; i < stars.length; i++) stars[i].color = initial[i];
+}
+var tbl_cutscenes = [
+  null,
+  null,
+  cutscene_2_6,
+  null,
+  cutscene_4,
+  null,
+  cutscene_2_6,
+  null,
+  cutscene_8,
+  cutscene_9,
+  null,
+  null,
+  cutscene_12,
+  null,
+  null,
+  null
+];
+function start_timer(length) {
+  return scr.now() + length;
+}
+function* do_wait(deadline) {
+  const left = deadline - scr.now();
+  if (left > 0) yield left;
+}
+function* pop_wait(time) {
+  yield* do_wait(start_timer(time));
+}
+function* fade_in_2(which_rows) {
+  scr.fade_start("in", which_rows);
+  while (scr.fade_active()) yield 1;
+}
+function* fade_out_2(which_rows) {
+  scr.fade_start("out", which_rows);
+  while (scr.fade_active()) yield 1;
+}
+function* transition_ltr() {
+  for (let position = 0; position < 320; position += 2) {
+    scr.copy_screen_rect(position, 0, position + 2, 200);
+    yield 0.5;
+  }
+}
+function* load_intro(which_imgs, func, _free_sounds) {
+  scr.clear_screen();
+  scr.load_intro_images(which_imgs);
+  scr.target(true);
+  scr.blit_image(chtabs.id_chtab_8_princessroom, 0, 0, 0, 0);
+  scr.blit_image(chtabs.id_chtab_9_princessbed, 0, 0, 142, blitters.blitters_2_or);
+  draw_all_stars();
+  scr.target(false);
+  while (out.check_sound_playing()) yield 1;
+  reset_cutscene();
+  yield* func();
+  scr.free_intro_images();
+  scr.clear_screen();
+}
+function* end_sequence() {
+  yield* load_intro(1, end_sequence_anim, 1);
+  scr.clear_screen_and_sounds();
+  out.play_sound(soundids.sound_56_ending_music);
+  scr.load_title_images(0);
+  scr.target(true);
+  scr.draw_full_image(full_image_id.STORY_FRAME);
+  scr.draw_full_image(full_image_id.STORY_HAIL);
+  yield* fade_in_2(2048);
+  yield* pop_wait(900);
+  const timer = start_timer(240);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  yield* transition_ltr();
+  yield* do_wait(timer);
+  while (out.check_sound_playing()) yield 1;
+  yield* fade_out_2(4096);
+  scr.release_title_images();
+}
+function* expired() {
+  scr.clear_screen_and_sounds();
+  yield* load_intro(1, time_expired, 1);
+}
+function* show_title() {
+  scr.load_title_images(1);
+  scr.target(true);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  yield* fade_in_2(4096);
+  scr.present();
+  out.play_sound(soundids.sound_54_intro_music);
+  let timer = start_timer(130);
+  scr.draw_full_image(full_image_id.TITLE_PRESENTS);
+  yield* do_wait(timer);
+  timer = start_timer(205);
+  scr.copy_screen_rect(24, 106, 296, 195);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  yield* do_wait(timer);
+  timer = start_timer(65);
+  scr.copy_screen_rect(24, 106, 296, 195);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  scr.draw_full_image(full_image_id.TITLE_GAME);
+  yield* do_wait(timer);
+  timer = start_timer(270);
+  scr.copy_screen_rect(24, 106, 296, 195);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  yield* do_wait(timer);
+  timer = start_timer(235);
+  scr.copy_screen_rect(24, 106, 296, 195);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  scr.draw_full_image(full_image_id.TITLE_POP);
+  scr.draw_full_image(full_image_id.TITLE_MECHNER);
+  yield* do_wait(timer);
+  scr.copy_screen_rect(24, 106, 296, 195);
+  scr.draw_full_image(full_image_id.STORY_FRAME);
+  scr.draw_full_image(full_image_id.STORY_ABSENCE);
+  scr.target(false);
+  while (out.check_sound_playing()) yield 1;
+  out.play_sound(soundids.sound_55_story_1_absence);
+  yield* transition_ltr();
+  yield* pop_wait(600);
+  yield* fade_out_2(2048);
+  scr.release_title_images();
+  yield* load_intro(0, pv_scene, 0);
+  scr.load_title_images(1);
+  scr.target(true);
+  scr.draw_full_image(full_image_id.STORY_FRAME);
+  scr.draw_full_image(full_image_id.STORY_MARRY);
+  yield* fade_in_2(2048);
+  scr.draw_full_image(full_image_id.TITLE_MAIN);
+  scr.draw_full_image(full_image_id.TITLE_POP);
+  scr.draw_full_image(full_image_id.TITLE_MECHNER);
+  while (out.check_sound_playing()) yield 1;
+  yield* transition_ltr();
+  yield* pop_wait(120);
+  scr.draw_full_image(full_image_id.STORY_FRAME);
+  scr.draw_full_image(full_image_id.STORY_CREDITS);
+  yield* transition_ltr();
+  yield* pop_wait(360);
+  scr.target(false);
+  while (out.check_sound_playing()) yield 1;
+  yield* fade_out_2(6144);
+  scr.release_title_images();
+}
+
+// src/pop/cutscene.ts
+var UNIT_MS = 1e3 / 60;
+var ROW = {
+  sword: 2,
+  flame: 3,
+  kid: 7,
+  princessInStory: 9,
+  jaffarInStory: 10,
+  title40: 11,
+  title50: 12,
+  princessRoom: 13,
+  princessBed: 14
+};
+var FULL_IMAGE = [
+  { id: 0, bank: 50, blit: blitters.blitters_0_no_transp, xpos: 0, ypos: 0 },
+  { id: 1, bank: 50, blit: blitters.blitters_0_no_transp, xpos: 96, ypos: 106 },
+  { id: 2, bank: 50, blit: blitters.blitters_0_no_transp, xpos: 96, ypos: 122 },
+  { id: 3, bank: 50, blit: blitters.blitters_10h_transp, xpos: 24, ypos: 107 },
+  { id: 4, bank: 50, blit: blitters.blitters_0_no_transp, xpos: 48, ypos: 184 },
+  { id: 3, bank: 50, blit: blitters.blitters_10h_transp, xpos: 24, ypos: 24 },
+  { id: 0, bank: 40, blit: blitters.blitters_0_no_transp, xpos: 0, ypos: 0 },
+  { id: 1, bank: 40, blit: blitters.blitters_white, xpos: 24, ypos: 25 },
+  { id: 2, bank: 40, blit: blitters.blitters_white, xpos: 24, ypos: 25 },
+  { id: 3, bank: 40, blit: blitters.blitters_white, xpos: 24, ypos: 25 },
+  { id: 4, bank: 40, blit: blitters.blitters_white, xpos: 24, ypos: 26 }
+];
+var STORY_TEXT_COLOR = ROW.title40 * 16 + 15;
+function blankLevel() {
+  return {
+    fg: new Uint8Array(24 * 30),
+    bg: new Uint8Array(24 * 30),
+    doorlinks1: new Uint8Array(256),
+    doorlinks2: new Uint8Array(256),
+    roomlinks: Array.from({ length: 24 }, () => ({ left: 0, right: 0, up: 0, down: 0 })),
+    start_room: 1,
+    start_pos: 0,
+    start_dir: 0,
+    guards_tile: new Uint8Array(24).fill(30),
+    guards_dir: new Uint8Array(24),
+    guards_x: new Uint8Array(24),
+    guards_seq_lo: new Uint8Array(24),
+    guards_skill: new Uint8Array(24),
+    guards_seq_hi: new Uint8Array(24),
+    guards_color: new Uint8Array(24)
+  };
+}
+var CutscenePlayer = class _CutscenePlayer {
+  /** `offscreen_surface`, where the picture is composed. */
+  offscreen = new Surface();
+  /** `onscreen_surface_`, which is what the page shows. */
+  onscreen = new Surface();
+  target = this.offscreen;
+  palette = new ScreenPalette();
+  banks = /* @__PURE__ */ new Map();
+  title40;
+  title50;
+  /** The two halves of chtab 4: 850 in the story, 900 in a cutscene. */
+  jaffarInStory;
+  princessInCutscenes;
+  vgaPalette;
+  gen = null;
+  pending = 0;
+  owed = 0;
+  elapsed = 0;
+  fadeOwed = 0;
+  clipRect = null;
+  effects;
+  scene = { kind: "title" };
+  /** Palette rows mid-fade, and the ones to put back when it is over. */
+  fade = null;
+  /** The background colour `do_flash` took, put back by `remove_flash`. */
+  savedBackground = null;
+  exe;
+  constructor(exe, vgaPalette) {
+    this.exe = exe;
+    this.vgaPalette = vgaPalette;
+  }
+  static async create(assets, exe, effects) {
+    const constants = readExeConstants(exe);
+    const player = new _CutscenePlayer(exe, constants.vgaPalette);
+    player.effects = effects;
+    player.banks.set(
+      chtabs.id_chtab_0_sword,
+      await assets.group("PRINCE.DAT", 700, ROW.sword * 16)
+    );
+    player.banks.set(
+      chtabs.id_chtab_1_flameswordpotion,
+      await assets.group("PRINCE.DAT", 150, ROW.flame * 16)
+    );
+    player.banks.set(
+      chtabs.id_chtab_2_kid,
+      await assets.group("KID.DAT", 400, ROW.kid * 16)
+    );
+    player.banks.set(
+      chtabs.id_chtab_3_princessinstory,
+      await assets.group("PV.DAT", 800, ROW.princessInStory * 16)
+    );
+    player.jaffarInStory = await assets.group("PV.DAT", 850, ROW.jaffarInStory * 16);
+    player.princessInCutscenes = await assets.group("PV.DAT", 900, ROW.jaffarInStory * 16);
+    player.banks.set(
+      chtabs.id_chtab_8_princessroom,
+      await assets.group("PV.DAT", 950, ROW.princessRoom * 16)
+    );
+    player.banks.set(
+      chtabs.id_chtab_9_princessbed,
+      await assets.group("PV.DAT", 980, ROW.princessBed * 16)
+    );
+    player.title40 = await assets.group("TITLE.DAT", 40, ROW.title40 * 16);
+    player.title50 = await assets.group("TITLE.DAT", 50, ROW.title50 * 16);
+    return player;
+  }
+  /** `tbl_cutscenes[level]`: is there a scene before this level at all? */
+  static hasCutsceneFor(level) {
+    return tbl_cutscenes[level] != null;
+  }
+  get running() {
+    return this.gen !== null;
+  }
+  get playing() {
+    return this.scene;
+  }
+  /** `disable_keys`: whether a key may cut this short. */
+  get skippable() {
+    return this.scene.kind === "title";
+  }
+  render() {
+    return this.onscreen;
+  }
+  /**
+   * Start one. `level` plays `tbl_cutscenes[level]` before that level
+   * is loaded, exactly as `play_level` does.
+   */
+  begin(scene) {
+    this.scene = scene;
+    this.install();
+    const body = () => {
+      switch (scene.kind) {
+        case "title":
+          return show_title();
+        case "ending":
+          return end_sequence();
+        case "expired":
+          return expired();
+        default: {
+          const func = tbl_cutscenes[scene.level];
+          if (!func) return (function* () {
+          })();
+          return load_intro(scene.level > 2 ? 1 : 0, func, 1);
+        }
+      }
+    };
+    this.gen = body();
+    this.elapsed = 0;
+    this.owed = 0;
+    this.fadeOwed = 0;
+    this.pending = 0;
+    this.step();
+  }
+  /** Stop where it stands: a key during the title, or the page moving on. */
+  cancel() {
+    this.gen = null;
+    this.fade = null;
+  }
+  /** Run the clock on by `ms`. Answers whether the scene is still going. */
+  advance(ms) {
+    if (!this.gen) return false;
+    this.owed += ms / UNIT_MS;
+    let guard = 0;
+    while (this.gen && this.owed >= this.pending && guard++ < 2e4) {
+      this.owed -= this.pending;
+      this.consume(this.pending);
+      this.step();
+    }
+    return this.gen !== null;
+  }
+  step() {
+    const r = this.gen.next();
+    if (r.done) {
+      this.gen = null;
+      this.pending = 0;
+      return;
+    }
+    this.pending = r.value;
+  }
+  /** The sixtieths that have gone by: the fade moves one shade each. */
+  consume(units) {
+    this.elapsed += units;
+    this.fadeOwed += units;
+    while (this.fadeOwed >= 1) {
+      this.fadeOwed -= 1;
+      this.fadeStep();
+    }
+  }
+  // -- everything below is what `screen.ts` and `seg008.ts` ask for ----------
+  install() {
+    link();
+    g.Kid = newChar();
+    g.Guard = newChar();
+    g.Char = newChar();
+    g.Opp = newChar();
+    g.level = blankLevel();
+    g.drawn_room = 1;
+    g.room_L = 0;
+    g.room_R = 0;
+    g.room_A = 0;
+    g.room_B = 0;
+    g.room_AL = 0;
+    g.room_AR = 0;
+    g.room_BL = 0;
+    g.room_BR = 0;
+    g.is_blind_mode = 0;
+    g.upside_down = 0;
+    g.flash_time = 0;
+    g.flash_color = 0;
+    free_peels();
+    reset_tables();
+    reset_stars();
+    const tables = readExeTables(this.exe);
+    setFrameTables(
+      tables.frameTableKid,
+      tables.frameTableGuard,
+      tables.frameTableCutscene,
+      tables.sequences,
+      Array.from(tables.sequenceOffsets)
+    );
+    g.chtab_addrs = Array.from({ length: 10 }, (_, i) => {
+      const set = this.banks.get(i);
+      return set ? set.images.slice(1) : null;
+    });
+    this.palette.loadBlock(0, this.vgaPalette);
+    for (const set of this.banks.values()) {
+      this.palette.loadBlock(set.paletteBase, set.palette.vga);
+    }
+    out.play_sound = (which) => {
+      g.current_sound = which;
+      this.effects?.sound?.(which);
+    };
+    out.stop_sounds = () => {
+      this.effects?.stopSounds?.();
+    };
+    out.check_sound_playing = () => this.effects?.soundPlaying?.() ? 1 : 0;
+    setPainter({
+      image: (chtab, id) => this.imageOf(chtab, id),
+      blit: (chtab, id, x, y, blit) => this.blitSprite(chtab, id, x, y, blit),
+      rect: (left, top, right, bottom, color) => {
+        if (bottom > top) this.target.fillRect(left, top, right - left, bottom - top, color);
+      },
+      clip: (rect) => this.setClip(rect),
+      text: () => {
+      },
+      readPeel: (left, top, right, bottom) => this.readPeel(left, top, right, bottom),
+      restorePeel: (peel) => this.restorePeel(peel),
+      target: (offscreen) => {
+        this.target = offscreen ? this.offscreen : this.onscreen;
+        this.setClip(this.clipRect);
+      }
+    });
+    setScreen({
+      copy_screen_rect: (l, t, r, b) => this.copyRect(l, t, r, b),
+      present: () => this.copyRect(0, 0, 320, 200),
+      rect: (l, t, r, b, color) => {
+        this.target.fillRect(l, t, r - l, b - t, color);
+      },
+      clear_screen: () => {
+        this.offscreen.clear(0);
+        this.onscreen.clear(0);
+      },
+      clear_screen_and_sounds: () => {
+        out.stop_sounds();
+        this.offscreen.clear(0);
+        this.onscreen.clear(0);
+      },
+      set_bg_attr: (color) => this.setBackground(color),
+      fade_start: (dir, rows) => this.fadeStart(dir, rows),
+      fade_active: () => this.fade !== null,
+      blit_image: (chtab, id, x, y, blit) => this.blitSprite(chtab, id, x, y, blit),
+      load_intro_images: (which) => this.loadIntroImages(which),
+      free_intro_images: () => {
+      },
+      now: () => this.elapsed,
+      draw_full_image: (id) => this.drawFullImage(id),
+      load_title_images: (bgcolor) => this.loadTitleImages(bgcolor),
+      release_title_images: () => {
+      },
+      target: (offscreen) => {
+        this.target = offscreen ? this.offscreen : this.onscreen;
+        this.setClip(this.clipRect);
+      }
+    });
+  }
+  /**
+   * `load_chtab_from_file(id_chtab_4_..., 50*which_imgs + 850, ...)`.
+   *
+   * The one bank a cutscene picks between: 850 is Jaffar for the
+   * story the title tells, 900 the princess for every other scene.
+   */
+  loadIntroImages(which_imgs) {
+    const set = which_imgs ? this.princessInCutscenes : this.jaffarInStory;
+    if (!set) return;
+    this.banks.set(chtabs.id_chtab_4_jaffarinstory_princessincutscenes, set);
+    g.chtab_addrs[chtabs.id_chtab_4_jaffarinstory_princessincutscenes] = set.images.slice(1);
+    this.palette.loadBlock(set.paletteBase, set.palette.vga);
+  }
+  /**
+   * `load_title_images(bgcolor)`: the two banks of `TITLE.DAT`, and
+   * the one colour the original pokes into the story bank by hand --
+   * the frame's background, dark blue for the opening and dark red
+   * for the ending.
+   */
+  loadTitleImages(bgcolor) {
+    if (this.title40) this.palette.loadBlock(this.title40.paletteBase, this.title40.palette.vga);
+    if (this.title50) this.palette.loadBlock(this.title50.paletteBase, this.title50.palette.vga);
+    const at = ROW.title40 * 16 + 14;
+    if (bgcolor) this.palette.setEntry(at, 4, 0, 24);
+    else this.palette.setEntry(at, 32, 0, 0);
+  }
+  // seg000:1DF8
+  drawFullImage(id) {
+    const spec = FULL_IMAGE[id];
+    if (!spec) return;
+    const bank = spec.bank === 40 ? this.title40 : this.title50;
+    const image = bank?.images[spec.id + 1];
+    if (!bank || !image) return;
+    if (spec.blit === blitters.blitters_white) {
+      this.target.blitMono(image, spec.xpos, spec.ypos, STORY_TEXT_COLOR);
+    } else if (spec.blit === blitters.blitters_10h_transp) {
+      this.target.blitTransparent(image, spec.xpos, spec.ypos, bank.paletteBase);
+    } else {
+      this.target.blitOpaqueBlack(image, spec.xpos, spec.ypos, bank.paletteBase);
+    }
+  }
+  /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */
+  copyRect(left, top, right, bottom) {
+    const x0 = Math.max(0, left);
+    const x1 = Math.min(320, right);
+    const y0 = Math.max(0, top);
+    const y1 = Math.min(200, bottom);
+    for (let y = y0; y < y1; y++) {
+      this.onscreen.pixels.set(
+        this.offscreen.pixels.subarray(y * 320 + x0, y * 320 + x1),
+        y * 320 + x0
+      );
+    }
+  }
+  setBackground(color) {
+    if (color === 0) {
+      if (this.savedBackground) {
+        this.palette.setEntry(0, ...this.savedBackground);
+        this.savedBackground = null;
+      }
+      return;
+    }
+    if (!this.savedBackground) this.savedBackground = this.palette.entry(0);
+    this.palette.setEntry(0, ...this.palette.entry(color));
+  }
+  // seg009:1A51 / seg009:1D28
+  fadeStart(dir, rows) {
+    const original = this.palette.rgb6.slice();
+    const faded = original.slice();
+    this.copyRect(0, 0, 320, 200);
+    if (dir === "in") {
+      for (let row = 0; row < 16; row++) {
+        if (!(rows & 1 << row)) continue;
+        faded.fill(0, row * 16 * 3, (row * 16 + 16) * 3);
+      }
+      this.applyFade(faded, rows);
+    }
+    this.fade = { dir, rows, pos: dir === "in" ? 64 : 0, original, faded };
+  }
+  // seg009:1B88 / seg009:1DF7
+  fadeStep() {
+    const f = this.fade;
+    if (!f) return;
+    if (f.dir === "in") {
+      --f.pos;
+      for (let row = 0; row < 16; row++) {
+        if (!(f.rows & 1 << row)) continue;
+        for (let i = row * 16 * 3; i < (row * 16 + 16) * 3; i++) {
+          if (f.original[i] > f.pos) ++f.faded[i];
+        }
+      }
+      this.applyFade(f.faded, f.rows);
+      if (f.pos === 0) {
+        this.palette.loadBlock(0, this.rowsOf(f.original, 0, 256));
+        this.fade = null;
+        this.copyRect(0, 0, 320, 200);
+      }
+      return;
+    }
+    let finished = true;
+    for (let row = 0; row < 16; row++) {
+      if (!(f.rows & 1 << row)) continue;
+      for (let i = row * 16 * 3; i < (row * 16 + 16) * 3; i++) {
+        if (f.faded[i] !== 0) {
+          --f.faded[i];
+          finished = false;
+        }
+      }
+    }
+    this.applyFade(f.faded, f.rows);
+    if (finished) {
+      this.palette.loadBlock(0, this.rowsOf(f.original, 0, 256));
+      this.fade = null;
+      this.onscreen.clear(0);
+    }
+  }
+  rowsOf(rgb6, from, count) {
+    const outp = [];
+    for (let i = from; i < from + count; i++) {
+      outp.push({ r: rgb6[i * 3], g: rgb6[i * 3 + 1], b: rgb6[i * 3 + 2] });
+    }
+    return outp;
+  }
+  applyFade(faded, rows) {
+    for (let row = 0; row < 16; row++) {
+      if (!(rows & 1 << row)) continue;
+      this.palette.loadBlock(row * 16, this.rowsOf(faded, row * 16, 16));
+    }
+  }
+  imageOf(chtab, id) {
+    return this.banks.get(chtab)?.images[id + 1] ?? null;
+  }
+  blitSprite(chtab, id, x, y, blit) {
+    const bank = this.banks.get(chtab);
+    const found = bank?.images[id + 1];
+    if (!bank || !found) return;
+    let sprite = found;
+    const base = bank.paletteBase;
+    if (blit & FLIPPED) {
+      sprite = flipHorizontally(sprite);
+      blit &= ~FLIPPED;
+    }
+    if (blit === blitters.blitters_9_black) this.target.blitMono(sprite, x, y, 0);
+    else if (blit === blitters.blitters_3_xor) this.target.blitXor(sprite, x, y, base);
+    else if (blit >= blitters.blitters_40h_mono) this.target.blitMono(sprite, x, y, blit & 15);
+    else if (blit === blitters.blitters_2_or) this.target.blitOr(sprite, x, y, base);
+    else if (blit === blitters.blitters_10h_transp) this.target.blitTransparent(sprite, x, y, base);
+    else this.target.blitOpaqueBlack(sprite, x, y, base);
+  }
+  setClip(rect) {
+    this.clipRect = rect;
+    const s = this.target;
+    s.clipTop = rect ? rect.top : 0;
+    s.clipBottom = rect ? Math.min(rect.bottom, 200) : 200;
+    s.clipLeft = rect ? rect.left : 0;
+    s.clipRight = rect ? rect.right : 320;
+  }
+  readPeel(left, top, right, bottom) {
+    const x0 = Math.max(0, Math.min(320, left));
+    const x1 = Math.max(x0, Math.min(320, right));
+    const y0 = Math.max(0, Math.min(200, top));
+    const y1 = Math.max(y0, Math.min(200, bottom));
+    const width = x1 - x0;
+    const height = y1 - y0;
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      pixels.set(
+        this.offscreen.pixels.subarray((y0 + y) * 320 + x0, (y0 + y) * 320 + x1),
+        y * width
+      );
+    }
+    return { left: x0, top: y0, width, height, pixels };
+  }
+  restorePeel(peel) {
+    for (let y = 0; y < peel.height; y++) {
+      this.offscreen.pixels.set(
+        peel.pixels.subarray(y * peel.width, (y + 1) * peel.width),
+        (peel.top + y) * 320 + peel.left
+      );
+    }
+  }
+};
+
 // src/dat/sound.ts
 var SOUND_RESOURCE_BASE = 1e4;
 var SPEAKER_END = 18;
@@ -10727,6 +11829,37 @@ async function boot() {
   const titleSurface = new Surface();
   const title = await assets.group("TITLE.DAT", 50);
   const opening = await assets.group("TITLE.DAT", 40);
+  let cutscene = null;
+  let cutsceneBuilding = false;
+  let afterScene = null;
+  async function playScene(scene, then) {
+    if (!cutscene) {
+      cutsceneBuilding = true;
+      try {
+        cutscene = await CutscenePlayer.create(assets, exe, effects);
+      } finally {
+        cutsceneBuilding = false;
+      }
+    }
+    game = null;
+    afterScene = then;
+    cutscene.begin(scene);
+    display.present(cutscene.render(), cutscene.palette.toRgba());
+    status.textContent = "press Escape to skip";
+  }
+  function sceneFrame(ms) {
+    if (!cutscene || !cutscene.running) return false;
+    const going = cutscene.advance(ms);
+    display.present(cutscene.render(), cutscene.palette.toRgba());
+    if (!going) endScene();
+    return true;
+  }
+  function endScene() {
+    cutscene?.cancel();
+    const then = afterScene;
+    afterScene = null;
+    if (then) void changeScene(then);
+  }
   const views = [{ kind: "title" }, { kind: "opening" }];
   let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
@@ -10880,7 +12013,7 @@ async function boot() {
   let building = 0;
   function frame() {
     if (!game) return;
-    if (changing || building > 0) return;
+    if (changing || building > 0 || cutsceneBuilding) return;
     if (game.paused) {
       present(game);
       status.textContent = "paused \u2014 press any key";
@@ -10893,7 +12026,7 @@ async function boot() {
       ticksPlayed++;
       recorder.tick(c, game);
       if (game.gameWon) {
-        void changeScene(() => select(1));
+        void changeScene(() => playScene({ kind: "ending" }, restartGame));
         return;
       }
       if (game.timeExpired) {
@@ -11026,6 +12159,11 @@ async function boot() {
     if (e.altKey) return;
     wakeSound();
     document.activeElement?.blur?.();
+    if (cutscene?.running) {
+      e.preventDefault();
+      if (cutscene.skippable || keyName(e) === "escape") endScene();
+      return;
+    }
     if (!game) {
       e.preventDefault();
       void changeScene(async () => {
@@ -11202,6 +12340,10 @@ async function boot() {
       owed = 0;
       return;
     }
+    if (sceneFrame(Math.min(owed, STEP_MS * 5))) {
+      owed = 0;
+      return;
+    }
     let stepped = false;
     while (owed >= STEP_MS) {
       owed -= STEP_MS;
@@ -11236,6 +12378,16 @@ async function boot() {
   w.__princePause = (on) => {
     paused = on;
   };
+  w.__princePlayScene = async (scene) => {
+    await playScene(scene, restartGame);
+  };
+  w.__princeSceneStep = (ms) => sceneFrame(ms);
+  w.__princeSceneState = () => cutscene ? {
+    running: cutscene.running,
+    playing: cutscene.playing,
+    /** How many of the screen's pixels are not black. */
+    lit: cutscene.render().pixels.reduce((n, v) => n + (v !== 0 ? 1 : 0), 0)
+  } : null;
   w.__princeState = () => game ? {
     // How many ticks the page has played. A test that has to wait for
     // the game rather than for the clock waits on this: under load the

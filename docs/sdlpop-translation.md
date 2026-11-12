@@ -321,3 +321,73 @@ stops the page; the second is worse, because nothing says so. A
 fuzz that checks for `NaN` as well as for exceptions is the cheap way
 to find both, and `tests/pop/levels-smoke.test.ts` now plays badly
 for a thousand ticks of every level.
+
+## The cutscenes, which the port did not have at all
+
+`check_the_end` set `game_won` and the shell stopped; `seg009.ts` was
+`prandom` and `set_seed`; there was no title sequence, no story, no
+princess, no Jaffar, no hourglass and no ending. The score cannot see
+any of it -- every recording is one level of an ordinary run -- so
+none of it was ever measured, and the player who finished the game got
+a static picture and a "press any key".
+
+It is translated now, out of `seg001.c` and the parts of `seg000.c`
+that tell the same story:
+
+| module | from | holds |
+| --- | --- | --- |
+| `seg001.ts` | `seg001.c`, `seg000.c` | the cutscenes, `end_sequence`, `expired`, `load_intro`, `show_title` |
+| `screen.ts` | -- | the slots a cutscene asks the screen for, as `link.ts` does for sound |
+| `cutscene.ts` | -- | the driver: the two surfaces, the palette, the fades, the banks out of `PV.DAT` and `TITLE.DAT` |
+| `wire.ts` | -- | `link()`, moved out of `game.ts` because a cutscene needs it too |
+
+### The one thing that had to be decided rather than translated
+
+The C plays a cutscene by blocking -- `proc_cutscene_frame(n)` draws a
+frame, spins on a timer and comes back `n` frames later -- and a page
+cannot block. Every cutscene procedure is therefore a **generator**,
+and every `proc_cutscene_frame(n)` is a `yield*` of one; what a
+generator yields is how long to wait before it is resumed, in the
+original's own unit of a sixtieth of a second (`BASE_FPS` is 60, and
+`cutscene_frame_time` is 6 of them). The shape of each procedure is
+the C's, line for line, and only the waiting is spelled differently.
+
+### `blitters_0_no_transp` writes a sprite's colour 0 as black
+
+Measured, not assumed. `load_intro` lays the princess's room down --
+`PV.DAT` 950 image 0, 320 by 200 -- and then ORs the bed, `PV.DAT` 980
+image 0, 240 by 41, into it at y 142 with `blitters_2_or`. The two do
+not overlap: of the 6336 pixels the bed has, **not one** is over a
+pixel of the room that is not nought.
+
+So what the OR lands on decides whether the bed can be seen at all.
+The room is loaded into palette row 13 and the bed into row 14. Write
+the room's colour 0 as 208 -- row 13's own black, which is what
+`blitOpaque` does and what every room in the game is drawn with -- and
+the OR gives `208 | 224+v`, which is `240+v`: row 15, which the game
+never loads, so the bed comes out black. Write it as nought and the
+OR gives `224+v`, the bed in its own colours. `Surface.blitOpaqueBlack`
+is the second, and it is what the cutscenes blit with.
+
+Nothing in a room can tell the two apart -- colour 0 of every bank in
+the game is black, and an OR inside one row is the same either way --
+which is why the captures have never had an opinion about it. The
+capture that pins the OR itself is `palace4`'s tapestry over the
+Prince, and both of its pixels are non-zero.
+
+### The ending
+
+`check_the_end` now calls `end_sequence()` where the original does.
+The shell plays it, and it runs for 32.6 seconds: the Prince runs into
+the princess's room out of `PV.DAT`, she turns and embraces him, the
+mouse comes in and sits up, the screen fades to the closing story out
+of `TITLE.DAT` group 40 -- *the tyrant Jaffar lies dead* -- and the
+title picture wipes on from the left. `tests/pop/cutscene.test.ts`
+pins it: which palette rows are drawn, that all three characters are
+in it, and how long it is. Backing `init_mouse_1` out of
+`end_sequence_anim` fails that test.
+
+The hall of fame at the end of `end_sequence` is left out, and it is
+the one piece of the C that is not here: it asks the player to type a
+name into a box and writes it to `PRINCE.HOF` beside the game's files,
+and a page can do neither.
