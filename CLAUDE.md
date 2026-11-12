@@ -51,8 +51,14 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-* the translation draws **11690 of 12036** ticks exactly -- 97 per cent
-  -- of the twenty-one runs a capture can settle;
+* the translation draws **11673 of 12038** ticks exactly -- 97 per cent
+  -- of the twenty-one runs a capture can settle. It read 11690 of
+  12036 before `probeF` and `f6874819` were recaptured at the
+  corrected `SETTLE_L1`; those two are the only runs whose clock
+  crosses a minute, their old captures had spent about 298 ticks of
+  the hour before their own tick nought, and the seventeen the number
+  fell by are `probeF`'s new capture, not the port. See **the hour
+  stops for a death** in `tools/oracle/README.md`;
 * **the hundred ticks that were "the port's" have been taken apart,
   one run at a time, against fresh captures.** Five were a real fault
   and are fixed: `blitters_2_or` is a bitwise OR of the palette index
@@ -65,16 +71,21 @@ captures of a real PRINCE.EXE:
   original's clock-seeded guard rather than the port. Each one has the
   measurement that says so written beside it in
   `tests/oracle/recordings-vs-original.test.ts`. With them the number
-  is 14142 of 16588.
+  is 14146 of 16593. `exitdoor` is one of them and is now measured to
+  a single coincidence: its Shift at 594 three ticks earlier, or its
+  Right at 591 three ticks later, scores **794 of 801** against 593,
+  so in the emulator the two edges arrived in one tick where the
+  recording has them three apart.
 * the hand-written port, which it replaced, is still in `src/game` and
   on `backup/handwritten-port`; nothing but its own unit tests uses it
   now.
 * Thirteen of the twenty-one are exact or within one tick. What is
   left is `13ab6867` (156), `0fbffa60` (82), `b4ff4672` (33),
-  `9b60bf3a` (28), `760c3e74` (28), `848ee3c4` (14), `palace4` (2),
-  `5920a8c2` (2) and `f6874819` (1) -- and `tools/oracle/README.md`
-  names what every one of those is. Four of them are a single key
-  edge the emulator took a tick or two off the recording's time.
+  `9b60bf3a` (28), `760c3e74` (28), `probeF` (17), `848ee3c4` (14),
+  `f6874819` (3), `palace4` (2) and `5920a8c2` (2) -- and
+  `tools/oracle/README.md` names what every one of those is. Most are
+  a single key edge the emulator took a tick or two off the
+  recording's time.
 
 **Before reading any of those as a fault, run
 `tools/dev/which-key.ts`.** It moves every key edge of the recording a
@@ -83,16 +94,23 @@ place an edge to better than a tick, and where the edge decides which
 frame of the run `control_running` stops on -- frame 7 or frame 11 --
 one tick is thirty of them:
 
+    0fbffa60   edge 569 two ticks later:   722 of 724, from 642
     13ab6867   edge 573 two ticks later:   721 of 728, from 572
-    0fbffa60   edge 626 one tick earlier:  714 of 724, from 642
-    b4ff4672   edge 251 one tick earlier:  428 of 428, from 395
-    9b60bf3a   edge 424 one tick later:    531, from 529
-    palace4    edge  20 one tick earlier:  516, from 514
-    5920a8c2   edge 240 one tick earlier:  414, from 413
+    9b60bf3a   Right at 380 two later:     550 of 557, from 529
+    b4ff4672   Right at 251 one earlier:   428 of 428, from 395
+    palace4    Right at  20 one earlier:   521 of 521, from 519
+    5920a8c2   Shift at 240 one earlier:   414 of 415, from 413
 
-Three edges are 254 of the 346 the suite is short, and `b4ff4672` is
-exact once its one edge is where the emulator took it. `760c3e74`'s
-is a fifth: the release at 292, taken two ticks early, and the port
+**It moves one control of an edge at a time, not the whole edge.** A
+player who presses Right and Up in the same thousandth of a second
+makes one edge of the recording, the script sends both at the same
+instant, and the emulator can read them in two different ticks --
+which moving the edge as a whole can never express. `848ee3c4` 926 is
+exactly that and was the last of the suite's unexplained ticks; the
+same change takes `palace4` from 516 to **exact** and `9b60bf3a` from
+531 to 550.
+
+`760c3e74`'s is the release at 292, taken two ticks early: the port
 draws its ticks 286 to 326 exactly when it is given at 290.
 
 **And recapture.** The oracle's phase moves between captures of the
@@ -126,6 +144,19 @@ Read these before calling any difference a fault. Each cost a round.
    `gate2` scored 235 alone and 616 after the twenty-one recordings
    before it. `resetGlobals` and the three `resetSeg*` fix that; do not
    undo them to make a number look better.
+5. **A capture taken before `SETTLE_L1` came down cannot be used to
+   measure the clock.** The old wait spent about 298 ticks of the hour
+   before the capture's own tick nought, and the two runs whose clock
+   crosses a minute -- `probeF` and `f6874819` -- were read that way
+   and cost the C's `Kid.alive < 0` guard in `show_time`. Both are
+   recaptured and the guard is back; `tools/oracle/README.md` has the
+   arithmetic.
+6. **The port does not read the keyboard a tick late.**
+   `tools/dev/every-key.ts` moves *every* edge of *every* recording by
+   the same number of ticks: the suite scores 10951, 11206, **11690**,
+   11121 and 10493 at -2, -1, 0, +1 and +2. Nought wins by 484 and by
+   569, and run by run in seventeen of the twenty-one, so an edge that
+   wants moving is that capture's and not the port's.
 
 **Do not stop while ticks are still different.** The tools:
 
@@ -146,6 +177,13 @@ Read these before calling any difference a fault. Each cost a round.
   shorter than four ticks, which is what DOSBox takes reliably.
 * `tools/dev/late-key.ts <rec> <from> <to> <n,n,n>` -- the same run
   with one press moved on by n ticks, scored.
+* `tools/dev/which-key.ts <name...> [--by 1,2]` -- every edge of a
+  recording, and every control of an edge on its own, moved a tick or
+  two either way and scored. What it finds is the harness's own
+  resolution; what is left over is the port's.
+* `tools/dev/every-key.ts [-2,-1,0,1,2]` -- the whole suite with
+  *every* edge of *every* recording moved by the same amount, which
+  is the check that the port is not reading the keyboard late.
 
 **Before reading a run of differences as a fault, check for a tap.**
 `gate1` looked like the worst difference in the set -- exact for 591

@@ -27,3 +27,12 @@ gate2 0  (-1: 222 of 1306, 0: 616 of 1309, 1: 242 of 1308)
 palace4 0  (the phase knife-edge: three captures scored 466, 512, 428)
 gate2b 0  (-1: 601 of 1653, 0: 1183 of 1653, 1: 1149 of 1653)
 level2 1  (-1: 418 of 424, 0: 422 of 424, 1: 424 of 424)
+#
+# `probeF` and `f6874819` were recaptured at `SETTLE_L1` = 3, both at
+# shift 0. They are the only two runs whose clock crosses a minute,
+# and their old captures had spent about 298 ticks of the hour before
+# their own tick nought. Four tries each:
+#   f6874819   466, 1189, 468, 467   of ~1192
+#   probeF     468,  464, 464, 1153  of ~1193   (1176 once the C's
+#                                                `Kid.alive` guard in
+#                                                `show_time` was back)

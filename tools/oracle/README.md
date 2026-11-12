@@ -978,3 +978,28 @@ The suite stands at **11673 of 12038**. It was 11690 of 12036 against
 the two old digests, and the seventeen are `probeF`'s capture, not a
 regression: the two numbers are taken against different captures and
 only the later pair is honest about the clock.
+
+### `which-key` moves one control at a time now, and the table moves with it
+
+It used to move all three controls of an edge together, which cannot
+express a player pressing two keys in the same thousandth of a second
+and the emulator reading them in two different ticks. That is
+`848ee3c4` 926 -- Right and Up together, and the eight ticks it cost
+were the last in the suite nothing accounted for. Run again with each
+control of a multi-control edge tried on its own:
+
+| run        | as recorded  | one control of one edge, moved |
+|------------|--------------|--------------------------------|
+| `0fbffa60` |  642 of  724 | edge 569 two later: **722**    |
+| `13ab6867` |  572 of  728 | Up at 573 two later: **721**   |
+| `9b60bf3a` |  529 of  557 | Right at 380 two later: **550** |
+| `b4ff4672` |  395 of  428 | Right at 251 one earlier: **428, exact** |
+| `palace4`  |  519 of  521 | Right at 20 one earlier: **521, exact** |
+| `5920a8c2` |  413 of  415 | Shift at 240 one earlier: **414** |
+| `848ee3c4` | 1432 of 1446 | Up at 926 one later: **1440**  |
+
+Where the old table had `palace4` at 516 and `9b60bf3a` at 531, the
+per-control version has 521 and 550. What no single edge explains is
+now two, seven, seven, nought, nought, one and six -- twenty-three
+ticks of twelve thousand, and six of those twenty-three are ticks two
+captures of the original disagree about.
