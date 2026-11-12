@@ -192,3 +192,65 @@ thirty-five are real; `9b60bf3a` has two and `0fbffa60` a dozen.
 That is not a proof that nothing is left to fix, and it should not be
 read as one. It is a reason to look at the ticks that differ one at a
 time rather than at the total.
+
+## The second audit: the parts no capture reaches
+
+The score can only see the twenty-one recordings, and all of them are
+on levels 1 to 4 of an ordinary run. The player plays the whole game,
+so `src/pop` was put beside `sdlpop/src` a second time, function for
+function, looking for a line that had gone missing where no capture
+would ever notice.
+
+The method was mechanical, and the two scripts are worth describing
+because they found everything here. The first lifts each function out
+of both files and compares the *sets* of identifiers and numeric
+literals in the two bodies, printing what the C has and the port does
+not; that finds a dropped call or a dropped constant whatever the two
+look like otherwise. The second turns each body into a stream of
+tokens and runs `difflib` over the two streams, which finds a line
+moved, an operator changed or a branch that the port spells
+differently. Together they reduced four hundred and thirty C
+functions to about forty worth reading, of which nearly all turned
+out to be `#ifdef FIX_`/`USE_` branches the translation is right to
+leave out, or a `goto` the port expresses with a flag.
+
+Six were real, and none of them moves the score by a tick:
+
+| what | where | what it broke |
+|------|-------|---------------|
+| `upside_down && Char.alive >= 0` | `play_kid_frame` | a Prince who drank the invert potion and then died played on upside down for ever |
+| `draw_guard_hp(0, guardhp_curr)` | `clear_char` | the shadows of levels 4, 5 and 12 and the mouse of level 8 left their flasks painted under the room |
+| `saveshad()`, not `saveshad_and_opp()` | `play_guard_frame` | the extra line wrote the stale `Opp` back over `Kid`, which undid the `savekid()` that moves the Prince to where the shadow stood on level 12 |
+| `Char.charid` and then `saveshad()` | `jump_through_mirror` | the port set `Guard.charid` and then copied `Char` over `Guard`, so what came through the mirror on level 4 was a guard, not the shadow |
+| `load_frame()` | `jump_through_mirror` | `check_mirror_image` reads `cur_frame.weight`, so the shadow came out of the glass from the wrong x |
+| the `else` halves of both pairs | `load_room_links` | `room_AL`, `room_AR`, `room_BL` and `room_BR` stayed nought whenever the room had nothing above or below it |
+
+A seventh is the shell's rather than the translation's: `seamless` is
+a global the C carries from level 12 into 13, and `install` wrote a
+nought over it, so the running exit announced `LEVEL 12` and
+`do_startpos`'s `if (seamless == 0)` could never be false.
+
+Each has a test beside the three from the first audit in
+`tests/pop/dropped-lines.test.ts`, or in `tests/pop/exits.test.ts` for
+the last, and each of those tests was checked to fail with the fix
+backed out and pass with it in.
+
+What the same sweep says is *right* is worth as much as what it
+found, so: the potions and `proc_get_object`, `do_pickup`, `add_life`
+and `feather_fall`; `check_shadow` and all four of the shadow's minds;
+`autocontrol_opponent` and every branch under it, the skeleton, the
+mouse, the fat guard and the shadow as an opponent; `hurt_by_sword`,
+`check_hurting`, `parry`, `guard_block` and `guard_strike`;
+`check_skel` and `check_guard_fallout`; the chomper, the spikes, the
+slicer and every one of the eight `animate_*`; the whole door-link
+family (`do_trigger_list`, `trigger_button`, `trigger_gate`,
+`get_doorlink_*`, `set_doorlink_timer`); the loose floor from
+`make_loose_fall` through `animate_loose`, `move_loose`, `loose_fall`,
+`loose_land` and `fell_on_your_head`; `leave_room`, `exit_room`,
+`goto_other_room`, `do_startpos`, `set_start_pos` and `show_time`;
+`Jaffar_exit`, `meet_Jaffar`, `sword_disappears`, `play_mirr_mus` and
+`level3_set_chkp`. Every `play_sound` in `seg000`--`seg008` is in the
+port except the cutscenes' and the cheats'.
+
+`tools/dev/residue.ts` and `tools/dev/which-tick.ts` came out of the
+other half of the same round; see `tools/oracle/README.md`.
