@@ -88,8 +88,14 @@ captures of a real PRINCE.EXE:
   recording's time.
 * **With each run's edge where `which-key --by 1,2,3` puts it, three
   ticks of the twelve thousand are left that nothing accounts for**:
-  `13ab6867` 584 and `9b60bf3a` 554 and 555, and all three sit on a
-  capture's own numbering. `palace4` and `b4ff4672` are then exact,
+  `13ab6867` 584 and `9b60bf3a` 554 and 555 -- and recapturing both
+  runs three times says all three are their captures' own numbering.
+  Against the three fresh captures of `13ab6867` the port scores 724,
+  722 and 725 and the one tick left is 581--583, 580--582 and
+  581--583: a different tick in every capture, which a fault cannot
+  be. And `agree.py` between the fresh captures of `9b60bf3a` says
+  `not agreed: 1 82 83 84`, so two runs of the original disagree
+  where its 83 is. `palace4` and `b4ff4672` are then exact,
   `13ab6867` is 727 of 728, `848ee3c4` 1440 of 1446 and `9b60bf3a`
   551 of 557. Everything else is named in `tools/oracle/README.md`:
   `0fbffa60`'s 266 is a room change and its 690 and 694 are the

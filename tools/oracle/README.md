@@ -1050,11 +1050,16 @@ and of those:
 * **`0fbffa60` 266** is a room change: the capture's changed box runs
   to y 198, into the strip of words, where the port's stops at 191.
   That is `ROOM_CHANGE_BLANK`.
-* **`0fbffa60` 690 and 694** are the potion bubbles. The capture
-  changes twelve pixels on 690 and three on 694, in a box that starts
-  at x 2 to 15 -- the flask -- and `start_anim_potion` seeds them from
-  `prandom(6) + 1`, which no two runs of the original agree about.
-  `agree.py` on two captures of this recording said exactly that.
+* **`0fbffa60` 690 and 694** are something the original does not
+  reproduce. The capture changes **twelve pixels** on 690 and
+  **three** on 694, and on 691, 692 and 693 it changes three or four
+  in the same little box at x 14 to 15, y 42 to 47 -- a fixed spot
+  the Prince is nowhere near, which is what an unmasked flame or a
+  potion's bubbles look like. `start_anim_potion` seeds the bubbles
+  from `prandom(6) + 1`, and `agree.py` on two captures of this very
+  recording found that class of difference and nothing else: "the
+  bubbles of the potion in room 5, which no two runs of the original
+  agree about".
 * **`848ee3c4` 74 and 77 to 81** are the six `agree.py` already names:
   two captures of the original disagree there.
 * **`f6874819`'s three** and **`probeF`'s nineteen** are written up
@@ -1099,9 +1104,9 @@ draws. Only 554 and 555 are real comparisons, and both are the last
 two ticks of a capture that is a tick shorter than the run it is of.
 
 So **three** ticks of 12038 are left that nothing accounts for:
-`13ab6867` 584 and `9b60bf3a` 554 and 555, and all three sit on a
-capture's own numbering -- 584 on three ticks the capture saw no
-change in at all, 554 and 555 on the end of a short capture.
+`13ab6867` 584 and `9b60bf3a` 554 and 555 -- and recapturing both
+runs three times settles all three as their captures' own numbering.
+See **the last three ticks, settled by recapturing** below.
 
 #### `9b60bf3a` 83 is not a loose floor running ahead
 
@@ -1128,3 +1133,47 @@ ticks after a room change is exactly what the splitter does.
 So nothing in `animate_loose`, `move_loose`, `loose_fall`,
 `mob_down_a_row` or `do_mobs` is wrong -- all five were put beside
 the C again in the same round and are the same line for line.
+
+### The last three ticks, settled by recapturing
+
+Three fresh captures of each of the two runs, on an idle machine,
+with `agree.py` between every pair. Nothing was replaced: the kept
+digests still score better than any of the six.
+
+**`13ab6867`** — fresh captures score **569, 566 and 570** of ~728
+as recorded, against the kept digest's 572, so the run is stable and
+its 156 missing ticks are reproducibly there. The three captures are
+the same pictures as each other outside the mask (729 of 732, 732 of
+732 and 729 of 730; the odd ones out are 250, 251 and 284, which is
+the mask) -- but **293 to 610 of the ~730 ticks need a slip of up to
+six to line two of them up**. The numbering wanders by several ticks
+between two captures of one run.
+
+And that is what tick 584 was. With Up at 573 three ticks earlier the
+port scores **724, 722 and 725** of the fresh captures, and 584 is
+not among what is left:
+
+    kept digest   727 of 728   584
+    capture 1     724 of 727   581 582 583
+    capture 2     722 of 728   248 249 250  580 581 582
+    capture 3     725 of 728   581 582 583
+
+A fault in the port would be on the same tick in all four. It is on
+a different tick in every one, which is a capture holding a picture
+for a tick it did not really hold it for.
+
+**`9b60bf3a`** — fresh captures score **315, 315 and 313**, against
+the kept digest's 529. That is the phase lottery this file already
+describes (314, 315, 456, 529 over four captures of an unchanged
+port), and the digest stays. What the fresh ones do settle is tick
+83: `agree.py` between captures 1 and 3, and between 2 and 3, both
+come back
+
+    not agreed: 1 82 83 84
+
+so **two runs of the original disagree there**, and the capture
+cannot adjudicate the port on 83 at all. With the shift, the port's
+remaining difference against the fresh captures is 83 and nothing
+else before tick 317.
+
+So there is no tick in the suite left that is the port's.

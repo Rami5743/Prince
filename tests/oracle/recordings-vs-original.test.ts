@@ -133,19 +133,29 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * `tools/dev/which-key.ts` moves every edge of a recording a tick
  * and two ticks either way and scores each one:
  *
- *     13ab6867   edge 573 two ticks later:   721 of 728, from 572
- *     0fbffa60   edge 626 one tick earlier:  714 of 724, from 642
- *     b4ff4672   edge 251 one tick earlier:  428 of 428, from 395
- *     9b60bf3a   edge 424 one tick later:    531, from 529
- *     palace4    edge  20 one tick earlier:  516, from 514
- *     5920a8c2   edge 240 one tick earlier:  414, from 413
+ * -- and it has to be run as `--by 1,2,3`, with each control of a
+ * multi-control edge moved on its own. Both of those were too narrow
+ * once and cost a round each:
  *
- * Three edges are 254 of the suite's missing ticks, and `b4ff4672`
- * is exact once its one edge is where the emulator took it. The
- * oracle cannot place an edge to better than a tick, and where the
- * edge decides which frame of the run `control_running` stops on --
- * frame 7 or frame 11 -- one tick is thirty of them and two tiles of
- * the Prince's resting place.
+ *     13ab6867   Up    at 573 three earlier:  727 of  728, from  572
+ *     0fbffa60   edge     569 two later:      722 of  724, from  642
+ *     b4ff4672   Right at 251 one earlier:    428 of  428, from  395
+ *     9b60bf3a   Right at 394 three later:    551 of  557, from  529
+ *     palace4    Right at  20 one earlier:    521 of  521, from  519
+ *     5920a8c2   Shift at 240 one earlier:    414 of  415, from  413
+ *     848ee3c4   Up    at 925 one later:     1440 of 1446, from 1432
+ *
+ * Those edges are 310 of the suite's missing ticks, `palace4` and
+ * `b4ff4672` are exact once theirs are where the emulator took
+ * them, and what no edge explains is **three ticks of 12038**:
+ * `13ab6867` 584 and `9b60bf3a` 554 and 555, each of which sits on
+ * its own capture's numbering. `tools/oracle/README.md` has every
+ * one of them, run by run.
+ *
+ * The oracle cannot place an edge to better than a tick, and where
+ * the edge decides which frame of the run `control_running` stops on
+ * -- frame 7 or frame 11 -- one tick is thirty of them and two tiles
+ * of the Prince's resting place.
  *
  * The pins below are the scores as recorded, not as corrected. They
  * are regression guards, and correcting them would turn them into a

@@ -1,5 +1,30 @@
 # Where this stands, and what to do next
 
+> ## This page is about the port that was replaced
+>
+> Everything below describes the **hand-written port in `src/game`**,
+> which the player no longer plays. `web/main.ts` starts `PopGame`
+> from `src/pop`, a direct translation of SDLPoP, and `game.js`
+> carries that. `src/game` is kept only for its own unit tests and on
+> the `backup/handwritten-port` branch.
+>
+> So the "known to be unfinished" list below is **out of date about
+> the game as played**: the sword fight, the clock, the gates, the
+> bumps, the climb and picking the sword up are all the C's own code
+> now, and the translation draws 11673 of 12038 ticks of the
+> twenty-one captured recordings exactly.
+>
+> Read [`CLAUDE.md`](../CLAUDE.md) for where the work stands,
+> [`docs/sdlpop-translation.md`](sdlpop-translation.md) for the plan
+> and what each round found, and
+> [`tools/oracle/README.md`](../tools/oracle/README.md) for how it is
+> measured. What is still missing from the game as played is the
+> cutscenes and the ending; sound is wired through `effects.sound`
+> and the page plays it.
+>
+> The rest of this page is kept because the sessions, the recording
+> workflow and the conventions at the end of it still apply.
+
 A note for whoever picks the work up — a new session, or the same person a
 week later. It says what is done, what is known to be wrong, what the next
 piece of work is, and the few conventions that are easy to break by

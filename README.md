@@ -15,7 +15,7 @@ npm run serve     # then open http://localhost:8099/web/
 Arrow keys to move, shift to step carefully.
 
 ```bash
-npm test          # 317 tests
+npm test          # 578 tests
 npm run typecheck
 ```
 
@@ -39,9 +39,11 @@ npm run typecheck
 | Loose floors: shake, give way, fall, crash | ✅ |
 | Spikes and chompers | ✅ |
 | Guards: placed, coloured, drawn with their swords | ✅ |
-| Guard behaviour and sword fighting | ❌ not yet |
-| Sound | ❌ not yet |
-| Status bar: the clock | ❌ not yet |
+| Guard behaviour and sword fighting | ✅ the original's own code, translated |
+| The potions, the shadow, the mirror, the skeleton, the mouse | ✅ |
+| Sound | ✅ the game's own samples, on the game's own triggers |
+| Status bar: the clock | ✅ |
+| The cutscenes and the ending | ❌ not yet |
 
 ## How it is built
 
@@ -69,6 +71,14 @@ Three layers, described in [docs/testing.md](docs/testing.md):
 3. **The port in a real browser**, read back through headless Chromium and
    diffed against the same captures.
 
+The game the page runs is `src/pop`, a direct translation of
+[SDLPoP](https://github.com/NagyD/SDLPoP) function for function. Against
+captures of twenty-one recorded sessions of the real `PRINCE.EXE` it draws
+**11673 of 12038 ticks** to the pixel. `tools/oracle/README.md` names what
+every one of the rest is; once each capture's key edges are where the
+emulator actually took them, three ticks of the twelve thousand are left
+that nothing accounts for, and all three sit on a capture's own numbering.
+
 Where the shipped data turned out to be irregular, the tests record the
 irregularity exactly rather than loosening the check.
 
@@ -77,8 +87,9 @@ irregularity exactly rather than loosening the check.
 ```
 original/prince1/   the game as it shipped, untouched
 src/dat/            readers for the .DAT archive, palettes, images, levels
-src/game/           constants and tables from PRINCE.EXE, tiles, physics,
-                    the animation interpreter, the Prince, the traps
+src/pop/            the game: SDLPoP translated function for function
+src/game/           constants and tables from PRINCE.EXE, and the
+                    hand-written port this replaced (its tests only)
 src/render/         indexed 320x200 surface, room renderer, canvas
 web/                the page
 tools/oracle/       runs the original under DOSBox and captures frames
@@ -89,8 +100,13 @@ docs/               the file inventory and the testing notes
 
 ## Documentation
 
-* [docs/status.md](docs/status.md) — where the work stands, what is known
-  to be unfinished, and what to pick up next.
+* [CLAUDE.md](CLAUDE.md) — where the work stands and what is measured.
+* [docs/sdlpop-translation.md](docs/sdlpop-translation.md) — the
+  translation, and what each round of comparing it with the C found.
+* [tools/oracle/README.md](tools/oracle/README.md) — how the original is
+  captured and the port compared with it, tick by tick.
+* [docs/status.md](docs/status.md) — the hand-written port that was
+  replaced; out of date about the game as played.
 * [docs/file-inventory.md](docs/file-inventory.md) — what each of the 33
   original files is for, and the decoded on-disk formats.
 * [docs/testing.md](docs/testing.md) — how the port is compared with the
