@@ -436,7 +436,31 @@ export function exit_room(): void {
 
 // seg002:0486
 export function goto_other_room(direction: number): number {
-  const link = g.level.roomlinks[g.Char.room - 1];
+  /**
+   * `((byte*)&level.roomlinks[Char.room - 1])[direction]`, including
+   * when `Char.room` is nought.
+   *
+   * It can be. `goto_other_room` is what puts him in room 0 when he
+   * falls out of the bottom of a level, and `fell_out` only kills him
+   * for it while `Char.alive < 0`; once he is already dying the room
+   * stays nought and the next `exit_room` comes back here. Fuzzing
+   * level 5 reaches it in about one run in ten.
+   *
+   * In the C that reads `level.roomlinks[-1]`, which is the four
+   * bytes in front of `roomlinks` in the level struct -- the end of
+   * `doorlinks2`. It is garbage, but it is the original's own
+   * garbage, and it is the same garbage every time for a given level.
+   * Here the array simply has no index -1, so `link.left` threw a
+   * `TypeError` and took the whole page down with it.
+   */
+  const link = g.Char.room === 0
+    ? {
+      left: g.level.doorlinks2[252],
+      right: g.level.doorlinks2[253],
+      up: g.level.doorlinks2[254],
+      down: g.level.doorlinks2[255],
+    }
+    : g.level.roomlinks[g.Char.room - 1];
   const other_room = [link.left, link.right, link.up, link.down][direction];
   g.Char.room = other_room;
   let opposite_dir: number;

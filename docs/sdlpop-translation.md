@@ -254,3 +254,35 @@ port except the cutscenes' and the cheats'.
 
 `tools/dev/residue.ts` and `tools/dev/which-tick.ts` came out of the
 other half of the same round; see `tools/oracle/README.md`.
+
+### A seventh, found by fuzzing rather than by reading
+
+The sweep above reads; this one was found by playing. Nine levels,
+four runs each, two thousand ticks of random keys with the cheats
+thrown in, over nine seeds -- and level 5 threw in about one run in
+ten:
+
+    TypeError: Cannot read properties of undefined (reading 'left')
+        at goto_other_room (src/pop/seg002.ts:440)
+        at leave_room       (src/pop/seg002.ts:509)
+        at exit_room        (src/pop/seg002.ts:408)
+
+`goto_other_room` is what puts the Prince in room 0 when he falls out
+of the bottom of a level, and `fell_out` only kills him for it while
+`Char.alive < 0`. Once he is already dying the room stays nought, and
+the next `exit_room` comes straight back into `goto_other_room` with
+a room of nought -- where the C reads
+`((byte*)&level.roomlinks[-1])[direction]`, which is the four bytes
+in front of `roomlinks` in the level struct and therefore the end of
+`doorlinks2`. Garbage, but the original's own garbage and the same
+every time for a level. Here the array has no index -1, so reading
+`.left` off `undefined` threw and took the whole page down.
+
+The port now reads `doorlinks2[252 + direction]`, which is those four
+bytes exactly. `tests/pop/fell-out.test.ts` pins both halves: the
+four directions off room 0, and `exit_room` reaching it the way play
+does. Fuzzing nine seeds after the fix throws nothing.
+
+A `TypeError` is worse than the original's garbage, not better: the
+original wanders off and the page stops dead. Anywhere the C indexes
+an array with something that can be -1 is worth the same look.

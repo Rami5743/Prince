@@ -6851,7 +6851,12 @@ function exit_room() {
   else follow_guard();
 }
 function goto_other_room(direction) {
-  const link2 = g.level.roomlinks[g.Char.room - 1];
+  const link2 = g.Char.room === 0 ? {
+    left: g.level.doorlinks2[252],
+    right: g.level.doorlinks2[253],
+    up: g.level.doorlinks2[254],
+    down: g.level.doorlinks2[255]
+  } : g.level.roomlinks[g.Char.room - 1];
   const other_room = [link2.left, link2.right, link2.up, link2.down][direction];
   g.Char.room = other_room;
   let opposite_dir;
