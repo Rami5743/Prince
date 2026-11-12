@@ -14,7 +14,7 @@
  * translated; no capture reaches those levels, so what stands behind
  * them is `tests/pop/levels-smoke.test.ts` and playing it.
  */
-import { g, byteOf, sbyteOf, wordOf } from './state.ts';
+import { g, byteOf, sbyteOf, wordOf, roomLinksOf } from './state.ts';
 import {
   x_bump, y_land, strikeprob, restrikeprob, blockprob, impblockprob,
   advprob, refractimer, extrastrength,
@@ -135,7 +135,7 @@ export function load_room_links(): void {
     // which pressed buttons, opened gates and shook loose floors that
     // nothing had touched.
     l8.get_room_address.fn(g.drawn_room);
-    const link = g.level.roomlinks[g.drawn_room - 1];
+    const link = roomLinksOf(g.drawn_room);
     g.room_L = link.left;
     g.room_R = link.right;
     g.room_A = link.up;
@@ -157,18 +157,18 @@ export function load_room_links(): void {
      * of the row below from `room_BL`.
      */
     if (g.room_A) {
-      g.room_AL = g.level.roomlinks[g.room_A - 1].left;
-      g.room_AR = g.level.roomlinks[g.room_A - 1].right;
+      g.room_AL = roomLinksOf(g.room_A).left;
+      g.room_AR = roomLinksOf(g.room_A).right;
     } else {
-      if (g.room_L) g.room_AL = g.level.roomlinks[g.room_L - 1].up;
-      if (g.room_R) g.room_AR = g.level.roomlinks[g.room_R - 1].up;
+      if (g.room_L) g.room_AL = roomLinksOf(g.room_L).up;
+      if (g.room_R) g.room_AR = roomLinksOf(g.room_R).up;
     }
     if (g.room_B) {
-      g.room_BL = g.level.roomlinks[g.room_B - 1].left;
-      g.room_BR = g.level.roomlinks[g.room_B - 1].right;
+      g.room_BL = roomLinksOf(g.room_B).left;
+      g.room_BR = roomLinksOf(g.room_B).right;
     } else {
-      if (g.room_L) g.room_BL = g.level.roomlinks[g.room_L - 1].down;
-      if (g.room_R) g.room_BR = g.level.roomlinks[g.room_R - 1].down;
+      if (g.room_L) g.room_BL = roomLinksOf(g.room_L).down;
+      if (g.room_R) g.room_BR = roomLinksOf(g.room_R).down;
     }
   } else {
     g.room_L = 0;
@@ -343,9 +343,11 @@ export function check_guard_fallout(): void {
     clear_char();
     saveshad();
   } else if (g.Guard.charid === charids.charid_4_skeleton
-    && g.level.roomlinks[g.Guard.room - 1].down === 3) {
-    // A skeleton that falls into room 3 comes back.
-    g.Guard.room = g.level.roomlinks[g.Guard.room - 1].down;
+    && roomLinksOf(g.Guard.room).down === 3) {
+    // A skeleton that falls into room 3 comes back. `Guard.room` can
+    // be nought here -- a guard who falls out of the bottom of the
+    // level is put there -- which is what `linksOfRoom` is for.
+    g.Guard.room = roomLinksOf(g.Guard.room).down;
     g.Guard.x = 133;
     g.Guard.curr_row = 1;
     g.Guard.direction = directions.dir_0_right;
@@ -453,14 +455,7 @@ export function goto_other_room(direction: number): number {
    * Here the array simply has no index -1, so `link.left` threw a
    * `TypeError` and took the whole page down with it.
    */
-  const link = g.Char.room === 0
-    ? {
-      left: g.level.doorlinks2[252],
-      right: g.level.doorlinks2[253],
-      up: g.level.doorlinks2[254],
-      down: g.level.doorlinks2[255],
-    }
-    : g.level.roomlinks[g.Char.room - 1];
+  const link = roomLinksOf(g.Char.room);
   const other_room = [link.left, link.right, link.up, link.down][direction];
   g.Char.room = other_room;
   let opposite_dir: number;

@@ -392,6 +392,49 @@ export function resetGlobals(): void {
 }
 
 /** The C's `(byte)`, `(sbyte)` and `(word)` casts, which it relies on. */
+/**
+ * `level.roomlinks[room - 1]`, for a `room` that need not be a room.
+ *
+ * The C indexes the array with `room - 1` and never checks, so it
+ * reads whatever is at that offset in the `level` struct. Two rooms
+ * that are not rooms turn up in play:
+ *
+ * * **nought.** `goto_other_room` puts the Prince -- and a guard --
+ *   there when they fall out of the bottom of a level, and
+ *   `fell_out` only kills him for it while `Char.alive < 0`, so once
+ *   he is dying the room stays nought and the next `exit_room` comes
+ *   back for its links. The C then reads the four bytes in front of
+ *   `roomlinks`, which is the end of `doorlinks2`; those are
+ *   reproduced here exactly.
+ * * **anything at all.** Those four bytes are 128 on level 10, so
+ *   the original walks out of room 0 into "room 128" and reads
+ *   `roomlinks[127]`, four hundred bytes past the array and into the
+ *   guard tables. That cannot be reproduced without the level's raw
+ *   image, which the port does not keep, so this answers with no
+ *   links at all -- which is what the level data uses for the edge of
+ *   the world, and stops the wandering instead of carrying it on.
+ *
+ * It exists because in JavaScript the array simply has no index -1
+ * or 127: reading a field off `undefined` throws a `TypeError`, and
+ * that stops the page dead where the original merely wanders.
+ * Fuzzing found both -- level 5 about one run in ten, level 10 about
+ * one in five.
+ */
+export function roomLinksOf(room: number): {
+  left: number; right: number; up: number; down: number;
+} {
+  if (room >= 1 && room <= 24) return g.level.roomlinks[room - 1];
+  if (room === 0) {
+    return {
+      left: g.level.doorlinks2[252],
+      right: g.level.doorlinks2[253],
+      up: g.level.doorlinks2[254],
+      down: g.level.doorlinks2[255],
+    };
+  }
+  return { left: 0, right: 0, up: 0, down: 0 };
+}
+
 export const byteOf = (v: number): number => v & 0xff;
 export const sbyteOf = (v: number): number => ((v & 0xff) << 24) >> 24;
 export const wordOf = (v: number): number => v & 0xffff;

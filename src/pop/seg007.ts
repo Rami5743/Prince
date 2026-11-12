@@ -11,7 +11,7 @@
  * Every `#ifdef FIX_` and `#ifdef USE_` branch takes the side the
  * unmodified game is on.
  */
-import { g, byteOf, sbyteOf } from './state.ts';
+import { g, byteOf, sbyteOf, roomLinksOf } from './state.ts';
 import {
   tbl_line, y_loose_land, loose_sound, y_something, gate_close_speeds,
   door_delta, leveldoor_close_speeds, y_land,
@@ -947,7 +947,7 @@ export function mob_down_a_row(): void {
   if (g.curmob.row >= 3) {
     g.curmob.y -= 192;
     g.curmob.row = 0;
-    g.curmob.room = g.level.roomlinks[g.curmob.room - 1].down;
+    g.curmob.room = roomLinksOf(g.curmob.room).down;
   }
 }
 

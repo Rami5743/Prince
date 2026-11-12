@@ -279,9 +279,23 @@ every time for a level. Here the array has no index -1, so reading
 `.left` off `undefined` threw and took the whole page down.
 
 The port now reads `doorlinks2[252 + direction]`, which is those four
-bytes exactly. `tests/pop/fell-out.test.ts` pins both halves: the
-four directions off room 0, and `exit_room` reaching it the way play
-does. Fuzzing nine seeds after the fix throws nothing.
+bytes exactly -- and fuzzing all fourteen levels after that found the
+next step of the same wander. On level 10 those four bytes are **128
+apiece**, so the original walks out of room 0 into "room 128" and
+`load_room_links` reads `roomlinks[127]`, four hundred bytes past the
+array and in among the guard tables. One run of level 10 in five.
+
+There is nothing to reproduce there without the level's raw image,
+which the port does not keep, so `roomLinksOf` in `state.ts` is now
+the one place that decides what a room that is not a room has for
+links: the C's own four bytes for room 0, and **no links at all** for
+anything else -- which is what the level data uses for the edge of
+the world, and stops the wandering instead of carrying it on. Every
+`roomlinks[room - 1]` in `seg002`, `seg006` and `seg007` goes through
+it. `tests/pop/fell-out.test.ts` pins all three: the four directions
+off room 0, `exit_room` reaching it the way play does, and
+`load_room_links` on room 128. Fuzzing fourteen levels over five
+seeds throws nothing now.
 
 A `TypeError` is worse than the original's garbage, not better: the
 original wanders off and the page stops dead. Anywhere the C indexes

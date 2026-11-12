@@ -13,6 +13,7 @@
  */
 import {
   g, type CharType, type FrameType, copyChar, byteOf, sbyteOf, wordOf,
+  roomLinksOf,
 } from './state.ts';
 import {
   tbl_line, y_land, tile_div_tbl, tile_mod_tbl, dir_front, dir_behind, y_clip,
@@ -123,9 +124,10 @@ export function find_room_of_tile(): number {
    * `get_tile` turns room 0 into a wall, which is what the original
    * does at the edge of a level.
    */
-  const linksOf = (room: number) => (room >= 1 && room <= 24
-    ? g.level.roomlinks[room - 1]
-    : { left: 0, right: 0, up: 0, down: 0 });
+  // `roomLinksOf` is the one place that decides what a room that is
+  // not a room has for links; the `if (g.curr_room)` tests below mean
+  // this never asks it about room 0.
+  const linksOf = roomLinksOf;
   for (;;) {
     if (g.tile_col < 0) {
       g.tile_col += 10;

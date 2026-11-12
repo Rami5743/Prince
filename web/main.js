@@ -2887,6 +2887,18 @@ function resetGlobals() {
   g.upside_down = keep.upside_down;
   g.is_blind_mode = keep.is_blind_mode;
 }
+function roomLinksOf(room) {
+  if (room >= 1 && room <= 24) return g.level.roomlinks[room - 1];
+  if (room === 0) {
+    return {
+      left: g.level.doorlinks2[252],
+      right: g.level.doorlinks2[253],
+      up: g.level.doorlinks2[254],
+      down: g.level.doorlinks2[255]
+    };
+  }
+  return { left: 0, right: 0, up: 0, down: 0 };
+}
 var byteOf = (v) => v & 255;
 var sbyteOf = (v) => (v & 255) << 24 >> 24;
 var wordOf = (v) => v & 65535;
@@ -3649,7 +3661,7 @@ function get_tile(room, col, row) {
   return g.curr_tile2;
 }
 function find_room_of_tile() {
-  const linksOf = (room) => room >= 1 && room <= 24 ? g.level.roomlinks[room - 1] : { left: 0, right: 0, up: 0, down: 0 };
+  const linksOf = roomLinksOf;
   for (; ; ) {
     if (g.tile_col < 0) {
       g.tile_col += 10;
@@ -6175,7 +6187,7 @@ function mob_down_a_row() {
   if (g.curmob.row >= 3) {
     g.curmob.y -= 192;
     g.curmob.row = 0;
-    g.curmob.room = g.level.roomlinks[g.curmob.room - 1].down;
+    g.curmob.room = roomLinksOf(g.curmob.room).down;
   }
 }
 function draw_mobs() {
@@ -6583,24 +6595,24 @@ function load_room_links() {
   g.room_AL = 0;
   if (g.drawn_room) {
     l8.get_room_address.fn(g.drawn_room);
-    const link2 = g.level.roomlinks[g.drawn_room - 1];
+    const link2 = roomLinksOf(g.drawn_room);
     g.room_L = link2.left;
     g.room_R = link2.right;
     g.room_A = link2.up;
     g.room_B = link2.down;
     if (g.room_A) {
-      g.room_AL = g.level.roomlinks[g.room_A - 1].left;
-      g.room_AR = g.level.roomlinks[g.room_A - 1].right;
+      g.room_AL = roomLinksOf(g.room_A).left;
+      g.room_AR = roomLinksOf(g.room_A).right;
     } else {
-      if (g.room_L) g.room_AL = g.level.roomlinks[g.room_L - 1].up;
-      if (g.room_R) g.room_AR = g.level.roomlinks[g.room_R - 1].up;
+      if (g.room_L) g.room_AL = roomLinksOf(g.room_L).up;
+      if (g.room_R) g.room_AR = roomLinksOf(g.room_R).up;
     }
     if (g.room_B) {
-      g.room_BL = g.level.roomlinks[g.room_B - 1].left;
-      g.room_BR = g.level.roomlinks[g.room_B - 1].right;
+      g.room_BL = roomLinksOf(g.room_B).left;
+      g.room_BR = roomLinksOf(g.room_B).right;
     } else {
-      if (g.room_L) g.room_BL = g.level.roomlinks[g.room_L - 1].down;
-      if (g.room_R) g.room_BR = g.level.roomlinks[g.room_R - 1].down;
+      if (g.room_L) g.room_BL = roomLinksOf(g.room_L).down;
+      if (g.room_R) g.room_BR = roomLinksOf(g.room_R).down;
     }
   } else {
     g.room_L = 0;
@@ -6771,8 +6783,8 @@ function check_guard_fallout() {
     loadshad();
     clear_char();
     saveshad();
-  } else if (g.Guard.charid === charids.charid_4_skeleton && g.level.roomlinks[g.Guard.room - 1].down === 3) {
-    g.Guard.room = g.level.roomlinks[g.Guard.room - 1].down;
+  } else if (g.Guard.charid === charids.charid_4_skeleton && roomLinksOf(g.Guard.room).down === 3) {
+    g.Guard.room = roomLinksOf(g.Guard.room).down;
     g.Guard.x = 133;
     g.Guard.curr_row = 1;
     g.Guard.direction = directions.dir_0_right;
@@ -6851,12 +6863,7 @@ function exit_room() {
   else follow_guard();
 }
 function goto_other_room(direction) {
-  const link2 = g.Char.room === 0 ? {
-    left: g.level.doorlinks2[252],
-    right: g.level.doorlinks2[253],
-    up: g.level.doorlinks2[254],
-    down: g.level.doorlinks2[255]
-  } : g.level.roomlinks[g.Char.room - 1];
+  const link2 = roomLinksOf(g.Char.room);
   const other_room = [link2.left, link2.right, link2.up, link2.down][direction];
   g.Char.room = other_room;
   let opposite_dir;
