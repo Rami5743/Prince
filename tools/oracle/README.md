@@ -1036,7 +1036,7 @@ With each run's edge where `which-key` puts it:
 | `0fbffa60` (edge@569 +2) | 722 of 724 | 266, 690, 694 |
 | `848ee3c4` (Up@925 +1) | 1440 of 1446 | 74, 77–81 |
 | `13ab6867` (Up@573 −3) | 727 of 728 | 584 |
-| `9b60bf3a` (Right@380 +2) | 550 of 557 | 83, 379, 554–558 |
+| `9b60bf3a` (Right@394 +3) | 551 of 557 | 83, 554–558 |
 | `f6874819` (as recorded) | 1189 of 1192 | 24, 25, 48 |
 | `probeF` (as recorded) | 1176 of 1193 | 433, 708, 1129–1148 |
 
@@ -1083,9 +1083,48 @@ both controls, where this moves the one control's one edge.
 
 So **run `which-key.ts --by 1,2,3`**, not the default.
 
-So eight ticks of 12038 are left that nothing accounts for:
-`13ab6867` 584 and `9b60bf3a` 83, 379 and 554–558 -- and of those,
-`13ab6867`'s is a stretch the capture saw no change in, and
-`9b60bf3a`'s last five are the end of a capture that has 557 ticks
-where the recording has 558 and is already carrying six ticks of
-drift by then.
+`9b60bf3a` wants three ticks as well, and a different edge with
+them: Right at **394** three ticks later is 551 of 557 where Right
+at 380 two later was 550, and its 379 goes with the change.
+
+#### `9b60bf3a` 554 to 558: the comparison runs off the end
+
+The digest has **559 tick slots, 557 of them filled**, against a
+recording of 558 ticks -- so the port's run is 559 pictures, indices
+0 to 558. By tick 554 the alignment is carrying **+3**, so the
+capture's 556, 557 and 558 are asked for the port's 559, 560 and
+561, which do not exist; `exactAgreement`'s `cost` charges one for a
+`k` past the end, so those three can never match whatever the port
+draws. Only 554 and 555 are real comparisons, and both are the last
+two ticks of a capture that is a tick shorter than the run it is of.
+
+So **three** ticks of 12038 are left that nothing accounts for:
+`13ab6867` 584 and `9b60bf3a` 554 and 555, and all three sit on a
+capture's own numbering -- 584 on three ticks the capture saw no
+change in at all, 554 and 555 on the end of a short capture.
+
+#### `9b60bf3a` 83 is not a loose floor running ahead
+
+It was written down as "a falling loose floor runs a tick ahead of
+the capture". It does not. Replaying the recording and printing the
+mob each tick gives the falling floor's `y` as
+
+    tick   76  77  78  79  80  81  82  83   84
+    port    2   8  17  29  44  62  83 107   landed at 125
+
+and the capture's own box of what moved has its bottom at 45, 62, 83
+and 107 on ticks 80 to 83 -- the same numbers, tick for tick. The
+fall is in step.
+
+What is out of step is the capture's numbering. The port and the
+capture agree at offset 0 for ticks 79 to 82 and at offset 1 from 84
+on, so the capture gains a tick between them; `which-tick.ts` prints
+the port's box at the *aligned* tick, which is why the port's column
+reads 125 against the capture's 107 at 83 and looks like a lead. The
+room change is at 78 and this capture has 557 ticks where the
+recording has 558, so a tick invented or dropped around a landing two
+ticks after a room change is exactly what the splitter does.
+
+So nothing in `animate_loose`, `move_loose`, `loose_fall`,
+`mob_down_a_row` or `do_mobs` is wrong -- all five were put beside
+the C again in the same round and are the same line for line.
