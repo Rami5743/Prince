@@ -131,29 +131,55 @@ describe('the lines the translation dropped', () => {
   /**
    * `play_guard_frame` ends on `saveshad()`, not `saveshad_and_opp()`.
    * The second of those also writes `Opp` -- the copy of the Prince
-   * taken at the top of the same function -- back over `Kid`, which
-   * throws away anything the guard's own frame did to the Prince.
+   * taken by `loadshad_and_opp` at the top of the same function --
+   * back over `Kid`, which throws away whatever the guard's own frame
+   * did to the Prince.
    *
-   * The one that does it is the shadow of level 12: when the Prince
-   * reaches him, `autocontrol_shadow_level12` moves the Prince to
-   * where the shadow stood with `savekid()`. Writing the stale `Opp`
-   * back over `Kid` undid exactly that.
+   * One thing does: uniting with the shadow on level 12.
+   * `autocontrol_shadow_level12` runs inside `play_guard`, and when
+   * the Prince reaches the shadow it puts the Prince where the shadow
+   * stood -- `Char.charid = charid_0_kid; savekid();` -- and clears
+   * the shadow. Writing the stale `Opp` back over `Kid` a few lines
+   * later undid exactly that, so uniting left the Prince where he
+   * was.
    */
-  it('the guard frame does not write the stale Prince back', async () => {
-    await PopGame.start(assets, exe, 1);
+  it('uniting with the shadow moves the Prince to where it stood', async () => {
+    await PopGame.start(assets, exe, 12);
+    g.current_level = 12;
+    g.drawn_room = 15;
+    // The shadow, close enough to unite with, and past its own setup.
+    g.shadow_initialized = 1;
+    g.offguard = 1;
+    g.Guard.charid = charids.charid_1_shadow;
     g.Guard.direction = directions.dir_FF_left;
-    g.Guard.room = g.drawn_room;
-    g.Guard.charid = charids.charid_2_guard;
+    g.Guard.room = 15;
+    g.Guard.curr_row = 0;
+    g.Guard.curr_col = 4;
     g.Guard.alive = -1;
-    g.Guard.x = 100;
-    // `loadshad_and_opp` will take this x into `Opp`; the frame then
-    // moves the Prince, as the shadow of level 12 does.
-    const moved = (g.Kid.x + 40) & 0xff;
-    const original = { ...g.Kid };
-    g.Kid.x = moved;
+    g.Guard.sword = 0;
+    g.Guard.frame = 15;
+    g.Guard.x = 150;
+    g.guardhp_curr = 1;
+    // The Prince, five units away and unarmed.
+    g.Kid.charid = charids.charid_0_kid;
+    g.Kid.room = 15;
+    g.Kid.curr_row = 0;
+    g.Kid.curr_col = 4;
+    g.Kid.alive = -1;
+    g.Kid.sword = 0;
+    g.Kid.frame = 15;
+    g.Kid.x = 155;
+    const was = g.Kid.x;
+
     play_guard_frame();
-    expect(g.Kid.x).toBe(moved);
-    expect(original.x).not.toBe(moved);
+
+    // `savekid()` moved him to where the shadow was, and nothing put
+    // the old copy back.
+    expect(g.Kid.x).toBe(150);
+    expect(was).toBe(155);
+    expect(g.united_with_shadow).toBe(42);
+    // And the shadow is gone.
+    expect(g.Guard.direction).toBe(directions.dir_56_none);
   });
 
   /**

@@ -1177,3 +1177,17 @@ remaining difference against the fresh captures is 83 and nothing
 else before tick 317.
 
 So there is no tick in the suite left that is the port's.
+
+### `760c3e74`: no edge closes it, three ticks either way
+
+Searched again with each of the four edges between 270 and 340
+(`x@291`, `x@307`, `x@327`, `x@328`) moved one, two and three ticks
+either way: the best is `x@327` three later at **1540** of 1566,
+against 1538 as recorded. Nothing there is worth anything.
+
+So its twenty-eight stay what this file already measured them to be:
+the release at 291 taken two ticks early, which makes the port draw
+its ticks 286 to 326 exactly and costs more than it gains over the
+rest of a twenty-six-second run (361 of 1564 with the shift). That is
+the schedule's clock and the game's parting company over a long run,
+and no single edge can express it.
