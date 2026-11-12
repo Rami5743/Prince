@@ -18,9 +18,19 @@
  *
  *   node --experimental-strip-types tools/dev/which-key.ts <name> [more...] [--by 1,2]
  *
- * `--by` is how many ticks to try moving each edge; one by default,
- * because one is the oracle's own resolution, and `1,2` because the
- * emulator has been measured taking a press two ticks late as well.
+ * `--by` is how many ticks to try moving each edge. One is the
+ * oracle's own resolution, and the emulator has been measured taking
+ * a press two and three ticks off as well, so the default is now
+ * `1,2,3`.
+ *
+ * **It has to be three.** Three is not a theoretical extra: `13ab6867`
+ * reads 572 of 728 as recorded and 721 with its Up at 573 two ticks
+ * later, which is where the range of `1,2` left it -- and **727**
+ * with the same Up three ticks *earlier*, which is exactly what
+ * `tools/oracle/README` had already read off that capture's own
+ * pixels (its run-jump begins on frame 34 at tick 571, three before
+ * the recording's Up). Seven of the suite's unexplained ticks were
+ * the tool's range and not the port.
  */
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -51,7 +61,7 @@ async function score(name: string, ticks: Controls[], digest: Digest, level: num
 
 const args = process.argv.slice(2);
 const byArg = args.indexOf('--by');
-const BY = byArg >= 0 ? args[byArg + 1].split(',').map(Number) : [1];
+const BY = byArg >= 0 ? args[byArg + 1].split(',').map(Number) : [1, 2, 3];
 const names = args.filter((a, i) => !a.startsWith('--') && i !== byArg + 1);
 
 for (const name of names) {

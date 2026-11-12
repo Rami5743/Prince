@@ -1003,3 +1003,89 @@ per-control version has 521 and 550. What no single edge explains is
 now two, seven, seven, nought, nought, one and six -- twenty-three
 ticks of twelve thousand, and six of those twenty-three are ticks two
 captures of the original disagree about.
+
+### The residue, with the edge put where the emulator took it
+
+`which-key.ts` says which edge a capture wants moved; while it is in
+the wrong place the whole run after it is marked wrong, so the ticks
+that are genuinely the port's cannot be seen at all. Two tools were
+added for the other half of that:
+
+* `tools/dev/residue.ts <name> [edge-tick] [x|y|shift|all] [by]` --
+  the shift applied, then the list of ticks still apart with the
+  drift the alignment carries there. With no edge it is `pop-first`.
+* `tools/dev/which-tick.ts <name> <from> <to> [edge-tick which by]` --
+  per tick: the capture's box of what moved, the port's, and -- the
+  useful one -- whether the capture's fingerprint is a picture the
+  port draws on *some* tick. "The port's tick 456" says the capture
+  is the port's own run shifted; "nothing the port ever draws" says
+  the two really do draw something different.
+
+Note that the edge tick these take is the one in the recording's
+decoded timeline, which is where the control *changes*. `848ee3c4`'s
+Up, written "926" in the table above, is the edge at **925**; given
+926 the tool moves nothing and reports 1432.
+
+With each run's edge where `which-key` puts it:
+
+| run | with the edge moved | what is left |
+|-----|---------------------|--------------|
+| `palace4` (Right@20 −1) | 521 of 521 | nothing |
+| `b4ff4672` (Right@251 −1) | 428 of 428 | nothing |
+| `5920a8c2` (Shift@240 −1) | 414 of 415 | tick 1 |
+| `0fbffa60` (edge@569 +2) | 722 of 724 | 266, 690, 694 |
+| `848ee3c4` (Up@925 +1) | 1440 of 1446 | 74, 77–81 |
+| `13ab6867` (Up@573 −3) | 727 of 728 | 584 |
+| `9b60bf3a` (Right@380 +2) | 550 of 557 | 83, 379, 554–558 |
+| `f6874819` (as recorded) | 1189 of 1192 | 24, 25, 48 |
+| `probeF` (as recorded) | 1176 of 1193 | 433, 708, 1129–1148 |
+
+and of those:
+
+* **`5920a8c2` tick 1** is the same thing as its old tick 289: the
+  port draws a level's opening picture twice -- the frame
+  `draw_level_first` drew it on and the frame the first tick does
+  nothing in -- and this capture has it once. `probeF`'s restart has
+  it twice, so it is the capture.
+* **`0fbffa60` 266** is a room change: the capture's changed box runs
+  to y 198, into the strip of words, where the port's stops at 191.
+  That is `ROOM_CHANGE_BLANK`.
+* **`0fbffa60` 690 and 694** are the potion bubbles. The capture
+  changes twelve pixels on 690 and three on 694, in a box that starts
+  at x 2 to 15 -- the flask -- and `start_anim_potion` seeds them from
+  `prandom(6) + 1`, which no two runs of the original agree about.
+  `agree.py` on two captures of this recording said exactly that.
+* **`848ee3c4` 74 and 77 to 81** are the six `agree.py` already names:
+  two captures of the original disagree there.
+* **`f6874819`'s three** and **`probeF`'s nineteen** are written up
+  under the hour above.
+
+* **`13ab6867` 584** is the capture holding still. Its 581, 582 and
+  583 have nothing changed at all while the port is moving, and 584
+  changes **one pixel**; the alignment then slips from −2 to +1 over
+  584 to 586 and the two agree again. That is `split_ticks` numbering
+  by the clock over a stretch it saw no change in.
+
+#### Three ticks, not two: `13ab6867` after all
+
+`which-key.ts` tried each edge at ±1 and ±2 and said Up at 573 two
+ticks *later* was worth 721 of 728. Tried at ±3 as well, the same Up
+**three ticks earlier** is worth **727**, and what is left is the one
+tick above.
+
+That is the reading this file already had from the capture's own
+pixels and never followed up: "frames 34, 35 and 36 at ticks 571, 572
+and 573 ... the run-jump therefore began at 571, three ticks before
+the recording's Up". The pixels were right and the tool's range was
+too narrow. `late-key.ts 13ab6867 572 588 --y --shift` scoring 609 at
+−3 is not the same experiment: it moves the whole press window and
+both controls, where this moves the one control's one edge.
+
+So **run `which-key.ts --by 1,2,3`**, not the default.
+
+So eight ticks of 12038 are left that nothing accounts for:
+`13ab6867` 584 and `9b60bf3a` 83, 379 and 554–558 -- and of those,
+`13ab6867`'s is a stretch the capture saw no change in, and
+`9b60bf3a`'s last five are the end of a capture that has 557 ticks
+where the recording has 558 and is already carrying six ticks of
+drift by then.

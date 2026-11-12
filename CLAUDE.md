@@ -86,6 +86,16 @@ captures of a real PRINCE.EXE:
   `tools/oracle/README.md` names what every one of those is. Most are
   a single key edge the emulator took a tick or two off the
   recording's time.
+* **With each run's edge where `which-key --by 1,2,3` puts it, eight
+  ticks of the twelve thousand are left that nothing accounts for**:
+  `13ab6867` 584 and `9b60bf3a` 83, 379 and 554 to 558. `palace4` and
+  `b4ff4672` are then exact, `13ab6867` is 727 of 728 and `848ee3c4`
+  1440 of 1446. Everything else is named: `0fbffa60`'s 266 is a room
+  change and its 690 and 694 are the potion bubbles no two runs of
+  the original agree about, `848ee3c4`'s six are the six `agree.py`
+  says two captures disagree on, `5920a8c2`'s one is the opening
+  picture drawn once instead of twice. `tools/dev/residue.ts` and
+  `tools/dev/which-tick.ts` are what measured it.
 
 **Before reading any of those as a fault, run
 `tools/dev/which-key.ts`.** It moves every key edge of the recording a
@@ -95,11 +105,21 @@ frame of the run `control_running` stops on -- frame 7 or frame 11 --
 one tick is thirty of them:
 
     0fbffa60   edge 569 two ticks later:   722 of 724, from 642
-    13ab6867   edge 573 two ticks later:   721 of 728, from 572
+    13ab6867   Up at 573 three EARLIER:    727 of 728, from 572
     9b60bf3a   Right at 380 two later:     550 of 557, from 529
     b4ff4672   Right at 251 one earlier:   428 of 428, from 395
     palace4    Right at  20 one earlier:   521 of 521, from 519
     5920a8c2   Shift at 240 one earlier:   414 of 415, from 413
+    848ee3c4   Up at 925 one later:       1440 of 1446, from 1432
+
+**Run it as `which-key.ts --by 1,2,3`.** The default range of one
+tick, and even `1,2`, is too narrow: `13ab6867` reads 721 with its Up
+two ticks later and **727** with the same Up three ticks earlier,
+which is what `tools/oracle/README.md` had already read off that
+capture's own pixels and nobody had tried. And the edge tick these
+tools take is the one in the decoded timeline, where the control
+changes -- `848ee3c4`'s Up, written "926" in the old tables, is the
+edge at **925**.
 
 **It moves one control of an edge at a time, not the whole edge.** A
 player who presses Right and Up in the same thousandth of a second
