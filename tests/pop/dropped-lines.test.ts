@@ -18,8 +18,11 @@ import { PopGame } from '../../src/pop/game.ts';
 import { g } from '../../src/pop/state.ts';
 import { draw_hurt_splash } from '../../src/pop/seg008.ts';
 import { loose_land } from '../../src/pop/seg007.ts';
-import { on_guard_killed } from '../../src/pop/seg002.ts';
-import { tiles } from '../../src/pop/types.ts';
+import { on_guard_killed, clear_char } from '../../src/pop/seg002.ts';
+import { play_kid_frame, play_guard_frame } from '../../src/pop/seg000.ts';
+import { jump_through_mirror } from '../../src/pop/seg003.ts';
+import { hud } from '../../src/pop/link.ts';
+import { tiles, charids, directions } from '../../src/pop/types.ts';
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -85,5 +88,92 @@ describe('the lines the translation dropped', () => {
     on_guard_killed();
     expect(g.is_show_time).toBe(1);
     expect(g.leveldoor_open).toBe(2);
+  });
+  /**
+   * `play_kid_frame` has three lines after `play_kid()` that the
+   * translation had lost: a Prince who is dying turns the world the
+   * right way up again. `Char.alive` is -1 while he lives, so the
+   * reset only fires once the green potion's owner is on his way out.
+   */
+  it('dying cancels the upside-down potion', async () => {
+    await PopGame.start(assets, exe, 1);
+    g.upside_down = -1;
+    play_kid_frame();
+    // Alive: the world stays over.
+    expect(g.upside_down).toBe(-1);
+    g.Kid.alive = 0;
+    play_kid_frame();
+    expect(g.upside_down).toBe(0);
+  });
+
+  /**
+   * `clear_char` erases the guard's flasks before it zeroes the
+   * count. Nothing else will -- `draw_hp` only redraws them while
+   * `guardhp_delta` is set -- so without this line every character
+   * `clear_char` removes (the shadows of levels 4, 5 and 12, and the
+   * mouse of level 8) left his hit points painted under the room.
+   */
+  it('clear_char rubs the guard hit points out first', async () => {
+    await PopGame.start(assets, exe, 1);
+    const asked: Array<[number, number]> = [];
+    const was = hud.draw_guard_hp.fn;
+    hud.draw_guard_hp.fn = (curr: number, max: number) => { asked.push([curr, max]); };
+    try {
+      g.guardhp_curr = 3;
+      clear_char();
+    } finally {
+      hud.draw_guard_hp.fn = was;
+    }
+    expect(asked).toEqual([[0, 3]]);
+    expect(g.guardhp_curr).toBe(0);
+  });
+
+  /**
+   * `play_guard_frame` ends on `saveshad()`, not `saveshad_and_opp()`.
+   * The second of those also writes `Opp` -- the copy of the Prince
+   * taken at the top of the same function -- back over `Kid`, which
+   * throws away anything the guard's own frame did to the Prince.
+   *
+   * The one that does it is the shadow of level 12: when the Prince
+   * reaches him, `autocontrol_shadow_level12` moves the Prince to
+   * where the shadow stood with `savekid()`. Writing the stale `Opp`
+   * back over `Kid` undid exactly that.
+   */
+  it('the guard frame does not write the stale Prince back', async () => {
+    await PopGame.start(assets, exe, 1);
+    g.Guard.direction = directions.dir_FF_left;
+    g.Guard.room = g.drawn_room;
+    g.Guard.charid = charids.charid_2_guard;
+    g.Guard.alive = -1;
+    g.Guard.x = 100;
+    // `loadshad_and_opp` will take this x into `Opp`; the frame then
+    // moves the Prince, as the shadow of level 12 does.
+    const moved = (g.Kid.x + 40) & 0xff;
+    const original = { ...g.Kid };
+    g.Kid.x = moved;
+    play_guard_frame();
+    expect(g.Kid.x).toBe(moved);
+    expect(original.x).not.toBe(moved);
+  });
+
+  /**
+   * `jump_through_mirror` sets `Char.charid` and then `saveshad()`.
+   * The translation set `Guard.charid` and then copied the whole of
+   * `Char` over `Guard`, which put the Prince's own `charid_0_kid`
+   * straight back on top of it -- so what came through the glass on
+   * level 4 was an ordinary guard, drawn solid and run by
+   * `autocontrol_kid` rather than `autocontrol_shadow_level4`.
+   */
+  it('what comes through the mirror is the shadow', async () => {
+    await PopGame.start(assets, exe, 1);
+    g.current_level = 4;
+    g.hitp_max = 3;
+    g.hitp_curr = 3;
+    g.jumped_through_mirror = -1;
+    jump_through_mirror();
+    expect(g.Guard.charid).toBe(charids.charid_1_shadow);
+    expect(g.guardhp_curr).toBe(3);
+    expect(g.hitp_curr).toBe(1);
+    expect(g.jumped_through_mirror).toBe(0);
   });
 });

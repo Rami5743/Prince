@@ -6436,18 +6436,18 @@ function check_mirror() {
   }
 }
 function jump_through_mirror() {
-  g.jumped_through_mirror = 0;
   loadkid();
+  load_frame();
   check_mirror_image();
-  g.Guard.charid = charids.charid_1_shadow;
+  g.jumped_through_mirror = 0;
+  g.Char.charid = charids.charid_1_shadow;
   out.play_sound(soundids.sound_45_jump_through_mirror);
+  saveshad();
   g.guardhp_max = g.hitp_max;
   g.guardhp_curr = g.guardhp_max;
   g.hitp_curr = 1;
   hud.draw_kid_hp.fn(1, g.hitp_max);
   hud.draw_guard_hp.fn(g.guardhp_curr, g.guardhp_max);
-  copyChar(g.Guard, g.Char);
-  loadkid();
 }
 function check_mirror_image() {
   const xpos = x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + 10;
@@ -6526,8 +6526,7 @@ function do_mouse() {
   g.guardhp_curr = 1;
   seqtbl_offset_char(seqids.seq_105_mouse_forward);
   play_seq();
-  copyChar(g.Guard, g.Char);
-  loadkid();
+  saveshad();
 }
 
 // src/pop/seg002.ts
@@ -6560,6 +6559,7 @@ function clear_char() {
   g.Char.direction = directions.dir_56_none;
   g.Char.alive = 0;
   g.Char.action = 0;
+  hud.draw_guard_hp.fn(0, g.guardhp_curr);
   g.guardhp_curr = 0;
 }
 function inc_curr_row() {
@@ -9104,6 +9104,10 @@ function play_kid_frame() {
   load_fram_det_col();
   check_killed_shadow();
   play_kid();
+  if (g.upside_down && g.Char.alive >= 0) {
+    g.upside_down = 0;
+    g.need_full_redraw = 1;
+  }
   if (g.is_restart_level) return 1;
   if (g.Char.room !== 0) {
     play_seq();
@@ -9150,7 +9154,7 @@ function play_guard_frame() {
         check_chomped_guard();
       }
     }
-    saveshad_and_opp();
+    saveshad();
   }
 }
 function gen_palace_wall_colors() {

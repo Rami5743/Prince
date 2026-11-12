@@ -14,7 +14,7 @@
 import { g, copyChar, byteOf } from './state.ts';
 import { tiles, charids, actions, directions, frameids, soundids } from './types.ts';
 import {
-  loadkid, loadkid_and_opp, savekid_and_opp, loadshad_and_opp, saveshad_and_opp,
+  loadkid, loadkid_and_opp, savekid_and_opp, loadshad_and_opp,
   load_fram_det_col, play_seq, play_kid, play_guard, fell_out, is_dead,
   check_action, check_press, check_spiked, check_spike_below, take_hp,
   fall_accel, fall_speed, load_frame_to_obj, set_char_collision, control_kid,
@@ -164,6 +164,19 @@ export function play_kid_frame(): number {
   load_fram_det_col();
   check_killed_shadow();
   play_kid();
+  /**
+   * The green potion's world turns back the right way up when he dies.
+   *
+   * `Char.alive` is -1 while he lives and counts up from 0 once he is
+   * dying, so this fires on the first tick of a death and on every
+   * tick after it. The translation had dropped the three lines, and a
+   * Prince who drank an upside-down potion and then died went on
+   * playing the restarted level upside down, with no way back.
+   */
+  if (g.upside_down && g.Char.alive >= 0) {
+    g.upside_down = 0;
+    g.need_full_redraw = 1;
+  }
   if (g.is_restart_level) return 1;
   if (g.Char.room !== 0) {
     play_seq();
@@ -212,7 +225,22 @@ export function play_guard_frame(): void {
         check_chomped_guard();
       }
     }
-    saveshad_and_opp();
+    /**
+     * `saveshad()`, not `saveshad_and_opp()`.
+     *
+     * The two differ by one line: `saveshad_and_opp` also writes `Opp`
+     * back over `Kid`, and `Opp` here is the copy of the Prince that
+     * `loadshad_and_opp` took at the top of this function. So anything
+     * the guard's own frame did to the Prince was thrown away again.
+     *
+     * The one that does it is the shadow of level 12: when the Prince
+     * reaches him, `autocontrol_shadow_level12` puts the Prince where
+     * the shadow stood -- `Char.charid = charid_0_kid; savekid();` --
+     * and then clears the shadow. Writing the stale `Opp` back over
+     * `Kid` a few lines later undid exactly that, so uniting with the
+     * shadow left the Prince standing where he was.
+     */
+    saveshad();
   }
 }
 

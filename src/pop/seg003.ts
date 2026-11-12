@@ -8,14 +8,14 @@
  * timer loop -- are the shell's business and are not here; what is
  * here is what a tick of the game needs.
  */
-import { g, byteOf, copyChar } from './state.ts';
+import { g, byteOf } from './state.ts';
 import { x_bump, y_land, y_clip } from './data.ts';
 import {
   tiles, charids, directions, frameids, seqids, sword_status, actions, soundids,
 } from './types.ts';
 import {
   get_tile, get_tile_div_mod_m7, distance_to_edge_weight, play_seq, take_hp,
-  savekid, loadkid, get_tilepos, tile_is_floor,
+  savekid, loadkid, saveshad, get_tilepos, tile_is_floor,
   load_frame, get_tile_at_char, load_frame_to_obj, reset_obj_clip, setDroppedout,
 } from './seg006.ts';
 import { seqtbl_offset_char } from './seg005.ts';
@@ -248,13 +248,38 @@ export function check_mirror(): void {
 
 // seg003:07FC
 export function jump_through_mirror(): void {
-  g.jumped_through_mirror = 0;
   loadkid();
+  /**
+   * `load_frame()`, which the translation had dropped.
+   *
+   * `check_mirror_image` works the reflection's place out from
+   * `distance_to_edge_weight`, and that reads `cur_frame.weight`.
+   * Without this the weight is whatever frame was loaded last -- the
+   * guard's, or the Prince's from an earlier tick -- so the shadow
+   * came out of the glass a pixel or two from where the original puts
+   * him.
+   */
+  load_frame();
   check_mirror_image();
-  g.Guard.charid = charids.charid_1_shadow;
+  g.jumped_through_mirror = 0;
+  /**
+   * `Char.charid`, and then `saveshad()`.
+   *
+   * This used to set `Guard.charid` and then copy the whole of `Char`
+   * over `Guard`, which put the Prince's own `charid_0_kid` back on
+   * top of it. So the thing that came through the mirror on level 4
+   * was a *guard*, not the shadow: `autocontrol_opponent` sent it to
+   * `autocontrol_kid` instead of `autocontrol_shadow_level4`, so it
+   * never ran off to the left of room 4 and vanished; `add_guard_to_objtable`
+   * gave it obj type 2, so it was painted solid instead of with the
+   * OR-and-XOR pair that makes the shadow; and `draw_guard_hp` showed
+   * its flasks.
+   */
+  g.Char.charid = charids.charid_1_shadow;
   // The glass going. The translation never asked for it, so the one
   // moment on the level that ought to make a noise made none.
   out.play_sound(soundids.sound_45_jump_through_mirror);
+  saveshad();
   g.guardhp_max = g.hitp_max;
   g.guardhp_curr = g.guardhp_max;
   // The shadow takes his strength and leaves him one point. The
@@ -263,8 +288,6 @@ export function jump_through_mirror(): void {
   g.hitp_curr = 1;
   hud.draw_kid_hp.fn(1, g.hitp_max);
   hud.draw_guard_hp.fn(g.guardhp_curr, g.guardhp_max);
-  copyChar(g.Guard, g.Char);
-  loadkid();
 }
 
 // seg003:0848
@@ -375,7 +398,6 @@ export function do_mouse(): void {
   g.guardhp_curr = 1;
   seqtbl_offset_char(seqids.seq_105_mouse_forward);
   play_seq();
-  copyChar(g.Guard, g.Char);
-  loadkid();
+  saveshad();
 }
 

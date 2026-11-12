@@ -33,7 +33,7 @@ import {
 import { seqtbl_offset_char, draw_sword } from './seg005.ts';
 import { trigger_button } from './seg007.ts';
 import { prandom } from './seg009.ts';
-import { l8, out } from './link.ts';
+import { hud, l8, out } from './link.ts';
 
 const TILE_SIZEX = 14;
 const TILE_MIDX = 7;
@@ -73,6 +73,21 @@ export function clear_char(): void {
   g.Char.direction = directions.dir_56_none;
   g.Char.alive = 0;
   g.Char.action = 0;
+  /**
+   * `draw_guard_hp(0, guardhp_curr)`, which the translation dropped.
+   *
+   * It is what rubs the guard's flasks off the strip under the room.
+   * Nothing else will: `draw_hp` only redraws them while
+   * `guardhp_delta` is set, and the next line here takes the count to
+   * nought without touching the delta. So every character this
+   * removes -- the shadow of level 4 walking off the left of the
+   * mirror room, the one of level 5 who drinks the potion and goes,
+   * the mouse of level 8 once it has reached the right of the room,
+   * and the shadow of level 12 the moment the Prince unites with him
+   * -- used to leave his flasks painted on the screen for the rest of
+   * the level.
+   */
+  hud.draw_guard_hp.fn(0, g.guardhp_curr);
   g.guardhp_curr = 0;
 }
 
