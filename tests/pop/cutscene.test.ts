@@ -45,6 +45,8 @@ interface Watched {
   seconds: number;
   /** The most pixels that were ever lit at once. */
   mostLit: number;
+  /** How many frames were drawn with `do_flash`'s colour behind them. */
+  flashed: number;
 }
 
 /** Run a scene to the end on its own clock, watching what it draws. */
@@ -61,7 +63,7 @@ async function play(
   if (options.remMin !== undefined) g.rem_min = options.remMin;
   player.begin(scene);
   const out: Watched = {
-    rows: new Set(), charids: new Set(), sounds, seconds: 0, mostLit: 0,
+    rows: new Set(), charids: new Set(), sounds, seconds: 0, mostLit: 0, flashed: 0,
   };
   let units = 0;
   while (player.running && units < limitSeconds * 60) {
@@ -74,6 +76,10 @@ async function play(
     if (lit > out.mostLit) out.mostLit = lit;
     if (g.Kid.frame) out.charids.add(g.Kid.charid);
     if (g.Guard.frame) out.charids.add(g.Guard.charid);
+    // `do_flash(flash_color)` is `set_bg_attr(0, color)`: the black
+    // of the palette made the flash's colour for a frame.
+    const background = player.palette.entry(0);
+    if (background[0] || background[1] || background[2]) out.flashed++;
   }
   out.seconds = units / 60;
   expect(player.running).toBe(false);
@@ -253,6 +259,15 @@ describe('the title sequence', () => {
       // story 1, story 2, the gate closing, the princess's door, story
       // 3 as Jaffar comes and story 4 as he leaves.
       expect(seen.sounds).toEqual([54, 55, 50, 4, 51, 53, 52]);
+      /**
+       * Jaffar conjuring the hourglass: `flash_time = 5` and
+       * `flash_color = 15`, five frames of white behind the room.
+       * `cutscene_frame_time` is 7 by then, so thirty-five sixtieths
+       * -- and the C sets the colour and puts it back inside one
+       * frame, which would show nothing at all if the driver did not
+       * hold it for the frame it was asked on.
+       */
+      expect(seen.flashed).toBe(5 * 7);
       // A minute or so, with no speaker to wait for.
       expect(seen.seconds).toBeGreaterThan(50);
       expect(seen.seconds).toBeLessThan(90);

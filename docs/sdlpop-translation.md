@@ -464,6 +464,19 @@ The C's `show_title` ends in `init_game(0)` -- the demo level, which
 plays itself through and comes back round to the title. This port has
 no demo level, so it ends at the top of level 1 instead.
 
+### Jaffar's flash, which would never have been seen
+
+`proc_cutscene_frame` sets the background colour and puts it back
+inside one frame -- the C waits two sixtieths of a second in between
+with `do_simple_wait(timer_2)` -- and a page draws once per frame, so
+written out line for line the white flash as Jaffar conjures the
+hourglass flashed nothing at all. The driver puts the colour back at
+the top of the *next* frame instead, which is the same thing
+`PopGame.flash` already does for a potion. Measured: five frames at
+`cutscene_frame_time` of 7, so thirty-five sixtieths of a second of
+white, 46.3 seconds into the title. The test pins the thirty-five and
+putting the colour back where the C puts it reads nought.
+
 ### What is deliberately not here
 
 * **The copy-protection screen.** `enable_copyprot` is nought in

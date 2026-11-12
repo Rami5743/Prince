@@ -10842,6 +10842,8 @@ var CutscenePlayer = class _CutscenePlayer {
   fade = null;
   /** The background colour `do_flash` took, put back by `remove_flash`. */
   savedBackground = null;
+  /** `remove_flash` has been asked for and is owed the next frame. */
+  flashPending = false;
   exe;
   constructor(exe, vgaPalette) {
     this.exe = exe;
@@ -10946,6 +10948,13 @@ var CutscenePlayer = class _CutscenePlayer {
     return this.gen !== null;
   }
   step() {
+    if (this.flashPending) {
+      this.flashPending = false;
+      if (this.savedBackground) {
+        this.palette.setEntry(0, ...this.savedBackground);
+        this.savedBackground = null;
+      }
+    }
     const r = this.gen.next();
     if (r.done) {
       this.gen = null;
@@ -10984,6 +10993,9 @@ var CutscenePlayer = class _CutscenePlayer {
     g.upside_down = 0;
     g.flash_time = 0;
     g.flash_color = 0;
+    this.savedBackground = null;
+    this.flashPending = false;
+    this.fade = null;
     free_peels();
     reset_tables();
     reset_stars();
@@ -11116,10 +11128,7 @@ var CutscenePlayer = class _CutscenePlayer {
   }
   setBackground(color) {
     if (color === 0) {
-      if (this.savedBackground) {
-        this.palette.setEntry(0, ...this.savedBackground);
-        this.savedBackground = null;
-      }
+      this.flashPending = this.savedBackground !== null;
       return;
     }
     if (!this.savedBackground) this.savedBackground = this.palette.entry(0);

@@ -506,10 +506,12 @@ export function reset_cutscene(): void {
  * `do_flash`, and `remove_flash` after it.
  *
  * The C sets the background colour, waits two sixtieths of a second
- * and puts it back inside the same frame. Here the flash stands for
- * the rest of the cutscene frame -- a tenth of a second rather than a
- * thirtieth -- because a page draws once per frame and there is
- * nothing in between to show it on.
+ * and puts it back inside the same frame. A page draws once per
+ * frame and has nothing in between to show that on, so the driver
+ * puts the colour back at the top of the next frame instead and the
+ * flash lasts the frame it was asked for -- a tenth of a second
+ * rather than a thirtieth. Jaffar conjuring the hourglass in
+ * `pv_scene` is the one place it happens.
  */
 export function do_flash(color: number): void {
   if (color) scr.set_bg_attr(color);

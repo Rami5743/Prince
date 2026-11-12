@@ -138,6 +138,8 @@ export class CutscenePlayer {
 
   /** The background colour `do_flash` took, put back by `remove_flash`. */
   private savedBackground: [number, number, number] | null = null;
+  /** `remove_flash` has been asked for and is owed the next frame. */
+  private flashPending = false;
 
   private readonly exe: Uint8Array;
 
@@ -236,6 +238,22 @@ export class CutscenePlayer {
   }
 
   private step(): void {
+    // `remove_flash`, a frame late on purpose.
+    //
+    // `proc_cutscene_frame` flashes and un-flashes inside one frame --
+    // the C sets the background colour, waits two sixtieths of a
+    // second and puts it back -- so a page that draws once per frame
+    // would never show it at all. The colour is put back here
+    // instead, at the top of the next frame, so the flash lasts the
+    // frame it was asked for. It is the same thing `PopGame.flash`
+    // does for the Prince drinking a potion.
+    if (this.flashPending) {
+      this.flashPending = false;
+      if (this.savedBackground) {
+        this.palette.setEntry(0, ...this.savedBackground);
+        this.savedBackground = null;
+      }
+    }
     const r = this.gen!.next();
     if (r.done) { this.gen = null; this.pending = 0; return; }
     this.pending = r.value;
@@ -270,6 +288,9 @@ export class CutscenePlayer {
     g.upside_down = 0;
     g.flash_time = 0;
     g.flash_color = 0;
+    this.savedBackground = null;
+    this.flashPending = false;
+    this.fade = null;
     free_peels();
     reset_tables();
     reset_stars();
@@ -404,10 +425,9 @@ export class CutscenePlayer {
 
   private setBackground(color: number): void {
     if (color === 0) {
-      if (this.savedBackground) {
-        this.palette.setEntry(0, ...this.savedBackground);
-        this.savedBackground = null;
-      }
+      // `remove_flash`: taken at the top of the next frame, so that
+      // the frame this was asked on is drawn with the colour up.
+      this.flashPending = this.savedBackground !== null;
       return;
     }
     if (!this.savedBackground) this.savedBackground = this.palette.entry(0);
