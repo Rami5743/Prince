@@ -51,7 +51,7 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-* the translation draws **11656 of 12034** ticks exactly -- 97 per cent
+* the translation draws **11690 of 12036** ticks exactly -- 97 per cent
   -- of the twenty-one runs a capture can settle;
 * **the hundred ticks that were "the port's" have been taken apart,
   one run at a time, against fresh captures.** Five were a real fault
@@ -70,10 +70,11 @@ captures of a real PRINCE.EXE:
   on `backup/handwritten-port`; nothing but its own unit tests uses it
   now.
 * Thirteen of the twenty-one are exact or within one tick. What is
-  left is `13ab6867` (156, and measured not to be the port's --
-  `tools/oracle/README.md`), `0fbffa60` (84), `760c3e74` (51),
-  `b4ff4672` (33), `9b60bf3a` (28), `848ee3c4` (25), `palace4` (7),
-  `5920a8c2` (2) and `f6874819` (1).
+  left is `13ab6867` (156), `0fbffa60` (82), `b4ff4672` (33),
+  `9b60bf3a` (28), `760c3e74` (28), `848ee3c4` (14), `palace4` (2),
+  `5920a8c2` (2) and `f6874819` (1) -- and `tools/oracle/README.md`
+  names what every one of those is. Four of them are a single key
+  edge the emulator took a tick or two off the recording's time.
 
 **Before reading any of those as a fault, run
 `tools/dev/which-key.ts`.** It moves every key edge of the recording a
@@ -89,8 +90,10 @@ one tick is thirty of them:
     palace4    edge  20 one tick earlier:  516, from 514
     5920a8c2   edge 240 one tick earlier:  414, from 413
 
-Three edges are 254 of the 385 the suite is short, and `b4ff4672` is
-exact once its one edge is where the emulator took it.
+Three edges are 254 of the 346 the suite is short, and `b4ff4672` is
+exact once its one edge is where the emulator took it. `760c3e74`'s
+is a fifth: the release at 292, taken two ticks early, and the port
+draws its ticks 286 to 326 exactly when it is given at 290.
 
 **And recapture.** The oracle's phase moves between captures of the
 same recording: four captures of `9b60bf3a` at the same shift, minutes

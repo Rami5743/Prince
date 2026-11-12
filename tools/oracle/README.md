@@ -589,6 +589,7 @@ harness:
 | `760c3e74` | 27 | the release at 292, taken two ticks early |
 | `760c3e74` | 24 | the capture's hour -- **gone, recaptured** |
 | `848ee3c4` | 23 | the capture's hour -- **gone, recaptured** |
+| `848ee3c4` | 14 | two pixels of him either side of a wall's edge |
 | `0fbffa60` |  4 | the spikes, compared across the Prince's own tick |
 | `0fbffa60` |  6 | the stop on frame 7 against frame 11 |
 | `9b60bf3a` | 26 | the run started a tick earlier (above) |
@@ -596,6 +597,20 @@ harness:
 | `palace4`  |  2 | the edge at 20, a tick early |
 | `5920a8c2` |  1 | the restart's opening frame, drawn once not twice |
 | `f6874819` |  1 | the room-change blank |
+
+The suite now stands at **11690 of 12036**, and `848ee3c4`'s fourteen
+are the only ticks in it that nothing above accounts for. They are
+two small things and both are a pixel or two wide. At 74 to 81 the
+Prince is one tick's worth of a step out of place at the bottom of
+room 1, which is the usual key read. At 926 to 933 he is standing
+behind the wall of column 8 with `obj_clip_right` at `8 << 5` = 256,
+which is what `clip_char` computes and what the C computes, and the
+capture has nothing of him at 254 and 255 where the port has two
+columns of his tunic: the original's edge is two pixels to the left
+of the port's and nobody has yet found where those two pixels come
+from. It is not the OR blitter -- `848ee3c4` is 1432 with it and
+1432 without -- and it is not the wall clip, which is worth two
+ticks there and would have to be wider, not narrower, to explain it.
 
 Two of those entries have since been read off the capture's own
 pixels and are **not** the port's. Both are the strip of words under
