@@ -52,9 +52,14 @@ interface Watched {
 /** Run a scene to the end on its own clock, watching what it draws. */
 async function play(
   scene: Parameters<CutscenePlayer['begin']>[0],
-  options: { remMin?: number; limitSeconds?: number } = {},
+  options: { remMin?: number; limitSeconds?: number; typeName?: string } = {},
 ): Promise<Watched> {
   const limitSeconds = options.limitSeconds ?? 300;
+  // What to type when the hall of fame asks for a name: one key each
+  // time round, and then Enter, which is what `input_str` returns on.
+  const toType = [...(options.typeName ?? '')]
+    .map((ch) => ({ key: '', ch }))
+    .concat([{ key: 'enter', ch: '' }]);
   const sounds: number[] = [];
   const player = await CutscenePlayer.create(assets, exe,
     { sound: (which) => sounds.push(which) });
@@ -69,6 +74,10 @@ async function play(
   while (player.running && units < limitSeconds * 60) {
     player.advance(UNIT_MS);
     units++;
+    if (player.wantsText && toType.length) {
+      const next = toType.shift()!;
+      player.pushKey(next.key, next.ch);
+    }
     const pixels = player.render().pixels;
     for (const r of rowsOnScreen(pixels)) out.rows.add(r);
     let lit = 0;
@@ -88,7 +97,9 @@ async function play(
 
 describe('the ending', () => {
   it('plays the princess\'s room, the closing story and the title', async () => {
-    const seen = await play({ kind: 'ending' });
+    // The hall of fame is the last thing in `end_sequence`, and it
+    // will not come back until a name has been typed into it.
+    const seen = await play({ kind: 'ending' }, { typeName: 'KID' });
     // The princess's room, out of PV.DAT: row 13 is `id_chtab_8_princessroom`
     // and row 14 the bed that is ORed into the holes it leaves.
     expect(seen.rows.has(13)).toBe(true);
@@ -105,10 +116,12 @@ describe('the ending', () => {
     expect(seen.rows.has(12)).toBe(true);
     // It is a picture, not a few stray pixels.
     expect(seen.mostLit).toBeGreaterThan(50000);
-    // Long enough to read the story and short enough to end: the
-    // measured length is 32.6 seconds.
+    // Long enough to read the story and short enough to end: 32.6
+    // seconds before the hall of fame, and about fifteen more with
+    // it -- two fades, the name typed a key at a time, `pop_wait(120)`
+    // and the title wiped on again.
     expect(seen.seconds).toBeGreaterThan(25);
-    expect(seen.seconds).toBeLessThan(45);
+    expect(seen.seconds).toBeLessThan(70);
   }, 60000);
 
   it('is the only thing level 15 of the cutscene table does not have',

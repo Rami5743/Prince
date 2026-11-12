@@ -23,7 +23,7 @@
  * So the shape of each procedure is the C's, line for line, and only
  * the waiting is spelled differently.
  */
-import { g } from './state.ts';
+import { g, type RectType } from './state.ts';
 import { charids, directions, blitters, chtabs, seqids, soundids } from './types.ts';
 import {
   loadkid, savekid, loadshad, saveshad, play_seq, load_frame_to_obj,
@@ -34,7 +34,7 @@ import {
   redraw_needed_tiles, draw_tables,
 } from './seg008.ts';
 import { get_torch_frame, clear_tile_wipes } from './seg007.ts';
-import { prandom } from './seg009.ts';
+import { prandom, input_str, type StrBuffer } from './seg009.ts';
 import { out } from './link.ts';
 import { scr, FADE_CUTSCENE_ROWS, full_image_id } from './screen.ts';
 
@@ -55,6 +55,120 @@ let hourglass_state = 0;
 let which_torch = 0;
 
 const N_STARS = 6;
+
+// ---------------------------------------------------------------------------
+// The hall of fame.
+// ---------------------------------------------------------------------------
+
+/** `hof_type`: twenty-five bytes of name and two shorts, packed to 29. */
+export interface HofEntry { name: string; min: number; tick: number }
+
+export const MAX_HOF_COUNT = 6;
+/** One entry is `char name[25]; short min, tick;` with no padding. */
+export const HOF_ENTRY_BYTES = 29;
+
+// data:589A
+export const hof: HofEntry[] = Array.from(
+  { length: MAX_HOF_COUNT }, () => ({ name: '', min: 0, tick: 0 }),
+);
+// data:...
+export let hof_count = 0;
+
+// data:0D92
+export const hof_rects: readonly RectType[] = [
+  { top: 84, left: 72, bottom: 96, right: 248 },
+  { top: 98, left: 72, bottom: 110, right: 248 },
+  { top: 112, left: 72, bottom: 124, right: 248 },
+  { top: 126, left: 72, bottom: 138, right: 248 },
+  { top: 140, left: 72, bottom: 152, right: 248 },
+  { top: 154, left: 72, bottom: 166, right: 248 },
+];
+
+// seg001:0FC3
+/** `show_hof_text`: the text, and its black shadow a pixel down and right. */
+export function show_hof_text(
+  rect: RectType, x_align: number, y_align: number, text: string,
+): void {
+  const text_color = 0xB7; // graphics_mode == gmMcgaVga
+  const shadow_color = 0;
+  // `offset2_rect(&rect2, rect, 1, 1)`.
+  scr.show_text(rect.left + 1, rect.top + 1, rect.right + 1, rect.bottom + 1,
+    x_align, y_align, text, shadow_color);
+  scr.show_text(rect.left, rect.top, rect.right, rect.bottom,
+    x_align, y_align, text, text_color);
+}
+
+// seg001:0E94
+/**
+ * `show_hof`: the names down the left of the frame and the times down
+ * the right.
+ *
+ * SDLPoP's `ALLOW_INFINITE_TIME` branch -- a negative `min` meaning the
+ * clock ran forward from nought -- is one of its own options and not
+ * the original's, so what is here is the `#else`: the branch the C
+ * marks "from PoP 1.4", which turns an expired clock into `0:00`.
+ */
+export function show_hof(): void {
+  for (let index = 0; index < hof_count; ++index) {
+    const entry = hof[index]!;
+    // if the time limit expired (from PoP 1.4)
+    if (entry.min === 0) { entry.min = 1; entry.tick = 0; }
+    const seconds = Math.trunc(entry.tick / 12);
+    const time_text = `${entry.min - 1}:${String(seconds).padStart(2, '0')}`;
+    show_hof_text(hof_rects[index]!, -1, 0, entry.name);
+    show_hof_text(hof_rects[index]!, 1, 0, time_text);
+  }
+}
+
+// seg001:0F17
+/**
+ * `hof_write`: `hof_count` as two bytes and then the six entries.
+ *
+ * The bytes are the original's exactly -- a 16-bit count, then six
+ * records of twenty-five bytes of name, a 16-bit `min` and a 16-bit
+ * `tick`, 176 in all -- and the one thing that is not the original's
+ * is where they go: `PRINCE.HOF` beside the game's files has no
+ * equivalent in a browser, so `cutscene.ts` keeps them in
+ * `localStorage`.
+ */
+export function hof_write(): void {
+  const bytes = new Uint8Array(2 + MAX_HOF_COUNT * HOF_ENTRY_BYTES);
+  const dv = new DataView(bytes.buffer);
+  dv.setInt16(0, hof_count, true);
+  for (let i = 0; i < MAX_HOF_COUNT; i++) {
+    const at = 2 + i * HOF_ENTRY_BYTES;
+    const entry = hof[i]!;
+    for (let c = 0; c < 25 && c < entry.name.length; c++) {
+      bytes[at + c] = entry.name.charCodeAt(c) & 0xff;
+    }
+    dv.setInt16(at + 25, entry.min, true);
+    dv.setInt16(at + 27, entry.tick, true);
+  }
+  scr.hof_write_file(bytes);
+}
+
+// seg001:0F6C
+/** `hof_read`: and `hof_count` stays nought where there is no file. */
+export function hof_read(): void {
+  hof_count = 0;
+  for (const entry of hof) { entry.name = ''; entry.min = 0; entry.tick = 0; }
+  const bytes = scr.hof_read_file();
+  if (bytes === null) return;
+  if (bytes.length !== 2 + MAX_HOF_COUNT * HOF_ENTRY_BYTES) { hof_count = 0; return; }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  hof_count = dv.getInt16(0, true);
+  if (hof_count < 0 || hof_count > MAX_HOF_COUNT) { hof_count = 0; return; }
+  for (let i = 0; i < MAX_HOF_COUNT; i++) {
+    const at = 2 + i * HOF_ENTRY_BYTES;
+    let name = '';
+    for (let c = 0; c < 25; c++) {
+      const b = bytes[at + c]!;
+      if (b === 0) break;
+      name += String.fromCharCode(b);
+    }
+    hof[i] = { name, min: dv.getInt16(at + 25, true), tick: dv.getInt16(at + 27, true) };
+  }
+}
 
 // seg001:0004
 /**
@@ -680,15 +794,15 @@ export function* load_intro(
 
 // seg001:09D7
 /**
- * `end_sequence`: the Prince reaches the princess.
+ * `end_sequence`: the Prince reaches the princess, and then the hall
+ * of fame.
  *
- * The hall of fame is left out, and it is the one piece of this the
- * port does not have: it asks the player to type a name and writes it
- * to `PRINCE.HOF` beside the game's files, neither of which a page
- * can do. Everything else is here -- the embrace, the closing story
- * screen and the title again.
+ * The one thing here that is not the C is where `hof_write` puts its
+ * bytes: see `hof_write`.
  */
 export function* end_sequence(): Scene {
+  let color = 0;
+  let bgcolor = 15;
   yield* load_intro(1, end_sequence_anim, 1);
   scr.clear_screen_and_sounds();
   out.play_sound(soundids.sound_56_ending_music);
@@ -702,6 +816,46 @@ export function* end_sequence(): Scene {
   scr.draw_full_image(full_image_id.TITLE_MAIN);
   yield* transition_ltr();
   yield* do_wait(timer);
+  let hof_index = 0;
+  for (hof_index = 0; hof_index < hof_count; ++hof_index) {
+    const entry = hof[hof_index]!;
+    if (entry.min < g.rem_min
+      || (entry.min === g.rem_min && entry.tick < g.rem_tick)) break;
+  }
+  if (hof_index < MAX_HOF_COUNT && hof_index <= hof_count) {
+    yield* fade_out_2(0x1000);
+    let i = 5;
+    for (i = 5; hof_index + 1 <= i; --i) hof[i] = { ...hof[i - 1]! };
+    hof[i] = { name: '', min: g.rem_min, tick: g.rem_tick };
+    if (hof_count < MAX_HOF_COUNT) ++hof_count;
+    scr.draw_full_image(full_image_id.STORY_FRAME);
+    scr.draw_full_image(full_image_id.HOF_POP);
+    show_hof();
+    // `offset4_rect_add(&rect, &hof_rects[hof_index], -4, -1, -40, -1)`.
+    const row = hof_rects[hof_index]!;
+    const rect: RectType = {
+      left: row.left - 4, top: row.top - 1, right: row.right - 40, bottom: row.bottom - 1,
+    };
+    const peel = scr.read_peel(rect.left, rect.top, rect.right, rect.bottom);
+    color = 0xBE; // graphics_mode == gmMcgaVga
+    bgcolor = 0xB7;
+    scr.rect(rect.left, rect.top, rect.right, rect.bottom, bgcolor);
+    yield* fade_in_2(0x1800);
+    scr.target(false);
+    const buffer: StrBuffer = { text: hof[hof_index]!.name };
+    let typed = 0;
+    do {
+      typed = yield* input_str(rect, buffer, 24, '', 0, 4, color, bgcolor);
+    } while (typed <= 0);
+    hof[hof_index]!.name = buffer.text;
+    scr.restore_peel(peel);
+    show_hof_text(hof_rects[hof_index]!, -1, 0, hof[hof_index]!.name);
+    hof_write();
+    yield* pop_wait(120);
+    scr.target(true);
+    scr.draw_full_image(full_image_id.TITLE_MAIN);
+    yield* transition_ltr();
+  }
   while (out.check_sound_playing()) yield 1;
   yield* fade_out_2(0x1000);
   scr.release_title_images();
@@ -714,13 +868,7 @@ export function* expired(): Scene {
 }
 
 // seg000:17E6
-/**
- * `show_title`: the opening titles and the story that leads into them.
- *
- * `hof_count` is nought in this port -- there is no hall of fame --
- * so the branch that shows it is left out, as the original leaves it
- * out until somebody has finished the game.
- */
+/** `show_title`: the opening titles and the story that leads into them. */
 export function* show_title(): Scene {
   scr.load_title_images(1);
   scr.target(true);
@@ -784,6 +932,13 @@ export function* show_title(): Scene {
   scr.draw_full_image(full_image_id.STORY_CREDITS);
   yield* transition_ltr();
   yield* pop_wait(0x168);
+  if (hof_count) {
+    scr.draw_full_image(full_image_id.STORY_FRAME);
+    scr.draw_full_image(full_image_id.HOF_POP);
+    show_hof();
+    yield* transition_ltr();
+    yield* pop_wait(0xF0);
+  }
   scr.target(false);
   while (out.check_sound_playing()) yield 1;
   yield* fade_out_2(0x1800);

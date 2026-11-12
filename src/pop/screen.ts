@@ -29,6 +29,21 @@ export const full_image_id = {
  */
 export const FADE_CUTSCENE_ROWS = 0x6689;
 
+/**
+ * What `key_test_quit()` and `last_text_input` give `input_str` between
+ * them: which of the four keys it acts on this is, and the printable
+ * character the keyboard put in `last_text_input`.
+ */
+export interface KeyPress {
+  /** `'enter'`, `'escape'`, `'backspace'`, `'delete'`, or `''` for any other. */
+  readonly key: string;
+  /** `last_text_input`, or `''` where the key produced no character. */
+  readonly ch: string;
+}
+
+/** What `read_peel_from_screen` hands back; only the driver looks inside. */
+export type ScreenPeel = unknown;
+
 export interface ScreenOps {
   /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */
   copy_screen_rect(left: number, top: number, right: number, bottom: number): void;
@@ -61,6 +76,46 @@ export interface ScreenOps {
   release_title_images(): void;
   /** `current_target_surface`: true is `offscreen_surface`. */
   target(offscreen: boolean): void;
+
+  // -- the hall of fame: text, a peel and the keyboard --------------------
+
+  /** `show_text_with_color(rect, x_align, y_align, text, color)`. */
+  show_text(
+    left: number, top: number, right: number, bottom: number,
+    x_align: number, y_align: number, text: string, color: number,
+  ): void;
+  /** `get_text_center_y(rect)`. */
+  text_center_y(top: number, bottom: number): number;
+  /** `get_char_width(character)`. */
+  char_width(ch: string): number;
+  /** `get_cstring_width(text)`. */
+  cstring_width(text: string): number;
+  /**
+   * `set_curr_pos(x, y)` and then `draw_text_character(ch)`: one glyph
+   * with its baseline at `y`. Answers what `current_x` moves by.
+   */
+  draw_text_character(x: number, y: number, ch: string, color: number): number;
+  /** `read_peel_from_screen(rect)`, off whichever surface is the target. */
+  read_peel(left: number, top: number, right: number, bottom: number): ScreenPeel;
+  /** `restore_peel(peel)`, on to whichever surface is the target. */
+  restore_peel(peel: ScreenPeel): void;
+  /** `SDL_SetTextInputRect(rect)` and `SDL_StartTextInput()`. */
+  start_text_input(left: number, top: number, right: number, bottom: number): void;
+  /** `SDL_StopTextInput()`. */
+  stop_text_input(): void;
+  /** `key_test_quit()` with `last_text_input`, or null for no key. */
+  take_key(): KeyPress | null;
+  /** `clear_kbd_buf()`: the key just read, not the queue behind it. */
+  clear_kbd_buf(): void;
+  /**
+   * `fread` of `PRINCE.HOF`, or null where there is no such file.
+   *
+   * A page has no file beside the game's, so the driver keeps those
+   * same bytes in `localStorage`; see `cutscene.ts`.
+   */
+  hof_read_file(): Uint8Array | null;
+  /** `fwrite` of `PRINCE.HOF`. */
+  hof_write_file(bytes: Uint8Array): void;
 }
 
 function missing(name: string): never {
@@ -84,6 +139,19 @@ export const scr: ScreenOps = {
   load_title_images: () => missing('load_title_images'),
   release_title_images: () => missing('release_title_images'),
   target: () => missing('target'),
+  show_text: () => missing('show_text'),
+  text_center_y: () => 0,
+  char_width: () => 0,
+  cstring_width: () => 0,
+  draw_text_character: () => 0,
+  read_peel: () => null,
+  restore_peel: () => {},
+  start_text_input: () => {},
+  stop_text_input: () => {},
+  take_key: () => null,
+  clear_kbd_buf: () => {},
+  hof_read_file: () => null,
+  hof_write_file: () => {},
 };
 
 /** `cutscene.ts` installs itself here. */

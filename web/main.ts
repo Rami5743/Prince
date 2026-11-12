@@ -489,6 +489,22 @@ async function boot(): Promise<void> {
     }
   }
 
+  /**
+   * Which of the four keys `input_str` acts on this is.
+   *
+   * The C reads a scancode from `key_test_quit()` and a character
+   * from `last_text_input`; these are the scancodes it tests for.
+   */
+  function textInputKey(e: KeyboardEvent): string {
+    switch (e.code) {
+      case 'Enter': case 'NumpadEnter': return 'enter';
+      case 'Escape': return 'escape';
+      case 'Backspace': return 'backspace';
+      case 'Delete': return 'delete';
+      default: return '';
+    }
+  }
+
   window.addEventListener('keydown', (e) => {
     if (e.altKey) return; // leave the browser's own chords alone
     wakeSound();
@@ -504,6 +520,18 @@ async function boot(): Promise<void> {
      */
     if (cutscene?.running) {
       e.preventDefault();
+      /**
+       * Unless a name is being typed into the hall of fame.
+       *
+       * `input_str` has the keyboard then -- the C calls
+       * `SDL_StartTextInput()` and spins on `key_test_quit()` -- so
+       * every key goes to it, Escape included, which is what clears
+       * the box there rather than what skips the scene.
+       */
+      if (cutscene.wantsText) {
+        cutscene.pushKey(textInputKey(e), e.key.length === 1 ? e.key : '');
+        return;
+      }
       if (cutscene.skippable || keyName(e) === 'escape') endScene();
       return;
     }
@@ -806,6 +834,8 @@ async function boot(): Promise<void> {
   w.__princeSceneState = () => (cutscene ? {
     running: cutscene.running,
     playing: cutscene.playing,
+    /** `input_str` has the keyboard: the hall of fame is asking for a name. */
+    wantsText: cutscene.wantsText,
     /** How many of the screen's pixels are not black. */
     lit: cutscene.render().pixels.reduce((n, v) => n + (v !== 0 ? 1 : 0), 0),
   } : null);

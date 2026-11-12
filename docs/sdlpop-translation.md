@@ -387,10 +387,69 @@ pins it: which palette rows are drawn, that all three characters are
 in it, and how long it is. Backing `init_mouse_1` out of
 `end_sequence_anim` fails that test.
 
-The hall of fame at the end of `end_sequence` is left out, and it is
-the one piece of the C that is not here: it asks the player to type a
-name into a box and writes it to `PRINCE.HOF` beside the game's files,
-and a page can do neither.
+### The hall of fame, and the one substitution
+
+`end_sequence` ends in it, so until now a player who finished the game
+fell off the end of the ending. `show_hof`, `show_hof_text`,
+`hof_write` and `hof_read` are translated in `seg001.ts` beside the
+rest of the scene, and `input_str` in `seg009.ts` where the C has it --
+as a generator, like every other blocking loop of the cutscenes, with
+`yield 1` for the sixtieth of a second the C spends in `idle()`.
+
+The one thing that had to be substituted rather than translated is
+where the bytes go. The C writes `PRINCE.HOF` beside the game's files
+and a page has no such place, so the same bytes go into
+`localStorage` under the key **`PRINCE.HOF`**, base64 encoded because
+`localStorage` holds strings. The layout is the original's exactly,
+and `tests/pop/hall-of-fame.test.ts` pins it:
+
+| offset | bytes | what |
+|---|---|---|
+| 0 | 2 | `hof_count`, int16 little-endian |
+| 2 + 29*i | 25 | `char name[25]`, NUL-padded |
+| 2 + 29*i + 25 | 2 | `min`, int16 little-endian |
+| 2 + 29*i + 27 | 2 | `tick`, int16 little-endian |
+
+176 bytes in all, which is `fwrite(&hof_count, 1, 2)` and
+`fwrite(&hof, 1, sizeof(hof))` with `sizeof(hof_type) == 29` and
+`MAX_HOF_COUNT == 6`.
+
+Every touch of `localStorage` is inside a `try`: a page in private
+browsing throws on the first one, and one served from a `file:` URL
+has none at all. The original treats a `PRINCE.HOF` it cannot open as
+an empty hall of fame and carries on, and so does this -- the player
+still types a name, still sees it beside their time, and still gets
+out of the screen. `tests/pop/hall-of-fame.test.ts` plays the ending
+through with a `localStorage` that throws on every call and checks
+that the scene ends.
+
+Two more notes on what was decided rather than translated:
+
+* SDLPoP's `ALLOW_INFINITE_TIME` branch of `show_hof` -- a negative
+  `min` meaning the clock ran forward from nought -- is one of its own
+  options, so what is here is the `#else`, the branch the C marks
+  "from PoP 1.4", which turns an expired clock into `0:00`.
+* `clear_kbd_buf()` is `last_key_scancode = last_text_input = 0`: it
+  drops the one key that was just read. Written as "empty the queue"
+  it ate every key the player had typed since the scene's clock last
+  ran, and a name typed at speed came out as its first letter.
+
+Typing means the shell has to feed keystrokes to the game.
+`web/main.ts` already takes every key while a scene is playing;
+`CutscenePlayer.wantsText` -- which is the C's `SDL_StartTextInput()`
+and `SDL_StopTextInput()` -- now says when they belong to `input_str`
+instead, Escape included, which is what clears the box there rather
+than what skips the scene.
+
+The C's text is drawn by `draw_text`, which measures differently from
+the shell's own `drawTextCentred`: `get_char_width` adds the gap after
+*every* character, including the last, and the line is aligned inside
+a rectangle. `charWidth`, `lineWidth`, `textCenterY`,
+`drawTextCharacter` and `drawTextInRect` in `src/render/font.ts` are
+that, for the one case the hall of fame needs -- a single line that
+fits. It cannot not fit: `input_str` refuses a character that would
+put the cursor past the right edge of a box 140 pixels inside a
+176-pixel rectangle.
 
 ### The hour running out, and a line that went with it
 
@@ -484,8 +543,5 @@ putting the colour back where the C puts it reads nought.
   never reaches level 15 or `show_copyprot`'s dialog, and the dialog
   asks the player to look a word up in a printed manual that is not
   among the game's files.
-* **The hall of fame** at the end of `end_sequence`: it asks for a
-  name to be typed into a box and writes it to `PRINCE.HOF` beside
-  the game's files.
 * **The demo level**, which `show_title` falls into and which plays
   itself from a recorded timeline in the executable.

@@ -17,6 +17,10 @@ import type { Assets, SpriteSet } from '../render/assets.ts';
 import { Surface, ScreenPalette } from '../render/surface.ts';
 import { readExeTables } from '../game/exe-tables.ts';
 import { readExeConstants } from '../game/exe-constants.ts';
+import {
+  readFont, charWidth, lineWidth, textCenterY, drawTextCharacter, drawTextInRect,
+  type Font,
+} from '../render/font.ts';
 import { flipHorizontally } from '../render/room.ts';
 
 import { g, newChar, type RectType } from './state.ts';
@@ -28,11 +32,23 @@ import { setScreen, full_image_id } from './screen.ts';
 import { link } from './wire.ts';
 import {
   type Scene, show_title, end_sequence, expired, load_intro, tbl_cutscenes,
-  reset_stars,
+  reset_stars, hof_read,
 } from './seg001.ts';
+import type { KeyPress, ScreenPeel } from './screen.ts';
 
 /** One sixtieth of a second: `BASE_FPS` is 60 and every timer counts it. */
 export const UNIT_MS = 1000 / 60;
+
+/**
+ * Where `PRINCE.HOF` goes.
+ *
+ * The original writes the hall of fame to a file of that name beside
+ * the game's own. A page has no such place, so the same 176 bytes --
+ * see `hof_write` -- go into `localStorage` under this key, base64
+ * encoded because `localStorage` holds strings. It is the one
+ * substitution in the translation of the ending.
+ */
+export const HOF_STORAGE_KEY = 'PRINCE.HOF';
 
 /**
  * Which sixteen-colour row of the 256-colour palette each bank sits in.
@@ -142,6 +158,12 @@ export class CutscenePlayer {
   private flashPending = false;
 
   private readonly exe: Uint8Array;
+  /** The game's own font, out of the executable, for the hall of fame. */
+  private font?: Font;
+  /** What the shell has typed and `input_str` has not taken yet. */
+  private readonly keys: KeyPress[] = [];
+  /** `SDL_StartTextInput()` is in, `SDL_StopTextInput()` is out. */
+  private textInput = false;
 
   private constructor(
     exe: Uint8Array,
@@ -176,6 +198,16 @@ export class CutscenePlayer {
       await assets.group('PV.DAT', 980, ROW.princessBed * 16));
     player.title40 = await assets.group('TITLE.DAT', 40, ROW.title40 * 16);
     player.title50 = await assets.group('TITLE.DAT', 50, ROW.title50 * 16);
+    player.font = readFont(exe);
+    // `init_game_main`: the hall of fame is read once, when the game
+    // starts, and `end_sequence` and `show_title` both read what it
+    // left. Only the two file slots are needed for that, and
+    // `install` fills in the same two again for every scene.
+    setScreen({
+      hof_read_file: () => readHofFile(),
+      hof_write_file: (bytes) => { writeHofFile(bytes); },
+    });
+    hof_read();
     return player;
   }
 
@@ -185,6 +217,13 @@ export class CutscenePlayer {
   }
 
   get running(): boolean { return this.gen !== null; }
+  /**
+   * `input_str` is waiting for a name: every key belongs to it, and
+   * none of them to the shell's own "a key skips the scene".
+   */
+  get wantsText(): boolean { return this.textInput; }
+  /** A key the player pressed, for `key_test_quit()` to find. */
+  pushKey(key: string, ch: string): void { this.keys.push({ key, ch }); }
   get playing(): SceneName { return this.scene; }
   /** `disable_keys`: whether a key may cut this short. */
   get skippable(): boolean { return this.scene.kind === 'title'; }
@@ -362,7 +401,66 @@ export class CutscenePlayer {
         this.target = offscreen ? this.offscreen : this.onscreen;
         this.setClip(this.clipRect);
       },
+      show_text: (l, t, r, b, xa, ya, text, color) => {
+        if (!this.font) return;
+        drawTextInRect(this.target, this.font, text, l, t, r, b, xa, ya, color);
+      },
+      text_center_y: (t, b) => (this.font ? textCenterY(this.font, t, b) : 0),
+      char_width: (ch) => (this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0),
+      cstring_width: (text) => (this.font ? lineWidth(this.font, text) : 0),
+      draw_text_character: (x, y, ch, color) => (this.font
+        ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color)
+        : 0),
+      read_peel: (l, t, r, b) => this.readTargetPeel(l, t, r, b),
+      restore_peel: (peel) => this.restoreTargetPeel(peel),
+      start_text_input: () => { this.textInput = true; this.keys.length = 0; },
+      stop_text_input: () => { this.textInput = false; this.keys.length = 0; },
+      take_key: () => this.keys.shift() ?? null,
+      /**
+       * `clear_kbd_buf()` is `last_key_scancode = last_text_input = 0`:
+       * it drops the one key that was just read, which `take_key` has
+       * already taken off the queue. Emptying the queue here instead
+       * loses every key the player typed before the scene's clock next
+       * ran, which on a page is most of a quickly typed name.
+       */
+      clear_kbd_buf: () => {},
+      hof_read_file: () => readHofFile(),
+      hof_write_file: (bytes) => { writeHofFile(bytes); },
     });
+  }
+
+  /**
+   * `read_peel_from_screen` and `restore_peel`, which both work on
+   * `current_target_surface`. The ending reads its peel off the
+   * offscreen surface and puts it back on the onscreen one, which is
+   * where `input_str` has just been drawing.
+   */
+  private readTargetPeel(
+    left: number, top: number, right: number, bottom: number,
+  ): ScreenPeel {
+    const x0 = Math.max(0, Math.min(320, left));
+    const x1 = Math.max(x0, Math.min(320, right));
+    const y0 = Math.max(0, Math.min(200, top));
+    const y1 = Math.max(y0, Math.min(200, bottom));
+    const width = x1 - x0;
+    const height = y1 - y0;
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      pixels.set(this.target.pixels.subarray((y0 + y) * 320 + x0, (y0 + y) * 320 + x1),
+        y * width);
+    }
+    return { left: x0, top: y0, width, height, pixels } satisfies Peel;
+  }
+
+  private restoreTargetPeel(peel: ScreenPeel): void {
+    const p = peel as Peel | null;
+    if (!p) return;
+    for (let y = 0; y < p.height; y++) {
+      this.target.pixels.set(
+        p.pixels.subarray(y * p.width, (y + 1) * p.width),
+        (p.top + y) * 320 + p.left,
+      );
+    }
   }
 
   /**
@@ -553,6 +651,40 @@ export class CutscenePlayer {
         (peel.top + y) * 320 + peel.left,
       );
     }
+  }
+}
+
+/**
+ * `fopen(hof_path, "rb")` and the two `fread`s, over `localStorage`.
+ *
+ * Every one of these can throw: a page opened in private browsing
+ * throws on the first touch of `localStorage` in some browsers, and
+ * one served from a file URL has none at all. The original treats a
+ * `PRINCE.HOF` it cannot open as an empty hall of fame and carries on,
+ * and so does this -- the player still types a name and still gets
+ * out of the screen, and nothing is kept.
+ */
+function readHofFile(): Uint8Array | null {
+  try {
+    const stored = globalThis.localStorage?.getItem(HOF_STORAGE_KEY);
+    if (stored == null) return null;
+    const binary = atob(stored);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/** `fopen(hof_path, "wb")` and the two `fwrite`s. */
+function writeHofFile(bytes: Uint8Array): void {
+  try {
+    let binary = '';
+    for (const b of bytes) binary += String.fromCharCode(b);
+    globalThis.localStorage?.setItem(HOF_STORAGE_KEY, btoa(binary));
+  } catch {
+    // `perror(hof_path)`: the original says so and goes on.
   }
 }
 

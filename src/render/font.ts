@@ -134,3 +134,111 @@ export function drawTextCentred(
   const width = textWidth(font, text);
   drawText(surface, font, text, left + ((right - left + 1 - width) >> 1), top, color);
 }
+
+// ---------------------------------------------------------------------------
+// `seg009.c`'s own measurements.
+//
+// `drawText` and `drawTextCentred` above are the shell's, and the strip
+// under the room is drawn with them. The hall of fame is drawn by the C's
+// `draw_text`, which measures differently -- `get_char_width` adds the gap
+// after *every* character, including the last -- and aligns inside a
+// rectangle. These four are that, line for line, for the one case the hall
+// of fame needs: a single line that fits.
+// ---------------------------------------------------------------------------
+
+// seg009:3E77
+/** `get_char_width`: the glyph and the gap after it, or nought for a hole. */
+export function charWidth(font: Font, code: number): number {
+  const g = glyphOf(font, code);
+  let width = 0;
+  if (g) {
+    width += g.width;
+    if (width) width += font.charSpacing;
+  }
+  return width;
+}
+
+// seg009:403F
+/** `get_line_width` / `get_cstring_width`. */
+export function lineWidth(font: Font, text: string): number {
+  let width = 0;
+  for (const ch of text) width += charWidth(font, ch.charCodeAt(0));
+  return width;
+}
+
+// seg009:0791
+/** `get_text_center_y`: the baseline a line of text sits on in a rect. */
+export function textCenterY(font: Font, top: number, bottom: number): number {
+  const empty = bottom - font.heightAbove - font.heightBelow - top;
+  return ((empty - (empty % 2)) >> 1) + font.heightAbove + (empty % 2) + top;
+}
+
+// seg009:3706
+/**
+ * `draw_text_character`: one glyph with its baseline at `y`, which is
+ * where `textstate.current_y` is. Answers how far `current_x` moves.
+ */
+export function drawTextCharacter(
+  surface: Surface, font: Font, code: number, x: number, y: number, color: number,
+): number {
+  const g = glyphOf(font, code);
+  if (!g) return 0;
+  surface.blitMono(g.sprite, x, y - font.heightAbove, color);
+  return font.charSpacing + g.width;
+}
+
+// seg009:3F01
+/**
+ * `draw_text`, for one line.
+ *
+ * `find_linebreak` never fires here: the only text this draws is a hall
+ * of fame row, and `input_str` will not take a character that would put
+ * the cursor past the right edge of a box 140 pixels inside a 176-pixel
+ * rectangle, so a name cannot be wide enough to wrap.
+ *
+ * `x_align` and `y_align` are the C's: negative left or top, nought
+ * centre or middle, positive right or bottom.
+ */
+export function drawTextInRect(
+  surface: Surface, font: Font, text: string,
+  left: number, top: number, right: number, bottom: number,
+  xAlign: number, yAlign: number, color: number,
+): void {
+  const rectWidth = right - left;
+  const rectHeight = bottom - top;
+  const fontLineDistance = font.heightAbove + font.heightBelow + font.lineSpacing;
+  const textHeight = fontLineDistance - font.lineSpacing;
+  let textTop = top;
+  if (yAlign >= 0) {
+    if (yAlign <= 0) {
+      // The +1 is for simulating SHR + ADC/SBB.
+      textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
+    } else {
+      textTop += rectHeight - textHeight;
+    }
+  }
+  const currentY = textTop + font.heightAbove;
+  const width = lineWidth(font, text);
+  let textLeft = left;
+  if (xAlign >= 0) {
+    if (xAlign <= 0) textLeft += (rectWidth / 2 | 0) - (width / 2 | 0);
+    else textLeft += rectWidth - width;
+  }
+  const savedLeft = surface.clipLeft;
+  const savedRight = surface.clipRight;
+  const savedTop = surface.clipTop;
+  const savedBottom = surface.clipBottom;
+  // `set_clip_rect(rect_ptr)` / `reset_clip_rect()`.
+  surface.clipLeft = Math.max(savedLeft, left);
+  surface.clipRight = Math.min(savedRight, right);
+  surface.clipTop = Math.max(savedTop, top);
+  surface.clipBottom = Math.min(savedBottom, bottom);
+  let at = textLeft;
+  for (const ch of text) {
+    at += drawTextCharacter(surface, font, ch.charCodeAt(0), at, currentY, color);
+  }
+  surface.clipLeft = savedLeft;
+  surface.clipRight = savedRight;
+  surface.clipTop = savedTop;
+  surface.clipBottom = savedBottom;
+}

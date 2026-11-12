@@ -2658,6 +2658,67 @@ function drawTextCentred(surface, font, text, left, right, top, color) {
   const width = textWidth(font, text);
   drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
 }
+function charWidth(font, code) {
+  const g2 = glyphOf(font, code);
+  let width = 0;
+  if (g2) {
+    width += g2.width;
+    if (width) width += font.charSpacing;
+  }
+  return width;
+}
+function lineWidth(font, text) {
+  let width = 0;
+  for (const ch of text) width += charWidth(font, ch.charCodeAt(0));
+  return width;
+}
+function textCenterY(font, top, bottom) {
+  const empty = bottom - font.heightAbove - font.heightBelow - top;
+  return (empty - empty % 2 >> 1) + font.heightAbove + empty % 2 + top;
+}
+function drawTextCharacter(surface, font, code, x, y, color) {
+  const g2 = glyphOf(font, code);
+  if (!g2) return 0;
+  surface.blitMono(g2.sprite, x, y - font.heightAbove, color);
+  return font.charSpacing + g2.width;
+}
+function drawTextInRect(surface, font, text, left, top, right, bottom, xAlign, yAlign, color) {
+  const rectWidth = right - left;
+  const rectHeight = bottom - top;
+  const fontLineDistance = font.heightAbove + font.heightBelow + font.lineSpacing;
+  const textHeight = fontLineDistance - font.lineSpacing;
+  let textTop = top;
+  if (yAlign >= 0) {
+    if (yAlign <= 0) {
+      textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
+    } else {
+      textTop += rectHeight - textHeight;
+    }
+  }
+  const currentY = textTop + font.heightAbove;
+  const width = lineWidth(font, text);
+  let textLeft = left;
+  if (xAlign >= 0) {
+    if (xAlign <= 0) textLeft += (rectWidth / 2 | 0) - (width / 2 | 0);
+    else textLeft += rectWidth - width;
+  }
+  const savedLeft = surface.clipLeft;
+  const savedRight = surface.clipRight;
+  const savedTop = surface.clipTop;
+  const savedBottom = surface.clipBottom;
+  surface.clipLeft = Math.max(savedLeft, left);
+  surface.clipRight = Math.min(savedRight, right);
+  surface.clipTop = Math.max(savedTop, top);
+  surface.clipBottom = Math.min(savedBottom, bottom);
+  let at = textLeft;
+  for (const ch of text) {
+    at += drawTextCharacter(surface, font, ch.charCodeAt(0), at, currentY, color);
+  }
+  surface.clipLeft = savedLeft;
+  surface.clipRight = savedRight;
+  surface.clipTop = savedTop;
+  surface.clipBottom = savedBottom;
+}
 
 // src/pop/state.ts
 function newChar() {
@@ -5493,6 +5554,64 @@ function parry() {
   if (do_play_seq) play_seq();
 }
 
+// src/pop/screen.ts
+var full_image_id = {
+  TITLE_MAIN: 0,
+  TITLE_PRESENTS: 1,
+  TITLE_GAME: 2,
+  TITLE_POP: 3,
+  TITLE_MECHNER: 4,
+  HOF_POP: 5,
+  STORY_FRAME: 6,
+  STORY_ABSENCE: 7,
+  STORY_MARRY: 8,
+  STORY_HAIL: 9,
+  STORY_CREDITS: 10
+};
+var FADE_CUTSCENE_ROWS = 26249;
+function missing2(name) {
+  throw new Error(`screen.${name} has not been linked in`);
+}
+var scr = {
+  copy_screen_rect: () => missing2("copy_screen_rect"),
+  present: () => missing2("present"),
+  rect: () => missing2("rect"),
+  clear_screen: () => missing2("clear_screen"),
+  set_bg_attr: () => missing2("set_bg_attr"),
+  fade_start: () => missing2("fade_start"),
+  fade_active: () => false,
+  blit_image: () => missing2("blit_image"),
+  load_intro_images: () => missing2("load_intro_images"),
+  free_intro_images: () => missing2("free_intro_images"),
+  now: () => 0,
+  clear_screen_and_sounds: () => missing2("clear_screen_and_sounds"),
+  draw_full_image: () => missing2("draw_full_image"),
+  load_title_images: () => missing2("load_title_images"),
+  release_title_images: () => missing2("release_title_images"),
+  target: () => missing2("target"),
+  show_text: () => missing2("show_text"),
+  text_center_y: () => 0,
+  char_width: () => 0,
+  cstring_width: () => 0,
+  draw_text_character: () => 0,
+  read_peel: () => null,
+  restore_peel: () => {
+  },
+  start_text_input: () => {
+  },
+  stop_text_input: () => {
+  },
+  take_key: () => null,
+  clear_kbd_buf: () => {
+  },
+  hof_read_file: () => null,
+  hof_write_file: () => {
+  }
+};
+function setScreen(ops) {
+  Object.assign(scr, ops);
+}
+
 // src/pop/seg009.ts
 function prandom(max) {
   g.random_seed = Math.imul(g.random_seed, 214013) + 2531011 >>> 0;
@@ -5500,6 +5619,81 @@ function prandom(max) {
 }
 function set_seed(seed) {
   g.random_seed = seed >>> 0;
+}
+function* input_str(rect, buffer, max_length, initial, has_initial, arg_4, color, bgcolor) {
+  scr.start_text_input(rect.left, rect.top, rect.right, rect.bottom);
+  let key = null;
+  let entered = "";
+  let length = 0;
+  let cursor_visible = 0;
+  scr.rect(rect.left, rect.top, rect.right, rect.bottom, bgcolor);
+  const init_length = initial.length;
+  if (has_initial) {
+    buffer.text = initial;
+    length = init_length;
+  }
+  let current_xpos = rect.left + arg_4;
+  const ypos = scr.text_center_y(rect.top, rect.bottom);
+  let at = current_xpos;
+  for (const ch of initial) at += scr.draw_text_character(at, ypos, ch, color);
+  current_xpos += scr.cstring_width(initial) + (init_length !== 0 ? arg_4 : 0);
+  const draw_text_cursor = (xpos, y, c) => {
+    scr.draw_text_character(xpos, y, "_", c);
+  };
+  for (; ; ) {
+    key = null;
+    entered = "";
+    for (; ; ) {
+      if (cursor_visible) draw_text_cursor(current_xpos, ypos, color);
+      else draw_text_cursor(current_xpos, ypos, bgcolor);
+      cursor_visible = cursor_visible ? 0 : 1;
+      const deadline = scr.now() + 6;
+      if (key !== null) {
+        if (cursor_visible) {
+          draw_text_cursor(current_xpos, ypos, color);
+          cursor_visible = cursor_visible ? 0 : 1;
+        }
+        if (key === "enter") {
+          scr.stop_text_input();
+          return length;
+        }
+        break;
+      }
+      while (scr.now() < deadline) {
+        const press = scr.take_key();
+        if (press) {
+          key = press.key;
+          entered = press.ch;
+          break;
+        }
+        yield 1;
+      }
+    }
+    const code = entered.charCodeAt(0);
+    const entered_char = entered.length === 1 && code <= 126 ? entered : "";
+    scr.clear_kbd_buf();
+    if (key === "escape") {
+      scr.rect(rect.left, rect.top, rect.right, rect.bottom, bgcolor);
+      buffer.text = "";
+      scr.stop_text_input();
+      return -1;
+    }
+    if (length !== 0 && (key === "backspace" || key === "delete")) {
+      --length;
+      draw_text_cursor(current_xpos, ypos, bgcolor);
+      current_xpos -= scr.char_width(buffer.text[length]);
+      scr.draw_text_character(current_xpos, ypos, buffer.text[length], bgcolor);
+      buffer.text = buffer.text.slice(0, length);
+      draw_text_cursor(current_xpos, ypos, color);
+    } else if (entered_char !== "" && code >= 32 && code <= 126 && length < max_length) {
+      if (scr.char_width("_") + scr.char_width(entered_char) + current_xpos < rect.right) {
+        draw_text_cursor(current_xpos, ypos, bgcolor);
+        buffer.text = buffer.text.slice(0, length) + entered_char;
+        length++;
+        current_xpos += scr.draw_text_character(current_xpos, ypos, entered_char, color);
+      }
+    }
+  }
 }
 
 // src/pop/seg007.ts
@@ -10163,46 +10357,6 @@ var PopGame = class _PopGame {
   }
 };
 
-// src/pop/screen.ts
-var full_image_id = {
-  TITLE_MAIN: 0,
-  TITLE_PRESENTS: 1,
-  TITLE_GAME: 2,
-  TITLE_POP: 3,
-  TITLE_MECHNER: 4,
-  HOF_POP: 5,
-  STORY_FRAME: 6,
-  STORY_ABSENCE: 7,
-  STORY_MARRY: 8,
-  STORY_HAIL: 9,
-  STORY_CREDITS: 10
-};
-var FADE_CUTSCENE_ROWS = 26249;
-function missing2(name) {
-  throw new Error(`screen.${name} has not been linked in`);
-}
-var scr = {
-  copy_screen_rect: () => missing2("copy_screen_rect"),
-  present: () => missing2("present"),
-  rect: () => missing2("rect"),
-  clear_screen: () => missing2("clear_screen"),
-  set_bg_attr: () => missing2("set_bg_attr"),
-  fade_start: () => missing2("fade_start"),
-  fade_active: () => false,
-  blit_image: () => missing2("blit_image"),
-  load_intro_images: () => missing2("load_intro_images"),
-  free_intro_images: () => missing2("free_intro_images"),
-  now: () => 0,
-  clear_screen_and_sounds: () => missing2("clear_screen_and_sounds"),
-  draw_full_image: () => missing2("draw_full_image"),
-  load_title_images: () => missing2("load_title_images"),
-  release_title_images: () => missing2("release_title_images"),
-  target: () => missing2("target")
-};
-function setScreen(ops) {
-  Object.assign(scr, ops);
-}
-
 // src/pop/seg001.ts
 var cutscene_wait_frames = 0;
 var cutscene_frame_time = 6;
@@ -10211,6 +10365,103 @@ var hourglass_sandflow = -1;
 var hourglass_state = 0;
 var which_torch = 0;
 var N_STARS = 6;
+var MAX_HOF_COUNT = 6;
+var HOF_ENTRY_BYTES = 29;
+var hof = Array.from(
+  { length: MAX_HOF_COUNT },
+  () => ({ name: "", min: 0, tick: 0 })
+);
+var hof_count = 0;
+var hof_rects = [
+  { top: 84, left: 72, bottom: 96, right: 248 },
+  { top: 98, left: 72, bottom: 110, right: 248 },
+  { top: 112, left: 72, bottom: 124, right: 248 },
+  { top: 126, left: 72, bottom: 138, right: 248 },
+  { top: 140, left: 72, bottom: 152, right: 248 },
+  { top: 154, left: 72, bottom: 166, right: 248 }
+];
+function show_hof_text(rect, x_align, y_align, text) {
+  const text_color = 183;
+  const shadow_color = 0;
+  scr.show_text(
+    rect.left + 1,
+    rect.top + 1,
+    rect.right + 1,
+    rect.bottom + 1,
+    x_align,
+    y_align,
+    text,
+    shadow_color
+  );
+  scr.show_text(
+    rect.left,
+    rect.top,
+    rect.right,
+    rect.bottom,
+    x_align,
+    y_align,
+    text,
+    text_color
+  );
+}
+function show_hof() {
+  for (let index = 0; index < hof_count; ++index) {
+    const entry = hof[index];
+    if (entry.min === 0) {
+      entry.min = 1;
+      entry.tick = 0;
+    }
+    const seconds = Math.trunc(entry.tick / 12);
+    const time_text = `${entry.min - 1}:${String(seconds).padStart(2, "0")}`;
+    show_hof_text(hof_rects[index], -1, 0, entry.name);
+    show_hof_text(hof_rects[index], 1, 0, time_text);
+  }
+}
+function hof_write() {
+  const bytes = new Uint8Array(2 + MAX_HOF_COUNT * HOF_ENTRY_BYTES);
+  const dv = new DataView(bytes.buffer);
+  dv.setInt16(0, hof_count, true);
+  for (let i = 0; i < MAX_HOF_COUNT; i++) {
+    const at = 2 + i * HOF_ENTRY_BYTES;
+    const entry = hof[i];
+    for (let c = 0; c < 25 && c < entry.name.length; c++) {
+      bytes[at + c] = entry.name.charCodeAt(c) & 255;
+    }
+    dv.setInt16(at + 25, entry.min, true);
+    dv.setInt16(at + 27, entry.tick, true);
+  }
+  scr.hof_write_file(bytes);
+}
+function hof_read() {
+  hof_count = 0;
+  for (const entry of hof) {
+    entry.name = "";
+    entry.min = 0;
+    entry.tick = 0;
+  }
+  const bytes = scr.hof_read_file();
+  if (bytes === null) return;
+  if (bytes.length !== 2 + MAX_HOF_COUNT * HOF_ENTRY_BYTES) {
+    hof_count = 0;
+    return;
+  }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  hof_count = dv.getInt16(0, true);
+  if (hof_count < 0 || hof_count > MAX_HOF_COUNT) {
+    hof_count = 0;
+    return;
+  }
+  for (let i = 0; i < MAX_HOF_COUNT; i++) {
+    const at = 2 + i * HOF_ENTRY_BYTES;
+    let name = "";
+    for (let c = 0; c < 25; c++) {
+      const b = bytes[at + c];
+      if (b === 0) break;
+      name += String.fromCharCode(b);
+    }
+    hof[i] = { name, min: dv.getInt16(at + 25, true), tick: dv.getInt16(at + 27, true) };
+  }
+}
 function* proc_cutscene_frame(wait_frames) {
   cutscene_wait_frames = wait_frames;
   do {
@@ -10689,6 +10940,8 @@ function* load_intro(which_imgs, func, _free_sounds) {
   scr.clear_screen();
 }
 function* end_sequence() {
+  let color = 0;
+  let bgcolor = 15;
   yield* load_intro(1, end_sequence_anim, 1);
   scr.clear_screen_and_sounds();
   out.play_sound(soundids.sound_56_ending_music);
@@ -10702,6 +10955,47 @@ function* end_sequence() {
   scr.draw_full_image(full_image_id.TITLE_MAIN);
   yield* transition_ltr();
   yield* do_wait(timer);
+  let hof_index = 0;
+  for (hof_index = 0; hof_index < hof_count; ++hof_index) {
+    const entry = hof[hof_index];
+    if (entry.min < g.rem_min || entry.min === g.rem_min && entry.tick < g.rem_tick) break;
+  }
+  if (hof_index < MAX_HOF_COUNT && hof_index <= hof_count) {
+    yield* fade_out_2(4096);
+    let i = 5;
+    for (i = 5; hof_index + 1 <= i; --i) hof[i] = { ...hof[i - 1] };
+    hof[i] = { name: "", min: g.rem_min, tick: g.rem_tick };
+    if (hof_count < MAX_HOF_COUNT) ++hof_count;
+    scr.draw_full_image(full_image_id.STORY_FRAME);
+    scr.draw_full_image(full_image_id.HOF_POP);
+    show_hof();
+    const row = hof_rects[hof_index];
+    const rect = {
+      left: row.left - 4,
+      top: row.top - 1,
+      right: row.right - 40,
+      bottom: row.bottom - 1
+    };
+    const peel = scr.read_peel(rect.left, rect.top, rect.right, rect.bottom);
+    color = 190;
+    bgcolor = 183;
+    scr.rect(rect.left, rect.top, rect.right, rect.bottom, bgcolor);
+    yield* fade_in_2(6144);
+    scr.target(false);
+    const buffer = { text: hof[hof_index].name };
+    let typed = 0;
+    do {
+      typed = yield* input_str(rect, buffer, 24, "", 0, 4, color, bgcolor);
+    } while (typed <= 0);
+    hof[hof_index].name = buffer.text;
+    scr.restore_peel(peel);
+    show_hof_text(hof_rects[hof_index], -1, 0, hof[hof_index].name);
+    hof_write();
+    yield* pop_wait(120);
+    scr.target(true);
+    scr.draw_full_image(full_image_id.TITLE_MAIN);
+    yield* transition_ltr();
+  }
   while (out.check_sound_playing()) yield 1;
   yield* fade_out_2(4096);
   scr.release_title_images();
@@ -10765,6 +11059,13 @@ function* show_title() {
   scr.draw_full_image(full_image_id.STORY_CREDITS);
   yield* transition_ltr();
   yield* pop_wait(360);
+  if (hof_count) {
+    scr.draw_full_image(full_image_id.STORY_FRAME);
+    scr.draw_full_image(full_image_id.HOF_POP);
+    show_hof();
+    yield* transition_ltr();
+    yield* pop_wait(240);
+  }
   scr.target(false);
   while (out.check_sound_playing()) yield 1;
   yield* fade_out_2(6144);
@@ -10773,6 +11074,7 @@ function* show_title() {
 
 // src/pop/cutscene.ts
 var UNIT_MS = 1e3 / 60;
+var HOF_STORAGE_KEY = "PRINCE.HOF";
 var ROW = {
   sword: 2,
   flame: 3,
@@ -10846,6 +11148,12 @@ var CutscenePlayer = class _CutscenePlayer {
   /** `remove_flash` has been asked for and is owed the next frame. */
   flashPending = false;
   exe;
+  /** The game's own font, out of the executable, for the hall of fame. */
+  font;
+  /** What the shell has typed and `input_str` has not taken yet. */
+  keys = [];
+  /** `SDL_StartTextInput()` is in, `SDL_StopTextInput()` is out. */
+  textInput = false;
   constructor(exe, vgaPalette) {
     this.exe = exe;
     this.vgaPalette = vgaPalette;
@@ -10882,6 +11190,14 @@ var CutscenePlayer = class _CutscenePlayer {
     );
     player.title40 = await assets.group("TITLE.DAT", 40, ROW.title40 * 16);
     player.title50 = await assets.group("TITLE.DAT", 50, ROW.title50 * 16);
+    player.font = readFont(exe);
+    setScreen({
+      hof_read_file: () => readHofFile(),
+      hof_write_file: (bytes) => {
+        writeHofFile(bytes);
+      }
+    });
+    hof_read();
     return player;
   }
   /** `tbl_cutscenes[level]`: is there a scene before this level at all? */
@@ -10890,6 +11206,17 @@ var CutscenePlayer = class _CutscenePlayer {
   }
   get running() {
     return this.gen !== null;
+  }
+  /**
+   * `input_str` is waiting for a name: every key belongs to it, and
+   * none of them to the shell's own "a key skips the scene".
+   */
+  get wantsText() {
+    return this.textInput;
+  }
+  /** A key the player pressed, for `key_test_quit()` to find. */
+  pushKey(key, ch) {
+    this.keys.push({ key, ch });
   }
   get playing() {
     return this.scene;
@@ -11070,8 +11397,72 @@ var CutscenePlayer = class _CutscenePlayer {
       target: (offscreen) => {
         this.target = offscreen ? this.offscreen : this.onscreen;
         this.setClip(this.clipRect);
+      },
+      show_text: (l, t, r, b, xa, ya, text, color) => {
+        if (!this.font) return;
+        drawTextInRect(this.target, this.font, text, l, t, r, b, xa, ya, color);
+      },
+      text_center_y: (t, b) => this.font ? textCenterY(this.font, t, b) : 0,
+      char_width: (ch) => this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0,
+      cstring_width: (text) => this.font ? lineWidth(this.font, text) : 0,
+      draw_text_character: (x, y, ch, color) => this.font ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color) : 0,
+      read_peel: (l, t, r, b) => this.readTargetPeel(l, t, r, b),
+      restore_peel: (peel) => this.restoreTargetPeel(peel),
+      start_text_input: () => {
+        this.textInput = true;
+        this.keys.length = 0;
+      },
+      stop_text_input: () => {
+        this.textInput = false;
+        this.keys.length = 0;
+      },
+      take_key: () => this.keys.shift() ?? null,
+      /**
+       * `clear_kbd_buf()` is `last_key_scancode = last_text_input = 0`:
+       * it drops the one key that was just read, which `take_key` has
+       * already taken off the queue. Emptying the queue here instead
+       * loses every key the player typed before the scene's clock next
+       * ran, which on a page is most of a quickly typed name.
+       */
+      clear_kbd_buf: () => {
+      },
+      hof_read_file: () => readHofFile(),
+      hof_write_file: (bytes) => {
+        writeHofFile(bytes);
       }
     });
+  }
+  /**
+   * `read_peel_from_screen` and `restore_peel`, which both work on
+   * `current_target_surface`. The ending reads its peel off the
+   * offscreen surface and puts it back on the onscreen one, which is
+   * where `input_str` has just been drawing.
+   */
+  readTargetPeel(left, top, right, bottom) {
+    const x0 = Math.max(0, Math.min(320, left));
+    const x1 = Math.max(x0, Math.min(320, right));
+    const y0 = Math.max(0, Math.min(200, top));
+    const y1 = Math.max(y0, Math.min(200, bottom));
+    const width = x1 - x0;
+    const height = y1 - y0;
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      pixels.set(
+        this.target.pixels.subarray((y0 + y) * 320 + x0, (y0 + y) * 320 + x1),
+        y * width
+      );
+    }
+    return { left: x0, top: y0, width, height, pixels };
+  }
+  restoreTargetPeel(peel) {
+    const p = peel;
+    if (!p) return;
+    for (let y = 0; y < p.height; y++) {
+      this.target.pixels.set(
+        p.pixels.subarray(y * p.width, (y + 1) * p.width),
+        (p.top + y) * 320 + p.left
+      );
+    }
   }
   /**
    * `load_chtab_from_file(id_chtab_4_..., 50*which_imgs + 850, ...)`.
@@ -11252,6 +11643,26 @@ var CutscenePlayer = class _CutscenePlayer {
     }
   }
 };
+function readHofFile() {
+  try {
+    const stored = globalThis.localStorage?.getItem(HOF_STORAGE_KEY);
+    if (stored == null) return null;
+    const binary = atob(stored);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+function writeHofFile(bytes) {
+  try {
+    let binary = "";
+    for (const b of bytes) binary += String.fromCharCode(b);
+    globalThis.localStorage?.setItem(HOF_STORAGE_KEY, btoa(binary));
+  } catch {
+  }
+}
 
 // src/dat/sound.ts
 var SOUND_RESOURCE_BASE = 1e4;
@@ -12177,12 +12588,31 @@ async function boot() {
         return false;
     }
   }
+  function textInputKey(e) {
+    switch (e.code) {
+      case "Enter":
+      case "NumpadEnter":
+        return "enter";
+      case "Escape":
+        return "escape";
+      case "Backspace":
+        return "backspace";
+      case "Delete":
+        return "delete";
+      default:
+        return "";
+    }
+  }
   window.addEventListener("keydown", (e) => {
     if (e.altKey) return;
     wakeSound();
     document.activeElement?.blur?.();
     if (cutscene?.running) {
       e.preventDefault();
+      if (cutscene.wantsText) {
+        cutscene.pushKey(textInputKey(e), e.key.length === 1 ? e.key : "");
+        return;
+      }
       if (cutscene.skippable || keyName(e) === "escape") endScene();
       return;
     }
@@ -12421,6 +12851,8 @@ async function boot() {
   w.__princeSceneState = () => cutscene ? {
     running: cutscene.running,
     playing: cutscene.playing,
+    /** `input_str` has the keyboard: the hall of fame is asking for a name. */
+    wantsText: cutscene.wantsText,
     /** How many of the screen's pixels are not black. */
     lit: cutscene.render().pixels.reduce((n, v) => n + (v !== 0 ? 1 : 0), 0)
   } : null;
