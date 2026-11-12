@@ -8659,7 +8659,11 @@ function draw_hurt_splash() {
     id: g.obj_id,
     chtab: g.obj_chtab,
     tilepos: g.obj_tilepos,
-    direction: g.obj_direction
+    direction: g.obj_direction,
+    clip_top: g.obj_clip_top,
+    clip_bottom: g.obj_clip_bottom,
+    clip_left: g.obj_clip_left,
+    clip_right: g.obj_clip_right
   };
   g.obj_tilepos = -1;
   if (frame === frameids.frame_185_dead || frame >= frameids.frame_106_fall && frame < 111) {
@@ -8686,6 +8690,10 @@ function draw_hurt_splash() {
   g.obj_chtab = saved.chtab;
   g.obj_tilepos = saved.tilepos;
   g.obj_direction = saved.direction;
+  g.obj_clip_top = saved.clip_top;
+  g.obj_clip_bottom = saved.clip_bottom;
+  g.obj_clip_left = saved.clip_left;
+  g.obj_clip_right = saved.clip_right;
 }
 function add_sword_to_objtable() {
   const frame = g.Char.frame;

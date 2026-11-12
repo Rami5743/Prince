@@ -36,6 +36,8 @@ const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
 type Controls = { x: number; y: number; shift: boolean };
+/** Which of the three controls of an edge to move, or all of them. */
+type Which = 'x' | 'y' | 'shift' | 'all';
 
 async function score(name: string, ticks: Controls[], digest: Digest, level: number): Promise<number> {
   const port = await runOf(
@@ -61,31 +63,57 @@ for (const name of names) {
   );
   const base = decodeTimeline(rec.timeline) as Controls[];
   const was = await score(name, base, digest, rec.level);
-  /** Every tick at which any of the three controls changed. */
-  const edges: number[] = [];
+  /**
+   * Every tick at which any of the three controls changed, and which
+   * of them did.
+   *
+   * One control at a time, not the whole edge. A player who presses
+   * Right and Up in the same thousandth of a second makes one edge of
+   * the recording, and `recording_to_script.mjs` sends both at the
+   * same instant -- but they go out as two `xdotool` events and the
+   * emulator can read them in two different ticks, which is a thing
+   * moving the edge as a whole can never express. `848ee3c4` 926 is
+   * one: Right and Up together, the port takes both on 926 and makes
+   * a standing jump into a wall, the original takes Right on 926 and
+   * steps. Moving the whole edge is worth nothing there; moving its
+   * Up alone is worth all eight of the ticks it costs.
+   */
+  const edges: { at: number; which: Which }[] = [];
   for (let t = 1; t < base.length; t++) {
     const a = base[t - 1];
     const b = base[t];
-    if (a.x !== b.x || a.y !== b.y || a.shift !== b.shift) edges.push(t);
+    const parts: Which[] = [];
+    if (a.x !== b.x) parts.push('x');
+    if (a.y !== b.y) parts.push('y');
+    if (a.shift !== b.shift) parts.push('shift');
+    if (parts.length === 0) continue;
+    for (const p of parts) edges.push({ at: t, which: p });
+    // And the whole edge together, when there is more than one of it.
+    if (parts.length > 1) edges.push({ at: t, which: 'all' });
   }
-  const gains: { at: number; by: number; to: number }[] = [];
-  for (const at of edges) {
+  const gains: { at: number; which: Which; by: number; to: number }[] = [];
+  for (const { at, which } of edges) {
     for (const k of BY) {
       for (const by of [-k, k]) {
-      // Move this one edge, and only this one: the ticks it is moved
-      // across take the state of whichever side of it they now fall.
-      const ticks = base.map((c) => ({ ...c }));
-      if (by < 0) for (let t = at + by; t < at; t++) { if (t >= 0) ticks[t] = { ...base[at] }; }
-      else for (let t = at; t < at + by; t++) { if (t < ticks.length) ticks[t] = { ...base[at - 1] }; }
-      const got = await score(name, ticks, digest, rec.level);
-      if (got > was) gains.push({ at, by, to: got });
+        // Move this one edge, and only this one: the ticks it is moved
+        // across take the state of whichever side of it they now fall.
+        const ticks = base.map((c) => ({ ...c }));
+        const put = (t: number, from: Controls): void => {
+          if (t < 0 || t >= ticks.length) return;
+          ticks[t] = which === 'all' ? { ...from } : { ...ticks[t], [which]: from[which] };
+        };
+        if (by < 0) for (let t = at + by; t < at; t++) put(t, base[at]);
+        else for (let t = at; t < at + by; t++) put(t, base[at - 1]);
+        const got = await score(name, ticks, digest, rec.level);
+        if (got > was) gains.push({ at, which, by, to: got });
       }
     }
   }
   gains.sort((p, q) => q.to - p.to);
   console.log(`${name}: ${was} as recorded, ${edges.length} edges`);
   for (const g of gains.slice(0, 8)) {
-    console.log(`   edge at ${g.at} moved ${Math.abs(g.by)} ${g.by > 0 ? 'later' : 'earlier'}: ${g.to} (+${g.to - was})`);
+    const when = `${Math.abs(g.by)} ${g.by > 0 ? 'later' : 'earlier'}`;
+    console.log(`   ${g.which} at ${g.at} moved ${when}: ${g.to} (+${g.to - was})`);
   }
   if (gains.length === 0) console.log('   no single edge is worth anything');
 }

@@ -806,3 +806,98 @@ eighty-five.
 
 `13ab6867` is not in the table: its 156 are the one press measured
 above, not the port.
+
+## The port does not read the keyboard a tick late
+
+The residue keeps reading as "one key edge, one tick out", and the
+obvious suspicion is that it is not one edge of one capture but the
+*port*, sampling input a tick off the original. If that were so, every
+run would want the same shift.
+
+`tools/dev/every-key.ts` moves **every** edge of **every** recording by
+the same number of ticks and scores the suite. At the commit that
+scored 11690 of 12036:
+
+               -2    -1     0     1     2
+    TOTAL   10951 11206 11690 11121 10493   of 12036
+
+Nought wins by 484 ticks over a tick earlier and by 569 over a tick
+later, and it wins run by run in seventeen of the twenty-one. The
+whole per-run table is in the tool's own comment. So the port reads
+the keyboard on the tick the original does, and `which-key`'s edges
+are the harness putting one edge of one capture inside the wrong tick.
+
+Two runs do want a shift, and both say something.
+
+* **`palace4` at a tick earlier is 521 of 521 -- exact.** Its two
+  remaining ticks are the phase of that capture sitting just the wrong
+  side of a tick boundary, which is the knife-edge described above.
+  There is nothing of `palace4` left that is the port's.
+* `848ee3c4` gains six at a tick earlier and gives them back at two.
+
+### Where `read_user_control` runs, against the C
+
+Settled by reading, because the frame-7-against-frame-11 stop turns on
+it. The chain in SDLPoP is
+
+    play_level_2 -> timers, play_frame, draw_game_frame, do_simple_wait
+    play_frame   -> do_mobs, process_trobs, check_skel,
+                    check_can_guard_see_kid, play_kid_frame, ...
+    play_kid_frame -> loadkid_and_opp, load_fram_det_col,
+                    check_killed_shadow, play_kid, play_seq, ...
+    play_kid     -> fell_out, control_kid
+    control_kid  -> rest_ctrl_1, do_paused (which is where
+                    read_keyb_control samples the keyboard),
+                    read_user_control, user_control, save_ctrl_1
+
+so the keyboard is read at the *start* of the tick, before `play_seq`
+advances the animation, and `control_running` therefore sees the frame
+that was on the screen at the end of the previous tick.
+`src/pop/seg000.ts` and `src/pop/seg006.ts` have that order call for
+call, and `clip_char`, `forward_pressed`, `safe_step`,
+`control_standing` and `control_running` were each put beside
+`seg005.c` and `seg006.c` line for line and are the same. Nothing in
+the port is reordered or dropped there.
+
+### `848ee3c4`'s fourteen: both blocks are the harness after all
+
+They were the last ticks in the suite that nothing accounted for.
+Neither is the port.
+
+**926 to 933 -- Right and Up pressed on the same tick, and the
+emulator took the Up a tick later.** The recording presses Right and
+Up together at tick 926 and holds both to 942. The port's
+`control_standing` sees `control_forward == CONTROL_HELD` *and*
+`control_up == CONTROL_HELD`, which in keyboard mode is
+`standing_jump()`, and he jumps into the wall of column 8 and is
+bumped -- eight ticks of that, cycling frames 15, 16, 17, 18, 19, 50,
+51, 52 while a wall hides all but four columns of him. The capture
+does something else, and `tools/dev/pop-frames.ts` and the digest's
+own hashes say exactly what: the capture's ticks 926, 927 and 928 are
+the port's own pictures from ticks 950, 951 and 952 -- frames 121, 122
+and 123 at x173, x174 and x175, the `safe_step` of distance 4 that
+`forward_pressed` takes when a wall is within 8. So the original read
+Right on 926 and Up on 927, and took the step before the jump could
+be asked for.
+
+    tools/dev/late-key.ts 848ee3c4 925 942 0,1,2 --y
+        delay 0: 1432    delay 1: 1440    delay 2: 1440   (of 1446)
+
+All eight, for one key of a two-key press a tick late. The shift is
+not kept: the recording says both on 926 and the pin stays where the
+port scores.
+
+**74 to 81 -- two captures of the original disagree there.** The
+recording taps Right for two ticks, at 72 and 73, with Shift held: a
+safe step, and a press shorter than the four ticks DOSBox takes
+reliably. `tools/oracle/agree.py` on two separate captures of
+`848ee3c4` -- the one the digest is taken from and another -- answers
+without the port in it at all:
+
+    not agreed: 74 77 78 79 80 81 146 ... 299
+
+which is the port's own six mismatched ticks, exactly. Where two runs
+of the original disagree, the capture cannot adjudicate the port.
+
+So the fourteen are six the oracle cannot settle and eight of a
+two-key press, and the hundred that were "the port's" are now none.

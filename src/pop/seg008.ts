@@ -1241,9 +1241,22 @@ export function mark_obj_tile_redraw(index: number): void {
 export function draw_hurt_splash(): void {
   const frame = g.Char.frame;
   if (frame === frameids.frame_178_chomped) return;
+  /**
+   * `save_obj`, which is ten fields and not six.
+   *
+   * The clipping rectangle is part of what it saves, and this used to
+   * drop it. `reset_obj_clip` below then stood until something else
+   * set it, and the next thing to read it is `add_sword_to_objtable`
+   * in the same breath -- so a character who is hurt while holding a
+   * sword had the sword drawn over whatever the wall in front of him
+   * was meant to hide. `seg006.c`'s `save_obj` and `load_obj` carry
+   * `obj2_clip_top`, `_bottom`, `_left` and `_right` with the rest.
+   */
   const saved = {
     x: g.obj_x, y: g.obj_y, id: g.obj_id, chtab: g.obj_chtab,
     tilepos: g.obj_tilepos, direction: g.obj_direction,
+    clip_top: g.obj_clip_top, clip_bottom: g.obj_clip_bottom,
+    clip_left: g.obj_clip_left, clip_right: g.obj_clip_right,
   };
   g.obj_tilepos = -1;
   if (frame === frameids.frame_185_dead
@@ -1271,6 +1284,10 @@ export function draw_hurt_splash(): void {
   g.obj_chtab = saved.chtab;
   g.obj_tilepos = saved.tilepos;
   g.obj_direction = saved.direction;
+  g.obj_clip_top = saved.clip_top;
+  g.obj_clip_bottom = saved.clip_bottom;
+  g.obj_clip_left = saved.clip_left;
+  g.obj_clip_right = saved.clip_right;
 }
 
 // seg006:1943 -- `add_sword_to_objtable`.
