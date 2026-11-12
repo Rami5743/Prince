@@ -51,96 +51,90 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-* the translation draws **11673 of 12038** ticks exactly -- 97 per cent
-  -- of the twenty-one runs a capture can settle. It read 11690 of
-  12036 before `probeF` and `f6874819` were recaptured at the
-  corrected `SETTLE_L1`; those two are the only runs whose clock
-  crosses a minute, their old captures had spent about 298 ticks of
-  the hour before their own tick nought, and the seventeen the number
-  fell by are `probeF`'s new capture, not the port. See **the hour
-  stops for a death** in `tools/oracle/README.md`;
-* **the hundred ticks that were "the port's" have been taken apart,
-  one run at a time, against fresh captures.** Five were a real fault
-  and are fixed: `blitters_2_or` is a bitwise OR of the palette index
-  and was drawn as a plain transparent blit, which is the same picture
-  over black and a different one over the Prince. The rest are the
-  harness, and `tools/oracle/README.md` says which is which, run by
-  run and tick by tick.
-* **levels 3 and 5 to 14 are measured against the original now**, by
-  eleven new probes `level3` and `level5`..`level14`. Before them
-  every recording was in levels 1 to 4 and `palace4` was the only one
-  past level 2. They stand at
+    old twenty-one   11676 of 12039
+    thirteen new      4572 of  4935   (levels 3 and 5 to 14)
+    six newer         1338 of  1384   (the cheats, a potion, the inversion)
+    measured         17586 of 18358   96%
+    retired           2473 of  4555
+    all              20059 of 22913   88%
 
-      level3   366 of 367    level9   374 of 421
-      level5   387 of 417    level10  259 of 368
-      level6   332 of 419    level11  377 of 377
-      level7   147 of 147    level12  383 of 383
-      level8   421 of 421    level13  324 of 371
-                             level14  425 of 425
+* **Nothing in the suite is now known to be the port's.** Every run
+  that is short has a measurement beside it in
+  `tools/oracle/README.md` and in
+  `tests/oracle/recordings-vs-original.test.ts` saying what it is
+  instead -- a key edge the emulator took a tick or two off the
+  recording's time, a capture's own numbering, the comparison running
+  off the end of a short capture, or `prandom`, whose seed the
+  original takes from its clock.
+* **`level10b`'s three ticks, the one difference that had no account,
+  were the splitter counting 11.85 ticks a second.** `split_ticks.py
+  --hybrid` numbers a capture by walking the gaps between picture
+  changes and rounding each one short, and on `level10b` that made
+  460 changes into 460 ticks at **11.8503 a second** where
+  `--numbering clock` makes the same changes span **466** at
+  **12.0052**, which is the rate the game keeps. Six ticks lost over
+  four hundred is a run that reads three ahead by its middle. The
+  probe holds Down for 125 ticks while nothing moves but two torches,
+  which is why it bit there and nowhere else.
 
-  and with them `pop-report` reads **15468 of 16154**. The old
-  twenty-one are untouched at 11673 of 12038. One real fault came out
-  of it -- `check_fall_flo` and `check_shadow` were missing from the
-  port's level start, where `draw_level_first` has them, so level
-  13's floors never fell: 282 to 324. Three harness faults came with
-  it and are written up in `tools/oracle/README.md`: a `shift+l` lost
-  to each inter-level cutscene and to level 7's death, the hour the
-  skip chain spends (now carried in the recording's `startMinutes`),
-  and `split_ticks.py` given only a second to find the restart flash
-  (`level3`: 86 of 355 at the old margin, **366 of 367** at the new;
-  both margins are tried now and the better kept, because `level10b`
-  is the other way round). Two more probes, `level5b` and `level10b`,
-  are the same two levels with the guard left out of the route --
-  `probe-check.ts` was asking `Guard.charid === 0`, which is the
-  Prince's own id -- and `level5b` is **416 of 416** three captures
-  running, so level 5 is drawn perfectly and its nineteen were the
-  guard. `level10b`'s 360 of 401 is the one difference in the suite
-  nothing accounts for: from tick 233 the capture's Prince climbs
-  seven or eight pixels lower than the port's in room 1 of level 10.
-  With all thirteen the suite reads **16244 of 16971**.
-* four more recordings are captured and kept but no longer counted,
-  because their captures measure the emulator's keyboard or the
-  original's clock-seeded guard rather than the port. Each one has the
-  measurement that says so written beside it in
-  `tests/oracle/recordings-vs-original.test.ts`. With them the number
-  is 14146 of 16593. `exitdoor` is one of them and is now measured to
-  a single coincidence: its Shift at 594 three ticks earlier, or its
-  Right at 591 three ticks later, scores **794 of 801** against 593,
-  so in the emulator the two edges arrived in one tick where the
-  recording has them three apart.
+  `firstcapture.sh` and `recapture.sh` now split every capture both
+  ways and keep the better, as they already do for the two `--start`
+  values. Across the four shortest runs of the old twenty-one it is
+  worth two to four ticks apiece and never loses: `13ab6867` 572 to
+  **574**, `b4ff4672` 395 to **396** (and 429 of 429, exact, with its
+  one edge moved).
+* **The cheats were there all along.** The capture chain has always
+  run the original as `prince megahit` -- `shift+l` past level 3 is
+  refused without it -- so every cheat of `process_key` was available
+  to a probe and none had been used. A recording carries them now
+  (`RecordedCheat`, `make_probe.mjs --cheat 40:j`, `PopGame.cheat`),
+  and `recording_to_script.mjs` sends them to the emulator.
+
+  `h`, `j`, `u` and `n` set `next_room`, and `check_the_end` then
+  does `loadkid`, `anim_tile_modif`, `start_chompers`,
+  `check_fall_flo` and `check_shadow`, whose own tail is
+  `enter_guard`. So drawing a room raises the shadow of level 5 and
+  of level 6 and puts whoever a room's guard is on the screen --
+  Jaffar included -- with the Prince nowhere near, which is what
+  makes them measurable: a guard who can see him is `prandom` and
+  `gate2b` settled that years ago.
+
+      shadow5   300 of 300   exact on all four captures
+      shadow6   279 of 280   the one is the capture ending early
+      jaffar    253 of 298   ticks 3-47, which are level 13's floors
+      potion8   246 of 246   exact
+      invert2   260 of 260   exact
+
+  **No cheat opens the exit door.** `leveldoor_open` is written in
+  five places and not one is a cheat, so the mirror of level 4 and
+  the skeleton of level 3 stay out of reach: both need the button
+  pressed, which is real play past a guard.
+* **A potion is measured, by its effect.** Level 8's potion is one
+  room from the start on the same row and its modifier is 40, so
+  `curr_room_modif >> 3` is 5 and it is the one that hurts. The flask
+  goes out of the room at tick 139 and off the bar at 158, 3/3 to
+  2/3. Not the bubbles -- `start_anim_potion` seeds them from
+  `prandom(6) + 1` and no two runs of the original agree.
+* **Three real faults were fixed this round, all found by reading
+  the C beside the port:**
+  * `showRoom` wrote `check_the_end` out by hand and had dropped
+    `loadkid`, `check_fall_flo` and `check_shadow`, so looking into
+    another room met nobody. Same fault as `startLevel`'s, in the
+    other place a room is drawn whole.
+  * the upside-down flip was in `web/main.ts`, so `PopGame.render`
+    handed back the picture the right way up and no capture could
+    measure it. Moved into `render`, it scored 131 of 260 -- and
+    `invert2` says the original mirrors **the 192 rows of the room
+    within themselves** (129 of 130) and not all 200 (0 of 130). The
+    room turns over and the row of flasks does not. 260 of 260 now.
+  * `recording_to_script.mjs`'s level-7 wait was four seconds while
+    its own comment said two. Level 7 kills the Prince and
+    `Press Button to Continue` eats a `shift+l`; four is on the edge
+    and a late chain loses the skip and is a level behind ever after.
+    Three captures of `level10b` in a row came back nought for it.
 * the hand-written port, which it replaced, is still in `src/game` and
   on `backup/handwritten-port`; nothing but its own unit tests uses it
   now.
-* Thirteen of the twenty-one are exact or within one tick. What is
-  left is `13ab6867` (156), `0fbffa60` (82), `b4ff4672` (33),
-  `9b60bf3a` (28), `760c3e74` (28), `probeF` (17), `848ee3c4` (14),
-  `f6874819` (3), `palace4` (2) and `5920a8c2` (2) -- and
-  `tools/oracle/README.md` names what every one of those is. Most are
-  a single key edge the emulator took a tick or two off the
-  recording's time.
-* **With each run's edge where `which-key --by 1,2,3` puts it, three
-  ticks of the twelve thousand are left that nothing accounts for**:
-  `13ab6867` 584 and `9b60bf3a` 554 and 555 -- and recapturing both
-  runs three times says all three are their captures' own numbering.
-  Against the three fresh captures of `13ab6867` the port scores 724,
-  722 and 725 and the one tick left is 581--583, 580--582 and
-  581--583: a different tick in every capture, which a fault cannot
-  be. And `agree.py` between the fresh captures of `9b60bf3a` says
-  `not agreed: 1 82 83 84`, so two runs of the original disagree
-  where its 83 is. `palace4` and `b4ff4672` are then exact,
-  `13ab6867` is 727 of 728, `848ee3c4` 1440 of 1446 and `9b60bf3a`
-  551 of 557. Everything else is named in `tools/oracle/README.md`:
-  `0fbffa60`'s 266 is a room change and its 690 and 694 are the
-  potion bubbles no two runs of the original agree about;
-  `848ee3c4`'s six are the six `agree.py` says two captures disagree
-  on; `5920a8c2`'s one is the opening picture drawn once instead of
-  twice; `9b60bf3a`'s 83 is its capture's numbering and not a loose
-  floor running ahead -- the port's falling mob is at y 44, 62, 83
-  and 107 on ticks 80 to 83 and the capture's own moved box has its
-  bottom at 45, 62, 83 and 107; and three of `9b60bf3a`'s last five
-  are asked for port ticks 559, 560 and 561 of a 559-picture run.
-  `tools/dev/residue.ts` and `tools/dev/which-tick.ts` are what
-  measured all of it.
 
 **Before reading any of those as a fault, run
 `tools/dev/which-key.ts`.** It moves every key edge of the recording a
@@ -150,18 +144,26 @@ frame of the run `control_running` stops on -- frame 7 or frame 11 --
 one tick is thirty of them:
 
     0fbffa60   edge 569 two ticks later:   722 of 724, from 642
-    13ab6867   Up at 573 three EARLIER:    727 of 728, from 572
+    13ab6867   y at 416 two ticks later:   726 of 728, from 574
     9b60bf3a   Right at 394 three later:   551 of 557, from 529
-    b4ff4672   Right at 251 one earlier:   428 of 428, from 395
+    b4ff4672   Right at 251 one earlier:   429 of 429, from 396
     palace4    Right at  20 one earlier:   521 of 521, from 519
     5920a8c2   Shift at 240 one earlier:   414 of 415, from 413
     848ee3c4   Up at 925 one later:       1440 of 1446, from 1432
+    level10b   Right at 68 two later:      389 of 403, from 361
+
+**And the edge a run wants is the capture's, not the port's.** Two
+captures of `13ab6867` want two *different* edges: the old one Up at
+573 three ticks earlier (727 of 728) and a fresh one y at 416 two
+ticks later (726 of 728), and neither wants the other's at all. That
+is the clearest statement of what `which-key` measures. The same
+thing happened to `level10b` when its capture was renumbered: the
+edge worth ten ticks became a different edge worth twenty-eight.
 
 **Run it as `which-key.ts --by 1,2,3`.** The default range of one
-tick, and even `1,2`, is too narrow: `13ab6867` reads 721 with its Up
-two ticks later and **727** with the same Up three ticks earlier,
-which is what `tools/oracle/README.md` had already read off that
-capture's own pixels and nobody had tried. And the edge tick these
+tick, and even `1,2`, is too narrow: against the old capture
+`13ab6867` read 721 with its Up two ticks later and **727** with the
+same Up three ticks earlier. And the edge tick these
 tools take is the one in the decoded timeline, where the control
 changes -- `848ee3c4`'s Up, written "926" in the old tables, is the
 edge at **925**.
@@ -216,7 +218,17 @@ Read these before calling any difference a fault. Each cost a round.
    and cost the C's `Kid.alive < 0` guard in `show_time`. Both are
    recaptured and the guard is back; `tools/oracle/README.md` has the
    arithmetic.
-6. **The port does not read the keyboard a tick late.**
+6. **The splitter's default numbering loses a tick wherever the
+   screen holds still for three.** `split_ticks.py --hybrid` walks
+   the gaps between picture changes and rounds each short, so it can
+   only undercount, and an undercount is a capture that reads
+   *ahead*. On `level10b` it made 460 changes into 460 ticks at
+   11.8503 a second where `--numbering clock` made them span 466 at
+   **12.0052**, which is the rate the game keeps. `firstcapture.sh`
+   and `recapture.sh` try both now and keep the better. It is worth
+   two to four ticks on an ordinary run and six on one that stands
+   still for a hundred and twenty-five.
+7. **The port does not read the keyboard a tick late.**
    `tools/dev/every-key.ts` moves *every* edge of *every* recording by
    the same number of ticks: the suite scores 10951, 11206, **11690**,
    11121 and 10493 at -2, -1, 0, +1 and +2. Nought wins by 484 and by
