@@ -317,6 +317,31 @@ const EXPECTED: Record<string, number> = {
   'level12': 383,
   'level13': 324,
   'level14': 425,
+  /**
+   * `level5` and `level10` again, with the guard left out.
+   *
+   * The thing that designed the eleven had a bug of its own: it asked
+   * whether anybody was in the room with the Prince by testing
+   * `Guard.charid === 0`, which is the Prince's own id and never a
+   * guard's. So it passed two routes that walk into one. `level5`
+   * spends a hundred ticks with a skill-3 guard standing twenty units
+   * away and `level10` meets one at its tick 315, and a guard who can
+   * see the Prince is driven by `prandom`, whose seed the original
+   * takes from its own clock -- `gate2b` settled that years ago.
+   *
+   * Routes that stay out of the guard's room were searched for again
+   * and captured. `level5b` is **416 of 416** -- three captures of it
+   * scored 416, 415 and 414 of 416, 415 and 415 -- so the nineteen
+   * `level5` is short were the guard and nothing else, and level 5 is
+   * drawn perfectly. `level10b` is 360 of 401 and its best single
+   * edge is 370, so level 10's room 1 has something in it that is not
+   * the guard and not a key edge: the capture's Prince climbs seven
+   * or eight pixels lower than the port's over ticks 233 to 295, and
+   * `which-tick.ts` says the picture is `nothing the port ever
+   * draws`. That one is still open.
+   */
+  'level5b': 416,
+  'level10b': 360,
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.

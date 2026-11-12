@@ -82,8 +82,19 @@ async function sim(ticks: Controls[]): Promise<Run> {
     sig.push(`${g.drawn_room},${g.Kid.x},${g.Kid.y},${g.Kid.frame},${g.Kid.direction},`
       + `${g.Guard.frame},${g.Guard.x},${g.hitp_curr}`);
     if (g.Kid.alive >= 0 && died < 0) died = t;
-    if (guard < 0 && g.Guard.charid === 0 && g.Guard.direction !== 0x56
-      && g.Guard.alive !== 0 && g.Guard.room === g.Kid.room) guard = t;
+    /**
+     * Anybody in the room with him, whatever he is.
+     *
+     * This asked for `charid === 0` first, which is the Prince's own
+     * id and never a guard's -- an ordinary guard is
+     * `charid_2_guard`, the shadow is 1, the skeleton 3 and Jaffar
+     * 4 -- so it never fired. `level5` was designed and captured
+     * with a guard of skill 3 standing twenty units from the Prince
+     * for a hundred ticks of it, and its nineteen remaining ticks
+     * begin while the Prince is doing nothing at all.
+     */
+    if (guard < 0 && g.Guard.direction !== 0x56 && g.Guard.alive !== 0
+      && g.Guard.room === g.Kid.room) guard = t;
   }
   return { sig, died, guard, rooms: [...rooms].sort((a, b) => a - b) };
 }

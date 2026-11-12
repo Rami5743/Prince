@@ -1378,3 +1378,39 @@ of the forty-seven it is short are ticks the original disagrees with
 itself about, and the rest are the alignment carrying that difference
 along. It is kept as a regression guard -- the port's own floors are
 deterministic from seed 1 -- and not as a measurement.
+
+### The guard in the room, and `level5b` and `level10b`
+
+The thing that designed the eleven probes asked whether anybody was in
+the room with the Prince by testing `Guard.charid === 0`. That is the
+*Prince's* own id and never a guard's -- an ordinary guard is
+`charid_2_guard` -- so the test never fired and two of the routes walk
+into one. `level5` spends about a hundred ticks with a skill-3 guard
+standing twenty units from the Prince, and `level10` meets one at its
+tick 315.
+
+A guard who can see the Prince is driven by `prandom`, whose seed the
+original takes from its own clock. That is what retired `gate2b`, and
+it applies here: those runs cannot be adjudicated where the guard is.
+
+`probe-check.ts` tests it properly now (`direction !== dir_56_none`
+and the same room, whoever he is), and two guard-free routes were
+searched for and captured:
+
+* **`level5b`: 416 of 416, and 416, 415, 414 over three captures.**
+  So the nineteen `level5` is short of exact were the guard and
+  nothing else, and level 5 is drawn perfectly.
+* **`level10b`: 360 of 401**, best single edge 370. Level 10's room 1
+  has something in it that is neither a guard nor a key edge: from
+  tick 233 to 295 the capture's Prince climbs seven or eight pixels
+  lower than the port's -- its moved box runs to y 181 where the
+  port's stops at 173 -- and `which-tick.ts` says the picture is
+  `nothing the port ever draws`. That one is open, and it is the only
+  difference in the suite that is not accounted for.
+
+`level10b` also caught the other half of the flash-search problem.
+`restart - 4` is right for `level3` and wrong for `level10b`, which
+reads nought from four seconds before and 360 from one: four is back
+inside the fade into the level. A split costs forty seconds against a
+capture's three minutes, so `firstcapture.sh` and `recapture.sh` now
+split each capture at both and keep the better, printing which won.

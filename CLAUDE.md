@@ -87,7 +87,17 @@ captures of a real PRINCE.EXE:
   to each inter-level cutscene and to level 7's death, the hour the
   skip chain spends (now carried in the recording's `startMinutes`),
   and `split_ticks.py` given only a second to find the restart flash
-  (`level3`: 86 of 355 at the old margin, **366 of 367** at the new).
+  (`level3`: 86 of 355 at the old margin, **366 of 367** at the new;
+  both margins are tried now and the better kept, because `level10b`
+  is the other way round). Two more probes, `level5b` and `level10b`,
+  are the same two levels with the guard left out of the route --
+  `probe-check.ts` was asking `Guard.charid === 0`, which is the
+  Prince's own id -- and `level5b` is **416 of 416** three captures
+  running, so level 5 is drawn perfectly and its nineteen were the
+  guard. `level10b`'s 360 of 401 is the one difference in the suite
+  nothing accounts for: from tick 233 the capture's Prince climbs
+  seven or eight pixels lower than the port's in room 1 of level 10.
+  With all thirteen the suite reads **16244 of 16971**.
 * four more recordings are captured and kept but no longer counted,
   because their captures measure the emulator's keyboard or the
   original's clock-seeded guard rather than the port. Each one has the

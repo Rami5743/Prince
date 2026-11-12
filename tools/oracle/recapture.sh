@@ -53,10 +53,11 @@ mkdir -p "$work"
 # that one. It used to be `27 + 10 * (level - 1)` here, which stopped
 # being right when the skip wait grew for the levels the game plays a
 # cutscene before.
-start=$(node "$repo/tools/oracle/recording_to_script.mjs" \
+where=$(node "$repo/tools/oracle/recording_to_script.mjs" \
   "$repo/tools/oracle/recordings/$name.json" "$work/$name.txt" \
-  --settle 0.04 --shift "$shift_" --rate "$rate" 2>&1 >/dev/null \
-  | sed -n 's/^search from //p')
+  --settle 0.04 --shift "$shift_" --rate "$rate" 2>&1 >/dev/null)
+start=$(sed -n 's/^search from //p' <<<"$where")
+late=$(( $(sed -n 's/^restart at //p' <<<"$where") - 1 ))
 [ -n "$start" ] || { echo "$name: the generator did not say where to search"; exit 2; }
 # Kept outside the repository: scoring a candidate means putting it
 # in `digests/` for a moment, and a stray file there is a stray file
@@ -70,12 +71,16 @@ for i in $(seq 1 "$tries"); do
   rm -rf "${d:?}"; mkdir -p "$d"
   nice -n 19 python3 "$repo/tools/oracle/dosbox_oracle.py" --script "$work/$name.txt" \
     --out "$d/rep" --record "$d/run.mkv" --fps 30 --cycles 20000 >/dev/null 2>&1 || true
+  # Two places to start looking for the restart flash; see
+  # `firstcapture.sh` for why one is not enough.
+  for st in "$start" "$late"; do
+  rm -rf "$d/dos"
   nice -n 19 python3 "$repo/tools/oracle/split_ticks.py" "$d/run.mkv" "$d/dos" \
-    --crop 640:400:0:0 --scale 320:200 --start "$start" --after-blank \
+    --crop 640:400:0:0 --scale 320:200 --start "$st" --after-blank \
     --fps 30 --rate 12 --hybrid --anchor-text 25 >/dev/null 2>&1 || true
-  [ -d "$d/dos" ] || { echo "  try $i: no ticks"; continue; }
-  python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name.json" >/dev/null 2>&1 || continue
-  cp "$d/$name.json" "$digest"
+  [ -d "$d/dos" ] || { echo "  try $i start $st: no ticks"; continue; }
+  python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$st.json" >/dev/null 2>&1 || continue
+  cp "$d/$name-$st.json" "$digest"
   # The whole of the report and then its first line, not `| head -1`.
   # `set -o pipefail` is on, and `head` closing the pipe after one line
   # kills `tsx` with SIGPIPE often enough to matter: the substitution
@@ -85,8 +90,11 @@ for i in $(seq 1 "$tries"); do
   out=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null || true)
   line=${out%%$'\n'*}
   score=$(awk '{print $2}' <<<"$line")
-  echo "  try $i: $line"
-  if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then bestscore=$score; best=$i; fi
+  echo "  try $i start $st: $line"
+  if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then
+    bestscore=$score; best=$i; cp "$d/$name-$st.json" "$d/$name.json"
+  fi
+  done
 done
 cp "$keep" "$digest"
 [ -n "$best" ] || { echo "$name: no usable capture"; exit 1; }
