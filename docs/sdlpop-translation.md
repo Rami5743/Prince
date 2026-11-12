@@ -413,3 +413,30 @@ hourglass can come on level 13 or 14: a Prince who dies on the last
 tick of the hour there was given `Press Button to Continue` instead.
 `tests/pop/cutscene.test.ts` pins it on level 13, and taking the line
 out again fails it.
+
+### The six scenes between the levels
+
+`play_level` plays `tbl_cutscenes[level_number]` before it loads the
+level, and the table has a scene before levels 2, 4, 6, 8, 9 and 12
+and before no others. The shell does that now, in `nextLevel`, with
+the clock of the level just finished still in `rem_min` -- which is
+what `hourglass_frame` reads to decide how much sand is left in the
+glass.
+
+* 2 and 6: `cutscene_2_6`, the princess standing and turned to the
+  right, 4.8 seconds, `sound_27`.
+* 4: `cutscene_4`, the princess lying on the bed, `sound_27`.
+* 8 and 9: `cutscene_8` and `cutscene_9`, the mouse and the princess,
+  `sound_35`. 8 is the mouse arriving and the princess standing up; 9
+  is the princess crouching and the mouse left standing for
+  fifty-eight frames.
+* 12: `cutscene_12`, which reads the clock. Under six minutes left
+  and it is the short scene with `sound_40`; otherwise it falls
+  through to `cutscene_2_6`. Both are 4.8 seconds to the frame --
+  `(2)` then `(24)` against `(26)` -- which reads like a mistake and
+  is not, so the test pins it.
+
+`tests/browser/cutscene.test.ts` plays them where the player does:
+Shift+L out of level 1 puts the scene on the canvas, it ends by
+itself and level 2 begins. Taking the two lines out of `nextLevel`
+fails it.

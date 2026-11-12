@@ -212,6 +212,11 @@ async function boot(): Promise<void> {
   }
 
   async function select(index: number, carry: { seamless?: boolean } = {}): Promise<void> {
+    // Whatever scene was playing is over: the shell is showing
+    // something else now, and a scene left running would go on
+    // drawing over it and holding the game's own clock.
+    cutscene?.cancel();
+    afterScene = null;
     current = index;
     const v = views[current];
     if (v.kind !== 'level') {
@@ -625,17 +630,37 @@ async function boot(): Promise<void> {
       hp: game.hitPoints,
     };
     held.clear();
-    const next = views.findIndex((x) => x.kind === 'level' && x.level === was + 1);
+    const level = was + 1;
+    const next = views.findIndex((x) => x.kind === 'level' && x.level === level);
     // Out of the last level and the game is over: the screen the
     // original ends on, and then the title again.
     if (next < 0) { await select(1); return; }
-    await select(next, { seamless: carried.seamless });
-    if (!game) return;
-    game.remainingTicks = carried.ticks;
-    game.hasSword = carried.sword || game.hasSword;
-    game.beginningHitPoints = carried.lives;
-    if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
-    watchRoom = null;
+
+    const arrive = async (): Promise<void> => {
+      await select(next, { seamless: carried.seamless });
+      if (!game) return;
+      game.remainingTicks = carried.ticks;
+      game.hasSword = carried.sword || game.hasSword;
+      game.beginningHitPoints = carried.lives;
+      if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
+      watchRoom = null;
+    };
+
+    /**
+     * `play_level`: the scene before the level, if the level has one.
+     *
+     *     cutscene_func = tbl_cutscenes[level_number];
+     *     if (cutscene_func != NULL) load_intro(level_number > 2, cutscene_func, 1);
+     *
+     * It is played before the level is loaded and with the clock the
+     * level just finished left in `rem_min`, which is what
+     * `hourglass_frame` reads to decide how much sand is left.
+     */
+    if (CutscenePlayer.hasCutsceneFor(level)) {
+      await playScene({ kind: 'level', level }, arrive);
+      return;
+    }
+    await arrive();
   }
 
   /** Ctrl+R: `start_level = -1; start_game()` -- back to the title. */

@@ -39,6 +39,8 @@ interface Watched {
   rows: Set<number>;
   /** Every `charid` either character ever had while on the screen. */
   charids: Set<number>;
+  /** Every sound the scene asked for, in order. */
+  sounds: number[];
   /** How many seconds of the original's clock the scene took. */
   seconds: number;
   /** The most pixels that were ever lit at once. */
@@ -47,11 +49,20 @@ interface Watched {
 
 /** Run a scene to the end on its own clock, watching what it draws. */
 async function play(
-  scene: Parameters<CutscenePlayer['begin']>[0], limitSeconds = 300,
+  scene: Parameters<CutscenePlayer['begin']>[0],
+  options: { remMin?: number; limitSeconds?: number } = {},
 ): Promise<Watched> {
-  const player = await CutscenePlayer.create(assets, exe);
+  const limitSeconds = options.limitSeconds ?? 300;
+  const sounds: number[] = [];
+  const player = await CutscenePlayer.create(assets, exe,
+    { sound: (which) => sounds.push(which) });
+  // `rem_min` is the clock the level just finished left behind, and
+  // `hourglass_frame` is the only thing that reads it here.
+  if (options.remMin !== undefined) g.rem_min = options.remMin;
   player.begin(scene);
-  const out: Watched = { rows: new Set(), charids: new Set(), seconds: 0, mostLit: 0 };
+  const out: Watched = {
+    rows: new Set(), charids: new Set(), sounds, seconds: 0, mostLit: 0,
+  };
   let units = 0;
   while (player.running && units < limitSeconds * 60) {
     player.advance(UNIT_MS);
@@ -107,7 +118,7 @@ describe('the ending', () => {
 describe('the hour running out', () => {
   it('plays the hourglass in the princess\'s room, with nobody in it',
     async () => {
-      const seen = await play({ kind: 'expired' });
+      const seen = await play({ kind: 'expired' }, { remMin: 0 });
       // The room, out of PV.DAT, and the bed ORed into it.
       expect(seen.rows.has(13)).toBe(true);
       expect(seen.rows.has(14)).toBe(true);
@@ -167,4 +178,57 @@ describe('the hour running out', () => {
     expect(g.game_expired).toBe(1);
     expect(game.timeExpired).toBe(true);
   });
+});
+
+describe('the scenes between the levels', () => {
+  it('come before the six levels `tbl_cutscenes` names and no others', () => {
+    const has = [];
+    for (let level = 0; level <= 15; level++) {
+      if (CutscenePlayer.hasCutsceneFor(level)) has.push(level);
+    }
+    expect(has).toEqual([2, 4, 6, 8, 9, 12]);
+  });
+
+  it('is the princess alone before levels 2 and 6', async () => {
+    for (const level of [2, 6]) {
+      const seen = await play({ kind: 'level', level }, { remMin: 40 });
+      expect(seen.rows.has(13)).toBe(true);
+      expect([...seen.charids]).toEqual([charids.charid_5_princess]);
+      // `cutscene_2_6` plays `sound_27_cutscene_2_4_6_12` and nothing else.
+      expect(seen.sounds).toEqual([27]);
+      expect(seen.seconds).toBeGreaterThan(3);
+      expect(seen.seconds).toBeLessThan(8);
+    }
+  }, 60000);
+
+  it('is the princess lying down before level 4', async () => {
+    const seen = await play({ kind: 'level', level: 4 }, { remMin: 40 });
+    expect([...seen.charids]).toEqual([charids.charid_5_princess]);
+    expect(seen.sounds).toEqual([27]);
+  }, 30000);
+
+  it('is the mouse and the princess before levels 8 and 9', async () => {
+    for (const level of [8, 9]) {
+      const seen = await play({ kind: 'level', level }, { remMin: 20 });
+      expect([...seen.charids].sort((a, b) => a - b)).toEqual([
+        charids.charid_5_princess, charids.charid_24_mouse,
+      ]);
+      // `sound_35_cutscene_8_9`.
+      expect(seen.sounds).toEqual([35]);
+    }
+  }, 60000);
+
+  it('before level 12 is one of two scenes, and the clock picks', async () => {
+    // `cutscene_12`: `hourglass_frame() >= 6` -- fewer than six
+    // minutes left -- is the short one, with its own sound; anything
+    // else falls through to `cutscene_2_6`.
+    const hurried = await play({ kind: 'level', level: 12 }, { remMin: 3 });
+    expect(hurried.sounds).toEqual([40]); // sound_40_cutscene_12_short_time
+    const unhurried = await play({ kind: 'level', level: 12 }, { remMin: 40 });
+    expect(unhurried.sounds).toEqual([27]); // sound_27_cutscene_2_4_6_12
+    // They are the same length to the frame, which is worth pinning
+    // because it reads like a mistake and is not: the short one is
+    // `proc_cutscene_frame(2)` and then `(24)`, the other one `(26)`.
+    expect(hurried.seconds).toBe(unhurried.seconds);
+  }, 60000);
 });

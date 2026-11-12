@@ -11931,6 +11931,8 @@ async function boot() {
     display.present(titleSurface, titlePalette.toRgba());
   }
   async function select(index, carry = {}) {
+    cutscene?.cancel();
+    afterScene = null;
     current = index;
     const v = views[current];
     if (v.kind !== "level") {
@@ -12280,18 +12282,26 @@ async function boot() {
       hp: game.hitPoints
     };
     held.clear();
-    const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
+    const level = was + 1;
+    const next = views.findIndex((x) => x.kind === "level" && x.level === level);
     if (next < 0) {
       await select(1);
       return;
     }
-    await select(next, { seamless: carried.seamless });
-    if (!game) return;
-    game.remainingTicks = carried.ticks;
-    game.hasSword = carried.sword || game.hasSword;
-    game.beginningHitPoints = carried.lives;
-    if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
-    watchRoom = null;
+    const arrive = async () => {
+      await select(next, { seamless: carried.seamless });
+      if (!game) return;
+      game.remainingTicks = carried.ticks;
+      game.hasSword = carried.sword || game.hasSword;
+      game.beginningHitPoints = carried.lives;
+      if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
+      watchRoom = null;
+    };
+    if (CutscenePlayer.hasCutsceneFor(level)) {
+      await playScene({ kind: "level", level }, arrive);
+      return;
+    }
+    await arrive();
   }
   async function restartGame() {
     held.clear();
