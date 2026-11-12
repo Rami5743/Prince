@@ -1488,19 +1488,26 @@ returns early while `get_tile(15, 1, 0) == tiles_22_sword`, and level
     shadow5   300 of 300   exact -- and 299 of 299 on three more captures
     shadow6   279 of 280   279 on all four
     jaffar    253 of 298   252, 253, 253 over the three that reached level 13
-    potion8   223 of 246   the same 223 on three captures of four
+    potion8   246 of 246   exact, once its capture's minute was read
 
-`shadow5` is **exact**, which says the shadow of level 5 -- `do_init_shad`
-with `init_shad_5`, frame 15 at x55 facing right -- is drawn as the
-original draws it, and so are the four rooms on the way. `shadow6`
-is one tick short over 280 and draws the guard of room 6 as well as
-the shadow of room 1.
+**Three of the four are exact and the fourth is the generator.**
 
-`jaffar`'s forty-five are mostly level 13's own floors: the probe
-starts in room 23, `check_fall_flo` gives each of the six floors
-above it a delay of `-(prandom(0xff) & 0x0f)`, and `probe-check.ts`
-says twenty of its ticks differ between two seeds by more than three
-hundred pixels. The same arithmetic caps `level13` at 324 of 371.
+`shadow5` is exact on every capture, which says the shadow of level 5
+-- `do_init_shad` with `init_shad_5`, frame 15 at x55 facing right --
+is drawn as the original draws it, and so are the four rooms on the
+way. `shadow6` draws the guard of room 6 as well as the shadow of
+room 1, and its one tick is 281 at a drift of -16: the comparison
+running off the end of a capture that holds 280 ticks of a 420-tick
+run, which is `9b60bf3a`'s last three all over again.
+
+`jaffar` is short by **ticks 3 to 47 and nothing else**, one block,
+all at a drift of +1. The probe starts in room 23, `check_fall_flo`
+gives each of the six floors above it a delay of
+`-(prandom(0xff) & 0x0f)`, and `probe-check.ts` at a sixty-pixel
+threshold says **212 of its 300 ticks** differ between two seeds --
+the floors come down in a different order every run and leave their
+debris behind. Jaffar's own room, from tick 140 on, agrees exactly.
+The same arithmetic caps `level13` at 324 of 371.
 
 ### A potion, measured by what it does
 
@@ -1520,6 +1527,20 @@ on column 5, the first Shift crouches him (`get_item` with
 `Char.frame != frame_109_crouch`) and the second drinks
 (`seq_78_drink`, frames 191 to 205). The flask goes out of the room
 at tick 139 and off the bar at 158, 3/3 to 2/3.
+
+It read **223 of 246** first, and the twenty-three were ticks 26 to
+48 in one unbroken block -- the signature this file already has a
+section for: `show_level` puts `LEVEL 8` up for twenty-five ticks and
+`show_time` follows it with the clock for twenty-three. This chain
+arrived at level 8 having spent a minute, so its capture says
+`59 MINUTES LEFT` where a port starting the level with a fresh hour
+says `60`. With that read off the capture and written into the
+recording as `startMinutes` it is **246 of 246, exact**.
+
+Worth noting for the next probe: `level8`'s own recording wants
+**60** there and `potion8` wants **59**, so a chain to level 8 sits
+right on the crossing. The minute has to be read off each capture's
+own tick 26 and never assumed from the level.
 
 That is the thing to measure. `0fbffa60` already proved no two runs
 of the original agree about a potion's bubbles -- `start_anim_potion`

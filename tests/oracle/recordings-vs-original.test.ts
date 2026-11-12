@@ -403,14 +403,21 @@ const EXPECTED: Record<string, number> = {
    *   then 299 of 299 three times.
    * * `shadow6` -- level 6, 24 -> 2 -> 15 -> 6 -> 18 -> 1, with the
    *   guard of room 6 drawn on the way. 279 of 280, and 279 in all
-   *   four captures.
+   *   four captures. The one is tick 281 at a drift of -16, which is
+   *   the comparison running off the end of a capture that holds 280
+   *   ticks of a 420-tick run -- the same thing as `9b60bf3a`'s last
+   *   three.
    * * `jaffar` -- level 13, 23 -> 17 -> 1, the one way to his room
    *   that does not pass through room 16, whose own `check_fall_flo`
    *   would start six floors falling at `-(prandom(0xff) & 0x0f)`
    *   ticks each. 253 of 298, and 252, 253, 253 over the three
-   *   captures that reached level 13; about twenty of what it is
-   *   short are level 13's own floors, which no two runs of the
-   *   original agree about.
+   *   captures that reached level 13. What it is short is **ticks 3
+   *   to 47 and nothing else** -- one block, all at a drift of +1,
+   *   and all of it inside the stretch `probe-check.ts` says two
+   *   seeds of the port's own `prandom` differ over: room 23's six
+   *   floors come down in a different order in every run of the
+   *   original and leave their debris on the screen. Jaffar's own
+   *   room, from tick 140 on, agrees exactly.
    * * `potion8` -- a potion drunk, measured by its effect and not by
    *   its `prandom` bubbles. Level 8's potion is one room from the
    *   start on the same row and its modifier is 40, so
@@ -418,8 +425,20 @@ const EXPECTED: Record<string, number> = {
    *   Prince runs right into room 2, bumps the wall at column 6,
    *   Shift crouches him (`get_item`) and Shift again drinks
    *   (`seq_78_drink`, frames 191 to 205): the flask goes out of the
-   *   room at tick 139 and off the bar at 158, 3/3 to 2/3. 223 of
-   *   246, the same 223 in three captures of four.
+   *   room at tick 139 and off the bar at 158, 3/3 to 2/3.
+   *
+   *   **246 of 246 -- exact.** It read 223 first, and the
+   *   twenty-three were ticks 26 to 48 in one block, which is the
+   *   signature of the minutes in words: `show_level` puts
+   *   `LEVEL 8` up for twenty-five ticks and `show_time` follows it
+   *   with the clock for twenty-three. This chain arrived at level 8
+   *   having spent a minute, so its capture says `59` where a port
+   *   starting the level fresh says `60`. Read off the capture and
+   *   written into the recording as `startMinutes`, as ever -- and
+   *   worth noting that `level8`'s own probe wants **60** there, so
+   *   a chain to level 8 sits right on the crossing and the minute
+   *   has to be read off each capture rather than assumed from the
+   *   level.
    */
   /**
    * Turning the screen over, which nothing had ever measured.
@@ -448,7 +467,7 @@ const EXPECTED: Record<string, number> = {
    */
   'invert2': 260,
   'jaffar': 253,
-  'potion8': 223,
+  'potion8': 246,
   'shadow5': 300,
   'shadow6': 279,
   // Probes: the same machinery, with a timeline written here rather
