@@ -19,8 +19,10 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { CutscenePlayer, UNIT_MS } from '../../src/pop/cutscene.ts';
 import { g } from '../../src/pop/state.ts';
-import { charids } from '../../src/pop/types.ts';
-import { tbl_cutscenes } from '../../src/pop/seg001.ts';
+import { charids, chtabs } from '../../src/pop/types.ts';
+import { tbl_cutscenes, hourglass_frame } from '../../src/pop/seg001.ts';
+import { PopGame } from '../../src/pop/game.ts';
+import { loadkid, play_kid } from '../../src/pop/seg006.ts';
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -100,4 +102,69 @@ describe('the ending', () => {
         .map((f, i) => (f ? i : -1)).filter((i) => i >= 0);
       expect(withScene).toEqual([2, 4, 6, 8, 9, 12]);
     });
+});
+
+describe('the hour running out', () => {
+  it('plays the hourglass in the princess\'s room, with nobody in it',
+    async () => {
+      const seen = await play({ kind: 'expired' });
+      // The room, out of PV.DAT, and the bed ORed into it.
+      expect(seen.rows.has(13)).toBe(true);
+      expect(seen.rows.has(14)).toBe(true);
+      // `time_expired` puts nobody in the room: `reset_cutscene` has
+      // cleared both frames and nothing sets them again.
+      expect([...seen.charids]).toEqual([]);
+      // Neither story screen is in it.
+      expect(seen.rows.has(11)).toBe(false);
+      expect(seen.rows.has(12)).toBe(false);
+      // `proc_cutscene_frame(2)` and then `(100)` at six sixtieths
+      // each, with a fade either side: 12.4 seconds.
+      expect(seen.seconds).toBeGreaterThan(10);
+      expect(seen.seconds).toBeLessThan(16);
+    }, 60000);
+
+  it('draws the hourglass itself, run right out', async () => {
+    const player = await CutscenePlayer.create(assets, exe);
+    player.begin({ kind: 'expired' });
+    player.advance(UNIT_MS * 60);
+    // `set_hourglass_state(7)`, and `draw_hourglass` puts
+    // `hourglass_state + 2` of the princess-room bank in the mid
+    // table. `add_midtable` keeps the id one lower than it is asked
+    // for, the way `chtab_addrs` is indexed.
+    const glass = g.midtable.filter((m) => m.chtab_id === chtabs.id_chtab_8_princessroom);
+    expect(glass.map((m) => m.id)).toEqual([7 + 2 - 1]);
+    // `hourglass_sandflow = -1`: no sand is running, so there is no
+    // flow frame in the fore table either.
+    expect(g.foretable.filter((f) => f.id >= 9).length).toBe(0);
+  }, 30000);
+
+  it('is how much sand is left, by the clock', () => {
+    // `time_bound = {6, 17, 33, 65}` and `6 - bound_index`.
+    const at = (min: number): number => { g.rem_min = min; return hourglass_frame(); };
+    expect(at(0)).toBe(6);
+    expect(at(5)).toBe(6);
+    expect(at(6)).toBe(5);
+    expect(at(16)).toBe(5);
+    expect(at(17)).toBe(4);
+    expect(at(33)).toBe(3);
+    expect(at(60)).toBe(3);
+    expect(at(65)).toBe(2);
+  });
+
+  it('comes for a Prince who dies on the last tick of the hour, '
+    + 'on a level that is otherwise past expiring', async () => {
+    // `play_frame`'s own test does not fire above level 12.
+    const game = await PopGame.start(assets, exe, 13);
+    g.rem_min = 0;
+    expect(game.timeExpired).toBe(false);
+    // `play_kid`'s does, and it has no level guard: this is the line
+    // the translation had dropped.
+    loadkid();
+    // `is_dead()`: the frame he is lying in, not his hit points.
+    g.Char.frame = 185; // frame_185_dead
+    g.Char.alive = 7;
+    play_kid();
+    expect(g.game_expired).toBe(1);
+    expect(game.timeExpired).toBe(true);
+  });
 });

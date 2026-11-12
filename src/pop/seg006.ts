@@ -740,6 +740,12 @@ export function play_kid(): void {
         if (g.current_level !== 0 && g.current_level !== 15) play_death_music();
       } else {
         if (g.Char.alive !== 7 || out.check_sound_playing()) return;
+        // `if (rem_min == 0) expired();` -- the line the translation
+        // dropped. A Prince who dies on the last tick of the hour
+        // gets the hourglass, not `Press Button to Continue`, and
+        // there is no level guard on this one: `play_frame`'s
+        // `current_level < 13` does not apply here.
+        if (g.rem_min === 0) g.game_expired = 1;
         if (g.current_level !== 0 && g.current_level !== 15) {
           g.text_time_remaining = g.text_time_total = 288;
           out.display_text_bottom('Press Button to Continue');

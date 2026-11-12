@@ -827,9 +827,13 @@ export class PopGame {
    * and goes back to the title.
    *
    * Not on level 13 or after: the original says expiring does not
-   * count on Jaffar's level or the princess's.
+   * count on Jaffar's level or the princess's -- but `play_kid` has
+   * its own `if (rem_min == 0) expired();` for a Prince who dies on
+   * the last tick, and that one has no level guard.
    */
-  get timeExpired() { return g.current_level < 13 && g.rem_min === 0; }
+  get timeExpired() {
+    return (g.current_level < 13 && g.rem_min === 0) || g.game_expired !== 0;
+  }
 
   /**
    * The Prince has walked into the last room of the last level.

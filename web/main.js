@@ -2884,6 +2884,14 @@ var Globals = class {
   random_seed = 0;
   /** `end_sequence` has been reached: the last room of the last level. */
   game_won = 0;
+  /**
+   * `expired()` has been reached.
+   *
+   * In the C `expired` never returns -- it ends in `start_game`,
+   * which `longjmp`s out of the whole game -- so a `goto` is all it
+   * is. Here the shell watches this and plays the hourglass.
+   */
+  game_expired = 0;
   upside_down = 0;
   need_level1_music = 0;
   is_blind_mode = 0;
@@ -4182,6 +4190,7 @@ function play_kid() {
         if (g.current_level !== 0 && g.current_level !== 15) play_death_music();
       } else {
         if (g.Char.alive !== 7 || out.check_sound_playing()) return;
+        if (g.rem_min === 0) g.game_expired = 1;
         if (g.current_level !== 0 && g.current_level !== 15) {
           g.text_time_remaining = g.text_time_total = 288;
           out.display_text_bottom("Press Button to Continue");
@@ -9973,10 +9982,12 @@ var PopGame = class _PopGame {
    * and goes back to the title.
    *
    * Not on level 13 or after: the original says expiring does not
-   * count on Jaffar's level or the princess's.
+   * count on Jaffar's level or the princess's -- but `play_kid` has
+   * its own `if (rem_min == 0) expired();` for a Prince who dies on
+   * the last tick, and that one has no level guard.
    */
   get timeExpired() {
-    return g.current_level < 13 && g.rem_min === 0;
+    return g.current_level < 13 && g.rem_min === 0 || g.game_expired !== 0;
   }
   /**
    * The Prince has walked into the last room of the last level.
@@ -12030,8 +12041,7 @@ async function boot() {
         return;
       }
       if (game.timeExpired) {
-        effects.sound?.(36);
-        void changeScene(restartGame);
+        void changeScene(() => playScene({ kind: "expired" }, restartGame));
         return;
       }
       if (game.restartDue) {

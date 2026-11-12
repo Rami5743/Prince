@@ -376,11 +376,9 @@ async function boot(): Promise<void> {
         return;
       }
       if (game.timeExpired) {
-        // `expired()`: the hour is up, and the original goes back to
-        // the title through the hourglass. The hourglass is a cutscene
-        // this port does not have; the sound and the title are here.
-        effects.sound?.(36); // `sound_36_out_of_time`
-        void changeScene(restartGame);
+        // `expired()`: the hour is up. The original throws the screen
+        // away, plays the hourglass out and starts the game again.
+        void changeScene(() => playScene({ kind: 'expired' }, restartGame));
         return;
       }
       if (game.restartDue) { void changeScene(restart); return; }

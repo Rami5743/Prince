@@ -391,3 +391,25 @@ The hall of fame at the end of `end_sequence` is left out, and it is
 the one piece of the C that is not here: it asks the player to type a
 name into a box and writes it to `PRINCE.HOF` beside the game's files,
 and a page can do neither.
+
+### The hour running out, and a line that went with it
+
+`expired()` is now the hourglass: the princess's room with the glass
+run right out, twelve and a half seconds of it, and then the title.
+Before this the shell played `sound_36_out_of_time` and cut to a
+static picture.
+
+The sweep for dropped lines missed one that belongs with it.
+`play_kid` has its own call --
+
+    if (Char.alive != 7 || check_sound_playing()) return;
+    if (rem_min == 0) {
+        expired();
+    }
+
+-- and the translation had the line above it and the lines below it
+and not that. It has no level guard, so it is the one way the
+hourglass can come on level 13 or 14: a Prince who dies on the last
+tick of the hour there was given `Press Button to Continue` instead.
+`tests/pop/cutscene.test.ts` pins it on level 13, and taking the line
+out again fails it.
