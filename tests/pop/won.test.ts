@@ -1,11 +1,11 @@
 /**
  * Walking into the last room of the last level ends the game.
  *
- * `check_the_end` runs the ending there in the original. The
- * translation had the rest of that function and not the test, so the
- * Prince walked into the final room and the game simply carried on.
- * This port has no cutscenes; the game says it is won and the shell
- * takes it from there.
+ * `check_the_end` runs `end_sequence()` there. The translation had
+ * the rest of that function and not the test, so the Prince walked
+ * into the final room and the game simply carried on. A cutscene
+ * cannot be run from inside a tick, so the game says it is won and
+ * the shell plays the ending -- see `tests/pop/cutscene.test.ts`.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

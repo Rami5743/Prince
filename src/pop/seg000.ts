@@ -296,10 +296,12 @@ export function check_the_end(): void {
   if (g.next_room !== 0 && g.next_room !== g.drawn_room) {
     g.drawn_room = g.next_room;
     load_room_links();
-    // Special event: the end of the game. The original runs the
-    // ending here; this port has no cutscenes, so it says so and the
-    // shell takes it from there. Nothing said it before, and walking
-    // into the last room simply went on playing.
+    // Special event: the end of the game. The C runs `end_sequence()`
+    // here. It is a cutscene, and a cutscene cannot be run from
+    // inside a tick of the game, so the flag is what the shell
+    // watches: `web/main.ts` plays `{ kind: 'ending' }` on it and
+    // then starts the game again, which is what `end_sequence` does
+    // when it is done.
     if (g.current_level === WIN_LEVEL && g.drawn_room === WIN_ROOM) g.game_won = 1;
     screen.different_room = 1;
     loadkid();

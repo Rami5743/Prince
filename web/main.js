@@ -9992,9 +9992,10 @@ var PopGame = class _PopGame {
   /**
    * The Prince has walked into the last room of the last level.
    *
-   * `check_the_end` runs the ending there in the original. This port
-   * has no cutscenes, so the game says it is won and the shell ends
-   * it; before this nothing said it at all and the game carried on.
+   * `check_the_end` runs `end_sequence()` there. A cutscene cannot
+   * be run from inside a tick, so the game says it is won and the
+   * shell plays the ending; before any of this nothing said it at
+   * all and the game carried on.
    */
   get gameWon() {
     return g.game_won !== 0;
