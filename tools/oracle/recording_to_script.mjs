@@ -157,8 +157,33 @@ const EDGE_COST = 0.0130;
 const SKIP_WAIT = arg('skip-wait', 10);
 /** When the game is at the title screen, in seconds from the start. */
 const BOOT = 25;
-/** How long level 1 is left running before the first `shift+l`. */
-const SETTLE_L1 = 25;
+/**
+ * How long level 1 is left running before the first `shift+l` -- or,
+ * for a level-1 recording, before the Ctrl+A that the capture starts
+ * on.
+ *
+ * It was twenty-five seconds, and that is three hundred ticks of the
+ * hour the game is played against. Ctrl+A restarts the level and not
+ * the hour, so the capture began with `rem_tick` three hundred short
+ * of the 719 the port starts a level with, and its clock crossed the
+ * minute around tick 420 where the port's crosses at 721. Nothing
+ * shows that until a death restarts the level and `show_level` asks
+ * `show_time` for the minutes in words: `848ee3c4` says
+ * `59 MINUTES LEFT` on its tick 681 and `760c3e74` on its 584, where
+ * the port says `60`, and the two blocks are 47 ticks of the suite.
+ *
+ * The level is up two tenths of a second after Return -- measured off
+ * the capture's own video, where the title goes at 25.93 and the room
+ * is drawn at 26.13 -- so three seconds is ten times the margin the
+ * load needs and leaves the hour only 34 ticks short, which is well
+ * inside the first minute for the whole of any run so far.
+ *
+ * It cannot go the other way instead. The title screen is only the
+ * title screen from about twenty-one seconds to about thirty: after
+ * that the game runs its own story and then the demo level, and
+ * Return no longer means "start".
+ */
+const SETTLE_L1 = 3;
 const lines = [
   `# generated from ${basename(src)} -- the player's own key events, replayed`,
   `wait ${BOOT}`,

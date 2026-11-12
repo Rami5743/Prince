@@ -51,8 +51,15 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-* the translation draws **11646 of 12033** ticks exactly -- 97 per cent
+* the translation draws **11656 of 12034** ticks exactly -- 97 per cent
   -- of the twenty-one runs a capture can settle;
+* **the hundred ticks that were "the port's" have been taken apart,
+  one run at a time, against fresh captures.** Five were a real fault
+  and are fixed: `blitters_2_or` is a bitwise OR of the palette index
+  and was drawn as a plain transparent blit, which is the same picture
+  over black and a different one over the Prince. The rest are the
+  harness, and `tools/oracle/README.md` says which is which, run by
+  run and tick by tick.
 * four more recordings are captured and kept but no longer counted,
   because their captures measure the emulator's keyboard or the
   original's clock-seeded guard rather than the port. Each one has the

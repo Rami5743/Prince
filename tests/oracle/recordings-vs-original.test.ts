@@ -160,8 +160,22 @@ const EXPECTED: Record<string, number> = {
   '5920a8c2': 413,
   '72b3522f': 384,
   '756b259c': 509,
-  '760c3e74': 1513,
-  '848ee3c4': 1421,
+  // Recaptured with the shorter `SETTLE_L1`. Both of these die and
+  // restart the level, and both captures used to say
+  // `59 MINUTES LEFT` where the port says `60`: Ctrl+A restarts the
+  // level and not the hour, and the old script let level 1 run for
+  // twenty-five seconds -- three hundred ticks of the hour -- before
+  // pressing it. `760c3e74` was 1513 of 1564 with 24 of its 51 that
+  // block, and is 1538 of 1566 without it; `848ee3c4` was 1421 (1423
+  // after the OR blitter) of 1446 with 23 of its 25 that block, and
+  // is 1432.
+  //
+  // The phase lottery is harsher at the shorter wait and these are
+  // the best of several: `848ee3c4` scored 1285, 348, 349, 1432, 350,
+  // 357, 350 and 1286 over eight captures, and `760c3e74` 1538, 1537,
+  // 316 and 1203 over four.
+  '760c3e74': 1538,
+  '848ee3c4': 1432,
   // Recaptured: four captures of this at shift -1 scored 314, 315, 456
   // and 529 against an unchanged port, which is the oracle's phase and
   // not the port -- see `tools/oracle/recapture.sh`. The best of them
@@ -211,7 +225,13 @@ const EXPECTED: Record<string, number> = {
   // `palace4` is the level-4 probe: the palace walls, their brick
   // colours and the decals between the bricks, measured against a
   // capture of the real game rather than read off a picture.
-  'palace4': 514,
+  //
+  // 514 until `blitters_2_or` was made an OR. Five of its seven
+  // differences were the tapestry of the room above drawn over the
+  // Prince's arm as he jumps for the ledge of room 10, where the
+  // original mixes the two: at (220,0) of a fresh capture's tick 437
+  // his colour is 113, the tapestry's is 85, and the capture has 117.
+  'palace4': 519,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and

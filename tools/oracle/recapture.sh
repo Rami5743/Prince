@@ -47,7 +47,11 @@ rate=${5:-12}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 digest="$repo/tools/oracle/digests/$name.json"
 level=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$repo/tools/oracle/recordings/$name.json','utf8')).level||1)")
-start=$((49 + 10 * (level - 1)))
+# One second before the Ctrl+A, which `recording_to_script.mjs` sends at
+# BOOT + SETTLE_L1 + SKIP_WAIT * (level - 1) = 25 + 3 + 10 * (level - 1).
+# The level's own fade, a tenth of a second after Return, is over by 26.5,
+# so looking from 27 finds the restart's flash and not that one.
+start=$((27 + 10 * (level - 1)))
 mkdir -p "$work"
 node "$repo/tools/oracle/recording_to_script.mjs" \
   "$repo/tools/oracle/recordings/$name.json" "$work/$name.txt" \

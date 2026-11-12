@@ -586,8 +586,9 @@ harness:
 
 | run        | what it is | where it is written |
 |------------|------------|---------------------|
-| `760c3e74` | 24 | the release at 292, taken two ticks early |
-| `848ee3c4` | 23 | the capture's hour, started before the capture |
+| `760c3e74` | 27 | the release at 292, taken two ticks early |
+| `760c3e74` | 24 | the capture's hour -- **gone, recaptured** |
+| `848ee3c4` | 23 | the capture's hour -- **gone, recaptured** |
 | `0fbffa60` |  4 | the spikes, compared across the Prince's own tick |
 | `0fbffa60` |  6 | the stop on frame 7 against frame 11 |
 | `9b60bf3a` | 26 | the run started a tick earlier (above) |
@@ -602,6 +603,39 @@ the room, and both were found the same way: render the port's tick,
 blank the text rectangle (70,193 to 250,202), hash it in the
 capture's palette with the capture's mask, and see which of the two
 the capture's number is.
+
+### The hour the capture had already spent, and the cure
+
+`848ee3c4` and `760c3e74` both die and restart level 1, and both
+captures used to say `59 MINUTES LEFT` where the port says `60`. The
+cause is in `recording_to_script.mjs`: Ctrl+A restarts the level and
+not the hour, and the script let level 1 run for `SETTLE_L1` = 25
+seconds -- three hundred ticks of the hour -- before pressing it, so
+the capture's `rem_tick` began three hundred short of the 719 the
+port starts with and crossed the minute around tick 420 where the
+port's crosses at 721.
+
+Measured off a capture's own video: the title screen goes at 25.93
+seconds and the room is drawn at 26.13, so the level needs two tenths
+of a second after Return. `SETTLE_L1` is now **3**, which leaves the
+hour 34 ticks short instead of three hundred -- inside the first
+minute for the whole of any run in the suite -- and the restart flash
+is then at `BOOT + SETTLE_L1 - 1` = 27 seconds, which is what
+`recapture.sh` now passes as `--start`.
+
+It cannot go the other way instead: the title screen is only the
+title screen from about twenty-one seconds to about thirty, and after
+that the game runs its own story and then the demo level, where
+Return no longer means "start". Probed with a script of one `wait 60`
+and the video read at three-second steps.
+
+The two runs were recaptured at the new wait. `760c3e74` went from
+1513 of 1564 to **1538 of 1566** and `848ee3c4` from 1423 of 1446 to
+**1432**, and the two blocks of words are gone from both. The phase
+lottery is harsher at the shorter wait -- `848ee3c4` scored 1285,
+348, 349, 1432, 350, 357, 350 and 1286 over eight captures, and
+`760c3e74` 1538, 1537, 316 and 1203 over four -- so take four at
+least, as `recapture.sh` does.
 
 ### `848ee3c4` 681 to 703: the capture's hour started before the capture did
 
