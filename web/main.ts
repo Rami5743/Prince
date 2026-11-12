@@ -116,7 +116,9 @@ async function boot(): Promise<void> {
     afterScene = then;
     cutscene.begin(scene);
     display.present(cutscene.render(), cutscene.palette.toRgba());
-    status.textContent = 'press Escape to skip';
+    status.textContent = scene.kind === 'title'
+      ? 'press any key to begin'
+      : 'press Escape to skip';
   }
 
   /** One frame of a scene; answers whether one is still playing. */
@@ -771,6 +773,10 @@ async function boot(): Promise<void> {
     if (id === 'title-background') {
       drawTitle(title);
       return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
+    }
+    // While a scene is playing it is what is on the screen.
+    if (cutscene?.running) {
+      return Array.from(cutscene.render().toRgb(cutscene.palette.toRgba()));
     }
     if (!game) return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
     return Array.from(game.render().toRgb(game.scene.screenPalette.toRgba()));

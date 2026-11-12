@@ -11865,7 +11865,7 @@ async function boot() {
     afterScene = then;
     cutscene.begin(scene);
     display.present(cutscene.render(), cutscene.palette.toRgba());
-    status.textContent = "press Escape to skip";
+    status.textContent = scene.kind === "title" ? "press any key to begin" : "press Escape to skip";
   }
   function sceneFrame(ms) {
     if (!cutscene || !cutscene.running) return false;
@@ -12390,6 +12390,9 @@ async function boot() {
     if (id === "title-background") {
       drawTitle(title);
       return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
+    }
+    if (cutscene?.running) {
+      return Array.from(cutscene.render().toRgb(cutscene.palette.toRgba()));
     }
     if (!game) return Array.from(titleSurface.toRgb(titlePalette.toRgba()));
     return Array.from(game.render().toRgb(game.scene.screenPalette.toRgba()));
