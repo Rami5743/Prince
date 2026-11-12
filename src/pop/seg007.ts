@@ -876,15 +876,33 @@ export function move_loose(): void {
 export function loose_land(): void {
   let button_type = 0;
   let tiletype = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+  /**
+   * The C is one `switch` with two fallthroughs, and the tile it
+   * switched on is not the tile the last case tests.
+   *
+   * `case tiles_15_opener` falls into `case tiles_6_closer`, which
+   * presses the button and then *re-reads* `tiletype`, and falls on
+   * into the floor case -- which the switch has already chosen, so it
+   * runs whatever the re-read says. Re-testing the new `tiletype`
+   * instead, which this did, loses the whole last case for a raise
+   * button: the tile was set to debris two lines earlier, the re-read
+   * therefore says debris, debris is not in the list, and the
+   * `redraw_at_cur_mob` never happened. A loose floor that fell on a
+   * raise button left the button on the screen until something else
+   * redrew the tile.
+   */
+  let fellThrough = false;
   if (tiletype === tiles.tiles_15_opener) {
     g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_14_debris;
     button_type = tiles.tiles_14_debris;
+    fellThrough = true;
   }
-  if (tiletype === tiles.tiles_15_opener || tiletype === tiles.tiles_6_closer) {
+  if (fellThrough || tiletype === tiles.tiles_6_closer) {
     trigger_button(1, button_type, -1);
     tiletype = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+    fellThrough = true;
   }
-  if (tiletype === tiles.tiles_15_opener || tiletype === tiles.tiles_6_closer
+  if (fellThrough
     || tiletype === tiles.tiles_1_floor || tiletype === tiles.tiles_2_spike
     || tiletype === tiles.tiles_10_potion || tiletype === tiles.tiles_19_torch
     || tiletype === tiles.tiles_30_torch_with_debris) {

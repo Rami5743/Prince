@@ -901,3 +901,26 @@ of the original disagree, the capture cannot adjudicate the port.
 
 So the fourteen are six the oracle cannot settle and eight of a
 two-key press, and the hundred that were "the port's" are now none.
+
+### `exitdoor`: not a late press but two keys that must coincide
+
+`exitdoor` is retired as "a four-tick press DOSBox took three ticks
+late, in four captures of four". Moving each control of each edge on
+its own says it more exactly, and more usefully.
+
+The recording presses Right at tick 591 and holds it to 594, and
+presses Shift at 594. The port therefore starts a run at 592 -- by 594
+`control()` is in `control_startrun`, where Shift means nothing -- and
+runs off the ledge of the room at 596. The capture's Prince takes a
+`safe_step` instead, which `control_standing` only reaches with
+`control_shift == CONTROL_HELD`, so the original had Shift down when it
+read the Right.
+
+    shift at 594 three ticks earlier:  794 of 801   (from 593)
+    x     at 591 three ticks later:    785 of 801
+
+Either reading says the same thing: in the emulator the two edges
+arrived in one tick, where the recording has them three apart. 201 of
+`exitdoor`'s 208 missing ticks are that one coincidence, and nothing
+in the port tells the two timings apart -- `forward_pressed` and
+`control_standing` are the C line for line.

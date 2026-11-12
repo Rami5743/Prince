@@ -6128,15 +6128,18 @@ function move_loose() {
 function loose_land() {
   let button_type = 0;
   let tiletype = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+  let fellThrough = false;
   if (tiletype === tiles.tiles_15_opener) {
     g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_14_debris;
     button_type = tiles.tiles_14_debris;
+    fellThrough = true;
   }
-  if (tiletype === tiles.tiles_15_opener || tiletype === tiles.tiles_6_closer) {
+  if (fellThrough || tiletype === tiles.tiles_6_closer) {
     trigger_button(1, button_type, -1);
     tiletype = get_tile(g.curmob.room, g.curmob.xh >> 2, g.curmob.row);
+    fellThrough = true;
   }
-  if (tiletype === tiles.tiles_15_opener || tiletype === tiles.tiles_6_closer || tiletype === tiles.tiles_1_floor || tiletype === tiles.tiles_2_spike || tiletype === tiles.tiles_10_potion || tiletype === tiles.tiles_19_torch || tiletype === tiles.tiles_30_torch_with_debris) {
+  if (fellThrough || tiletype === tiles.tiles_1_floor || tiletype === tiles.tiles_2_spike || tiletype === tiles.tiles_10_potion || tiletype === tiles.tiles_19_torch || tiletype === tiles.tiles_30_torch_with_debris) {
     if (tiletype === tiles.tiles_19_torch || tiletype === tiles.tiles_30_torch_with_debris) {
       g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_30_torch_with_debris;
     } else {
