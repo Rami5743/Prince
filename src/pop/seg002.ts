@@ -284,6 +284,21 @@ export const hp = {
 // seg002:00DF
 export function enter_guard(): void {
   const room_minus_1 = g.drawn_room - 1;
+  /**
+   * `level.guards_tile[drawn_room - 1] >= 30` means "no guard here",
+   * and a room that is not a room has no guard either.
+   *
+   * The C reads the byte at that offset whatever `drawn_room` is; the
+   * port's table is 24 long, so out of range it reads `undefined`,
+   * `undefined >= 30` is **false**, and the function went on to make
+   * a guard out of `undefined` -- `Char.curr_row = trunc(undefined /
+   * 10)` is `NaN`, and the NaN spread through `Char.x`, `Guard.x` and
+   * everything downstream of them. Fuzzing finds it on levels 10 and
+   * 11, where falling out of the bottom of the level puts the Prince
+   * in "room 128" (see `roomLinksOf`); it does not throw, it just
+   * quietly stops drawing anybody.
+   */
+  if (room_minus_1 < 0 || room_minus_1 > 23) return;
   const guard_tile = g.level.guards_tile[room_minus_1];
   if (guard_tile >= 30) return;
   g.Char.room = g.drawn_room;

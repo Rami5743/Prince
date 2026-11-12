@@ -6732,6 +6732,7 @@ var hp = {
 };
 function enter_guard() {
   const room_minus_1 = g.drawn_room - 1;
+  if (room_minus_1 < 0 || room_minus_1 > 23) return;
   const guard_tile = g.level.guards_tile[room_minus_1];
   if (guard_tile >= 30) return;
   g.Char.room = g.drawn_room;

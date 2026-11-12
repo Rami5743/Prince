@@ -21,7 +21,9 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { g } from '../../src/pop/state.ts';
-import { goto_other_room, exit_room, load_room_links } from '../../src/pop/seg002.ts';
+import {
+  goto_other_room, exit_room, load_room_links, enter_guard,
+} from '../../src/pop/seg002.ts';
 import { roomLinksOf } from '../../src/pop/state.ts';
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
@@ -84,5 +86,26 @@ describe('leaving a room that is not a room', () => {
     g.drawn_room = 128;
     expect(() => load_room_links()).not.toThrow();
     expect([g.room_L, g.room_R, g.room_A, g.room_B]).toEqual([0, 0, 0, 0]);
+  });
+
+  /**
+   * The quiet half of the same thing. `enter_guard` takes
+   * `guards_tile[drawn_room - 1] >= 30` to mean "no guard here"; out
+   * of range the port reads `undefined`, `undefined >= 30` is false,
+   * and it made a guard out of nothing -- `curr_row` of
+   * `trunc(undefined / 10)` is `NaN`, and the NaN spread through
+   * `Char.x` and `Guard.x` and stopped anybody being drawn. It does
+   * not throw, so only a check for it finds it; fuzzing levels 10 and
+   * 11 does.
+   */
+  it('a non-room has no guard in it', async () => {
+    await PopGame.start(assets, exe, 10);
+    g.drawn_room = 128;
+    g.Guard.x = 0;
+    g.Char.x = 0;
+    enter_guard();
+    expect(Number.isFinite(g.Char.x)).toBe(true);
+    expect(Number.isFinite(g.Char.curr_row)).toBe(true);
+    expect(Number.isFinite(g.Guard.x)).toBe(true);
   });
 });

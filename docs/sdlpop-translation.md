@@ -300,3 +300,24 @@ seeds throws nothing now.
 A `TypeError` is worse than the original's garbage, not better: the
 original wanders off and the page stops dead. Anywhere the C indexes
 an array with something that can be -1 is worth the same look.
+
+### And the quiet version of it: `undefined >= 30` is false
+
+Fuzzing again, this time checking every tick that `Kid`, `Guard` and
+`Char` still hold finite numbers, found the same hazard without a
+throw. `enter_guard` takes `level.guards_tile[drawn_room - 1] >= 30`
+to mean "no guard in this room". Out of range the port reads
+`undefined`, `undefined >= 30` is **false**, so it went on and built
+a guard out of nothing: `Char.curr_row = trunc(undefined / 10)` is
+`NaN`, and the NaN spread through `Char.x`, `Guard.x` and everything
+downstream, after which nobody is drawn at all. Levels 10 and 11,
+where "room 128" is reachable.
+
+That is the shape to look for in this translation generally. C reads
+a byte past an array and gets a number; JavaScript reads past an
+array and gets `undefined`, which **throws** when a field is taken
+off it and **silently compares false** when it is not. The first
+stops the page; the second is worse, because nothing says so. A
+fuzz that checks for `NaN` as well as for exceptions is the cheap way
+to find both, and `tests/pop/levels-smoke.test.ts` now plays badly
+for a thousand ticks of every level.
