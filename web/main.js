@@ -516,6 +516,28 @@ var Surface = class {
       this.pixels[dp] ^= base + v;
     });
   }
+  /**
+   * `blitters_2_or`: the VGA write-mode that ORs the byte already on
+   * the screen with the sprite's.
+   *
+   * A pixel the sprite leaves at nought has no bits to set and so is
+   * see-through, which is why this was translated as an ordinary
+   * transparent blit and went unnoticed: over black -- which is all a
+   * tapestry is usually drawn over -- the two give the same picture.
+   * Over something already drawn they do not, and a capture of
+   * `palace4` says which is right. The Prince jumps for the ledge of
+   * room 10 with his arm in the top three rows of the screen, the
+   * tapestry of the room above is drawn over him with this blitter,
+   * and at (220,0) the capture has colour 117. The Prince's own pixel
+   * there is 113 and the tapestry's is 85; 113 | 85 is 117, and a
+   * transparent blit gives 85.
+   */
+  blitOr(src, x, y, base = 0) {
+    this.each(src, x, y, (dp, v) => {
+      if (v === 0) return;
+      this.pixels[dp] |= base + v;
+    });
+  }
   blit(src, x, y, base, transparent) {
     this.each(src, x, y, (dp, v) => {
       if (transparent && v === 0) return;
@@ -8115,7 +8137,8 @@ function draw_wipes(which) {
 function draw_back_fore(which_table, index) {
   const entry = which_table === 0 ? g.backtable[index] : g.foretable[index];
   if (!entry) return;
-  draw_image(entry.chtab_id, entry.id, entry.xh * 8 + entry.xl, entry.y, entry.blit);
+  const blit = which_table === 0 && entry.blit === blitters.blitters_2_or ? blitters.blitters_10h_transp : entry.blit;
+  draw_image(entry.chtab_id, entry.id, entry.xh * 8 + entry.xl, entry.y, blit);
 }
 function draw_mid(index) {
   const entry = g.midtable[index];
@@ -9584,7 +9607,11 @@ var PopGame = class _PopGame {
       this.surface.blitMono(sprite, x, y, blit & 15);
       return;
     }
-    if (blit === blitters.blitters_10h_transp || blit === blitters.blitters_2_or) {
+    if (blit === blitters.blitters_2_or) {
+      this.surface.blitOr(sprite, x, y, found.base);
+      return;
+    }
+    if (blit === blitters.blitters_10h_transp) {
       this.surface.blitTransparent(sprite, x, y, found.base);
       return;
     }

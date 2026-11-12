@@ -754,7 +754,29 @@ export function draw_wipes(which: number): void {
 export function draw_back_fore(which_table: number, index: number): void {
   const entry = which_table === 0 ? g.backtable[index] : g.foretable[index];
   if (!entry) return;
-  draw_image(entry.chtab_id, entry.id, entry.xh * 8 + entry.xl, entry.y, entry.blit);
+  /**
+   * `blitters_2_or` really does OR -- but only where it can be seen.
+   *
+   * The original's blitter ORs the byte on the screen with the
+   * sprite's, so a sprite pixel of nought is see-through and one that
+   * is not mixes with what is under it. In the foretable that is a
+   * character: a tapestry drawn over the Prince gives
+   * `prince | tapestry`, and the capture of `palace4` says so to the
+   * pixel -- at (220,0) of its tick 437 the Prince's own colour is
+   * 113, the tapestry's is 85, and the capture has 117.
+   *
+   * In the backtable it cannot be seen, because what is under a
+   * background tile is the same tile restored from the peel, and
+   * `x | x` is `x`. The port's partial redraws do not always leave
+   * that same picture underneath, so ORing there mixes a tile with
+   * whatever the last frame left and the suite falls from 11651 of
+   * 12034 to 6157. A plain transparent blit puts the tile's own
+   * pixels down, which is what the original's OR arrives at.
+   */
+  const blit = which_table === 0 && entry.blit === blitters.blitters_2_or
+    ? blitters.blitters_10h_transp
+    : entry.blit;
+  draw_image(entry.chtab_id, entry.id, entry.xh * 8 + entry.xl, entry.y, blit);
 }
 
 // seg008:140C

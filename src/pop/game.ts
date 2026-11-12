@@ -541,7 +541,11 @@ export class PopGame {
       this.surface.blitMono(sprite, x, y, blit & 0x0f);
       return;
     }
-    if (blit === blitters.blitters_10h_transp || blit === blitters.blitters_2_or) {
+    if (blit === blitters.blitters_2_or) {
+      this.surface.blitOr(sprite, x, y, found.base);
+      return;
+    }
+    if (blit === blitters.blitters_10h_transp) {
       this.surface.blitTransparent(sprite, x, y, found.base);
       return;
     }
