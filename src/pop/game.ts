@@ -65,6 +65,18 @@ export interface Controls {
 export interface PopOptions {
   readonly prefix?: string;
   readonly effects?: PopEffects;
+  /**
+   * `seamless`, carried in from the level before.
+   *
+   * In the C this is an ordinary global: `play_frame` sets it when the
+   * Prince runs out of room 23 of level 12, `start_level` does not
+   * touch it, and `show_level` is the one thing that reads and clears
+   * it. Here each level is a fresh `PopGame` with fresh globals, so
+   * the shell has to hand it across -- and without it level 13 always
+   * announced itself, which the original does not do when it is run
+   * into at speed.
+   */
+  readonly seamless?: boolean;
 }
 
 /** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
@@ -172,6 +184,8 @@ export class PopGame {
   private firstDraw = false;
   /** Where `play_sound` goes, if the shell has a speaker. */
   private effects?: PopEffects;
+  /** `seamless` as the level began: see `PopOptions.seamless`. */
+  private seamlessEntry = false;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   private roomTarget = false;
   /**
@@ -222,6 +236,7 @@ export class PopGame {
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? 'V');
     const game = new PopGame(scene, levelNumber);
     game.effects = options.effects;
+    game.seamlessEntry = options.seamless === true;
     game.install(exe);
     game.startLevel();
     return game;
@@ -386,7 +401,7 @@ export class PopGame {
     g.text_time_remaining = 0;
     g.text_time_total = 0;
     g.is_show_time = 0;
-    g.seamless = 0;
+    g.seamless = this.seamlessEntry ? 1 : 0;
     g.Kid = newChar();
     g.Guard = newChar();
     g.Char = newChar();
@@ -815,6 +830,26 @@ export class PopGame {
 
   /** The level's door has been gone through: `next_level` moved on. */
   get levelFinished() { return g.next_level !== g.current_level; }
+
+  /**
+   * `seamless`: this level was left at a run and the next one is not
+   * to announce itself. Only level 12's room 23 sets it.
+   */
+  get seamlessExit() { return g.seamless !== 0; }
+
+  /**
+   * The flasks he is carrying, for a seamless exit.
+   *
+   * `do_startpos` skips `hitp_max = hitp_curr = hitp_beg_lev` when
+   * `seamless` is set, because in the C the two are globals that the
+   * run out of level 12 carries straight into 13. Here they are reset
+   * with everything else, so the shell puts them back.
+   */
+  carryHitPoints(curr: number, max: number): void {
+    g.hitp_max = max;
+    g.hitp_curr = curr;
+    g.hitp_delta = 1;
+  }
 
   /** `rem_min` and `rem_tick` as one number, for the shell's clock. */
   get remainingTicks() { return g.rem_min * 720 + g.rem_tick; }

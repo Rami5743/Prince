@@ -51,3 +51,32 @@ describe('the way out of level 12', () => {
     expect(g.seamless).toBe(0);
   });
 });
+
+/**
+ * `seamless` is a global in the C: `play_frame` sets it on level 12,
+ * `start_level` does not touch it and `show_level` is the only thing
+ * that reads and then clears it. Here every level is a fresh
+ * `PopGame` whose globals are cleared, so the flag has to be handed
+ * across -- and `install` used to write a flat nought over it.
+ *
+ * Without it level 13 announced `LEVEL 12` under the room, which the
+ * original does not do when 13 is run into at speed, and `do_startpos`
+ * handed the Prince a fresh set of flasks in the middle of the run.
+ */
+describe('the level run into carries the flag', () => {
+  it('a seamless start says nothing and keeps what he is carrying', async () => {
+    const game = await PopGame.start(assets, exe, 13, { seamless: true });
+    expect(g.seamless).toBe(0); // `show_level` has read and cleared it
+    expect(g.text_time_total).toBe(0); // and said nothing
+    // `do_startpos` left his strength alone, so the shell can put the
+    // flasks he ran in with back.
+    game.carryHitPoints(2, 5);
+    expect(g.hitp_curr).toBe(2);
+    expect(g.hitp_max).toBe(5);
+  });
+
+  it('an ordinary start announces the level', async () => {
+    await PopGame.start(assets, exe, 13);
+    expect(g.text_time_total).toBe(24);
+  });
+});

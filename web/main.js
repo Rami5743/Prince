@@ -9344,6 +9344,8 @@ var PopGame = class _PopGame {
   firstDraw = false;
   /** Where `play_sound` goes, if the shell has a speaker. */
   effects;
+  /** `seamless` as the level began: see `PopOptions.seamless`. */
+  seamlessEntry = false;
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   roomTarget = false;
   /**
@@ -9386,6 +9388,7 @@ var PopGame = class _PopGame {
     const scene = await buildLevelScene(assets, exe, levelNumber, options.prefix ?? "V");
     const game = new _PopGame(scene, levelNumber);
     game.effects = options.effects;
+    game.seamlessEntry = options.seamless === true;
     game.install(exe);
     game.startLevel();
     return game;
@@ -9507,7 +9510,7 @@ var PopGame = class _PopGame {
     g.text_time_remaining = 0;
     g.text_time_total = 0;
     g.is_show_time = 0;
-    g.seamless = 0;
+    g.seamless = this.seamlessEntry ? 1 : 0;
     g.Kid = newChar();
     g.Guard = newChar();
     g.Char = newChar();
@@ -9896,6 +9899,26 @@ var PopGame = class _PopGame {
   /** The level's door has been gone through: `next_level` moved on. */
   get levelFinished() {
     return g.next_level !== g.current_level;
+  }
+  /**
+   * `seamless`: this level was left at a run and the next one is not
+   * to announce itself. Only level 12's room 23 sets it.
+   */
+  get seamlessExit() {
+    return g.seamless !== 0;
+  }
+  /**
+   * The flasks he is carrying, for a seamless exit.
+   *
+   * `do_startpos` skips `hitp_max = hitp_curr = hitp_beg_lev` when
+   * `seamless` is set, because in the C the two are globals that the
+   * run out of level 12 carries straight into 13. Here they are reset
+   * with everything else, so the shell puts them back.
+   */
+  carryHitPoints(curr, max) {
+    g.hitp_max = max;
+    g.hitp_curr = curr;
+    g.hitp_delta = 1;
   }
   /** `rem_min` and `rem_tick` as one number, for the shell's clock. */
   get remainingTicks() {
@@ -10750,7 +10773,7 @@ async function boot() {
     titleSurface.blitOpaque(group.images[1], 0, 0);
     display.present(titleSurface, titlePalette.toRgba());
   }
-  async function select(index) {
+  async function select(index, carry = {}) {
     current = index;
     const v = views[current];
     if (v.kind !== "level") {
@@ -10761,7 +10784,7 @@ async function boot() {
     }
     building += 1;
     try {
-      game = await PopGame.start(assets, exe, v.level, { effects });
+      game = await PopGame.start(assets, exe, v.level, { effects, seamless: carry.seamless });
     } finally {
       building -= 1;
     }
@@ -11086,7 +11109,14 @@ async function boot() {
       // number to carry is the one he is playing with, not the one the
       // level began with, and carrying the latter is why the first
       // attempt at this changed nothing.
-      lives: game.maxHitPoints
+      lives: game.maxHitPoints,
+      // `seamless`: level 12 is left at a run through room 23, and
+      // level 13 then does not announce itself and does not give him
+      // a fresh set of flasks. In the C both of those are globals
+      // that simply survive `start_level`; here each level is a new
+      // `PopGame`, so they are handed across.
+      seamless: game.seamlessExit,
+      hp: game.hitPoints
     };
     held.clear();
     const next = views.findIndex((x) => x.kind === "level" && x.level === was + 1);
@@ -11094,11 +11124,12 @@ async function boot() {
       await select(1);
       return;
     }
-    await select(next);
+    await select(next, { seamless: carried.seamless });
     if (!game) return;
     game.remainingTicks = carried.ticks;
     game.hasSword = carried.sword || game.hasSword;
     game.beginningHitPoints = carried.lives;
+    if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
     watchRoom = null;
   }
   async function restartGame() {

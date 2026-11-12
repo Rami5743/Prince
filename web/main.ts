@@ -164,7 +164,7 @@ async function boot(): Promise<void> {
     display.present(titleSurface, titlePalette.toRgba());
   }
 
-  async function select(index: number): Promise<void> {
+  async function select(index: number, carry: { seamless?: boolean } = {}): Promise<void> {
     current = index;
     const v = views[current];
     if (v.kind !== 'level') {
@@ -192,7 +192,7 @@ async function boot(): Promise<void> {
      */
     building += 1;
     try {
-      game = await Game.start(assets, exe, v.level, { effects });
+      game = await Game.start(assets, exe, v.level, { effects, seamless: carry.seamless });
     } finally {
       building -= 1;
     }
@@ -557,17 +557,25 @@ async function boot(): Promise<void> {
       // level began with, and carrying the latter is why the first
       // attempt at this changed nothing.
       lives: game.maxHitPoints,
+      // `seamless`: level 12 is left at a run through room 23, and
+      // level 13 then does not announce itself and does not give him
+      // a fresh set of flasks. In the C both of those are globals
+      // that simply survive `start_level`; here each level is a new
+      // `PopGame`, so they are handed across.
+      seamless: game.seamlessExit,
+      hp: game.hitPoints,
     };
     held.clear();
     const next = views.findIndex((x) => x.kind === 'level' && x.level === was + 1);
     // Out of the last level and the game is over: the screen the
     // original ends on, and then the title again.
     if (next < 0) { await select(1); return; }
-    await select(next);
+    await select(next, { seamless: carried.seamless });
     if (!game) return;
     game.remainingTicks = carried.ticks;
     game.hasSword = carried.sword || game.hasSword;
     game.beginningHitPoints = carried.lives;
+    if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
     watchRoom = null;
   }
 
