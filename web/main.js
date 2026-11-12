@@ -6591,10 +6591,16 @@ function load_room_links() {
     if (g.room_A) {
       g.room_AL = g.level.roomlinks[g.room_A - 1].left;
       g.room_AR = g.level.roomlinks[g.room_A - 1].right;
+    } else {
+      if (g.room_L) g.room_AL = g.level.roomlinks[g.room_L - 1].up;
+      if (g.room_R) g.room_AR = g.level.roomlinks[g.room_R - 1].up;
     }
     if (g.room_B) {
       g.room_BL = g.level.roomlinks[g.room_B - 1].left;
       g.room_BR = g.level.roomlinks[g.room_B - 1].right;
+    } else {
+      if (g.room_L) g.room_BL = g.level.roomlinks[g.room_L - 1].down;
+      if (g.room_R) g.room_BR = g.level.roomlinks[g.room_R - 1].down;
     }
   } else {
     g.room_L = 0;

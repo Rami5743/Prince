@@ -18,7 +18,7 @@ import { PopGame } from '../../src/pop/game.ts';
 import { g } from '../../src/pop/state.ts';
 import { draw_hurt_splash } from '../../src/pop/seg008.ts';
 import { loose_land } from '../../src/pop/seg007.ts';
-import { on_guard_killed, clear_char } from '../../src/pop/seg002.ts';
+import { on_guard_killed, clear_char, load_room_links } from '../../src/pop/seg002.ts';
 import { play_kid_frame, play_guard_frame } from '../../src/pop/seg000.ts';
 import { jump_through_mirror } from '../../src/pop/seg003.ts';
 import { hud } from '../../src/pop/link.ts';
@@ -175,5 +175,34 @@ describe('the lines the translation dropped', () => {
     expect(g.guardhp_curr).toBe(3);
     expect(g.hitp_curr).toBe(1);
     expect(g.jumped_through_mirror).toBe(0);
+  });
+  /**
+   * `load_room_links` had only the `if` halves of its two pairs. With
+   * no room directly above, the original still reaches the rooms
+   * above-left and above-right by going sideways first and then up,
+   * and the same below; without those four lines the four diagonals
+   * stayed nought.
+   *
+   * Three things read them: `bumped`, which is how a character bumps
+   * into a wall of the room below-left or below-right;
+   * `get_trob_right_above_pos_in_drawn_room` and its twin, which is
+   * how a gate or a loose floor in a diagonal room asks for its
+   * redraw; and `load_leftroom`, which takes the left-hand column of
+   * the row below from `room_BL`.
+   *
+   * Level 1 has two rooms that show it: room 3 has nothing above it
+   * and room 1 above-left, and room 6 has nothing below it and room
+   * 11 below-left.
+   */
+  it('the diagonal rooms are found sideways when there is none above', async () => {
+    await PopGame.start(assets, exe, 1);
+    g.drawn_room = 3;
+    load_room_links();
+    expect(g.room_A).toBe(0);
+    expect(g.room_AL).toBe(1);
+    g.drawn_room = 6;
+    load_room_links();
+    expect(g.room_B).toBe(0);
+    expect(g.room_BL).toBe(11);
   });
 });

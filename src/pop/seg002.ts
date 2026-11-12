@@ -140,13 +140,35 @@ export function load_room_links(): void {
     g.room_R = link.right;
     g.room_A = link.up;
     g.room_B = link.down;
+    /**
+     * The four diagonals, and the `else` halves the translation had
+     * dropped.
+     *
+     * With no room directly above, the original still finds the two
+     * rooms above-left and above-right -- by going sideways first and
+     * then up -- and the same below. Without those four lines
+     * `room_AL`, `room_AR`, `room_BL` and `room_BR` stayed nought
+     * whenever the room had nothing over or under it, and three
+     * things read them: `bumped` (`curr_room == room_BL`), which is
+     * how a character bumps into a wall of the room below-left;
+     * `get_trob_right_above_pos_in_drawn_room` and its twin, which is
+     * how a gate or a loose floor in a diagonal room asks for its
+     * redraw; and `load_leftroom`, which takes the left-hand column
+     * of the row below from `room_BL`.
+     */
     if (g.room_A) {
       g.room_AL = g.level.roomlinks[g.room_A - 1].left;
       g.room_AR = g.level.roomlinks[g.room_A - 1].right;
+    } else {
+      if (g.room_L) g.room_AL = g.level.roomlinks[g.room_L - 1].up;
+      if (g.room_R) g.room_AR = g.level.roomlinks[g.room_R - 1].up;
     }
     if (g.room_B) {
       g.room_BL = g.level.roomlinks[g.room_B - 1].left;
       g.room_BR = g.level.roomlinks[g.room_B - 1].right;
+    } else {
+      if (g.room_L) g.room_BL = g.level.roomlinks[g.room_L - 1].down;
+      if (g.room_R) g.room_BR = g.level.roomlinks[g.room_R - 1].down;
     }
   } else {
     g.room_L = 0;
