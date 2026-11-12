@@ -225,6 +225,29 @@ reached the emulator fourteen ticks late. Moved there, the port draws
 790 of the 796. A late press does not read as lateness; it reads as
 the original doing something else.
 
+## The score cannot see most of the game: fuzz it
+
+Three of this round's bugs were found by **playing badly**, not by
+reading: fourteen levels, random keys, the cheats, through the doors,
+checking only that nothing throws and nothing goes `NaN`. Two were
+`TypeError`s that stop the page dead (level 5 about one run in ten,
+level 10 about one in five); the third drew nobody at all and said
+nothing.
+
+All three are one shape, and it is the shape to look for in a C
+translation: **C reads a byte past an array and gets a number;
+JavaScript gets `undefined`.** Taking a field off it throws; comparing
+it does not -- `undefined >= 30` is `false`, and `enter_guard` built
+a guard out of nothing. The silent one is the worse of the two.
+`roomLinksOf` in `src/pop/state.ts` is now the one place that answers
+for a room that is not a room, and `tests/pop/fell-out.test.ts` pins
+the four cases.
+
+`tests/pop/levels-smoke.test.ts` now plays badly for a thousand ticks
+of every level on a fixed seed, which costs two seconds. The fuller
+sweep -- more seeds, three thousand ticks, the globals checked for
+`NaN` too -- is worth running by hand after any change to `src/pop`.
+
 ## The player plays `game.js`, not `src/`
 
 GitHub Pages serves `index.html` and `game.js` from the repository root.
