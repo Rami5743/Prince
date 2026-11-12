@@ -421,6 +421,32 @@ const EXPECTED: Record<string, number> = {
    *   room at tick 139 and off the bar at 158, 3/3 to 2/3. 223 of
    *   246, the same 223 in three captures of four.
    */
+  /**
+   * Turning the screen over, which nothing had ever measured.
+   *
+   * `shift+i` at tick 60 and again at 190, with the Prince standing
+   * still in room 5 of level 2 the whole time. The port's flip was in
+   * `web/main.ts` -- the finished picture turned over on its way to
+   * the canvas -- so `PopGame.render` handed back the picture the
+   * right way up and a capture of the original with the screen over
+   * could not be compared with it at all.
+   *
+   * Moved into `render`, where `draw_game_frame` has it, the port
+   * scored **131 of 260**: every one of the 130 inverted ticks was
+   * wrong and every upright one was right. The two halves of the C
+   * disagree about the axis -- `flip_not_ega` mirrors the whole
+   * surface about row 99.5, `copy_screen_rect` mirrors each rect
+   * about `SCREEN_GAMEPLAY_HEIGHT`, which is 192 -- and the capture
+   * settles it: rendering each tick three ways and hashing each
+   * against the capture's own palette and mask,
+   *
+   *     all 200 rows mirrored        0 of 130
+   *     the 192 of the room only   129 of 130
+   *
+   * So the room turns over and the row of flasks does not. **260 of
+   * 260** with that.
+   */
+  'invert2': 260,
   'jaffar': 253,
   'potion8': 223,
   'shadow5': 300,

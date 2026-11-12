@@ -57,6 +57,12 @@ import { l2, l5, l6, l7, l8, out, hud } from './link.ts';
 import { set_seed } from './seg009.ts';
 import { link } from './wire.ts';
 
+/**
+ * `SCREEN_GAMEPLAY_HEIGHT`: the rows of the screen the room is drawn
+ * in. The eight below it are the hit points and the words.
+ */
+const GAMEPLAY_HEIGHT = 192;
+
 /** `tbl_guard_hp` and `tbl_guard_type`, read out of PRINCE.EXE. */
 import { readExeConstants } from '../game/exe-constants.ts';
 
@@ -781,19 +787,30 @@ export class PopGame {
    * port's `render` handed back the picture the right way up. It is
    * `draw_game_frame`'s business in the C and it is here now.
    *
-   * All two hundred rows, which is what `flip_not_ega` does to the
-   * offscreen surface. Whether the original's status bar comes out at
-   * the top with the room, or stays where it is -- `copy_screen_rect`
-   * mirrors a rect about `SCREEN_GAMEPLAY_HEIGHT`, which is 192 and
-   * not 200 -- is what the `invert2` probe is for.
+   * **The room turns over and the row of flasks does not.** The two
+   * halves of the C say different things -- `flip_not_ega` mirrors
+   * the whole surface about row 99.5, and `copy_screen_rect` mirrors
+   * each rect about `SCREEN_GAMEPLAY_HEIGHT`, which is 192 -- and the
+   * capture settles it. `invert2` turns the screen over at tick 60
+   * and back at 190, and over the 130 ticks it is over the original
+   * draws the 192 rows of the room mirrored **within themselves**,
+   * with rows 192 to 199 left exactly where they are: that matches
+   * 129 of the 130, and a mirror of all two hundred rows matches
+   * **none** of them. The port mirrored all two hundred, in the
+   * shell, and scored 131 of 260 for it.
    */
   private flipped(): Surface {
     const out = this.flipSurface ??= new Surface();
     const w = this.surface.width;
     const h = this.surface.height;
-    for (let y = 0; y < h; y++) {
-      out.pixels.set(this.surface.pixels.subarray(y * w, y * w + w), (h - 1 - y) * w);
+    out.pixels.set(this.surface.pixels);
+    for (let y = 0; y < GAMEPLAY_HEIGHT; y++) {
+      out.pixels.set(
+        this.surface.pixels.subarray(y * w, y * w + w),
+        (GAMEPLAY_HEIGHT - 1 - y) * w,
+      );
     }
+    if (h < GAMEPLAY_HEIGHT) throw new Error('the screen is shorter than the room');
     return out;
   }
 

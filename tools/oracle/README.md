@@ -1483,6 +1483,58 @@ The level 12 shadow is **not** reachable this way: `check_shadow`
 returns early while `get_tile(15, 1, 0) == tiles_22_sword`, and level
 12's sword is in room 15 at tile 1, five rooms from the start.
 
+### What the four came back with
+
+    shadow5   300 of 300   exact -- and 299 of 299 on three more captures
+    shadow6   279 of 280   279 on all four
+    jaffar    253 of 298   252, 253, 253 over the three that reached level 13
+    potion8   223 of 246   the same 223 on three captures of four
+
+`shadow5` is **exact**, which says the shadow of level 5 -- `do_init_shad`
+with `init_shad_5`, frame 15 at x55 facing right -- is drawn as the
+original draws it, and so are the four rooms on the way. `shadow6`
+is one tick short over 280 and draws the guard of room 6 as well as
+the shadow of room 1.
+
+`jaffar`'s forty-five are mostly level 13's own floors: the probe
+starts in room 23, `check_fall_flo` gives each of the six floors
+above it a delay of `-(prandom(0xff) & 0x0f)`, and `probe-check.ts`
+says twenty of its ticks differ between two seeds by more than three
+hundred pixels. The same arithmetic caps `level13` at 324 of 371.
+
+### A potion, measured by what it does
+
+`potion8` is the first run in the suite that drinks one. The nearest
+potion to a level start is **not** level 1's room 5: level 8 starts
+in room 1 at column 8 of row 1, room 2 is to its right, and room 2's
+row 1 reads torch, floor, torch, floor, pillar, **potion** -- all of
+them floors, because `tile_is_floor` excludes only empty, big-pillar
+top, doortop, wall and the four lattices. One room crossing, no
+climb, and `level8` is a probe the port already draws exactly.
+
+What kind of potion it is comes from `do_pickup(curr_room_modif
+[curr_tilepos] >> 3)` in `seg005.c`: this one's modifier is 40, so
+the type is 5 -- the one that hurts. The run is `16.,60r,60.,20s,
+30.,20s,40.`: he runs right, bumps the wall at column 6 and settles
+on column 5, the first Shift crouches him (`get_item` with
+`Char.frame != frame_109_crouch`) and the second drinks
+(`seq_78_drink`, frames 191 to 205). The flask goes out of the room
+at tick 139 and off the bar at 158, 3/3 to 2/3.
+
+That is the thing to measure. `0fbffa60` already proved no two runs
+of the original agree about a potion's bubbles -- `start_anim_potion`
+seeds them from `prandom(6) + 1` -- so a probe that measured the
+bubbles would measure the generator. The flask and the hit point are
+the game.
+
+The whole table of potions, by `modifier >> 3`, for whoever wants the
+next one: 1 health, 2 life, 3 feather, 4 invert, 5 hurt, 6 open. A
+health potion drunk at full hit points does **nothing** (`case 1`
+tests `hitp_curr != hitp_max`), which rules out most of level 1's.
+The invert potions are level 9's rooms 7 and 10 (modifier 32) and the
+feather is level 7's room 1 (modifier 27), which is the level that
+kills the Prince before he can reach it.
+
 A cheat goes into a recording as `{ tick, key }` in its `cheats`
 array (`RecordedCheat`), `make_probe.mjs --cheat 40:j` writes one,
 `PopGame.cheat` applies it where `control_kid` reads the keyboard,
@@ -1539,16 +1591,89 @@ so it is in `PopGame.render` now, as a mirror of all two hundred rows
 -- which is what `flip_not_ega` does to the offscreen surface, and
 what the shell was already doing, so nothing the player sees changes.
 
-What is **not** settled by reading is whether the row of flasks and
-the words under the room come out at the top with the room or stay
-where they are. `flip_not_ega` mirrors the whole surface about row
-99.5, but `copy_screen_rect` mirrors each dirty rect about
-`SCREEN_GAMEPLAY_HEIGHT`, which is 192 and not 200 -- two different
-axes, seven rows apart. `invert2` is the probe for it: level 2, the
-Prince standing still in room 5 the whole time, `shift+i` at tick 60
-and again at 190.
+Which axis it mirrors about is **not** settled by reading, because
+the two halves of the C disagree: `flip_not_ega` mirrors the whole
+surface about row 99.5, and `copy_screen_rect` mirrors each dirty
+rect about `SCREEN_GAMEPLAY_HEIGHT`, which is 192 and not 200. Seven
+rows apart, and the difference is whether the row of flasks comes out
+at the top of the screen with the room or stays where it is.
 
-### The three ticks of level 10, which nothing yet explains
+`invert2` settles it: level 2, the Prince standing still in room 5
+the whole time, `shift+i` at tick 60 and again at 190. The port
+scored **131 of 260** on it -- every one of the 130 inverted ticks
+wrong and every upright one right. Rendering each tick three ways and
+hashing each against the capture's own palette and mask:
+
+    all 200 rows mirrored        0 of 130
+    the 192 rows of the room   129 of 130
+    not mirrored at all          1 of 130
+
+**The room turns over and the row of flasks does not.** `PopGame`
+mirrors rows 0 to 191 within themselves now and leaves 192 to 199
+alone, and `invert2` is **260 of 260**.
+
+That is also the first time a two-key cheat has been through the
+chain, so the `shift+l`-shaped tap works: Shift down, a sixth of a
+second, the letter for eight hundredths, more air, Shift up, with the
+recording holding Shift over the same ticks so that both sides see
+the same `control_shift`.
+
+### The three ticks of level 10: the splitter counting 11.85 a second
+
+**Settled.** It was not the port and it was not one capture.
+
+`split_ticks.py --hybrid` numbers a capture by walking the gaps
+between picture changes and rounding each one *short* --
+`ticks_in(gap) = max(1, round(gap / per - 0.3))` -- and the lean is
+there for a good reason (a late one-tick gap of four frames would
+otherwise read as two and invent a tick). It can only ever
+undercount, and an undercount is a capture that reads *ahead* of the
+port, which is exactly the +3 this file described.
+
+On a fresh capture of `level10b` the two numberings say:
+
+    gaps    460 changes, 460 ticks spanned, 11.8503 ticks a second
+    clock   460 changes, 466 ticks spanned, 12.0052 ticks a second
+
+Twelve point nought is the rate the game keeps and the rate this file
+opens with. So the gap-walk lost **six ticks over four hundred**, and
+six lost ticks of numbering is a run that reads three ahead by its
+middle.
+
+Level 10's room 1 is why it bit there. The probe holds Down from tick
+108 to 235 -- a hundred and twenty-five ticks in which nothing moves
+but the two torches at row 1, columns 2 and 5 -- so every tick of the
+crouch is a gap for the walk to round, and a flame that holds its
+frame for three ticks makes a seven-frame gap, which `ticks_in` reads
+as two.
+
+The score hardly notices, because the alignment absorbs a slow drift:
+**360** for the gap-walk against **361** for the clock. What changes
+is what the score is made of. `which-key --by 1,2,3` against the
+gap-walk found one edge worth ten ticks (the Down release, 361 to
+371); against the clock numbering it finds a different one worth
+**twenty-eight** -- Right at tick 68 taken two ticks later, **389 of
+403**. With that edge where the emulator took it the +3 is gone
+altogether and fourteen ticks are left:
+
+    58, 108-110 (drift +1), and 240 244 260 264 268 272 284 288 292 296
+
+-- the last ten on a four-tick period, which is a frame of the run
+cycle and not a timing.
+
+`firstcapture.sh` and `recapture.sh` now split every capture both
+ways and keep the better, exactly as they already do for the two
+`--start` values. It costs one more split per try and it is the only
+way to know which numbering a capture wanted.
+
+### The old reading, kept because it was wrong in an instructive way
+
+What follows is what this file said before the numbering was measured.
+It is left here because every line of it is a correct observation and
+the conclusion is still wrong: three independent captures agreeing on
+the same ticks does not mean the port is at fault, it can mean the
+*splitter* is deterministic.
+
 
 This is the one run in the suite whose difference is the port's, is
 reproducible, and has no account.
