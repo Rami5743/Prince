@@ -231,15 +231,36 @@ const EXPECTED: Record<string, number> = {
    * measurement saying why. The files stay in the repository; what
    * has gone is the pretence that they say anything about the port.
    *
-   * `gate1` -- its two-tick tap of Right at 591 reached DOSBox
-   * fourteen ticks late. Moved there the port draws 790 of 796, so
-   * the capture is the port's own run with a press delivered late.
+   * `gate1` **is no longer one of them.** It was retired as "a
+   * two-tick tap DOSBox took fourteen ticks late", on the strength
+   * of one capture that scored 596 of 799. Four fresh captures with
+   * the current `recapture.sh` -- which tries both `--start` values
+   * and both numberings, neither of which it did when this was
+   * retired -- score **809, 574, 594 and 808** of ~810. Two of the
+   * four are the port's own run to the pixel, and the one tick left
+   * of the best is tick 0. The tap was never the trouble; the
+   * capture was. Its pin is below.
    *
-   * `exitdoor` -- `gate1` stretched to four-tick presses, and four is
-   * the threshold. Its press at 591 to 594 is taken three ticks late
-   * every time: four captures scored 593, 594, 592 and 593, and
-   * `late-key` moved on by three scores **785 of 801**. Systematic,
-   * not luck, and not the port.
+   * `exitdoor` -- `gate1` stretched to four-tick presses -- is the
+   * one that really is systematic. Its press at 591 to 594 and its
+   * Shift at 594 reach the emulator in one tick where the recording
+   * has them three apart, and `which-key` moving one control of one
+   * edge says so from either end (`shift@594` three earlier: 794 of
+   * 801; `x@591` three later: 785). Eleven captures now: the
+   * original four scored 593, 594, 592 and 593, and eight more taken
+   * with both numberings scored 591, 594, 590, 593, 590, 594, 590
+   * and 594. The digest is the 594.
+   *
+   * That `gate1` is 809 and `exitdoor` 594 on the *same route* is
+   * the clearest statement of what the difference is: the two
+   * recordings differ only in the lengths of their presses, and the
+   * one whose Right and Shift do not have to coincide is drawn
+   * exactly.
+   *
+   * `probe-check` puts a number on why no capture of `exitdoor` can
+   * settle it: over its 62 edges the mean is 0.9381 and the **worst
+   * is 0.1023**, at `shift@84-1`. One control of one edge moved one
+   * tick changes nine tenths of the run. `palace4` is 0.973/0.758.
    *
    * `gate2` -- from tick 88 the recording is one-tick taps of Left
    * and Up, a sword fight played on the keyboard, and DOSBox takes a
@@ -254,8 +275,23 @@ const EXPECTED: Record<string, number> = {
    *
    * Between them they were 4555 ticks of the count and 2059 of what
    * was missing from it. What is left in this table is what a capture
-   * can actually settle.
+   * can actually settle -- and `gate1`'s 810 of them have come back
+   * into it.
    */
+  /**
+   * `gate1`, un-retired: **809 of 810**.
+   *
+   * Eight hundred and eleven ticks across six rooms of level 1 --
+   * `probe-check` on the same route says rooms 1, 2, 3, 5, 6 and 9,
+   * with somebody in the room from tick 116 -- and the port draws
+   * every tick of it but the first.
+   *
+   * It was retired on one capture. Four taken with the current
+   * scripts score 809, 574, 594 and 808; the two low ones are the
+   * phase lottery this file describes five times over, and the
+   * digest is the 809.
+   */
+  'gate1': 809,
   // `level2` is the same level `gate2` is a fight on, walked instead:
   // 424 ticks of stepping, running, climbing, dropping and landing,
   // every press four ticks or longer, and nobody to draw a sword at.
@@ -380,8 +416,16 @@ const EXPECTED: Record<string, number> = {
    * (`palace4` is 0.973/0.758), no guard, no death, and two seeds
    * differ on none of its ticks. So the route is sound; it is one
    * edge of one capture.
+   *
+   * Recaptured three times with the current scripts -- both
+   * `--start` values and both numberings: **334, 333 and 333** of
+   * 417 under the clock numbering against 332, 331 and 331 under the
+   * gap-walk, so the clock wins every pair here as it does
+   * everywhere else. The digest is the 334. The run is stable to a
+   * tick over four captures, which is what makes the eighty-three
+   * worth an account rather than another try.
    */
-  'level6': 332,
+  'level6': 334,
   // Level 7 drops the Prince down a three-room shaft and kills him
   // before he has touched a key, and this probe is that and nothing
   // else: 160 ticks with no key at all, which is the most robust
@@ -409,8 +453,18 @@ const EXPECTED: Record<string, number> = {
    *
    * `probe-check` on the route: mean 0.9524, worst 0.6374 at
    * shift@270-1, no guard, no death, two seeds agree on every tick.
+   *
+   * **And then the recapture moved it, because the old digest was
+   * numbered from the wrong frame.** `recapture.sh` tries the two
+   * `--start` values the generator prints; at 156 this capture reads
+   * **nought** of 421 and at 159 it reads 416, 418 and 418 over
+   * three fresh captures. The kept digest's 374 was a capture whose
+   * flash the splitter found a quarter of a second off, and nobody
+   * had taken another since `--start` grew its second candidate.
+   *
+   * The digest here is the 418, and three ticks are left of it.
    */
-  'level9': 374,
+  'level9': 418,
   'level10': 259,
   'level11': 377,
   'level12': 383,
