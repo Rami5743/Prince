@@ -791,6 +791,11 @@ export function* load_intro(
   which_imgs: number, func: () => Scene, _free_sounds: number,
 ): Scene {
   scr.clear_screen();
+  // `draw_rect(&screen_rect, color_0_black)` on the screen, and from
+  // here until the scene is over nothing below the room reaches it:
+  // the original puts the room up through the tile grid's dirty
+  // rectangles, which stop at row 191. See `clip_room`.
+  scr.clip_room(true);
   scr.load_intro_images(which_imgs);
   scr.target(true);
   scr.blit_image(chtabs.id_chtab_8_princessroom, 0, 0, 0, 0);
@@ -801,6 +806,7 @@ export function* load_intro(
   reset_cutscene();
   yield* func();
   scr.free_intro_images();
+  scr.clip_room(false);
   scr.clear_screen();
 }
 

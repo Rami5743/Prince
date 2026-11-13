@@ -5611,6 +5611,7 @@ function missing2(name) {
 var scr = {
   copy_screen_rect: () => missing2("copy_screen_rect"),
   present: () => missing2("present"),
+  clip_room: () => missing2("clip_room"),
   rect: () => missing2("rect"),
   clear_screen: () => missing2("clear_screen"),
   set_bg_attr: () => missing2("set_bg_attr"),
@@ -11175,6 +11176,7 @@ function* transition_ltr() {
 }
 function* load_intro(which_imgs, func, _free_sounds) {
   scr.clear_screen();
+  scr.clip_room(true);
   scr.load_intro_images(which_imgs);
   scr.target(true);
   scr.blit_image(chtabs.id_chtab_8_princessroom, 0, 0, 0, 0);
@@ -11185,6 +11187,7 @@ function* load_intro(which_imgs, func, _free_sounds) {
   reset_cutscene();
   yield* func();
   scr.free_intro_images();
+  scr.clip_room(false);
   scr.clear_screen();
 }
 function* end_sequence() {
@@ -11628,6 +11631,7 @@ var CutscenePlayer = class _CutscenePlayer {
     this.savedBackground = null;
     this.flashPending = false;
     this.fade = null;
+    this.roomOnly = false;
     free_peels();
     reset_tables();
     reset_stars();
@@ -11674,6 +11678,31 @@ var CutscenePlayer = class _CutscenePlayer {
     setScreen({
       copy_screen_rect: (l, t, r, b) => this.copyRect(l, t, r, b),
       present: () => this.copyRect(0, 0, 320, 200),
+      /**
+       * `load_intro` asks for the clip; the title is the one scene
+       * that does not get it.
+       *
+       * The two captures say so flatly. In the capture of the title,
+       * rows 192 to 199 through the whole princess-room scene are
+       * (152,96,88) -- the floor of the room, drawn. In the capture
+       * of the scene before level 2, the same eight rows are **black
+       * on every frame**, and they are the only rows of it that
+       * differ from the port at all.
+       *
+       * What differs is the buffer the room is composed in.
+       * `show_title` frees the offscreen and makes its own
+       * (`make_offscreen_buffer(&screen_rect)`), which is the whole
+       * 320 by 200 -- so `TITLE.DAT`'s 320 by 200 images and the
+       * princess room both reach the bottom. A scene played from
+       * inside a level uses the game's own offscreen, which is the
+       * 192-row gameplay buffer -- the same 192 `copy_screen_rect`
+       * mirrors about when the screen is upside down -- so the room
+       * image is clipped at 191 and the eight rows under it keep the
+       * black `load_intro` painted over the screen before it began.
+       */
+      clip_room: (on) => {
+        this.roomOnly = on && this.scene.kind !== "title";
+      },
       rect: (l, t, r, b, color) => {
         this.target.fillRect(l, t, r - l, b - t, color);
       },
@@ -11810,11 +11839,13 @@ var CutscenePlayer = class _CutscenePlayer {
     }
   }
   /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */
+  /** `clip_room`: a `load_intro` scene never reaches past row 191. */
+  roomOnly = false;
   copyRect(left, top, right, bottom) {
     const x0 = Math.max(0, left);
     const x1 = Math.min(320, right);
     const y0 = Math.max(0, top);
-    const y1 = Math.min(200, bottom);
+    const y1 = Math.min(this.roomOnly ? 192 : 200, bottom);
     for (let y = y0; y < y1; y++) {
       this.onscreen.pixels.set(
         this.offscreen.pixels.subarray(y * 320 + x0, y * 320 + x1),

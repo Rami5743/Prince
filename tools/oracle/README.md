@@ -2352,3 +2352,73 @@ absorb two ticks in the middle of a block.
 
 So `textTicksToSkip` stays at 1 on the suite's evidence, and the
 twenty-four are written down here rather than fitted away.
+
+## `cutscene2`: the eight rows under the room, and a fade with a busy loop
+
+The first capture of one of the six scenes between the levels, reached
+the way a recording of level 2 is reached -- `wait 25`, Return,
+`wait 3`, `shift+l` -- and split from 28.5 seconds.
+
+The scene itself is easy to find in the video. The screen goes black
+at frame 876 when `load_intro` paints over it, the fade begins at 890
+after fourteen frames of `while (check_sound_playing())`, the
+twenty-six cutscene frames of `cutscene_2_6` run at exactly **+3
+frames each** from 944, and the fade out ends at 1085: **209 frames
+from the black to the end, which is the port's 209 exactly.**
+
+### The port drew eight rows the original leaves black
+
+Every frame of the scene differed from the capture **in rows 192 to
+199 and nowhere else**. The capture's are black; the port carried the
+floor of the princess's room down into them. Rows 97 to 179 of the
+same pair of frames differ by five pixels in all.
+
+It is not a blanket rule, and the title capture is what says so: in
+*its* princess-room scene those same eight rows are (152,96,88), the
+floor, drawn, on every frame -- and the port matches it there on all
+426 of its changes.
+
+What differs is the buffer the room is composed in. `show_title`
+frees the offscreen surface and makes its own over `screen_rect`,
+which is the whole 320 by 200, so `TITLE.DAT`'s 320 by 200 images and
+the princess room both reach the bottom. A scene played from inside a
+level uses the game's own offscreen, which is the **192-row gameplay
+buffer** -- the same 192 `copy_screen_rect` mirrors about when the
+screen is upside down, which `invert2` measured years of rounds ago
+-- so the room image is clipped at 191 and the eight rows under it
+keep the black `load_intro` painted over the screen before it began.
+
+`scr.clip_room(on)` is that, switched on by `load_intro` and off
+again at its end, and ignored for the title. With it the port's
+picture is the capture's **to the pixel**: the frames matched by hand
+come out diff 0.
+
+### What is left is the fade, and it is faster than the C
+
+`fade_in_1` is one shade every two sixtieths in the port, which is
+what `make_pal_buffer_fadein(offscreen, 0x6689, 2)` and
+`fade_in_frame`'s `do_simple_wait(timer_1)` say, so its sixty-three
+shades take sixty-three frames of video. The capture takes
+**fifty-three**. The brightest pixel on the screen goes
+
+    port      frame  2  3  4  5 ...  64     4, 8, 12, 16 ... 252
+    capture   frame 35 36 37 38 ...  88     4, 9, 12, 20 ... 252
+
+-- the capture's sequence skips about one shade in six, which is
+three and a half fade frames per cutscene frame rather than three.
+That is `proc_cutscene_frame`'s inner loop, which is
+
+    do {  proc_fade_frame(...)  } while (!has_timer_stopped(timer_0));
+
+with `timer_0` the cutscene frame's six sixtieths and each
+`proc_fade_frame` spending two: three fit exactly, and a fourth gets
+in whenever the frame started with time left over. The port's driver
+steps the fade off its own clock and cannot express a fourth. The two
+fades are 109 of this capture's 137 changes, which is why the run
+pins at 34 of 137 with the pictures themselves exact.
+
+The fourteen frames of black at the start are the same kind of thing
+from the other end: `load_intro` waits on whatever sound level 1 was
+playing when `shift+l` arrived, and nothing in the port knows what
+that was. `bestOffset` looks at forty candidate offsets rather than
+eight for it.

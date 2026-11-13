@@ -109,7 +109,7 @@ export function bestOffset(
   const all: { o: number; n: number }[] = [];
   for (let o = -range; o <= range; o++) all.push({ o, n: score(o) });
   all.sort((a, b) => b.n - a.n);
-  return { offset: all[0].o, hits: all[0].n, next: all[1].n, top: all.slice(0, 8) };
+  return { offset: all[0].o, hits: all[0].n, next: all[1].n, top: all.slice(0, 40) };
 }
 
 /** The digest with its ticks slid by `offset`, so the port's index 0 is 0. */
@@ -141,9 +141,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
      * The offset is settled by the score itself, not by bare equal
      * hashes. Counting hashes is what finds the candidates -- it is
      * cheap and needs no walk -- but a scene has long stretches of one
-     * picture and several offsets can tie on them, so the eight best
-     * candidates are each put through `exactAgreement` and the one
-     * that draws most of the capture wins.
+     * picture and dozens of offsets can tie on them, so the forty
+     * best candidates are each put through `exactAgreement` and the
+     * one that draws most of the capture wins. Forty and not eight
+     * because a scene reached from inside a level begins with
+     * `load_intro` waiting on whatever sound was playing, which is
+     * half a second of black the port has no way to know about: the
+     * right offset can be fourteen frames from where the bare hashes
+     * put it.
      */
     const { hits, next, top } = bestOffset(digest, port, spec.range ?? 240);
     let offset = top[0].o;

@@ -63,6 +63,32 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
  */
 const EXPECTED: Record<string, number> = {
   title: 426,
+  /**
+   * `cutscene2` -- 34 of 137, and what it found is worth more than
+   * the number.
+   *
+   * **The eight rows under the room.** Every frame of this scene
+   * differed from the capture in rows 192 to 199 and nowhere else:
+   * the capture's are black and the port drew the floor of the
+   * princess's room in them. Rows 97 to 179 of the same pair of
+   * frames differ by five pixels in all, and with the clip in
+   * (`clip_room`) the port's picture is the capture's **to the
+   * pixel** -- the frames matched by hand are diff 0.
+   *
+   * What is left is the fade. `fade_in_1` in the port is one shade
+   * every two sixtieths, which is what `make_pal_buffer_fadein(...,
+   * 2)` and `do_simple_wait(timer_1)` say, so its sixty-three shades
+   * take sixty-three frames of video. The capture takes **fifty-
+   * three** -- the brightest pixel goes 4, 9, 12, 20, 25, 28, 32,
+   * 36, 41, 49 ... 252 over frames 35 to 88, which is three and a
+   * half shades per cutscene frame rather than three. That is
+   * `proc_cutscene_frame`'s inner busy loop fitting a fourth
+   * `proc_fade_frame` into a six-sixtieth cutscene frame whenever
+   * there is room, and the port's driver, which steps the fade off
+   * its own clock, cannot express it. The two fades are 109 of this
+   * capture's 137 changes.
+   */
+  cutscene2: 34,
 };
 
 describe('the scenes, against a capture of the original', () => {

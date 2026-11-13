@@ -76,6 +76,33 @@ export interface ScreenOps {
   release_title_images(): void;
   /** `current_target_surface`: true is `offscreen_surface`. */
   target(offscreen: boolean): void;
+  /**
+   * While a `load_intro` scene is playing, nothing reaches the screen
+   * below the room.
+   *
+   * The original composes the princess's room in the offscreen buffer
+   * and puts it on the screen through `draw_proom_drects`, which
+   * copies the **dirty rectangles of the tile grid** -- and that grid
+   * is the 192-row gameplay area, so the eight rows under it are
+   * never copied at all. They keep the black `load_intro` painted
+   * over the whole screen before it began.
+   *
+   * The port composed the room straight into the screen, 200 rows of
+   * it, and the first capture of a cutscene says what that costs:
+   * every frame of the scene before level 2 differs from the
+   * original's in **rows 192 to 199 and nowhere else** -- the
+   * capture's are black and the port's carry on the floor of the
+   * room. Rows 97 to 179 of the same pair of frames differ by five
+   * pixels in all.
+   *
+   * It is not a blanket rule: `show_title` copies with
+   * `method_1_blit_rect(onscreen, offscreen, &screen_rect, ...)`,
+   * which is the whole 200 rows, and `TITLE.DAT`'s images are 320 by
+   * 200 and reach the bottom. The title capture matches the port
+   * there on all 426 of its changes. So the clip is `load_intro`'s
+   * and is switched on and off by it.
+   */
+  clip_room(on: boolean): void;
 
   // -- the hall of fame: text, a peel and the keyboard --------------------
 
@@ -125,6 +152,7 @@ function missing(name: string): never {
 export const scr: ScreenOps = {
   copy_screen_rect: () => missing('copy_screen_rect'),
   present: () => missing('present'),
+  clip_room: () => missing('clip_room'),
   rect: () => missing('rect'),
   clear_screen: () => missing('clear_screen'),
   set_bg_attr: () => missing('set_bg_attr'),
