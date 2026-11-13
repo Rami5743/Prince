@@ -48,6 +48,10 @@ export interface SceneSpec {
   script: string[];
   /** What the capture is, in one line, for the report. */
   what?: string;
+  /** Where the scene starts in the capture's video, in seconds. */
+  start?: number;
+  /** How wide the offset search is, in video frames. */
+  range?: number;
 }
 
 export const assets = new Assets(
@@ -138,7 +142,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
      * candidates are each put through `exactAgreement` and the one
      * that draws most of the capture wins.
      */
-    const { hits, next, top } = bestOffset(digest, port);
+    const { hits, next, top } = bestOffset(digest, port, spec.range ?? 240);
     let offset = top[0].o;
     let best: ReturnType<typeof exactAgreement> | null = null;
     for (const cand of top) {

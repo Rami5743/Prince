@@ -1,0 +1,14 @@
+{
+  "what": "expired(): the hourglass, reached by taking fifty-nine minutes off level 1's hour with the '-' cheat and waiting out the last one",
+  "scene": { "kind": "expired" },
+  "frames": 420,
+  "start": 80.0,
+  "range": 600,
+  "script": [
+    "wait 25",
+    "key Return",
+    "wait 4",
+    "key KP_Subtract 59",
+    "wait 70"
+  ]
+}

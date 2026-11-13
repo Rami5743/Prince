@@ -1,0 +1,31 @@
+{
+  "what": "tbl_cutscenes[9]: the scene the game plays before level 9, reached by the same chain of shift+l a recording of that level uses",
+  "scene": {
+    "kind": "level",
+    "level": 9
+  },
+  "frames": 330,
+  "start": 136.0,
+  "range": 300,
+  "script": [
+    "wait 25",
+    "key Return",
+    "wait 3",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 22",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 10",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 22",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 10",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 22",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 2",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 22",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 15"
+  ]
+}

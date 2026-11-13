@@ -19,7 +19,14 @@ music -- and a digest of three thousand identical hashes measures
 nothing but the hold. The hundreds that are left are the scene's own
 clock, which is what there is to measure.
 
-    scene_frames.py <video> <outdir> [--fps 30] [--limit N]
+    scene_frames.py <video> <outdir> [--fps 30] [--start SEC] [--limit N]
+
+`--start` is where the scene begins in the video, in seconds, and
+everything before it is thrown away. The title needs none of it -- the
+original is already fading it in when the grab starts -- but a scene
+reached by playing (`shift+l` to a level with a cutscene before it,
+or the hour running out) is a minute or two in, and the numbers a
+digest carries are frames from the start of what it kept.
 """
 import argparse, os, subprocess
 import numpy as np
@@ -33,14 +40,18 @@ def main():
     ap.add_argument('video')
     ap.add_argument('outdir')
     ap.add_argument('--fps', type=float, default=30.0)
+    ap.add_argument('--start', type=float, default=0.0)
     ap.add_argument('--limit', type=int, default=0)
     a = ap.parse_args()
     os.makedirs(a.outdir, exist_ok=True)
     for f in os.listdir(a.outdir):
         if f.endswith('.png'):
             os.remove(os.path.join(a.outdir, f))
-    cmd = ['ffmpeg', '-v', 'error', '-i', a.video, '-vf', f'fps={a.fps}',
-           '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']
+    cmd = ['ffmpeg', '-v', 'error']
+    if a.start:
+        cmd += ['-ss', str(a.start)]
+    cmd += ['-i', a.video, '-vf', f'fps={a.fps}',
+            '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, bufsize=10 ** 7)
     size = W * 2 * H * 2 * 3
     prev = None
