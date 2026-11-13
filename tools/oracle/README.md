@@ -2485,3 +2485,29 @@ It has no `check_sound_playing` loop in it at all
 (`play_sound(35)`, `fade_in_1`, `proc_cutscene_frame` 5, 9 and 58,
 `fade_out_1`), so the drift is in the cutscene-frame clock and is the
 thing to measure next.
+
+#### And the cutscene frame itself is 3.2 video frames, not 3
+
+Read off `cutscene9`'s digest, which is the longest of the six. After
+its fade in, the gaps between changes run
+
+    +3 +3 +3 +3 +1 +3 +3 +3 +3 +3 +4 +3 +3 +3 +4 +3 +3 +3 +4 ...
+
+-- mostly three video frames, which is `cutscene_frame_time` of six
+sixtieths, with a four every fifth or sixth frame and the odd one
+where the grab caught a change twice. That averages about **3.2**
+where the port's is exactly 3, and over the seventy-two cutscene
+frames of `cutscene9` it is the whole of the drift: the offset
+between the two runs is 116 frames when the mouse starts and 139 when
+it stops.
+
+It also accounts for the fade, from the other end. A fade frame
+spends `timer_1` = two sixtieths and a cutscene frame `timer_0` =
+six, so three fit; the capture fits **3.8** on average (63 shades in
+53 video frames at 3.2 frames to the cutscene frame). A cutscene
+frame that takes six per cent longer than its own timer says, with
+an inner `do { } while (!has_timer_stopped(timer_0))` that checks
+*after* each step, lets a fourth fade frame in about four times in
+five. Both numbers are the emulator's loop and not the game's, and
+neither is anything the port's driver -- which runs the scene off a
+clock that does keep time -- can or should reproduce.
