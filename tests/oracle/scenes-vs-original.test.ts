@@ -104,6 +104,29 @@ const EXPECTED: Record<string, number> = {
    * before level 2 has them black -- see `clip_room`.
    */
   expired: 108,
+  /**
+   * The other five scenes between the levels, captured the same way
+   * and all of them short for the same two reasons: the fades, and
+   * the fourteen-odd frames of black at the start where `load_intro`
+   * waits on whatever sound the level before was playing.
+   *
+   * The **pictures** are not the problem. Frames of each matched by
+   * hand against the port's come out **diff 0** outside the mask --
+   * `cutscene9` at capture frames 198, 240 and 278 matches the
+   * port's 82, 121 and 139 to the pixel. What moves is when: the
+   * offset between the two runs grows through the scene, which is
+   * the cutscene-frame clock and not the drawing.
+   *
+   * `cutscene9` is the worst of them at 8 of 207 and its drift is
+   * the largest -- 116 frames at the start of the mouse and 139 by
+   * the end of it -- which is the thing to measure next with
+   * `scene-frames.ts` and the capture side by side.
+   */
+  cutscene4: 36,
+  cutscene6: 37,
+  cutscene8: 74,
+  cutscene9: 8,
+  cutscene12: 33,
 };
 
 describe('the scenes, against a capture of the original', () => {

@@ -2453,3 +2453,35 @@ cutscene is reached from the level before it, draws all two hundred
 rows is not accounted for. The capture says it does. `end_sequence`
 has not been captured yet and will say which side of the rule it
 falls.
+
+### All six scenes between the levels, and where they stand
+
+Captured with the chain `recording_to_script.mjs` builds, so the
+`shift+l` that plays each scene goes out at 28, 60, 92, 116, 138 and
+180 seconds and each spec trims from half a second after it.
+
+    cutscene2     34 of 137      cutscene8     74 of 188
+    cutscene4     36 of 135      cutscene9      8 of 207
+    cutscene6     37 of 137      cutscene12    33 of 136
+    expired      108 of 177      title        426 of 606
+
+**The pictures are not what is short.** Frames of each put beside the
+port's come out **diff 0 outside the mask**: `cutscene9` at capture
+frames 198, 240 and 278 is the port's 82, 121 and 139 to the pixel.
+What moves is *when*. Two things do that and both are written up
+above:
+
+* the **fades**, which are 109 of a short scene's 137 changes and
+  run 63 shades in 53 video frames in the original against the
+  port's 63;
+* the **black at the start**, fourteen frames of `load_intro`
+  waiting on whatever sound the level before was playing, which
+  nothing in the port can know.
+
+`cutscene9` is the worst at 8 of 207 and its drift is the largest --
+the offset between the two runs is 116 frames when the mouse starts
+and 139 when it stops, where the others hold to within two or three.
+It has no `check_sound_playing` loop in it at all
+(`play_sound(35)`, `fade_in_1`, `proc_cutscene_frame` 5, 9 and 58,
+`fade_out_1`), so the drift is in the cutscene-frame clock and is the
+thing to measure next.
