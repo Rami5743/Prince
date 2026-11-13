@@ -298,12 +298,32 @@ export class CutscenePlayer {
     this.pending = r.value;
   }
 
-  /** The sixtieths that have gone by: the fade moves one shade each. */
+  /**
+   * The sixtieths that have gone by: the fade moves a shade every two.
+   *
+   * `make_pal_buffer_fadein` and `make_pal_buffer_fadeout` are both
+   * given `wait_time` **2**, and `fade_in_frame` spends it --
+   * `start_timer(timer_1, palette_buffer->wait_time)` at the top and
+   * `do_simple_wait(timer_1)` at the bottom, with one shade of the
+   * sixty-four in between. So a whole fade is 128 sixtieths, which is
+   * 2.13 seconds and 64 frames of a thirty-a-second capture.
+   *
+   * This stepped one shade per sixtieth and so faded in half the
+   * time, which nothing could see until the title screen was captured:
+   * the original's opening fade occupies video frames 5 to 64 of that
+   * capture, sixty of them, where the port's took thirty-two. Every
+   * fade in the game is the same two: `fade_in_1` and `fade_out_1`
+   * reach the same `proc_fade_frame` through `proc_cutscene_frame`'s
+   * inner busy loop, which is why the arithmetic belongs here and not
+   * in the four generators.
+   */
+  private static readonly FADE_UNITS = 2;
+
   private consume(units: number): void {
     this.elapsed += units;
     this.fadeOwed += units;
-    while (this.fadeOwed >= 1) {
-      this.fadeOwed -= 1;
+    while (this.fadeOwed >= CutscenePlayer.FADE_UNITS) {
+      this.fadeOwed -= CutscenePlayer.FADE_UNITS;
       this.fadeStep();
     }
   }

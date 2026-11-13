@@ -169,9 +169,13 @@ describe('the end of the ending', () => {
     const after = await play({ kind: 'title' });
     expect(after.finished).toBe(true);
     expect(hof_count).toBe(1);
-    // `transition_ltr()` is 160 steps of half a sixtieth and
-    // `pop_wait(timer_0, 0xF0)` is 240 sixtieths: 320 in all.
-    expect(after.seconds - without.seconds).toBeCloseTo(320 / 60, 1);
+    // `pop_wait(timer_0, 0xF0)` is 240 sixtieths, and
+    // `transition_ltr()` costs nothing: this used to say 320, for the
+    // 160 half-sixtieths SDLPoP's `// stub` of that function spends,
+    // and the first capture ever taken of the original's title says
+    // the wipe is over in two frames of thirty-a-second video. See
+    // `transition_ltr` in `src/pop/seg001.ts`.
+    expect(after.seconds - without.seconds).toBeCloseTo(240 / 60, 1);
   }, 240000);
 });
 

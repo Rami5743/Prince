@@ -762,14 +762,28 @@ function* fade_out_2(which_rows: number): Scene {
 // seg000:1BB3
 /**
  * `transition_ltr`: the picture wiped on from the left, two pixels at
- * a time. SDLPoP runs it at 120 frames a second, which is half a
- * sixtieth per column.
+ * a time -- and with **no wait between the columns**.
+ *
+ * SDLPoP puts `SDL_Delay(1000/120)` in that loop and marks the whole
+ * function `// stub`, and the port translated the stub: half a
+ * sixtieth a column is a wipe that takes a second and a third. The
+ * first capture ever taken of the original's title screen says that is
+ * not what `PRINCE.EXE` does. At thirty frames a second the wipe into
+ * the story frame occupies **two** frames of video and no more: frame
+ * 807 of the capture changes x 17 to 302 and frame 808 changes only x
+ * 212 to 302, so the sweep is real and it is over in about fifty
+ * milliseconds. A hundred and sixty copies of a two-pixel column is
+ * nothing to any machine that ever ran this game.
+ *
+ * So the columns go up with nothing between them. The loop is kept,
+ * rather than one whole-screen blit, because it is the C's shape and
+ * because the two frames of the capture show the sweep half done.
  */
 function* transition_ltr(): Scene {
   for (let position = 0; position < 320; position += 2) {
     scr.copy_screen_rect(position, 0, position + 2, 200);
-    yield 0.5;
   }
+  yield 0;
 }
 
 // seg001:0CCD
