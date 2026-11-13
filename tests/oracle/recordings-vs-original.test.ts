@@ -326,6 +326,61 @@ const EXPECTED: Record<string, number> = {
    */
   'level3': 366,
   'level5': 387,
+  /**
+   * `level6`'s eighty-seven: one key edge, and a gate says which.
+   *
+   * It and `level9` were the two runs in the measured set written
+   * off in one line and never checked. Both are checked now, and
+   * neither is the port's.
+   *
+   * `pop-first` puts the whole of `level6`'s difference after tick
+   * 332: ticks 0 to 332 are the capture's pictures to the pixel, and
+   * from 333 nothing matches. `which-key.ts --by 1,2,3` over all 24
+   * edges finds four moves worth anything and they are two readings
+   * of one hold:
+   *
+   *     x at 290 two ticks later:    418 of 419   (from 332)
+   *     x at 334 two ticks earlier:  416 of 419
+   *     x at 334 three earlier:      416 of 419
+   *     x at 290 three later:        412 of 419
+   *
+   * The recording holds Left from 290 to 333. The emulator gave the
+   * original forty-two ticks of it where the recording says
+   * forty-four, and either end of the hold expresses that.
+   *
+   * **A gate says which end.** Level 6 starts in room 24 at the level
+   * door, and row 1 of that room is torch, door, door, torch,
+   * **opener**, pillar: the Prince's run crosses the button at column
+   * 4, and the gate it opens is room 2's, at row 1 column 9, which
+   * shows in the left sliver of the screen at x 0 to 19 -- the same
+   * instrument `level10b` was settled with. `animate_door` moves it
+   * a pixel a tick while it opens and a pixel every four while it
+   * closes, and the box of what moved says where it is:
+   *
+   *     opening   y1 93, 92, 91 ... 76 on ticks 327 to 344
+   *     closing   y1 75, 76, 77, 78, 79, 80 on 396, 400 ... 416
+   *
+   * and the capture and the **unshifted** port put every one of those
+   * twenty-five moves on the same absolute tick. Move the press at
+   * 290 two ticks later and the port's gate moves with it -- y1 93 at
+   * 329 against the capture's 327 -- because the button is crossed
+   * two ticks later too. So the original crossed the button on the
+   * port's own tick, the press was read at 290 in both, and what the
+   * emulator took early is the **release**: `x at 334 two earlier` is
+   * the physically consistent reading, and its residue is ticks 343
+   * and 344, where the capture has something changing at x 20 to 29
+   * that the port does not.
+   *
+   * The 418 of the other reading is the alignment: a shift of every
+   * tick after an edge is free, because the edge's own tick is in
+   * `freeSlipAt`. Only the gate's absolute numbering tells the two
+   * apart.
+   *
+   * `probe-check` on the route: mean 0.9742, worst 0.7895 at y@20-1
+   * (`palace4` is 0.973/0.758), no guard, no death, and two seeds
+   * differ on none of its ticks. So the route is sound; it is one
+   * edge of one capture.
+   */
   'level6': 332,
   // Level 7 drops the Prince down a three-room shaft and kills him
   // before he has touched a key, and this probe is that and nothing
@@ -334,6 +389,27 @@ const EXPECTED: Record<string, number> = {
   // pixel.
   'level7': 147,
   'level8': 421,
+  /**
+   * `level9`'s forty-seven: **two** edges, moved in opposite
+   * directions, and then it is exact.
+   *
+   * `which-key.ts --by 1,2,3` finds `y at 382` one tick *later* worth
+   * 44 (374 to 418) and `y at 68` one tick *earlier* worth 3 (374 to
+   * 377). Applied together the port draws **421 of 421 -- exact**,
+   * and the only ticks left are 0 and 1, which the digest has no
+   * hash for.
+   *
+   * Two edges wanting opposite shifts is the thing no fault in the
+   * port can produce. A port that read the keyboard late would want
+   * every edge of every run moved the same way, and
+   * `tools/dev/every-key.ts` already says it does not (the suite
+   * scores 10951, 11206, **11690**, 11121, 10493 at -2 to +2). One
+   * capture wanting one edge a tick each way is the schedule's clock
+   * and the game's parting company over thirty-five seconds.
+   *
+   * `probe-check` on the route: mean 0.9524, worst 0.6374 at
+   * shift@270-1, no guard, no death, two seeds agree on every tick.
+   */
   'level9': 374,
   'level10': 259,
   'level11': 377,

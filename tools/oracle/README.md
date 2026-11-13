@@ -1872,3 +1872,98 @@ is 1.2 per cent, which is larger than that, but a schedule written at
 a rate the emulator is not keeping is the shape of thing that would
 put every key of the second half of a run three ticks out while
 leaving the first half alone.
+
+## `level6` and `level9`, the two that were never checked
+
+Every other short run in the measured set had a measurement beside it.
+These two were written off in one line -- "one key edge or the guard
+apiece" -- and nobody had run the tools at them. Both are now
+accounted for and neither is the port's.
+
+### `level9` is exact once **two** edges move, in opposite directions
+
+    y at 382 one tick later    374 -> 418 of 421
+    y at 68  one tick earlier  374 -> 377 of 421
+    both together              374 -> 421 of 421, exact
+
+Only ticks 0 and 1 are left, and the digest has no hash for them.
+
+The direction is the whole argument. A port that sampled the keyboard
+a tick off would want **every** edge of **every** run moved the same
+way, and `tools/dev/every-key.ts` has already measured that it does
+not: the suite scores 10951, 11206, **11690**, 11121 and 10493 at -2,
+-1, 0, +1 and +2. One capture wanting one edge a tick each way over
+thirty-five seconds is the schedule's clock and the game's parting
+company, which this file describes for `760c3e74` as well.
+
+### `level6` is one hold, and a gate says which end of it moved
+
+`pop-first` puts all eighty-seven after tick 332: the capture's
+pictures to the pixel from 0 to 332 and nothing after. Over all 24
+edges, `which-key.ts --by 1,2,3` finds four moves worth anything, and
+they are two readings of the same hold -- Left from 290 to 333:
+
+    x at 290 two ticks later     418 of 419
+    x at 334 two ticks earlier   416 of 419
+    x at 334 three earlier       416 of 419
+    x at 290 three later         412 of 419
+
+The emulator gave the original **forty-two** ticks of Left where the
+recording says forty-four. Either end expresses that, and the score
+cannot tell them apart: a shift of everything after an edge is free,
+because the edge's own tick is in `freeSlipAt`.
+
+**A gate tells them apart.** Level 6 starts in room 24 at the level
+door, and row 1 of that room reads torch, door, door, torch,
+**opener**, pillar. The Prince's run crosses the button at column 4;
+the gate it opens is room 2's, at row 1 column 9, which shows in the
+left sliver of the screen at x 0 to 19 -- the same instrument that
+settled `level10b`. `animate_door` moves it a pixel a tick while it
+opens and a pixel every four while it closes, and the box of what
+moved reads it straight off:
+
+    opening   y1 93, 92, 91 ... 76   ticks 327 to 344
+    closing   y1 75, 76, 77 ... 80   ticks 396, 400, 404, 408, 412, 416
+
+The capture and the **unshifted** port put all twenty-five of those
+moves on the same absolute tick. Move the press at 290 two ticks later
+and the port's gate goes with it -- y1 93 at 329 where the capture has
+it at 327 -- because the button is then crossed two ticks later.
+
+So the original crossed the button on the port's own tick: the press
+was read at 290 in both, and what the emulator took early is the
+**release**. `x at 334 two earlier` is the consistent reading, and its
+residue is ticks 343 and 344, where the capture has something changing
+at x 20 to 29 that the port does not.
+
+A gate opened by the Prince is not a free clock the way level 10's
+level-start gate is -- its phase is the Prince's -- but its *absolute*
+numbering still separates "the press moved" from "the stop moved",
+which nothing in the score can.
+
+### Both routes are sound
+
+`tools/dev/probe-check.ts` on each, which is the check that should
+have been quoted when they were written off:
+
+    level6   mean 0.9742  worst 0.7895 at y@20-1      no guard, no death, seeds agree
+    level9   mean 0.9524  worst 0.6374 at shift@270-1 no guard, no death, seeds agree
+
+(`palace4` is 0.973/0.758 and `level2` 0.975/0.833.) So neither is a
+route that measures the schedule, and neither needs a replacement
+probe the way `level5` and `level10` did.
+
+### What `probe-check` says about `exitdoor`, which *is* a route that measures the schedule
+
+    exitdoor   level 1, 811 ticks, 62 edges, rooms 1,2,3,5,6,9
+               guard in the room from tick 116
+               mean 0.9381  worst **0.1023** at shift@84-1
+               two seeds differ on none of its ticks
+
+A worst case of **one tenth** is the number that retires a run. Moving
+one control of one edge by one tick changes nine tenths of the run, so
+a capture of it cannot adjudicate the port whatever the numbering
+does. `gate1` is the same recording with its presses shortened below
+the four ticks DOSBox takes reliably, so it is worse. Neither is worth
+recapturing as it stands; what they need is a route built the way
+`level2` and `level5b` were.
