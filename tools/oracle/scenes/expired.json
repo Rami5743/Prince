@@ -1,14 +1,16 @@
 {
-  "what": "expired(): the hourglass, reached by taking fifty-nine minutes off level 1's hour with the '-' cheat and waiting out the last one",
-  "scene": { "kind": "expired" },
+  "what": "expired(): the hourglass, reached by taking the hour off level 1 with the '-' cheat and waiting out the last minute. Seventy-five presses for fifty-nine minutes: a capture of fifty-nine landed fifty-six of them and stopped at '4 MINUTES LEFT', and the cheat refuses to go below one, so the extra taps cost nothing.",
+  "scene": {
+    "kind": "expired"
+  },
   "frames": 420,
-  "start": 80.0,
-  "range": 600,
+  "start": 75.0,
+  "range": 900,
   "script": [
     "wait 25",
     "key Return",
     "wait 4",
-    "key KP_Subtract 59",
+    "key KP_Subtract 75",
     "wait 70"
   ]
 }

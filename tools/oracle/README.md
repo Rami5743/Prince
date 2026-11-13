@@ -2422,3 +2422,34 @@ from the other end: `load_intro` waits on whatever sound level 1 was
 playing when `shift+l` arrived, and nothing in the port knows what
 that was. `bestOffset` looks at forty candidate offsets rather than
 eight for it.
+
+### `expired`, and the rule about those eight rows
+
+The hourglass the player gets when the hour runs out, reached by
+taking the hour off level 1 with the `-` cheat and waiting out the
+last minute. Two things about getting there:
+
+* **Seventy-five presses for fifty-nine minutes.** A capture of
+  fifty-nine landed fifty-six of them and the clock stopped at
+  `4 MINUTES LEFT`; the cheat refuses to go below one (`if (rem_min >
+  1) --rem_min`), so the extra taps cost nothing. The presses take
+  about a tenth of a second each, and `expired()` then comes when the
+  last minute runs out, about eighty-six seconds into the capture.
+* Both `minus` and `KP_Subtract` reach the game -- probed with five
+  of each and reading the words under the room -- so the keypad one
+  the generator sends is right.
+
+It pins at **108 of 177**, and the eight rows under the room are what
+it settles. Three captures now, three answers:
+
+    show_title's own pv_scene    rows 192-199 are the floor
+    expired()'s hourglass        rows 192-199 are the floor
+    the scene before level 2     rows 192-199 are black
+
+so `clip_room` is on for a scene played **before a level** and off
+for the title and the hourglass. Why `expired()`, which is reached
+from `show_time` in the middle of a level exactly as `play_level`'s
+cutscene is reached from the level before it, draws all two hundred
+rows is not accounted for. The capture says it does. `end_sequence`
+has not been captured yet and will say which side of the rule it
+falls.

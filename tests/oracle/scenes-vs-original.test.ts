@@ -89,6 +89,21 @@ const EXPECTED: Record<string, number> = {
    * capture's 137 changes.
    */
   cutscene2: 34,
+  /**
+   * `expired` -- 108 of 177, the hourglass the player gets when the
+   * hour runs out.
+   *
+   * Reached by taking the hour off level 1 with the `-` cheat and
+   * waiting out the last minute. Seventy-five presses for
+   * fifty-nine minutes: a capture of fifty-nine landed only
+   * fifty-six of them and stopped at `4 MINUTES LEFT`, and the cheat
+   * refuses to go below one (`if (rem_min > 1) --rem_min`), so the
+   * extra taps cost nothing.
+   *
+   * Its eight rows under the room are **drawn**, where the scene
+   * before level 2 has them black -- see `clip_room`.
+   */
+  expired: 108,
 };
 
 describe('the scenes, against a capture of the original', () => {
@@ -101,8 +116,12 @@ describe('the scenes, against a capture of the original', () => {
       if (!digest.hash || !digest.palette) {
         throw new Error(`${name}: the digest has no fingerprints; recapture it`);
       }
-      const port = await runScene(specOf(name), digest);
-      const { top } = bestOffset(digest, port);
+      const spec = specOf(name);
+      const port = await runScene(spec, digest);
+      // The spec's own range, not the default: a scene reached by
+      // playing is a minute or two into the video and `expired` is
+      // 344 frames past where its `start` trims.
+      const { top } = bestOffset(digest, port, spec.range ?? 240);
       let best: ReturnType<typeof exactAgreement> | null = null;
       for (const cand of top) {
         const got = exactAgreement(shifted(digest, cand.o), port);

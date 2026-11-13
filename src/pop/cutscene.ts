@@ -441,28 +441,39 @@ export class CutscenePlayer {
       copy_screen_rect: (l, t, r, b) => this.copyRect(l, t, r, b),
       present: () => this.copyRect(0, 0, 320, 200),
       /**
-       * `load_intro` asks for the clip; the title is the one scene
-       * that does not get it.
+       * `load_intro` asks for the clip; only a scene played **before
+       * a level** gets it.
        *
-       * The two captures say so flatly. In the capture of the title,
-       * rows 192 to 199 through the whole princess-room scene are
-       * (152,96,88) -- the floor of the room, drawn. In the capture
-       * of the scene before level 2, the same eight rows are **black
-       * on every frame**, and they are the only rows of it that
-       * differ from the port at all.
+       * Three captures, three answers, and nothing but the captures
+       * decides this. Rows 192 to 199, right through the
+       * princess-room scene:
+       *
+       *     show_title's own pv_scene    (152,96,88) -- the floor
+       *     expired()'s hourglass        (152,96,88) -- the floor
+       *     the scene before level 2     black on every frame
+       *
+       * and in the last of those they were the **only** rows that
+       * differed from the port at all: rows 97 to 179 of the same
+       * pair of frames differ by five pixels in all, and with the
+       * clip in they are the same picture to the pixel.
        *
        * What differs is the buffer the room is composed in.
        * `show_title` frees the offscreen and makes its own
        * (`make_offscreen_buffer(&screen_rect)`), which is the whole
-       * 320 by 200 -- so `TITLE.DAT`'s 320 by 200 images and the
-       * princess room both reach the bottom. A scene played from
-       * inside a level uses the game's own offscreen, which is the
-       * 192-row gameplay buffer -- the same 192 `copy_screen_rect`
-       * mirrors about when the screen is upside down -- so the room
-       * image is clipped at 191 and the eight rows under it keep the
-       * black `load_intro` painted over the screen before it began.
+       * 320 by 200, so `TITLE.DAT`'s 320 by 200 images and the
+       * princess room both reach the bottom. A scene played where
+       * `play_level` plays one gets the game's own offscreen, which
+       * is the 192-row gameplay buffer -- the same 192
+       * `copy_screen_rect` mirrors about when the screen is upside
+       * down, which `invert2` settled -- so the room image is
+       * clipped at 191 and the eight rows under it keep the black
+       * `load_intro` painted over the screen before it began. Why
+       * `expired()`, which is reached from `show_time` in the middle
+       * of a level, draws all two hundred is not accounted for; the
+       * capture says it does, and `end_sequence` has not been
+       * captured yet.
        */
-      clip_room: (on) => { this.roomOnly = on && this.scene.kind !== 'title'; },
+      clip_room: (on) => { this.roomOnly = on && this.scene.kind === 'level'; },
       rect: (l, t, r, b, color) => {
         this.target.fillRect(l, t, r - l, b - t, color);
       },
