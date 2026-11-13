@@ -81,3 +81,16 @@ level14 0
 #             level. Both are tried now and the better kept.
 level5b 0
 level10b 0
+#
+# Recaptured with the current scripts (both `--start` values, both
+# numberings, four or three tries each). All at shift 0.
+#
+#   gate1      809, 574, 594, 808   of ~810   -- was 596 of 799, and
+#                                                was retired on it
+#   exitdoor   591, 594, 590, 593, 590, 594, 590, 594  of ~810
+#              (and 593, 594, 592, 593 before) -- eleven of eleven
+#   gate2b    1179, 1161, 293, 587  of ~1648 under --numbering clock
+#              and 277, 237, 72, 222 under the gap-walk
+#   gate2        18, 41, 4 (clock) and 39, 61, 24 (gaps) of ~1300
+#   level6      334, 333, 333 (clock) and 332, 331, 331 (gaps) of 417
+#   level9      416, 418, 418 at --start 159, and **nought** at 156

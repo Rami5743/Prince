@@ -282,14 +282,32 @@ const EXPECTED: Record<string, number> = {
    * `gate1`, un-retired: **809 of 810**.
    *
    * Eight hundred and eleven ticks across six rooms of level 1 --
-   * `probe-check` on the same route says rooms 1, 2, 3, 5, 6 and 9,
-   * with somebody in the room from tick 116 -- and the port draws
-   * every tick of it but the first.
+   * rooms 1, 2, 3, 5, 6 and 9, with a guard in the room from tick
+   * 610 -- and the port draws every tick of it but one.
    *
    * It was retired on one capture. Four taken with the current
    * scripts score 809, 574, 594 and 808; the two low ones are the
    * phase lottery this file describes five times over, and the
    * digest is the 809.
+   *
+   * **And it opens the exit door.** The run steps on the button of
+   * room 9 at tick 738 and `leveldoor_open` goes from 0 to 1 there;
+   * `animate_leveldoor` then does `++curr_modifier` once a tick
+   * until it reaches 43, so ticks 738 to 781 are the exit door
+   * rising, and the capture has all forty-three of them. Nothing in
+   * the suite had ever measured that: `shadow5`, `shadow6`,
+   * `jaffar`, `potion8` and the eleven level probes all stop short
+   * of a button, and the note above -- "no cheat opens the exit
+   * door" -- is still true and no longer matters, because a
+   * recording the player sent does.
+   *
+   * The one tick left is **603**, and it is the capture holding
+   * still: its 601, 602 and 603 have nothing changed at all while
+   * the port is moving, and `which-tick` says its 603 is the port's
+   * 600, 601, 602, 603 *and* 606 -- a picture the port holds over
+   * several ticks, so the slot says nothing about when anything
+   * happened. That is `13ab6867` tick 584 again, which three fresh
+   * captures put on three different ticks.
    */
   'gate1': 809,
   // `level2` is the same level `gate2` is a fight on, walked instead:
@@ -421,9 +439,22 @@ const EXPECTED: Record<string, number> = {
    * `--start` values and both numberings: **334, 333 and 333** of
    * 417 under the clock numbering against 332, 331 and 331 under the
    * gap-walk, so the clock wins every pair here as it does
-   * everywhere else. The digest is the 334. The run is stable to a
-   * tick over four captures, which is what makes the eighty-three
-   * worth an account rather than another try.
+   * everywhere else. The digest is the 334.
+   *
+   * **And the fresh capture settles it, by wanting a different
+   * shift of the same edge.** Against it `which-key --by 1,2,3`
+   * reads
+   *
+   *     x at 290 three ticks later   417 of 417 -- exact
+   *     x at 290 two ticks later     414
+   *     x at 334 two earlier         413
+   *
+   * where the old capture's best was the same edge **two** ticks
+   * later. Two captures of one recording, two different shifts of
+   * one edge, and the run exact under each one's own: that is
+   * `13ab6867` all over again, and it is the clearest thing a
+   * capture can say about whose fault an edge is. `level6` is drawn
+   * perfectly.
    */
   'level6': 334,
   // Level 7 drops the Prince down a three-room shaft and kills him
@@ -462,7 +493,10 @@ const EXPECTED: Record<string, number> = {
    * flash the splitter found a quarter of a second off, and nobody
    * had taken another since `--start` grew its second candidate.
    *
-   * The digest here is the 418, and three ticks are left of it.
+   * The digest here is the 418, and the three ticks left are 68, 69
+   * and 70 -- which is the second edge exactly. `y at 68` one tick
+   * earlier against this capture is **421 of 421, exact**, with only
+   * ticks 0 and 1 outside the count. `level9` is drawn perfectly.
    */
   'level9': 418,
   'level10': 259,

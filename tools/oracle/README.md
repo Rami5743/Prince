@@ -1967,3 +1967,79 @@ does. `gate1` is the same recording with its presses shortened below
 the four ticks DOSBox takes reliably, so it is worse. Neither is worth
 recapturing as it stands; what they need is a route built the way
 `level2` and `level5b` were.
+
+## The round that recaptured the retired four, and what fell out
+
+`gate1`, `exitdoor`, `gate2` and `gate2b` were retired before
+`recapture.sh` tried **both `--start` values and both numberings**,
+and before `which-key` moved one control of an edge at a time. All
+four were taken again with the current scripts. Eighteen captures.
+
+    gate1     809  574  594  808   of ~810   (kept digest was 596 of 799)
+    exitdoor  591  594  590  593  590  594  590  594   of ~810
+    gate2b   1179 1161  293  587   of ~1648  (kept 1174)
+    gate2      18   41    4        of ~1306  (kept 110)
+
+### `gate1` was never a retired run
+
+Two of its four captures are the port's own run to the pixel. The
+"two-tick tap DOSBox took fourteen ticks late" was one capture's
+accident, and the eight hundred and ten ticks it was blamed for are
+measured now: **809 of 810**, with the one tick left (603) being the
+capture holding a picture still while the port moves -- its 601, 602
+and 603 have nothing changed at all, and `which-tick` says its 603 is
+the port's 600, 601, 602, 603 *and* 606.
+
+**It opens the exit door.** The run steps on room 9's button at tick
+738, `leveldoor_open` goes 0 to 1, and `animate_leveldoor` adds one to
+`curr_modifier` every tick until 43 -- so ticks 738 to 781 are the
+exit door rising, and the capture has all of them. Nothing else in the
+suite reaches a button at all.
+
+### `exitdoor` is the one that really is systematic
+
+Eleven captures of eleven, all within four ticks of 592. It is the
+same route as `gate1` and differs only in the lengths of its presses,
+and the difference is one coincidence: it presses Right at 591 and
+Shift at 594 and the emulator reads both in one tick (`shift@594`
+three earlier is 794 of 801; `x@591` three later is 785).
+
+`probe-check` says why no capture of it can ever settle it: over its
+62 edges the mean is 0.9381 and the **worst is 0.1023**, at
+`shift@84-1` -- one control of one edge moved one tick changes nine
+tenths of the run. `palace4` is 0.973/0.758. That is the number that
+retires a recording, and `gate1`'s score beside it is the proof that
+retirement has to be measured and not guessed.
+
+### `gate2b` measures the numbering, not the game
+
+Its four fresh captures read 1179, 1161, 293 and 587 under
+`--numbering clock` and **277, 237, 72 and 222** under the gap-walk.
+Nine hundred ticks on one capture, where the four shortest of the old
+twenty-one gave two to four. A run in which the Prince stands about is
+exactly where rounding each gap short loses ticks, and `gate2b` stands
+about for a long time. Past the fight it is still a fight.
+
+### `gate2` has nothing to recapture towards
+
+39, 61, 24 under the gap-walk and 18, 41, 4 under the clock, against
+the kept 110. Forty one-tick taps and DOSBox drops about half of any
+press that short.
+
+### And two of the eleven level probes had bad digests
+
+    level9   374 of 421 -> 418 of 421, and 421 of 421 with one edge
+    level6   332 of 419 -> 334 of 417, and 417 of 417 with one edge
+
+`level9`'s old digest was numbered from the wrong frame: the fresh
+captures read **nought** at `--start 156` and 416, 418, 418 at 159.
+Nobody had recaptured it since `--start` grew its second candidate.
+Its three remaining ticks are 68, 69 and 70, which is `y at 68` one
+tick earlier -- **421 of 421, exact**.
+
+`level6` is stable (334, 333, 333) and its fresh capture wants `x at
+290` **three** ticks later, **417 of 417 -- exact**, where the old
+capture's best was the same edge **two** ticks later. Two captures of
+one recording, two different shifts of one edge, each exact under its
+own: the same thing `13ab6867` says, and the end of any suggestion
+that `level6`'s eighty-three were the port's.
