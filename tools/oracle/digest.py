@@ -208,9 +208,44 @@ def moved(a, b, mask):
     return [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()), int(d.sum())]
 
 
-def digest_dir(path):
+#: Rectangles to mask whatever the frames say, as (x0, y0, x1, y1).
+#:
+#: `flame_mask` finds what the original cannot reproduce by how often
+#: it changes, and that works for a torch, which picks a new flame on
+#: nearly every tick. It does not work for the six stars in the window
+#: of the princess's room. `proc_cutscene_frame` twinkles **one** of
+#: them per cutscene frame -- `draw_star(prandom(N_STARS - 1), 1)` --
+#: and a cutscene frame is six sixtieths, three frames of a
+#: thirty-a-second capture, so each star changes on about one video
+#: frame in eighteen. Five and a half per cent is under `FLAME_SHARE`
+#: and always will be, and `prandom`'s seed in the original is its own
+#: clock, so those pixels can never be adjudicated. They cost the
+#: whole of the princess-room scene: 422 of the title capture's 606
+#: changes disagreed, and the differing pixels outside the mask were
+#: the six stars and nothing else.
+STARS = (14, 95, 27, 131)
+
+#: The two torches of the princess's room, which `get_torch_frame`
+#: picks with `prandom` exactly as a room's torches do. `flame_mask`
+#: finds most of them -- they change on a quarter of the frames, well
+#: over `FLAME_SHARE` -- but a flame's edge reaches further on some
+#: frames than on others and `FLAME_GROW` does not quite cover it, and
+#: a single pixel left over costs the whole frame. Measured on the
+#: title capture: the frames that otherwise had no counterpart in the
+#: port at all differ by **one pixel at (102,110)** and by **three at
+#: x 103 and x 214, y 107 to 111**.
+#:
+#: `princess_room_torch` puts them at `xh` 11 and 26, `xl` 5 and 3,
+#: `y` 116 -- so x 93 and x 211 -- and these boxes are that with room
+#: to spare.
+PROOM_TORCHES = ((88, 92, 112, 124), (206, 92, 230, 124))
+
+
+def digest_dir(path, rects=()):
     frames = load_dir(path)
     mask = flame_mask(frames)
+    for x0, y0, x1, y1 in rects:
+        mask[y0:y1 + 1, x0:x1 + 1] = True
     pal = palette_of(frames)
     lookup = np.full(1 << 24, 0, dtype=np.uint16)
     for i, (r, g, b) in enumerate(pal):
@@ -237,7 +272,21 @@ def digest_dir(path):
 
 
 if __name__ == '__main__':
-    out = digest_dir(sys.argv[1])
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    rects = []
+    for a in sys.argv[1:]:
+        if a == '--stars':
+            rects.append(STARS)
+        elif a == '--cutscene':
+            # Everything in a cutscene that comes out of `prandom`,
+            # whose seed the original takes from its own clock: the six
+            # stars in the window and the two torches of the room.
+            rects.append(STARS)
+            rects.extend(PROOM_TORCHES)
+        elif a.startswith('--mask='):
+            rects.append(tuple(int(v) for v in a[len('--mask='):].split(',')))
+    sys.argv = [sys.argv[0]] + args
+    out = digest_dir(sys.argv[1], rects)
     with open(sys.argv[2], 'w') as f:
         json.dump(out, f, separators=(',', ':'))
     print(f"{sum(1 for h in out['hash'] if h is not None)} ticks "

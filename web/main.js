@@ -11511,14 +11511,31 @@ var CutscenePlayer = class _CutscenePlayer {
     this.gen = null;
     this.fade = null;
   }
-  /** Run the clock on by `ms`. Answers whether the scene is still going. */
+  /**
+   * Run the clock on by `ms`. Answers whether the scene is still going.
+   *
+   * The fade is stepped **here**, off the wall clock, and not where
+   * the generator finishes a wait. In the C it has a timer of its
+   * own: `proc_cutscene_frame`'s inner busy loop calls
+   * `proc_fade_frame` over and over until the cutscene frame's
+   * `timer_0` has run out, and each of those spends `timer_1`, which
+   * is two sixtieths. So a cutscene frame of six sixtieths holds
+   * three shades, one after another, each on the screen for two.
+   *
+   * Stepping them where the generator yields put all three up at once
+   * and left the screen still for the other two thirds of the frame.
+   * The capture says which: the princess-room scene of the title
+   * fades in over **fifty-three consecutive video frames, one change
+   * each**, where the port changed every third frame.
+   */
   advance(ms) {
     if (!this.gen) return false;
-    this.owed += ms / UNIT_MS;
+    const units = ms / UNIT_MS;
+    this.owed += units;
+    this.consume(units);
     let guard = 0;
     while (this.gen && this.owed >= this.pending && guard++ < 2e4) {
       this.owed -= this.pending;
-      this.consume(this.pending);
       this.step();
     }
     return this.gen !== null;
@@ -11543,20 +11560,40 @@ var CutscenePlayer = class _CutscenePlayer {
    * The sixtieths that have gone by: the fade moves a shade every two.
    *
    * `make_pal_buffer_fadein` and `make_pal_buffer_fadeout` are both
-   * given `wait_time` **2**, and `fade_in_frame` spends it --
-   * `start_timer(timer_1, palette_buffer->wait_time)` at the top and
-   * `do_simple_wait(timer_1)` at the bottom, with one shade of the
-   * sixty-four in between. So a whole fade is 128 sixtieths, which is
-   * 2.13 seconds and 64 frames of a thirty-a-second capture.
+   * given `wait_time` **2**, and `fade_in_frame` spends it round one
+   * shade of the sixty-four -- `start_timer(timer_1, wait_time)` at
+   * the top and `do_simple_wait(timer_1)` at the bottom. So a whole
+   * fade is 128 sixtieths, which is 2.13 seconds and 64 frames of a
+   * thirty-a-second capture. This stepped a shade per sixtieth and so
+   * faded in half the time, which nothing in the repository could see
+   * until the title screen was captured: the original's opening fade
+   * occupies video frames 5 to 64 of that capture, sixty of them,
+   * where the port's took thirty-two.
    *
-   * This stepped one shade per sixtieth and so faded in half the
-   * time, which nothing could see until the title screen was captured:
-   * the original's opening fade occupies video frames 5 to 64 of that
-   * capture, sixty of them, where the port's took thirty-two. Every
-   * fade in the game is the same two: `fade_in_1` and `fade_out_1`
-   * reach the same `proc_fade_frame` through `proc_cutscene_frame`'s
-   * inner busy loop, which is why the arithmetic belongs here and not
-   * in the four generators.
+   * Every fade in the game is the same two calls -- `fade_in_1` and
+   * `fade_out_1` reach the same step through `proc_cutscene_frame`'s
+   * inner busy loop -- which is why the arithmetic belongs here and
+   * not in the four generators.
+   *
+   * ### The odd frames of a fade are the capture, not the game
+   *
+   * With this right, the port draws the capture's fade **exactly on
+   * every even frame** and matches no odd one, all the way from 17 to
+   * 63, and `tools/dev/scene-report.ts` reports the fade that way.
+   * That is the grab catching the DAC half written. A step is two
+   * sixtieths, 33.3ms, and the grab is thirty frames a second, 33.3ms:
+   * the two beat together exactly, so one grab lands after
+   * `set_pal_arr` has walked all sixteen entries of the row and the
+   * next lands in the middle of it. The capture's odd frames have
+   * some components of some entries advanced and others not -- at
+   * (0,0) between frames 18 and 19 the green of one entry moves a DAC
+   * unit and the red of the same entry does not, which no arithmetic
+   * on a palette can produce and a half-finished write can.
+   *
+   * Two shades every four sixtieths was tried, because it fits that
+   * one pixel's reading of 8, 8, 16, 16; it scores **92 of the
+   * capture's 606 changes against 108**, and moves the alternation's
+   * parity rather than removing it. It is not kept.
    */
   static FADE_UNITS = 2;
   consume(units) {

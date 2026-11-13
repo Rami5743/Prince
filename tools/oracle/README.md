@@ -2068,3 +2068,156 @@ captures read 366 and 367 and at 59 they read 86 and 88. That is the
 splitter taking a dark frame six seconds past the restart, the fault
 `level3` found in the first place, and it is still there in one of
 the two candidates every time. Trying both is what makes it harmless.
+
+## The scenes: the title, the ending, the hourglass and the six cutscenes
+
+Every one of the forty-four digests before this round was *gameplay*.
+`show_title` -- the thing the player sees on **every page load** --
+`end_sequence`, `expired` and the scenes before levels 2, 4, 6, 8, 9
+and 12 had never been put beside a capture at all. They were written
+out of the C with unit tests only, and a unit test pins what the
+author believed the C does.
+
+They are also the **easiest** thing here to measure, and that is why
+they were worth doing first: no keys are pressed in a cutscene, so
+there is no key-edge lottery, no `which-key` search, no choosing
+between shifts and no capture-phase lottery. The original plays the
+same pictures at the same moments every time, outside `prandom`.
+
+### The unit is a video frame, not a game tick
+
+A level plays twelve ticks a second and nothing happens between two of
+them. A scene is written in sixtieths -- `start_timer(timer_0, 0x82)`,
+`do_simple_wait(timer_1)` -- so the finest unit a thirty frames a
+second grab can resolve is a video frame.
+
+* `tools/oracle/scene_frames.py <video> <outdir>` cuts a capture into
+  one picture per video frame, writing only the frames on which the
+  picture changed, under the number of the frame they are. A scene is
+  mostly holding still -- the title spends three hundred frames on one
+  picture waiting for the music -- and three thousand identical hashes
+  measure nothing but the hold.
+* `digest.py --cutscene` then fingerprints them as usual, with two
+  extra masks; see below.
+* `tools/dev/scene-common.ts` replays the port in steps of 1/30 of a
+  second, and `tools/dev/scene-report.ts` scores it.
+* `tools/oracle/scenes/<name>.json` says which scene it is, how many
+  frames to replay and what script reaches it, as
+  `tools/oracle/recordings/` does for a recording.
+
+The alignment is **searched for** rather than anchored. A gameplay
+capture has `--anchor-text 25`; a scene has no landmark, and -- this
+is the point -- nothing is pressed during one, so there is no key
+schedule for an alignment to be fitted to. The offset says one thing
+only: which video frame of the capture the scene began on, which
+depends on when ffmpeg started against when DOSBox got round to
+running `prince`. `bestOffset` counts bare equal hashes over ±240
+frames, and the eight best candidates are each put through
+`exactAgreement`.
+
+### The sound is the timing, and the original is playing the speaker
+
+`show_title` stops dead at `while (check_sound_playing())` three times
+over, `load_intro` once and `end_sequence` twice. In the browser that
+question goes to the audio device, which is right; headless there is no
+device, the waits were nought, and the port's title ran 68 seconds
+against the original's hundred and more.
+
+What the original was playing is measurable rather than assumed. The
+capture's first such wait -- `TITLE_MAIN` with the credits up, video
+frames 518 to 807 -- ends **24.77 seconds** after the intro music
+starts. Sound 54 is 5937 units at tempo 240, which is **24.74**
+seconds as `IBM_SND1.DAT` plays it and **46.59** as `MIDISND1.DAT`
+does. So the machine the oracle runs on is playing the PC speaker
+tunes, and `SpeakerClock` in `scene-common.ts` plays their lengths
+through `CutsceneEffects.soundPlaying`, out of the game's own files.
+The second wait confirms it: sound 55 is 951 units at tempo 64, 14.86
+seconds, and the capture's princess-room scene begins 14.9 seconds
+after that sound starts.
+
+(The browser prefers the MIDI, which is longer. That is not a fault:
+the game waits for whatever its own hardware is playing, and so does
+the port.)
+
+### `title`: 426 of the capture's 606 changes
+
+    gap                      capture   port
+    do_wait 0x82                 67       65
+    do_wait 0xCD                102      103
+    do_wait 0x41                 33       32
+    do_wait 0x10E               135      135
+    do_wait 0xEB                117      118
+    while check_sound_playing   289      290
+    pop_wait 0x258              306      300
+    ...
+    while check_sound_playing   488      497
+
+and the two runs' **absolute** frame numbers are within two of each
+other over the first ninety seconds -- the capture's `STORY_FRAME` and
+the port's both land on video frame 2503.
+
+Three faults in the port came out of it, and all three are things the
+player sees.
+
+#### `transition_ltr` is instant
+
+SDLPoP marks the whole function `// stub` and puts
+`SDL_Delay(1000/120)` between its hundred and sixty two-pixel columns,
+which is a wipe lasting a second and a third. The port translated the
+stub. In the capture the wipe into the story frame occupies **two**
+video frames: frame 807 changes x 17 to 302 and frame 808 changes only
+x 212 to 302, so the sweep is real and over in about fifty
+milliseconds. A hundred and sixty copies of a two-pixel column is
+nothing to any machine that ever ran this game.
+
+#### Every fade ran at twice the right speed
+
+`make_pal_buffer_fadein` and `make_pal_buffer_fadeout` are both given
+`wait_time` **2**, and `fade_in_frame` spends it round one shade of
+the sixty-four. So a fade is 128 sixtieths, 2.13 seconds, 64 frames of
+video. The driver stepped a shade per sixtieth. The capture's opening
+fade is frames 5 to 64; the port's was 0 to 32.
+
+#### A fade has a clock of its own and does not wait for the scene's
+
+`proc_cutscene_frame`'s inner busy loop calls `proc_fade_frame` over
+and over until the cutscene frame's `timer_0` has run out, and each of
+those spends `timer_1`, two sixtieths. So a cutscene frame of six
+sixtieths holds **three** shades, one after another. The port stepped
+the fade where the generator finished its wait, which put all three up
+at once and left the screen still for the other two thirds. The
+capture says which: the princess-room scene fades in over **fifty-three
+consecutive video frames, one change each**, where the port changed
+every third frame. `CutscenePlayer.advance` steps the fade off the
+wall clock now.
+
+### What a scene capture cannot settle
+
+* **The odd frames of a fade.** With the three faults above fixed the
+  port draws the capture's fade exactly on every **even** frame and
+  matches no odd one, from 17 to 63 and again at every other fade. A
+  fade step is two sixtieths, 33.3ms, and the grab is thirty frames a
+  second, 33.3ms: the two beat together exactly, so one grab lands
+  after `set_pal_arr` has walked all sixteen entries of the row and
+  the next lands in the middle of it. At (0,0) between frames 18 and
+  19 the green of one entry moves a DAC unit and the red of the same
+  entry does not, which no arithmetic on a palette can produce and a
+  half-finished write can.
+
+  Two shades every four sixtieths was tried, because it fits one
+  pixel's reading of 8, 8, 16, 16: it scores **92 against 108** and
+  only moves the alternation's parity. It is not kept.
+* **The princess's room is full of `prandom`.** Six stars in the
+  window, one twinkled per cutscene frame by
+  `draw_star(prandom(N_STARS - 1), 1)`, and two torches whose frames
+  come from `get_torch_frame`, which is `prandom` twice over. The
+  original seeds `prandom` from its clock, so none of them can ever be
+  adjudicated -- the same thing that masks a room's torches.
+  `flame_mask` catches neither: a star changes on about one video
+  frame in eighteen, well under `FLAME_SHARE`, and a torch's edge
+  reaches a pixel or two past `FLAME_GROW`. So `digest.py --cutscene`
+  masks them by rectangle. It is worth **253 of 606 to 426**: before
+  the masks every frame of the princess-room scene was wrong, and the
+  pixels that were wrong were six stars and, in the frames that had no
+  counterpart at all, **one pixel at (102,110)** and three at x 103
+  and x 214.
