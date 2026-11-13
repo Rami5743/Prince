@@ -52,6 +52,9 @@ export interface SceneSpec {
   start?: number;
   /** How wide the offset search is, in video frames. */
   range?: number;
+  /** `rem_min` and `rem_tick` when the scene starts; see `playScene`. */
+  remMin?: number;
+  remTick?: number;
 }
 
 export const assets = new Assets(
@@ -82,7 +85,7 @@ export async function runScene(
     hash.push(fingerprint(rgb, map, mask));
     moved.push(prev === null ? null : movedBetween(prev, rgb));
     prev = rgb;
-  }, undefined, clock);
+  }, undefined, clock, { remMin: spec.remMin, remTick: spec.remTick });
   return { hash, moved };
 }
 

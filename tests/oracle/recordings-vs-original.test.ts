@@ -524,6 +524,29 @@ const EXPECTED: Record<string, number> = {
   // floors a delay of `-(prandom(0xff) & 0x0f)` -- and the rest is
   // the alignment carrying that along.
   'level13': 327,
+  /**
+   * `level13` with room 23 out of the picture, and the first probe to
+   * draw nine rooms of the level that no capture had ever seen.
+   *
+   * `check_fall_flo` drops six floors on level 13's room 23 at
+   * `-(prandom(0xff) & 0x0f)` ticks each, and the original seeds
+   * `prandom` from its clock, so the room the level starts in can
+   * never be adjudicated: that is the whole of what `level13` and
+   * `jaffar` are short. This one leaves it on its **third** tick --
+   * `u` at 3 and `h` at 4, which is 23 to 17 to Jaffar's room 1 --
+   * and then tours 1, 3, 4, 24, 4, 3, 1, 17, 10, 13 and 2.
+   * `probe-check.ts` over two seeds 77776 apart says the whole 380
+   * ticks differ on **one**, which is tick 3 in room 23 before the
+   * first cheat lands.
+   *
+   * Three captures: 125, nought (a chain that lost a skip) and this
+   * one. Twenty-four of the twenty-seven it is short are one block,
+   * ticks 24 to 47, and they are the words under the room; see
+   * `tools/oracle/README.md` on why this digest is the only one in
+   * the suite taken **without `--anchor-text`**, and on the two ticks
+   * of the message boundary that the convention has been hiding.
+   */
+  'level13b': 324,
   'level14': 425,
   /**
    * `level5` and `level10` again, with the guard left out.

@@ -2221,3 +2221,94 @@ wall clock now.
   pixels that were wrong were six stars and, in the frames that had no
   counterpart at all, **one pixel at (102,110)** and three at x 103
   and x 214.
+
+## `level13b`, and the two ticks `--anchor-text` has been hiding
+
+`level13` is 327 of 374 and `jaffar` 253 of 298, and both are short
+by exactly the ticks in which six floors are coming down on room 23.
+`check_fall_flo` gives each of them a delay of `-(prandom(0xff) &
+0x0f)` and the original seeds `prandom` from its own clock, so the
+room every level-13 run starts in can never be adjudicated.
+
+`level13b` is the route that leaves it. The cheats go `u` at tick 3
+and `h` at tick 4 -- room 23 to room 17 to Jaffar's room 1 -- and the
+run then tours 1, 3, 4, 24, 4, 3, 1, 17, 10, 13 and 2 over 380 ticks,
+nine rooms of level 13 that no capture had ever drawn.
+
+The timing of those two cheats was searched with `probe-check.ts`
+over two seeds 77776 apart, which is the only way to know how much of
+a run is `prandom`:
+
+    cheats at 1 and 2    0 ticks differ
+    cheats at 2 and 3    1
+    cheats at 3 and 4    1   <- kept
+    cheats at 4 and 5    2
+    cheats at 4 and 7    4
+    cheats at 6 and 7    4
+    cheats at 8 and 9    6
+
+One and two are better and are not safe: a cheat on tick 1 goes out
+at the schedule's own origin, a tenth of a second after Ctrl+A, where
+3 and 4 are 0.17 and 0.25 seconds in. The one tick that differs is
+tick 3 itself, in room 23, before the first cheat lands.
+
+### Its digest is the only one taken without `--anchor-text`
+
+Three captures scored 125, nought (a chain that lost a skip) and
+**222** of ~351 under the usual `--anchor-text 25`, and **324 of
+351** under no anchor at all. The anchor is not a tie-breaker here,
+it is wrong, and the reason is worth knowing for every probe that
+changes room in its first few ticks.
+
+`--anchor-text` renumbers by the first tick the strip under the room
+goes **dark** after being lit. This capture's strip never goes dark
+between `LEVEL 12` and `59 MINUTES LEFT`, so the detector found the
+tick the whole message ends -- raw tick 48 -- and renumbered the run
+by -23. `--start` has nothing to do with it: 209, 210, 211, 212 and
+213 all give the same answer, and `--anchor-text` 17, 20, 25, 30 and
+33 give 147, 173, 222, 277 and 311.
+
+The strip settles it from the other end, the way level 10's closing
+gate settled `level10b`. Counting the lit pixels of x 100 to 220:
+
+    strip                         capture    port
+    `LEVEL 12`, 147 lit           0 to 23    0 to 24
+    nothing                       --         25
+    `59 MINUTES LEFT`, 306 lit    24 to 47   26 to 47
+    nothing                       from 48    from 48
+
+**Both runs put the end of the message on tick 48 with no anchor at
+all.** That is an event neither side can fake, and it says the
+capture's own restart-flash numbering is right.
+
+It also says the port puts the minutes up **two ticks late** and
+blanks the strip for a tick where the original does not, and that is
+twenty-four of `level13b`'s twenty-seven missing ticks -- the whole
+block 24 to 47.
+
+### Why the port is not changed for it
+
+Because the suite's digests and the port are two halves of one
+convention, and only the port half can be moved without recapturing
+everything.
+
+`PopGame.textTicksToSkip` is 1: the level's opening picture is on the
+screen for two frames and neither is a `draw_game_frame`, so the
+first tick does not spend one of the message's twenty-four. That was
+fitted to a level-1 capture which, split with `--anchor-text 25`,
+has `LEVEL 1` on ticks 0 to 24, nothing on 25 and the minutes from 26
+-- and `--anchor-text 25` *forces* the blank tick to 25, so the
+measurement and the convention are the same statement.
+
+Setting it to 0 moves the port's blank to 23 and its minutes to 24,
+which is what this capture wants. Measured over the whole suite:
+
+    textTicksToSkip = 1   19258 of 20011
+    textTicksToSkip = 0   19149 of 20011
+
+It costs **109 ticks** across forty-four runs to gain twenty-four
+here, because every one of those digests was numbered by the blank
+tick the port is being asked to move. The right experiment is a fresh
+capture of a level-1 recording split without `--anchor-text`, read
+the same way as the table above; the videos of the existing captures
+are long gone, so it cannot be done by re-splitting.

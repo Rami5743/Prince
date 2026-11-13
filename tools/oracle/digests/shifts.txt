@@ -109,3 +109,27 @@ level10b 0
 # `level5`, `level10` and `jaffar` do not move because what they are
 # short of is not the capture: a guard who can see the Prince, and
 # level 13's falling floors, both come out of `prandom`.
+
+# `level13b` -- the one digest in the suite taken WITHOUT `--anchor-text`.
+#
+# Three captures at shift 0 scored 125, nought (a chain that lost a
+# skip) and 222 of ~351 under the usual `--anchor-text 25`, and 324
+# under no anchor at all. The anchor is not a tie-breaker here, it is
+# wrong: it renumbers by the first tick the strip under the room goes
+# dark, and this capture's strip never goes dark between `LEVEL 12`
+# and `59 MINUTES LEFT`, so the detector found the tick the whole
+# message ends -- raw tick 48 -- and renumbered the run by -23.
+#
+# The capture's own restart-flash numbering is right, and the strip
+# says so from the other end, the way level 10's closing gate did:
+#
+#     strip (x 100-220, lit pixels)   capture    port
+#     `LEVEL 12`, 147 lit             0 to 23    0 to 24
+#     nothing                         --         25
+#     `59 MINUTES LEFT`, 306 lit      24 to 47   26 to 47
+#     nothing                         from 48    from 48
+#
+# Both runs put the end of the message on tick 48 with no anchor at
+# all, which is an event neither side can fake. `--start` makes no
+# difference: 209, 210, 211, 212 and 213 all give the same.
+level13b 0  (no --anchor-text; 125, 0, 324 over three captures)

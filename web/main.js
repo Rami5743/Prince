@@ -11532,10 +11532,11 @@ var CutscenePlayer = class _CutscenePlayer {
     if (!this.gen) return false;
     const units = ms / UNIT_MS;
     this.owed += units;
-    this.consume(units);
+    this.fadeClock(units);
     let guard = 0;
     while (this.gen && this.owed >= this.pending && guard++ < 2e4) {
       this.owed -= this.pending;
+      this.elapsed += this.pending;
       this.step();
     }
     return this.gen !== null;
@@ -11596,8 +11597,7 @@ var CutscenePlayer = class _CutscenePlayer {
    * parity rather than removing it. It is not kept.
    */
   static FADE_UNITS = 2;
-  consume(units) {
-    this.elapsed += units;
+  fadeClock(units) {
     this.fadeOwed += units;
     while (this.fadeOwed >= _CutscenePlayer.FADE_UNITS) {
       this.fadeOwed -= _CutscenePlayer.FADE_UNITS;

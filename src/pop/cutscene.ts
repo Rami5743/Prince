@@ -284,10 +284,18 @@ export class CutscenePlayer {
     if (!this.gen) return false;
     const units = ms / UNIT_MS;
     this.owed += units;
-    this.consume(units);
+    this.fadeClock(units);
     let guard = 0;
     while (this.gen && this.owed >= this.pending && guard++ < 20000) {
       this.owed -= this.pending;
+      // `elapsed` is the *generator's* clock, which is what
+      // `start_timer` and `do_wait` are written against, so it counts
+      // the waits the scene has actually finished and not the
+      // sixtieths that have gone by. The two come to the same total;
+      // keeping them apart is what stops a `do_wait` coming out a
+      // sixtieth short because the fade had already been given the
+      // leftover.
+      this.elapsed += this.pending;
       this.step();
     }
     return this.gen !== null;
@@ -356,8 +364,7 @@ export class CutscenePlayer {
    */
   private static readonly FADE_UNITS = 2;
 
-  private consume(units: number): void {
-    this.elapsed += units;
+  private fadeClock(units: number): void {
     this.fadeOwed += units;
     while (this.fadeOwed >= CutscenePlayer.FADE_UNITS) {
       this.fadeOwed -= CutscenePlayer.FADE_UNITS;

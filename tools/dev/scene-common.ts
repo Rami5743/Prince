@@ -33,6 +33,7 @@ import { Assets } from '../../src/render/assets.ts';
 import { loadSound, SPEAKER_FILES } from '../../src/render/audio.ts';
 import { speakerNotes } from '../../src/render/music.ts';
 import { CutscenePlayer, type SceneName } from '../../src/pop/cutscene.ts';
+import { g } from '../../src/pop/state.ts';
 
 /** One sound channel, with the lengths the PC speaker gives. */
 export class SpeakerClock {
@@ -86,6 +87,25 @@ export async function playScene(
   assets: Assets, exe: Uint8Array, scene: SceneName, frames: number,
   onFrame: (i: number, rgb: Uint8Array) => void,
   player?: CutscenePlayer, clock?: SpeakerClock,
+  /**
+   * The hour the scene is played with.
+   *
+   * `cutscene_2_6`, `cutscene_4` and `cutscene_12` each open with
+   * `set_hourglass_state(hourglass_frame())`, and `hourglass_frame`
+   * is `6 - the first index of time_bound = [6,17,33,65] above
+   * `rem_min`. So **which hourglass the scene draws is how much of
+   * the hour is left**, and `cutscene_12` picks a different scene
+   * altogether below six minutes.
+   *
+   * In the browser `g.rem_min` is whatever the level being left had,
+   * because `install()` does not touch it and the globals are shared.
+   * Headless nothing has played, so it would be nought -- which is
+   * under every bound and draws the last hourglass of the four. The
+   * chain that reaches a cutscene in a capture has spent a minute or
+   * two of the hour, so 60 or 59, and both give the same picture;
+   * the spec says which.
+   */
+  clock0: { remMin?: number; remTick?: number } = {},
 ): Promise<void> {
   const sound = clock ?? await SpeakerClock.load(assets);
   sound.reset();
@@ -94,6 +114,8 @@ export async function playScene(
     soundPlaying: () => sound.playing,
     stopSounds: () => sound.stop(),
   });
+  g.rem_min = clock0.remMin ?? 60;
+  g.rem_tick = clock0.remTick ?? 719;
   p.begin(scene);
   for (let i = 0; i < frames; i++) {
     onFrame(i, p.render().toRgb(p.palette.toRgba()));
