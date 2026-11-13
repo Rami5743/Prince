@@ -2043,3 +2043,28 @@ capture's best was the same edge **two** ticks later. Two captures of
 one recording, two different shifts of one edge, each exact under its
 own: the same thing `13ab6867` says, and the end of any suggestion
 that `level6`'s eighty-three were the port's.
+
+### Six more probes recaptured, and what moved
+
+The same treatment for every probe still short of exact. Three tries
+each, both `--start` values, both numberings:
+
+    level3    366 -> 367 of 367, exact
+    level13   324 -> 327
+    level10   259 -> 261
+    level5    387, unmoved over 386, 387, 387
+    level10b  361, unmoved over 330, 361, 329
+    jaffar    253, unmoved over 253, 253, 253
+
+The three that moved were numbering and nothing else. The three that
+did not are the three whose shortfall is `prandom`: `level5`'s
+skill-3 guard, `level10`'s guard at tick 315, and the six floors
+`check_fall_flo` drops on level 13's room 23 at
+`-(prandom(0xff) & 0x0f)` ticks each. Those cannot be recaptured
+towards, which is why `level5b` and `level10b` exist.
+
+`level3` is worth noting on its own: at `--start 56` the two fresh
+captures read 366 and 367 and at 59 they read 86 and 88. That is the
+splitter taking a dark frame six seconds past the restart, the fault
+`level3` found in the first place, and it is still there in one of
+the two candidates every time. Trying both is what makes it harmless.

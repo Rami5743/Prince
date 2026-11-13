@@ -378,7 +378,18 @@ const EXPECTED: Record<string, number> = {
    * these runs are stable to a tick, which is why what is left of
    * them is worth chasing.
    */
-  'level3': 366,
+  /**
+   * **367 of 367 -- exact**, on a fresh capture, where the kept one
+   * read 366. Two more captures with the current scripts read 366
+   * and 367 at `--start 56` and 86 and 88 at 59, which is the
+   * splitter finding a dark frame six seconds past the restart --
+   * the fault this probe found in the first place.
+   */
+  'level3': 367,
+  // Recaptured three times (386, 387, 387) and unmoved: its thirty
+  // are the skill-3 guard standing twenty units away, which is
+  // `prandom`, and `level5b` is the same level without him at
+  // **416 of 416**.
   'level5': 387,
   /**
    * `level6`'s eighty-seven: one key edge, and a gate says which.
@@ -499,10 +510,20 @@ const EXPECTED: Record<string, number> = {
    * ticks 0 and 1 outside the count. `level9` is drawn perfectly.
    */
   'level9': 418,
-  'level10': 259,
+  // Recaptured three times: 259, nought (a chain that lost a skip)
+  // and **261**. Its hundred and seven are the guard it meets at
+  // tick 315, which is `prandom`; `level10b` is the same level
+  // without him.
+  'level10': 261,
   'level11': 377,
   'level12': 383,
-  'level13': 324,
+  // Recaptured: 327 at `--start 211` and nought or one at 208, so
+  // the kept 324 was three ticks of numbering. About twenty of the
+  // forty-seven it is still short are ticks two seeds of the port
+  // disagree about -- `check_fall_flo` gives each of room 23's six
+  // floors a delay of `-(prandom(0xff) & 0x0f)` -- and the rest is
+  // the alignment carrying that along.
+  'level13': 327,
   'level14': 425,
   /**
    * `level5` and `level10` again, with the guard left out.

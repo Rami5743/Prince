@@ -94,3 +94,18 @@ level10b 0
 #   gate2        18, 41, 4 (clock) and 39, 61, 24 (gaps) of ~1300
 #   level6      334, 333, 333 (clock) and 332, 331, 331 (gaps) of 417
 #   level9      416, 418, 418 at --start 159, and **nought** at 156
+#
+# And the six probes that had never been taken with both `--start`
+# values and both numberings either. All at shift 0, three tries each
+# (two for `level3`); the kept score is in brackets.
+#
+#   level3    366, 367 at --start 56 and 86, 88 at 59   (366 -> 367, exact)
+#   level13   327 at 211, nought or one at 208          (324 -> 327)
+#   level10   259, nought, 261                          (259 -> 261)
+#   level5    386, 387, 387                             (387, unmoved)
+#   level10b  330, 361, 329                             (361, unmoved)
+#   jaffar    253, 253, 253 at 211, ~105 at 208         (253, unmoved)
+#
+# `level5`, `level10` and `jaffar` do not move because what they are
+# short of is not the capture: a guard who can see the Prince, and
+# level 13's falling floors, both come out of `prandom`.
