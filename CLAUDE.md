@@ -51,9 +51,35 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         18928 of 19656   96%
+    measured         18934 of 19660   96%
     retired           1883 of  3767   50%
-    all              20811 of 23423   89%
+    all              20817 of 23427   89%
+
+* **A bad capture is the commonest cause of a short run, and nobody
+  was recapturing.** Nine recordings were taken again this round with
+  the current `recapture.sh` -- which tries both `--start` values and
+  both numberings, and did neither when most of these digests were
+  made. Four of the nine moved and `level3` became exact:
+
+      gate1     596 of 799 -> 809 of 810   (and out of the retired list)
+      level9    374 of 421 -> 418 of 421   (421 of 421 with one edge)
+      level3    366 of 367 -> 367, exact
+      level13   324 of 371 -> 327 of 374
+      level10   259 of 368 -> 261 of 369
+      level6    332 of 419 -> 334 of 417   (417 of 417 with one edge)
+      level5, level10b, jaffar, exitdoor, gate2, gate2b -- unmoved
+
+  The three probes that would not move are the three whose shortfall
+  is `prandom`: `level5`'s skill-3 guard, `level10`'s guard at tick
+  315, and the six floors `check_fall_flo` drops on level 13's room
+  23 at `-(prandom(0xff) & 0x0f)` apiece. Those are the ones a
+  replacement probe is for, and `level5b` and `level10b` are it.
+
+  So: **before reading a short run as the port's, recapture it** --
+  and `level3` says why both `--start` values must be tried every
+  time. Its fresh captures read 366 and 367 at `--start 56` and 86
+  and 88 at 59, where the search finds a dark frame six seconds past
+  the restart.
 
 * **`gate1` was never a retired run, and it opens the exit door.**
   It was retired on one capture that scored 596 of 799, blamed on "a
