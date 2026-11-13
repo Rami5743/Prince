@@ -53,10 +53,10 @@ captures of a real PRINCE.EXE:
 
     old twenty-one   11676 of 12039
     thirteen new      4572 of  4935   (levels 3 and 5 to 14)
-    six newer         1338 of  1384   (the cheats, a potion, the inversion)
-    measured         17586 of 18358   96%
+    eight newer       1825 of  1874   (the cheats, a potion, the inversion)
+    measured         18073 of 18848   96%
     retired           2473 of  4555
-    all              20059 of 22913   88%
+    all              20546 of 23403   88%
 
 * **Nothing in the suite is now known to be the port's.** Every run
   that is short has a measurement beside it in
@@ -99,11 +99,13 @@ captures of a real PRINCE.EXE:
   makes them measurable: a guard who can see him is `prandom` and
   `gate2b` settled that years ago.
 
-      shadow5   300 of 300   exact on all four captures
-      shadow6   279 of 280   the one is the capture ending early
-      jaffar    253 of 298   ticks 3-47, which are level 13's floors
-      potion8   246 of 246   exact
-      invert2   260 of 260   exact
+      shadow5     300 of 300   exact on all four captures
+      killguard6  299 of 299   exact
+      invert2     260 of 260   exact
+      potion8     246 of 246   exact
+      shadow6     279 of 280   the one is the capture ending early
+      addlife2    188 of 191   the two are a flash the oracle cannot see
+      jaffar      253 of 298   ticks 3-47, which are level 13's floors
 
   **No cheat opens the exit door.** `leveldoor_open` is written in
   five places and not one is a cheat, so the mirror of level 4 and
@@ -115,7 +117,29 @@ captures of a real PRINCE.EXE:
   goes out of the room at tick 139 and off the bar at 158, 3/3 to
   2/3. Not the bubbles -- `start_anim_potion` seeds them from
   `prandom(6) + 1` and no two runs of the original agree.
-* **Three real faults were fixed this round, all found by reading
+* **A cheat ran before the tick instead of inside it.**
+  `process_key` is not called before `play_frame`, it is called four
+  calls *inside* it, in `do_paused`; and `play_level_2` clears
+  `guardhp_delta` and `hitp_delta` immediately before `play_frame`.
+  So a cheat that sets one of those deltas -- `shift+s`, `shift+t`,
+  `k` -- has it carried to `do_delta_hp` and `draw_hp` in the same
+  tick, and the port, applying cheats before `step`, wiped it every
+  time. **Shift+S, Shift+T and K did nothing to the bar in the game
+  the player plays.** `addlife2` 60 of 191 to 188, `killguard6` 179
+  of 299 to **299, exact**. `cheat` queues now and `step` drains the
+  queue where the C reads the key.
+* **The oracle cannot see a flash, and that is its fault and not the
+  port's.** `addlife2`'s last two ticks are the red flash `add_life`
+  asks for; take it out and the probe reads 190 of 191.
+  `play_level_2` puts the flash up *after* `draw_game_frame`, waits,
+  and takes it off before the next frame is drawn, and
+  `split_ticks.py` keeps for each tick the frame just before the next
+  change -- the frame the flash has already come off. So the flash
+  stays in the port, where the player can see it. The same thing is
+  why `flash_if_hurt`'s second branch is left out: `3764b76d` loses
+  three hit points and not one of its 17670 black pixels changes
+  colour on any tick of the run.
+* **Four real faults were fixed this round, all found by reading
   the C beside the port:**
   * `showRoom` wrote `check_the_end` out by hand and had dropped
     `loadkid`, `check_fall_flo` and `check_shadow`, so looking into
@@ -127,6 +151,7 @@ captures of a real PRINCE.EXE:
     `invert2` says the original mirrors **the 192 rows of the room
     within themselves** (129 of 130) and not all 200 (0 of 130). The
     room turns over and the row of flasks does not. 260 of 260 now.
+  * `cheat` applied before `step`, above.
   * `recording_to_script.mjs`'s level-7 wait was four seconds while
     its own comment said two. Level 7 kills the Prince and
     `Press Button to Continue` eats a `shift+l`; four is on the edge
