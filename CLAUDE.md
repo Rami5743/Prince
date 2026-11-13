@@ -51,9 +51,113 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         18934 of 19660   96%
+    measured         19258 of 20011   96%
     retired           1883 of  3767   50%
-    all              20817 of 23427   89%
+    all              21141 of 23778   89%
+
+and, for the first time, the parts of the game that are not
+gameplay, by `tools/dev/scene-report.ts`:
+
+    title              426 of   606   the opening, every page load
+    expired            108 of   177   the hourglass
+    cutscene2           34 of   137   the scene before level 2
+
+## The scenes were never compared with anything, and four things were wrong
+
+Every one of the forty-four digests before this round was *gameplay*.
+`show_title` -- which the player sees on **every page load** --
+`end_sequence`, `expired` and the six scenes between the levels were
+written out of the C with unit tests only, and a unit test pins what
+the author believed the C does. They are also the **easiest** thing
+in the suite to measure: no keys are pressed in a cutscene, so there
+is no key-edge lottery, no `which-key` search, no shift to choose and
+no phase lottery.
+
+`tools/oracle/scene_frames.py` cuts a capture into one picture per
+video frame (writing only the frames that changed),
+`digest.py --cutscene` fingerprints them with the stars and the
+princess-room torches masked, `tools/oracle/scenes/<name>.json` says
+what the scene is and what script reaches it,
+`tools/oracle/scenecapture.sh` takes it, `tools/dev/scene-common.ts`
+replays the port at 1/30 of a second against a model of the PC
+speaker, and `tools/dev/scene-report.ts` scores it.
+
+* **`transition_ltr` is instant.** SDLPoP marks the function `// stub`
+  and puts `SDL_Delay(1000/120)` between its hundred and sixty
+  two-pixel columns, which is a wipe lasting a second and a third;
+  the port translated the stub. In the capture the wipe occupies
+  **two** video frames -- 807 changes x 17 to 302 and 808 changes
+  only x 212 to 302.
+* **Every fade ran at twice the right speed.** `make_pal_buffer_fadein`
+  and `make_pal_buffer_fadeout` are both given `wait_time` 2 and
+  `fade_in_frame` spends it round one shade of the sixty-four, so a
+  fade is 128 sixtieths. The driver stepped a shade per sixtieth.
+* **A fade has a clock of its own.** `proc_cutscene_frame`'s inner
+  busy loop calls `proc_fade_frame` over and over until the cutscene
+  frame's `timer_0` runs out, so a six-sixtieth cutscene frame holds
+  three shades one after another. The port put all three up at once
+  and held the screen still for the other two thirds; the capture
+  fades the princess room in over **fifty-three consecutive video
+  frames, one change each**.
+* **The port drew eight rows the original leaves black.** Every frame
+  of the scene before level 2 differed from the capture in rows 192
+  to 199 and nowhere else -- the capture's are black, the port
+  carried the floor of the princess's room into them -- where rows 97
+  to 179 of the same pair differ by five pixels in all. A scene
+  played before a level gets the game's own offscreen, which is the
+  192-row gameplay buffer; `show_title` makes its own over the whole
+  320 by 200. `scr.clip_room` is that, and with it the port's picture
+  is the capture's **to the pixel**.
+
+And the measurement that makes a scene comparable at all: **the
+original is playing the PC speaker tunes, and the length of the music
+is the timing of the scene.** `show_title` stops dead at
+`while (check_sound_playing())` three times over. The capture's first
+such wait ends 24.77 seconds after the intro music starts, and sound
+54 is 5937 units at tempo 240 -- 24.74 seconds as `IBM_SND1.DAT`
+plays it against 46.59 as `MIDISND1.DAT` does.
+
+Two things a scene capture cannot settle, both measured and written
+up in `tools/oracle/README.md`: the **odd frames of a fade** (the
+grab beats against the DAC write at exactly 33.3ms and catches half
+of them mid-write) and the **princess's room**, whose six stars and
+two torches both come out of `prandom`.
+
+## `level13b`, and two cheats that were never there
+
+* **`level13b` is level 13 with room 23 out of the picture: 324 of
+  351.** `check_fall_flo` drops six floors on that room at
+  `-(prandom(0xff) & 0x0f)` ticks each, so it can never be
+  adjudicated, and that is the whole of what `level13` (327 of 374)
+  and `jaffar` (253 of 298) are short. This probe leaves it on its
+  **third** tick -- `u` at 3, `h` at 4 -- and tours nine rooms of
+  level 13 no capture had ever drawn. `probe-check.ts` over two seeds
+  says the whole 380 ticks differ on one.
+
+  Its digest is the only one in the suite taken **without
+  `--anchor-text`**, and that is a finding: the anchor renumbers by
+  the first tick the strip under the room goes dark, and this
+  capture's strip never does, so the detector took the tick the whole
+  message ends and renumbered the run by -23. Both runs put the end
+  of the message on tick 48 with no anchor at all, which neither side
+  can fake. The twenty-four it is still short are the words under the
+  room, and `textTicksToSkip` was measured both ways rather than
+  guessed: **19258 of 20011 with the skip against 19149 without**,
+  under either numbering, so the skip stays.
+
+* **`c` and `shift+c` were not in `PopGame.cheat` at all**, and
+  `tools/oracle/README.md` has had them in its catalogue of cheats
+  since the cheats went in. `seg000.c:741` and `:746`.
+
+* **The shell still applied its cheats before the tick.** The round
+  that found this fixed `PopGame.cheat`, which is the path a
+  recording replays through, and left `web/main.ts` calling
+  `game.heal()`, `game.addLife()` and `game.killGuard()` straight off
+  the key event -- on the wrong side of `play_level_2`'s clearing of
+  `guardhp_delta` and `hitp_delta`. **K, Shift+S and Shift+T did
+  nothing to the bar in the game the player plays**, which the last
+  round said it had fixed and had not. All eleven go through
+  `cheat()` now.
 
 * **A bad capture is the commonest cause of a short run, and nobody
   was recapturing.** Nine recordings were taken again this round with
@@ -413,8 +517,18 @@ the four cases.
 
 `tests/pop/levels-smoke.test.ts` now plays badly for a thousand ticks
 of every level on a fixed seed, which costs two seconds. The fuller
-sweep -- more seeds, three thousand ticks, the globals checked for
-`NaN` too -- is worth running by hand after any change to `src/pop`.
+sweep is **`tools/dev/fuzz.ts`** now, rather than a thing to write
+again each round:
+
+    npx tsx tools/dev/fuzz.ts [seeds] [ticks]
+
+Eight seeds, three thousand ticks of every level, the cheats thrown
+in at random, every room of every level drawn through `showRoom`,
+**every global walked for a number that is not a number any more**,
+and the title, the ending, the hourglass and the six level cutscenes
+played to the end with keys hammered at the hall of fame's name box.
+Two faults came out of its first run -- the two cheats above -- and
+it is clean after them.
 
 ## The player plays `game.js`, not `src/`
 

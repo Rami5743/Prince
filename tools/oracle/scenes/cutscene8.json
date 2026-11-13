@@ -4,8 +4,8 @@
     "kind": "level",
     "level": 8
   },
-  "frames": 290,
-  "start": 114.0,
+  "frames": 380,
+  "start": 116.5,
   "range": 300,
   "script": [
     "wait 25",
