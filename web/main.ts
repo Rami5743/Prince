@@ -498,17 +498,32 @@ async function boot(): Promise<void> {
     }
     if (!cheats) return false;
     switch (key) {
-      case 'c': game.say(game.roomsAround); return true;
-      case 'shift+c': game.say(game.roomsDiagonal); return true;
-      case '+': game.addMinutes(1); return true;
-      case '-': game.addMinutes(-1); return true;
-      case 'r': game.resurrect(); return true;
-      case 'k': game.killGuard(); return true;
-      case 'shift+i': game.toggleUpsideDown(); return true;
-      case 'shift+w': game.featherFall(); return true;
-      case 'shift+b': game.toggleBlind(); return true;
-      case 'shift+s': game.heal(); return true;
-      case 'shift+t': game.addLife(); return true;
+      /**
+       * Every one of these goes through `cheat()`, not through the
+       * method behind it, because `process_key` runs **inside** the
+       * tick and not before it.
+       *
+       * The chain is `play_level_2` -> `play_frame` ->
+       * `play_kid_frame` -> `control_kid` -> `do_paused`, and
+       * `play_level_2` clears `guardhp_delta` and `hitp_delta`
+       * immediately before `play_frame`. A cheat called here, on the
+       * key event, is on the wrong side of that clearing: K, Shift+S
+       * and Shift+T each set a delta that the very next `step` wiped
+       * before anything read it, so none of the three did anything to
+       * the bar in the game the player plays. `addlife2` scored 60 of
+       * 191 against the original for exactly that and `killguard6`
+       * 179 of 299; queued, they are 188 and **299, exact**.
+       *
+       * `cheat()` queues and `step()` drains the queue where the C
+       * reads the key, so the browser and the oracle's replay now run
+       * the identical path. H, J, U, N and Ctrl+B stay below, because
+       * the shell's look-around holds a room across ticks, which is
+       * more than `process_key` does.
+       */
+      case 'c': case 'shift+c': case '+': case '-':
+      case 'r': case 'k': case 'shift+i': case 'shift+w':
+      case 'shift+b': case 'shift+s': case 'shift+t':
+        game.cheat(key); return true;
       case 'h': watchRoom = game.roomLeft; return true;
       case 'j': watchRoom = game.roomRight; return true;
       case 'u': watchRoom = game.roomAbove; return true;

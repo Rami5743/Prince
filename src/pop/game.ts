@@ -1261,6 +1261,26 @@ export class PopGame {
       case 'shift+t': this.addLife(); break;
       case '+': this.addMinutes(1); break;
       case '-': this.addMinutes(-1); break;
+      /**
+       * `c` and `shift+c`: the room's links, in words under the room.
+       *
+       * `seg000.c:741` and `:746` write `sprintf_temp` and set
+       * `need_show_text`, and the tail of `process_key` turns that
+       * into `display_text_bottom(answer_text); text_time_total =
+       * text_time_remaining = 24`. They were in the catalogue of
+       * cheats in `tools/oracle/README.md` as "yes, a capture can use
+       * them" and were the two of the eleven the port never had.
+       */
+      case 'c':
+        display_text_bottom(`S${g.drawn_room} L${g.room_L} R${g.room_R} A${g.room_A} B${g.room_B}`);
+        g.text_time_total = 24;
+        g.text_time_remaining = 24;
+        break;
+      case 'shift+c':
+        display_text_bottom(`AL${g.room_AL} AR${g.room_AR} BL${g.room_BL} BR${g.room_BR}`);
+        g.text_time_total = 24;
+        g.text_time_remaining = 24;
+        break;
       default: throw new Error(`no such cheat ${JSON.stringify(key)}`);
     }
   }
