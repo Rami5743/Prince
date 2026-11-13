@@ -489,6 +489,48 @@ const EXPECTED: Record<string, number> = {
    * 260** with that.
    */
   'invert2': 260,
+  /**
+   * The two cheats that set a hit-point delta, and the sequencing
+   * fault they found.
+   *
+   * `process_key` does not run before a tick, it runs *inside* it:
+   * `play_level_2` clears `guardhp_delta` and `hitp_delta` and then
+   * calls `play_frame`, and the keyboard is pumped four calls deeper,
+   * in `do_paused`. So a cheat that sets one of those deltas has it
+   * carried to `do_delta_hp` and `draw_hp` in the same tick. The port
+   * applied cheats before `step`, which is on the wrong side of the
+   * clearing, and the delta was wiped every time.
+   *
+   * Two probes measured it. `addlife2` is `shift+t` on level 2 with
+   * the Prince standing still: it scored **60 of 191** -- wrong on
+   * every tick after the cheat -- and the capture has a fourth flask
+   * at (21,194)-(26,198) from its tick 62 where the port went on
+   * drawing three. `killguard6` draws the guard of level 6's room 6
+   * (`h` three times) and then kills him with `k`: **179 of 299**,
+   * wrong from the cheat on, because `guardhp_delta` was wiped and
+   * his hit points stayed on the screen while he fell over.
+   *
+   * With the cheats applied where `process_key` runs, `killguard6`
+   * is **299 of 299 -- exact**, so the guard's death is drawn as the
+   * original draws it, and `addlife2` is **188 of 191**.
+   *
+   * `addlife2`'s remaining two are 62 and 63, which are the red
+   * flash: take `flash_color` and `flash_time` out of `addLife` and
+   * it is 190 of 191, so the capture does not show the flash at all.
+   * That is the harness and not the game. `play_level_2` puts the
+   * flash up *after* `draw_game_frame`, waits, and takes it down
+   * before the next frame is drawn -- and `split_ticks.py` keeps,
+   * for each tick, the frame just before the next change, which is
+   * the one the flash has already been taken off. The flash stays in
+   * the port, where the player can see it. It is the second
+   * measurement to point this way; the first is the `flash_if_hurt`
+   * branch noted in `tools/oracle/README.md`.
+   *
+   * Tick 1 is the opening picture drawn once instead of twice, as in
+   * `5920a8c2`.
+   */
+  'addlife2': 188,
+  'killguard6': 299,
   'jaffar': 253,
   'potion8': 246,
   'shadow5': 300,

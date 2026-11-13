@@ -9993,6 +9993,10 @@ var PopGame = class _PopGame {
     }
     g.guardhp_delta = 0;
     g.hitp_delta = 0;
+    if (this.pendingCheats.length) {
+      for (const key of this.pendingCheats) this.applyCheat(key);
+      this.pendingCheats.length = 0;
+    }
     if (this.deathMusic > 0) --this.deathMusic;
     timers();
     play_frame();
@@ -10511,6 +10515,30 @@ var PopGame = class _PopGame {
    * same key to the emulator on the same tick.
    */
   cheat(key) {
+    this.pendingCheats.push(key);
+  }
+  /**
+   * The cheats asked for since the last tick, waiting for their place
+   * in it.
+   *
+   * `process_key` does not run before the tick, it runs *inside* it:
+   * the chain is `play_level_2` -> `play_frame` -> `play_kid_frame`
+   * -> `control_kid` -> `do_paused`, and `do_paused` is where the
+   * keyboard is pumped. `play_level_2` clears `guardhp_delta` and
+   * `hitp_delta` just *before* `play_frame`, so a cheat that sets one
+   * of them -- `shift+s`, `shift+t`, `k` -- has it carried to
+   * `do_delta_hp` and `draw_hp` in the same tick.
+   *
+   * Applying them before `step` instead put them on the wrong side of
+   * that clearing and the delta was wiped every time. `shift+t` took
+   * `hitp_max` from three to four and the row of flasks went on
+   * showing three: `addlife2` scored 60 of 191 for it, every tick
+   * after the cheat, and the capture has the fourth flask at
+   * (21,194)-(26,198) from its tick 62. `k` was the same -- the guard
+   * fell over and his hit points stayed on the screen, 179 of 299.
+   */
+  pendingCheats = [];
+  applyCheat(key) {
     switch (key) {
       case "h":
         this.showRoom(g.room_L);

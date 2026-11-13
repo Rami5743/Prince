@@ -1,0 +1,30 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-12T23:32:54.889Z",
+ "level": 2,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "50.,21s,120.",
+ "events": [
+  {
+   "ms": 4167,
+   "tick": 50,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 5917,
+   "tick": 71,
+   "type": "up",
+   "key": "ShiftLeft"
+  }
+ ],
+ "states": [],
+ "cheats": [
+  {
+   "tick": 60,
+   "key": "shift+t"
+  }
+ ]
+}

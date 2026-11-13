@@ -26,6 +26,12 @@ const from = Number(fromS ?? 0);
 const to = Number(toS ?? 4);
 const rec = parseRecording(readFileSync(recPath, 'utf8'));
 const ticks = decodeTimeline(rec.timeline);
+/** A probe's cheats, applied where `control_kid` reads the keyboard. */
+const cheatsAt = new Map<number, string[]>();
+for (const c of rec.cheats ?? []) {
+  const had = cheatsAt.get(c.tick);
+  if (had) had.push(c.key); else cheatsAt.set(c.tick, [c.key]);
+}
 const lateArg = process.argv[process.argv.indexOf('--late') + 1];
 if (process.argv.includes('--late') && lateArg) {
   const [a, b, d] = lateArg.split(':').map(Number);
@@ -69,6 +75,7 @@ function write(index: number): void {
 write(0);
 for (let t = 0; t < ticks.length && t + 1 <= to; t++) {
   if (ticks[t].shift && !(ticks[t - 1]?.shift)) game.pressButton();
+  for (const key of cheatsAt.get(t) ?? []) game.cheat(key);
   game.step(ticks[t]);
   if (game.restartDue) game = await game.restart(assets, exe);
   write(t + 1);

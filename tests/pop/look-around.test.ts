@@ -1,5 +1,6 @@
 /**
- * H, J, U and N: the rooms the Prince is not in.
+ * H, J, U and N: the rooms the Prince is not in, and when a cheat
+ * takes effect.
  *
  * `process_key`'s four look-around cheats are two lines of the C --
  * `draw_guard_hp(0, 10); next_room = room_L;` -- and everything that
@@ -49,10 +50,14 @@ describe('the look-around cheats', () => {
     game.step(still);
     expect(g.drawn_room).toBe(7);
     game.cheat('u');
-    // `next_room` and nothing else until `play_frame` gets to
-    // `check_the_end`, which is where the C switches the room.
+    // Nothing at all until the tick. `process_key` runs *inside*
+    // `play_frame` -- `play_level_2` clears the hit-point deltas and
+    // then calls it, and the keyboard is pumped four calls deeper in
+    // `do_paused` -- so a cheat waits for `step`, which drains the
+    // queue just after the clearing. Then `check_the_end`, at the end
+    // of the same `play_frame`, switches the room.
     expect(g.drawn_room).toBe(7);
-    expect(g.next_room).toBe(10);
+    expect(g.next_room).not.toBe(10);
     game.step(still);
     expect(g.drawn_room).toBe(10);
   });

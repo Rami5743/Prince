@@ -1509,6 +1509,57 @@ the floors come down in a different order every run and leave their
 debris behind. Jaffar's own room, from tick 140 on, agrees exactly.
 The same arithmetic caps `level13` at 324 of 371.
 
+### `process_key` runs inside the tick, and two cheats proved it
+
+`play_level_2` clears `guardhp_delta` and `hitp_delta` and *then*
+calls `play_frame`; the keyboard is pumped four calls deeper, in
+`do_paused`, which `control_kid` reaches from `play_kid_frame`. So a
+cheat that sets one of those deltas -- `shift+s`, `shift+t`, `k` --
+has it carried to `do_delta_hp` and `draw_hp` in the same tick.
+
+`PopGame.cheat` applied them *before* `step`, which is on the wrong
+side of the clearing, and the delta was wiped every time. Two probes
+found it and the capture said so in pixels:
+
+    addlife2    60 of 191   ->  188   `shift+t` on level 2
+    killguard6 179 of 299   ->  299   `h` `h` `h` then `k` on level 6
+
+`addlife2`'s capture has a **fourth flask at (21,194)-(26,198)** from
+its tick 62 where the port went on drawing three; `killguard6`'s
+guard fell over in both runs, but in the port his hit points stayed
+on the screen because `guardhp_delta` never reached `do_delta_hp`.
+`killguard6` is now **exact**, so the guard's death -- frames 179 to
+185 of `seq_remove_guard` -- is drawn as the original draws it.
+
+This is a fault in the game the player plays, not only in the
+harness: in the browser the shell calls `heal()`, `addLife()` and
+`killGuard()` on the key event, outside `step`, so Shift+S, Shift+T
+and K all did nothing to the bar. `cheat` queues now, and `step`
+drains the queue right after clearing the deltas.
+
+### The capture cannot see a flash, and this is the second time
+
+`addlife2`'s last two ticks are 62 and 63, and they are the red
+flash `add_life` asks for. Take `flash_color` and `flash_time` out
+and the probe reads **190 of 191**, so the capture does not show the
+flash at all.
+
+That is the harness. `play_level_2` runs `draw_game_frame`, then
+`flash_if_hurt`, then `do_simple_wait(1)`, then
+`remove_flash_if_hurt` -- the flash is on the screen only during the
+wait and is taken off before the next frame is drawn. And
+`split_ticks.py` keeps, for each tick, the frame just *before* the
+next change, which is the frame the flash has already come off. So a
+flash that really happens is invisible to this oracle by
+construction.
+
+The flash stays in the port, where the player can see it. The first
+measurement to point this way was `flash_if_hurt`'s second branch --
+red whenever `hitp_delta` is negative -- which is left out of the
+port for the same reason; that one should probably go back in now
+that the cause is understood, but it costs ticks against the
+captures and nothing is gained by changing it blind.
+
 ### A potion, measured by what it does
 
 `potion8` is the first run in the suite that drinks one. The nearest
