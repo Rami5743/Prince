@@ -60,7 +60,21 @@ gameplay, by `tools/dev/scene-report.ts`:
 
     title              426 of   606   the opening, every page load
     expired            108 of   177   the hourglass
-    cutscene2           34 of   137   the scene before level 2
+    cutscene2           34 of   137   cutscene8     74 of 188
+    cutscene4           36 of   135   cutscene9      8 of 207
+    cutscene6           37 of   137   cutscene12    33 of 136
+
+**The pictures are not what is short.** Frames of each put beside the
+port's come out diff 0 outside the mask -- `cutscene9` at capture
+frames 198, 240 and 278 is the port's 82, 121 and 139 to the pixel.
+What moves is *when*, and both things that move it are the
+emulator's: **the cutscene frame is 3.2 video frames there and 3
+here** (`cutscene_frame_time` is six sixtieths and the gaps read
++3 +3 +3 +3 +1 +3 +3 +3 +3 +3 +4 ...), which over seventy-two frames
+is `cutscene9`'s whole drift, and the same six per cent lets a fourth
+`proc_fade_frame` into a cutscene frame four times in five, so the
+original's fade is 63 shades in 53 video frames against the port's
+63. Neither is anything a driver that keeps time can reproduce.
 
 ## The scenes were never compared with anything, and four things were wrong
 
