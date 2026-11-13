@@ -51,12 +51,68 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    old twenty-one   11676 of 12039
-    thirteen new      4572 of  4935   (levels 3 and 5 to 14)
-    eight newer       1825 of  1874   (the cheats, a potion, the inversion)
-    measured         18073 of 18848   96%
-    retired           2473 of  4555
-    all              20546 of 23403   88%
+    measured         18928 of 19656   96%
+    retired           1883 of  3767   50%
+    all              20811 of 23423   89%
+
+* **`gate1` was never a retired run, and it opens the exit door.**
+  It was retired on one capture that scored 596 of 799, blamed on "a
+  two-tick tap DOSBox took fourteen ticks late". Four captures with
+  the current `recapture.sh` -- which tries both `--start` values and
+  both numberings, and did neither when `gate1` was retired -- score
+  **809, 574, 594 and 808** of ~810. Eight hundred and ten ticks of
+  level 1, six rooms of it, are back in the measured set at 809.
+
+  And it reaches a **button**: at tick 738 the run steps on room 9's
+  opener, `leveldoor_open` goes 0 to 1, and `animate_leveldoor` adds
+  one to `curr_modifier` every tick to 43 -- so ticks 738 to 781 are
+  the exit door rising and the capture has all of them. Nothing else
+  in the suite reaches a button at all, so `trigger_button` on a
+  level door and `animate_leveldoor` had never been put beside the
+  original. They are exact.
+
+  Its one remaining tick, 603, is the capture holding still: 601, 602
+  and 603 have nothing changed while the port moves.
+
+* **`level6` and `level9` are exact.** They were the two runs in the
+  measured set written off in a line and never checked.
+
+      level9   374 -> 418 of 421, and 421 of 421 with `y at 68` one earlier
+      level6   332 -> 334 of 417, and 417 of 417 with `x at 290` three later
+
+  `level9`'s old digest was numbered from the wrong frame: the fresh
+  captures read **nought** at `--start 156` and 416, 418, 418 at 159.
+  `level6`'s fresh capture wants its one edge **three** ticks later
+  where the old capture wanted **two**, and each is exact under its
+  own -- two captures of one recording, two different shifts of one
+  edge, which is the clearest thing a capture can say about whose
+  fault an edge is.
+
+  A **gate** settled `level6` before the recapture did. Room 24 has an
+  opener at row 1 column 4 that the run crosses, and the gate it opens
+  -- room 2's, row 1 column 9 -- shows in the left sliver at x 0 to
+  19. Its eighteen opening moves (a pixel a tick, 327 to 344) and
+  seven closing moves (a pixel every four, 396 to 416) fall on the
+  same absolute ticks in the capture as in the **unshifted** port,
+  where moving the press at 290 carries them two ticks later. So the
+  button was crossed on the port's own tick.
+
+* **`exitdoor` is the one that really is systematic: eleven captures
+  of eleven**, all within four ticks of 592. It is `gate1`'s route
+  with longer presses, and its Right at 591 and Shift at 594 reach the
+  emulator in one tick. `probe-check` says why no capture can settle
+  it: mean 0.9381 and **worst 0.1023** at `shift@84-1`, where
+  `palace4` is 0.973/0.758. One control of one edge moved one tick
+  changes nine tenths of the run. **That number is what retires a
+  recording** -- and `gate1`'s 809 beside it is why retirement has to
+  be measured and not guessed.
+
+* **`gate2b` measures the numbering.** Four fresh captures read 1179,
+  1161, 293 and 587 under `--numbering clock` and **277, 237, 72 and
+  222** under the gap-walk: nine hundred ticks on one capture, where
+  the four shortest of the old twenty-one gave two to four. Past the
+  fight it is still a fight, so it stays retired. `gate2` has nothing
+  to recapture towards: 18, 41, 4 against the kept 110.
 
 * **Nothing in the suite is now known to be the port's.** Every run
   that is short has a measurement beside it in
