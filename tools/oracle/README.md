@@ -2307,8 +2307,48 @@ which is what this capture wants. Measured over the whole suite:
     textTicksToSkip = 0   19149 of 20011
 
 It costs **109 ticks** across forty-four runs to gain twenty-four
-here, because every one of those digests was numbered by the blank
-tick the port is being asked to move. The right experiment is a fresh
-capture of a level-1 recording split without `--anchor-text`, read
-the same way as the table above; the videos of the existing captures
-are long gone, so it cannot be done by re-splitting.
+here. The obvious objection is that every one of those digests was
+numbered by the blank tick the port is being asked to move, so of
+course moving it loses -- and that objection is wrong, measured three
+ways.
+
+**A fresh level-1 capture, split with no anchor at all.** `probeE`,
+taken again for this and split from its own restart flash:
+
+    strip (x 100-220)          probeE capture   level13b capture   port
+    `LEVEL n`                  0 to 23          0 to 23            0 to 24
+    nothing                    24               --                 25
+    the minutes                25 to 47         24 to 47           26 to 47
+    nothing                    from 48          from 48            from 48
+
+So the original **does** blank the strip for one tick, which
+`level13b`'s capture does not show at all -- a one-tick blank is
+exactly the sort of thing `split_ticks` can miss, since it keeps for
+each tick the frame just before the next change. Two captures of the
+original disagree about it, which is the usual sign that it cannot be
+adjudicated.
+
+**The numbering, moved on its own.** `pop-report.ts` takes
+`POP_DIGESTS` now, so the whole suite can be scored against a
+renumbered copy of the digests without touching the repository's.
+Every anchored digest shifted by -1 -- which is exactly what
+`--anchor-text 24` would have written -- gives
+
+    textTicksToSkip = 1, digests as kept       19258 of 20011
+    textTicksToSkip = 1, digests shifted -1    19277 of 20032
+    textTicksToSkip = 0, digests as kept       19149 of 20011
+    textTicksToSkip = 0, digests shifted -1    19168 of 20032
+
+The skip is worth **109 ticks either way**. The numbering is worth
+nothing: the alignment absorbs a constant shift, which is what it is
+for.
+
+**And renumbering `level13b` does not help it.** Shifted -2, -1, 0,
++1, +2 and +3 it scores 323, 323, 324, 324, 324, 324. Its
+twenty-four are a picture difference in the middle of a forty-eight
+tick block -- the capture gives `LEVEL 12` 24 ticks and the minutes
+24, where the port gives 25, a blank, and 22 -- and no alignment can
+absorb two ticks in the middle of a block.
+
+So `textTicksToSkip` stays at 1 on the suite's evidence, and the
+twenty-four are written down here rather than fitted away.

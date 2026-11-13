@@ -20,7 +20,17 @@ import {
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
-const DIGESTS = join(REPO, 'tools', 'oracle', 'digests');
+/**
+ * Where the digests are, so an experiment on the *numbering* can be
+ * run without touching the repository's own.
+ *
+ * `--anchor-text N` is nothing but a constant added to every tick
+ * index, so asking what a different N would have given is asking
+ * what the same digests renumbered would give -- and that is a
+ * question worth being able to answer without rewriting
+ * `tools/oracle/digests/`.
+ */
+const DIGESTS = process.env.POP_DIGESTS || join(REPO, 'tools', 'oracle', 'digests');
 const RECORDINGS = join(REPO, 'tools', 'oracle', 'recordings');
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
