@@ -83,6 +83,23 @@ captures of a real PRINCE.EXE:
   worth two to four ticks apiece and never loses: `13ab6867` 572 to
   **574**, `b4ff4672` 395 to **396** (and 429 of 429, exact, with its
   one edge moved).
+
+  And the fourteen that were left of `level10b` after that are
+  settled by **a clock nobody had noticed: a closing gate**.
+  `animate_door` with `anim_type` 0 does `curr_modifier +=
+  door_delta[0]`, which is -1, once per tick and nothing else -- no
+  `prandom`, no key -- and the picture drops a pixel every four of
+  those. Level 10's room 5 has one closing from the level start, in
+  the sliver to the left of the screen, and thirteen of the fourteen
+  ticks are in that sliver. Counted over ticks 35 to 300 the port
+  moves it **95** times and the capture moves it **95** times; what
+  differs is only *when* the capture thinks they happened -- two
+  ticks early over 69 to 141, one tick late over 192 to 296. The
+  game played the same ticks and the capture's numbering wandered.
+
+  **Any level with a gate closing has a free tick counter in the
+  corner of the screen**, and counting its moves says what the
+  splitter cannot: how many ticks the emulator really ran.
 * **The cheats were there all along.** The capture chain has always
   run the original as `prince megahit` -- `shift+l` past level 3 is
   refused without it -- so every cheat of `process_key` was available

@@ -387,6 +387,25 @@ const EXPECTED: Record<string, number> = {
    * So `firstcapture.sh` and `recapture.sh` now split every capture
    * both ways and keep the better, as they already do for the two
    * `--start` values.
+   *
+   * The fourteen that are left are settled too, by a clock nobody
+   * had noticed. Thirteen of them are the same little region -- the
+   * sliver of the room to the left and the right-hand column -- and
+   * level 10's room 5 has a gate at row 2 column 9 which is closing
+   * from the level start. `animate_door` with `anim_type` 0 does
+   * `curr_modifier += door_delta[0]`, which is -1, once per tick and
+   * nothing else, and the picture drops a pixel every four of those.
+   * So counting the gate's moves counts the ticks the run really
+   * played, in a quantity both sides can be read for.
+   *
+   * Over ticks 35 to 300 the port moves it **95** times and the
+   * capture moves it **95** times. What differs is only when: the
+   * same ticks to 62, the capture two early over 69 to 79, two early
+   * again over 93 to 141 until it skips 107 and 125 and catches up,
+   * and then one *late* for the whole of 192 to 296. The game
+   * underneath played the same ticks; the capture's numbering
+   * wandered by two. There is nothing of `level10b` that is the
+   * port's.
    */
   'level5b': 416,
   'level10b': 361,

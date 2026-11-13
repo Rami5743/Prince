@@ -1772,6 +1772,52 @@ measuring. It is not finding the port's fault; it is finding where
 `b4ff4672` with its Right at 251 one tick earlier is **429 of 429**,
 exact.
 
+### A closing gate is a clock, and it settles the rest of level 10
+
+With the numbering right and `x@68` where the emulator took it,
+`level10b` is 389 of 403 and fourteen ticks are left: 58, 108 to 110,
+and ten on a four-tick period from 240 to 296. Rendering the port's
+own frames beside the capture's, **thirteen of the fourteen are the
+same little region** -- x 0 to 31 and x 256 to 271, y 128 to 175,
+which is the sliver of the room to the left and the right-hand
+column of the room. Level 10's room 5 has a gate at row 2, column 9,
+and room 1 has gates at row 2, columns 7 and 9; the Prince plays in
+room 1, so room 5's gate shows in the left sliver. All three are
+closing from the level start -- `process_trobs` lists them as
+`5:29:0 1:29:0 1:27:0`, type 0, closing.
+
+And a closing gate is a **clock**. `animate_door` with `anim_type` 0
+does `curr_modifier += door_delta[0]`, which is `-1`, once per tick
+and nothing else: no `prandom`, no key, no dependence on the Prince.
+Its picture drops a pixel every four of those. So the number of
+times the gate moves between two ticks is the number of game ticks
+the run really played, written into the picture where both the port
+and the capture can be read for it.
+
+Counted over ticks 35 to 300:
+
+    port    95 moves
+    capture 95 moves
+
+**The same 95.** What differs is only *when* the capture thinks they
+happened:
+
+    51-62    the same ticks in both
+    69-79    the capture two ticks early
+    93-141   two early, then it skips 107 and 125 and catches up
+    192-296  the port every fourth tick from 192, the capture from 193
+
+So the capture's numbering wanders by up to two ticks over the run
+while the game underneath played exactly the same ticks. That is the
+whole of `level10b`'s fourteen, and it needs no reference to the port
+at all -- the gate is in the capture, and the capture disagrees with
+itself.
+
+It is worth keeping as an instrument. Any level with a gate closing
+has a free tick counter in the corner of the screen, and counting its
+moves says what the splitter's numbering cannot: how many ticks the
+emulator really ran.
+
 ### The old reading, kept because it was wrong in an instructive way
 
 What follows is what this file said before the numbering was measured.
