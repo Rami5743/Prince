@@ -285,9 +285,9 @@ async function boot(): Promise<void> {
     // drawing over it and holding the game's own clock.
     cutscene?.cancel();
     afterScene = null;
-    current = index;
-    const v = views[current];
+    const v = views[index];
     if (v.kind !== 'level') {
+      current = index;
       game = null;
       drawTitle(v.kind === 'title' ? title : opening);
       status.textContent = v.kind === 'title'
@@ -295,6 +295,28 @@ async function boot(): Promise<void> {
         : 'the hour is up — press any key';
       return;
     }
+    /**
+     * `play_level`'s `stop_sounds()`, which comes just before
+     * `draw_level_first`.
+     *
+     * Whatever was sounding does not carry into the level. Sound 27
+     * -- the scene between levels 2, 4, 6 and 12 -- is priority 1 and
+     * marked **not interruptible** in the original's own tables, so
+     * while it sounds `play_next_sound` gives the one channel to
+     * nothing else: left running it refused every gate, every
+     * footstep and every loose floor for as long as it lasted, and
+     * that is why there was no gate-opening sound. The title's own
+     * music does the same thing to level 1.
+     *
+     * The `while (check_sound_playing() && !do_paused()) idle();`
+     * that stands in front of it in the C is where the player meets
+     * it -- out of a scene and into the level, and a level begun
+     * again -- and it is there, in `nextLevel` and `restart`. A jump
+     * straight to a level is not a path the original has, so it only
+     * stops what is sounding.
+     */
+    effects.stopSounds();
+    current = index;
     /**
      * Nothing may be drawn or stepped while this await is out.
      *
@@ -820,12 +842,11 @@ async function boot(): Promise<void> {
        *     while (check_sound_playing() && !do_paused()) idle();
        *     stop_sounds();
        *
-       * The scene's tune is let finish and is then stopped. Without
-       * it the tune played on into the level -- sound 27 is marked
-       * uninterruptible in the original's own table -- and
-       * `play_next_sound`'s rule refused every gate, footstep and
-       * loose floor for as long as it lasted. That is why there was
-       * no gate-opening sound.
+       * The scene's tune is let finish -- and any key ends the wait,
+       * which is what `do_paused` is doing in that line. Off a fresh
+       * capture of `PRINCE.EXE`, the original's own black screen
+       * between the princess's room and level 2 runs from 36.0 to
+       * 39.5 seconds, and this is it.
        */
       await waitForSound();
       await select(next, { seamless: carried.seamless });
@@ -885,6 +906,10 @@ async function boot(): Promise<void> {
   async function restart(): Promise<void> {
     if (!game) return;
     held.clear();
+    // `play_level`'s loop comes back round here too, so the death
+    // music is let finish and then stopped rather than being left to
+    // hold the channel through the first seconds of the level again.
+    await waitForSound();
     game = await game.restart(assets, exe);
     watchRoom = null;
   }

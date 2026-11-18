@@ -41,6 +41,186 @@
 ## ============================================================
 
 
+## FIVE BUGS THE PLAYER FOUND BY PLAYING, AND ALL FIVE WERE REAL
+
+Everything above and below this is the tick score. **These five were
+not.** A human being played the page and reported them, and not one
+of them could be seen by `pop-report.ts` or `scene-report.ts` at all.
+Both scores are **exactly the same before and after all five fixes**
+-- measured 19258 of 20011, all 21141 of 23778, scenes 756 of 1723 --
+which is the clearest statement there is of what the suite cannot
+see. Three of the five were sound, and **the sound had never been
+compared with anything.**
+
+### 1 and 2. The melody of every tune in the game was twelve seconds late
+
+`src/render/music.ts` skipped a MIDI sysex with `p += varLen()`.
+JavaScript reads `p` **before** calling `varLen`, so the bytes
+`varLen` ate for the length were added back on and the skip landed
+one byte short, every time. Every melody track in `MIDISND1.DAT`
+opens with the AdLib instrument definition,
+`F0 07 00 00 34 01 00 0C F7`, so the reader came back onto its last
+two bytes, `F7 00`, and read them as a delta time of **15232 ticks**.
+
+The accompaniment played on time and stopped after two or three
+seconds; the melody arrived twelve seconds later, by which time the
+scene was over and the next level was being played. That is the
+player's "the sound is cut off, comes back, is cut off again, and
+only returns during the next level after you have already been
+playing for a while", and it is the same fault for the healing potion
+as for the transition.
+
+**The measurement is the game's own second copy of the music.** Every
+tune ships twice -- MIDI for an AdLib, a tune for the PC speaker --
+so the two must last the same time. Seconds, before -> after, with
+the speaker's in brackets:
+
+    24 death           15.9 ->  3.2 ( 3.0)    36 out of time  52.6 -> 15.7 (12.7)
+    26 embrace         29.4 -> 13.5 (11.7)    39 feather      39.2 -> 18.0 (18.6)
+    27 scene between   33.4 -> 11.0 (10.7)    41 end of level 35.1 -> 11.3 (11.3)
+    30 big potion      13.7 ->  3.1 ( 2.3)    50 princess     60.6 -> 13.0 ( 9.5)
+    32 shadow          30.7 ->  6.9 ( 4.9)    52 Jaffar goes  51.2 -> 27.4 (28.0)
+    33 small potion    14.0 ->  2.1 ( 2.5)    54 the title    46.6 -> 22.8 (24.7)
+    35 cutscene 8/9    10.1 -> 10.1 ( 9.8)    55 absence      38.8 -> 15.0 (14.9)
+    37 victory          2.6 ->  2.6 ( 2.5)    56 the ending  145.5 ->121.7 (120.0)
+
+Seventeen tunes, every one now within half of its speaker twin where
+before they ran two to six times long. `tests/render/audio.test.ts`
+pins it, and it needs nothing outside the game's own files.
+
+It matters far beyond the music, because **the game waits for the
+sound**: `while (check_sound_playing())` holds `show_title`,
+`load_intro` and `play_level` where they stand. The title the player
+sees on every page load was waiting on 46.6 seconds of stranded
+melody; `DEATH_MUSIC_TICKS` is 36 and sound 24 was 190 ticks, so the
+wait for `Press Button to Continue` was sixteen seconds.
+
+### 3. The flash left a black box round every torch
+
+`set_bg_attr(0, color)` fills the screen with the colour and puts the
+frame back over it with **black punched out**, so what flashes is
+every black *pixel*. The port gave palette entry nought the colour
+and nothing else -- and a sprite drawn with `blitters_0_no_transp`
+does not use entry nought for its black. It uses its own bank's,
+`paletteBase + 0`, which is black in the palette and is a different
+entry. `draw_tile_anim` draws a torch flame exactly that way.
+
+A **new capture** of `PRINCE.EXE` taking `shift+t` on level 2
+settles it, because no digest can: `split_ticks.py` keeps for each
+tick the frame just before the next change, which is the frame the
+flash has already come off. Share of the screen still black on the
+flash frame:
+
+                       the room   the strip under it
+    the original         0.0%           0.0%
+    the port, before     2.9%           1.9%
+    the port, after      0.0%           0.0%
+
+against 40.8% and 97.2% on the frames either side, in the capture and
+in the port alike. The flash covers the whole 320 by 200, the words
+and the hit points with it.
+
+### 4. There was no gate-opening sound, and 1 again: the pause could not be skipped
+
+Two lines of the C the shell did not have.
+
+**`proc_cutscene_frame`** is
+`if (!disable_keys && do_paused()) { stop_sounds(); ...; return 1; }`
+and `do_paused` ends on `return key || control_shift`, so **any** key
+ends a scene -- an arrow, the space bar, shift on its own. Only
+`end_sequence_anim` and `time_expired` set `disable_keys`. The shell
+took Escape and nothing else.
+
+**`play_level`**, between whatever came before and
+`draw_level_first`, is
+`while (check_sound_playing() && !do_paused()) idle(); stop_sounds();`
+The scene's tune is let finish and is **then stopped**. Without it
+the tune played on into the level -- sound 27 is priority 1 and
+marked **not interruptible** in the original's own tables -- and
+`play_next_sound`'s rule then refused every gate, every footstep and
+every loose floor for as long as it lasted. That is the whole of "no
+gate-opening sound", and the title's own music does the same thing to
+level 1.
+
+`stop_sounds()` is in `select()`, which is where every level begins.
+The **wait** in front of it is in `nextLevel` and in `restart`, which
+are the two places the player meets it; a jump straight to a level
+(`__princeShow`, `__princeGoToLevel`) is not a path the original has,
+and making those wait put a quarter of an hour on `npm test`.
+
+Measured in a real browser, recorded sounds started in the first four
+seconds of level 2 reached through the transition and then run about:
+**nought before, five after**.
+
+And the pause itself, from the `shift+l` to the level being up:
+
+    the original, off a fresh capture of PRINCE.EXE   11.7s
+      (level 1 fades out at 29.0 -- a hard cut, not a fade --
+       the princess's room fades in over 54 video frames from
+       29.567 to 31.333, the scene holds to 35.0, **black from
+       36.0 to 39.5**, which is this very wait, level 2 at 40.0)
+    the port, before                                   7.1s
+    the port, after                                   11.1s
+    the port, after, with any key                     1.0s, the
+                                                 moment it is pressed
+
+So the port's transition was four and a half seconds **shorter** than
+the original's and could not be cut short. It is the original's
+length now and any key ends it.
+
+### 5. Level 7 opened on a black screen
+
+`draw_level_first` opens with `next_room = Kid.room; check_the_end();`
+and `startLevel` wrote `check_the_end`'s body out by hand and set only
+`drawn_room`. On thirteen of the fourteen levels the two numbers are
+equal and nothing shows. **Level 7 is the exception.** `do_startpos`
+does `next_room = Char.room = level.start_room`, which is 17, and
+then `set_start_pos`'s falling entry does `goto_other_room(3)` --
+which moves `Char.room` to the room below, 1, and leaves `next_room`
+at 17. So the level's first `check_the_end` found 17 against a drawn
+room of 1 and drew **room 17**, which is empty.
+
+A fresh capture settles the picture: at 118.0 seconds into the
+`level7` chain the original's screen is **room 1**, the shaft with
+the Prince falling into it. A digest of that capture -- 224 ticks,
+161 comparable, the first capture in the suite to cover level 7's
+opening at all -- scores the port **132 of 161 without the line and
+137 with it**. The pinned `level7` digest, whose first fourteen ticks
+the capture does not have (`hash` is null for 0..13), is 147 of 147
+either way, which is why nobody had ever seen this.
+
+**The death is the original's own.** The same capture has the Prince
+dead on the floor of room 3 twelve ticks in, exactly as the port
+does: the fall is six rows at terminal velocity and `land()` makes
+that `take_hp(100)`. What the black screen took away was not the
+chance to live but the chance to **see** -- holding shift on the way
+down grabs the ledge in room 1 and he keeps all three flasks.
+Verified in the real page, arriving from level 6 through the real
+transition. `tests/pop/level7-entry.test.ts` pins all four facts.
+
+### What this round says about the method
+
+* **Nothing in either score moved, and five real bugs were fixed.**
+  A digest is a picture of a tick. It cannot hear, it cannot see a
+  flash (the splitter keeps the frame the flash has already come off),
+  and it never enters a level any way but the skip chain -- which is
+  why level 7's opening, the one level whose entry differs, had never
+  been drawn.
+* **A capture is cheap and it is the authority.** Three of these five
+  were settled by taking a new capture rather than by reading: the
+  level 7 opening, the flash over the torches, and the length of the
+  transition. `tools/oracle/dosbox_oracle.py --record` plus
+  `ffmpeg -vf fps=30` and a mean-colour sweep is ten minutes.
+* **`tools/dev/sound-trace.ts`** is new: it replays a recording with
+  the real `SoundPlayer` behind a stand-in device and prints every
+  sound the byte-code asked for, whether the player heard it, and
+  what was in the one channel instead.
+* Playwright and Chromium are in the container and the page runs
+  under them with real audio (`--autoplay-policy=no-user-gesture-required`,
+  and wrap `AudioContext` in `page.addInitScript` to log every
+  `start`). That is how "no gate sound" went from a guess to nought
+  against five.
+
 ## THE JOB IN HAND: close the last of the difference
 
 `src/pop` is a direct translation of https://github.com/NagyD/SDLPoP

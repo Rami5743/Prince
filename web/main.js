@@ -12780,14 +12780,16 @@ async function boot() {
   async function select(index, carry = {}) {
     cutscene?.cancel();
     afterScene = null;
-    current = index;
-    const v = views[current];
+    const v = views[index];
     if (v.kind !== "level") {
+      current = index;
       game = null;
       drawTitle(v.kind === "title" ? title : opening);
       status.textContent = v.kind === "title" ? "press any key to begin" : "the hour is up \u2014 press any key";
       return;
     }
+    effects.stopSounds();
+    current = index;
     building += 1;
     try {
       game = await PopGame.start(assets, exe, v.level, { effects, seamless: carry.seamless });
@@ -13204,6 +13206,7 @@ async function boot() {
   async function restart() {
     if (!game) return;
     held.clear();
+    await waitForSound();
     game = await game.restart(assets, exe);
     watchRoom = null;
   }

@@ -88,6 +88,30 @@ class FakeSink implements AudioSink {
     return node as unknown as AudioBufferSourceNode;
   }
   /**
+   * The three a tune needs. Without them `SoundPlayer.start` drops
+   * every sound that is music rather than a recording, which is half
+   * the game's -- and the trace then says a tune was refused when
+   * nothing had refused it.
+   */
+  createOscillator(): OscillatorNode {
+    return {
+      type: 'square', frequency: { value: 0 },
+      connect(): void {}, disconnect(): void {},
+      start(): void {}, stop(): void {}, onended: null,
+    } as unknown as OscillatorNode;
+  }
+
+  createGain(): GainNode {
+    const gain = {
+      value: 0,
+      setValueAtTime(): unknown { return gain; },
+      linearRampToValueAtTime(): unknown { return gain; },
+      cancelScheduledValues(): unknown { return gain; },
+    };
+    return { gain, connect(): void {}, disconnect(): void {} } as unknown as GainNode;
+  }
+
+  /**
    * The recordings in the channel and when each one ends. A real
    * device raises `onended`; here the clock does.
    */

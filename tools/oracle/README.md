@@ -2511,3 +2511,130 @@ an inner `do { } while (!has_timer_stopped(timer_0))` that checks
 five. Both numbers are the emulator's loop and not the game's, and
 neither is anything the port's driver -- which runs the scene off a
 clock that does keep time -- can or should reproduce.
+
+## The sound, compared with the original for the first time
+
+Every digest here is a picture, the capture chain runs DOSBox with
+`nosound=true`, and until this round nothing had ever put what the page
+plays beside what the original plays. Three of the five bugs a player
+found by playing were sound.
+
+### The cross-check that needs no capture at all
+
+Every tune in the game ships **twice**: as a standard MIDI file in
+`MIDISND1..2.DAT` for an AdLib, and as a tune for the PC speaker in
+`IBM_SND1..2.DAT`. They are the same music, so they last the same
+time, and that is a complete check on the MIDI reader using nothing
+but the game's own files. Seventeen tunes have both.
+
+It was not true. `src/render/music.ts` skipped a sysex with
+`p += varLen()`, which reads `p` before calling `varLen` and so added
+the length bytes back on: the skip landed one byte short of the end,
+every time. Every melody track in `MIDISND1.DAT` opens with the AdLib
+instrument definition `F0 07 00 00 34 01 00 0C F7`, so the reader came
+back onto its last two bytes, `F7 00`, and read them as a delta time
+of **15232 ticks**. The melody of every tune in the game was twelve
+seconds late while the accompaniment played on time.
+
+    sound   before   after   speaker        sound   before  after  speaker
+      24     15.9     3.2      3.0            39     39.2   18.0    18.6
+      26     29.4    13.5     11.7            40     33.1    5.9     5.2
+      27     33.4    11.0     10.7            41     35.1   11.3    11.3
+      30     13.7     3.1      2.3            50     60.6   13.0     9.5
+      32     30.7     6.9      4.9            52     51.2   27.4    28.0
+      33     14.0     2.1      2.5            54     46.6   22.8    24.7
+      36     52.6    15.7     12.7            55     38.8   15.0    14.9
+                                              56    145.5  121.7   120.0
+
+Sound 54 is the one this README already had a capture measurement for:
+the title's first `while (check_sound_playing())` ends **24.77 seconds**
+after the music starts, which is the speaker's 24.74 and not the MIDI's
+46.59. `tests/render/audio.test.ts` holds the whole table as a ratio
+test now.
+
+### What the sound does to the game, which is why it is worth measuring
+
+`while (check_sound_playing())` holds `show_title`, `load_intro` and
+`play_level` where they stand, and `need_level1_music` holds the Prince
+crouched at the start of level 1 until the channel is quiet. A tune that
+lasts three times too long is a pause that lasts three times too long.
+
+And `play_next_sound` gives the one channel to a new sound only if
+nothing is sounding, or if what is sounding may be interrupted and the
+new one is at least as important. Sound 27 -- the scene between levels
+2, 4, 6 and 12 -- is priority 1 and **not interruptible**, so while it
+sounds nothing else can. `play_level` stops it:
+
+    while (check_sound_playing() && !do_paused()) idle();
+    stop_sounds();
+
+Without those two lines the scene's tune played on into the level and
+every gate, footstep and loose floor was refused. Measured in a real
+browser over the first four seconds of level 2 reached through the
+transition: **nought** recorded sounds started before, five after.
+
+`stop_sounds()` belongs in `select()`, which is where every level
+begins; the wait in front of it belongs in `nextLevel` and `restart`,
+which are the two places a player meets it. Making every level start
+wait -- `__princeShow` and `__princeGoToLevel` among them -- puts
+five minutes on `npm test` and is not a path the original has.
+
+`tools/dev/sound-trace.ts` is the tool for this: it replays a recording
+with the real `SoundPlayer` behind a stand-in device and prints every
+sound the byte-code asked for, whether it was heard, and what held the
+channel instead.
+
+### Driving the real page, with real audio
+
+Playwright and Chromium are in the container. Launch with
+`--autoplay-policy=no-user-gesture-required`, wrap `AudioContext` in
+`page.addInitScript` so that every `start()` is logged with a
+timestamp, and the page can be asked what the player hears and when.
+That is how "there is no gate sound" went from a guess to nought
+against five.
+
+## A capture for a question the digests cannot answer
+
+Three of this round's five bugs were settled by taking a new capture
+rather than by reading the C, and none of them could have been settled
+by a digest. It costs about ten minutes:
+
+    node tools/oracle/recording_to_script.mjs \
+        tools/oracle/recordings/<name>.json /tmp/x.txt --settle 0.04 --shift 0
+    python3 tools/oracle/dosbox_oracle.py --script /tmp/x.txt \
+        --out /tmp/cap/rep --record /tmp/cap/run.mkv --fps 30 --cycles 20000
+    ffmpeg -ss <seconds> -i /tmp/cap/run.mkv -t 10 -vf fps=30 /tmp/f/%03d.png
+
+and then look at the frames, or sweep them for a mean colour or a count
+of black pixels. What it answered:
+
+* **The flash.** No digest can see one: `split_ticks.py` keeps for each
+  tick the frame just before the next change, which is the frame the
+  flash has already come off. A capture of `addlife2` at 30 frames a
+  second has it. On the flash frame the original leaves **0.0%** of the
+  room and **0.0%** of the strip under it black, against 40.8% and 97.2%
+  on the frames either side. So the flash is every black *pixel* on the
+  whole 320 by 200, not the palette's entry nought: the port left a
+  black box round every torch, because a sprite drawn with
+  `blitters_0_no_transp` uses its own bank's `paletteBase + 0` for its
+  black.
+* **The length of the transition between two levels.** From the `shift+l`
+  to level 2 being on the screen is **11.7 seconds**: level 1 cuts to
+  black at 29.0 (a hard cut, not a fade), the princess's room fades in
+  over 54 video frames from 29.567 to 31.333, the scene holds to 35.0,
+  the screen is **black from 36.0 to 39.5** -- that black is
+  `play_level`'s wait for the music -- and level 2 is up at 40.0. The
+  port was doing it in 7.1 seconds with no wait at all.
+* **The opening of level 7**, which no digest covers: the pinned
+  `level7` digest has `hash` null for ticks 0 to 13. A capture of the
+  same chain shows **room 1** at 118.0 seconds, the shaft with the
+  Prince falling into it, where the port was drawing the empty room 17.
+  Digesting that capture (224 ticks, 161 comparable) scores the port
+  132 of 161 before the fix and 137 after, with the pinned digest
+  unmoved at 147 of 147.
+
+  The same capture also says the death on arrival is the **original's**:
+  the Prince is a heap on the floor of room 3 twelve ticks in, exactly
+  as the port draws him. The fall is six rows at terminal velocity and
+  `land()` makes that `take_hp(100)`. Holding shift on the way down
+  grabs the ledge in room 1.
