@@ -134,12 +134,49 @@ def merge(ns, gap=0.004, cents=0.03):
     return out
 
 
+# How long a silence has to be before it breaks one noise into two.
+# The speaker's own tunes toggle the gate every fourteen milliseconds
+# -- `sound_15_leveldoor_sliding` is a sweep from 39 Hz down to 31 and
+# back in half-cycles -- so a shorter gap is inside one sound.
+ACTIVE_GAP = 0.050
+
+
+def active(data, rate, gap=ACTIVE_GAP):
+    """When the speaker was making a noise at all, in seconds.
+
+    The effects are not tunes. `sound_2_tile_crashing` is a hundred
+    and sixty-nine notes of two milliseconds apiece at a thousand to
+    eighteen hundred hertz -- a burst of noise, not a pitch -- and
+    `sound_15_leveldoor_sliding` is seventeen half-cycles between 31
+    and 39 Hz. Nothing that counts zero crossings over a window can
+    read a note out of either, and nothing should try: what there is
+    to measure about an effect is that the speaker was sounding, and
+    when it started and stopped.
+
+    So this is the other half of the extractor, and it is the half the
+    gates, the buttons, the loose floors and the footsteps are in.
+    """
+    cross = crossings(data)
+    out = []
+    for c in cross:
+        t = c / rate
+        if out and t - out[-1][1] <= gap:
+            out[-1][1] = t
+        else:
+            out.append([t, t])
+    return [[round(a, 4), round(b, 4)] for a, b in out if b > a]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('wav')
     ap.add_argument('out')
     ap.add_argument('--from', dest='start', type=float, default=0.0)
     ap.add_argument('--to', dest='end', type=float, default=None)
+    ap.add_argument('--origin', type=float, default=None,
+                    help='the second of the recording at which the run '
+                         'being compared begins -- the Ctrl+A restart, '
+                         'which the script generator prints')
     a = ap.parse_args()
     data, rate = samples(a.wav)
     lo = int(a.start * rate)
@@ -147,10 +184,18 @@ def main():
     ns = merge(notes(data[lo:hi], rate))
     for n in ns:
         n[0] = round(n[0] + a.start, 4)
+    act = active(data[lo:hi], rate)
+    for iv in act:
+        iv[0] = round(iv[0] + a.start, 4)
+        iv[1] = round(iv[1] + a.start, 4)
+    out = {'rate': rate, 'seconds': round(len(data) / rate, 3),
+           'notes': ns, 'active': act}
+    if a.origin is not None:
+        out['origin'] = a.origin
     with open(a.out, 'w') as f:
-        json.dump({'rate': rate, 'seconds': round(len(data) / rate, 3),
-                   'notes': ns}, f)
-    print('%s: %d notes over %.2fs' % (a.out, len(ns), len(data) / rate))
+        json.dump(out, f)
+    print('%s: %d notes, %d noises over %.2fs'
+          % (a.out, len(ns), len(act), len(data) / rate))
 
 
 if __name__ == '__main__':

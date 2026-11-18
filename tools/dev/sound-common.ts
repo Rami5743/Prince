@@ -33,7 +33,10 @@
  *   shape in the MIDI path, and nothing was watching the speaker path.
  */
 import { Assets } from '../../src/render/assets.ts';
-import { loadSound, SPEAKER_FILES } from '../../src/render/audio.ts';
+import {
+  loadSound, SPEAKER_FILES, soundPriority, soundInterruptible,
+} from '../../src/render/audio.ts';
+import { PopGame } from '../../src/pop/game.ts';
 import { speakerNotes } from '../../src/render/music.ts';
 import { SpeakerClock } from './scene-common.ts';
 
@@ -52,6 +55,10 @@ export interface SoundDigest {
   readonly seconds: number;
   /** `[start, duration, hz]`, in seconds and hertz. */
   readonly notes: readonly (readonly [number, number, number])[];
+  /** `[start, end]` of every stretch the speaker was sounding at all. */
+  readonly active?: readonly (readonly [number, number])[];
+  /** The second the Ctrl+A restart falls on, for a recording. */
+  readonly origin?: number;
 }
 
 /** The port asking for a sound: which one, and when. */
@@ -344,7 +351,20 @@ export interface SoundScore {
  */
 const NEAR = 1.0;
 
-export function scoreHeard(capture: readonly Heard[], port: readonly Heard[]): SoundScore {
+export function scoreHeard(
+  capture: readonly Heard[], port: readonly Heard[],
+  /**
+   * How long the port's run is. A capture of a recording holds the
+   * whole chain that reached the level -- the title's own music and
+   * every `shift+l` -- and the port's half begins at the Ctrl+A
+   * restart, so what falls outside the run is not a difference
+   * between them. The window moves with the offset, which is the
+   * only thing a sound capture leaves unknown, and nothing is gained
+   * by choosing an offset that empties it: the score counted is the
+   * number matched, so an empty window scores nought.
+   */
+  span = Infinity,
+): SoundScore {
   const candidates = new Set<number>([0]);
   for (const c of capture) {
     for (const p of port) {
@@ -355,11 +375,15 @@ export function scoreHeard(capture: readonly Heard[], port: readonly Heard[]): S
   let bestScore = -1;
   let bestPairs: Pair[] = [];
   let bestTaken = new Set<number>();
+  let bestWindow: Heard[] = [];
   for (const off of candidates) {
     const taken = new Set<number>();
     const pairs: Pair[] = [];
     let score = 0;
-    for (const c of capture) {
+    // A port time of t is a capture time of `t - off`, so the run
+    // occupies `[-off, -off + span]` in the capture's own clock.
+    const within = capture.filter((c) => c.at >= -off - 0.5 && c.at <= -off + span);
+    for (const c of within) {
       let found: Heard | null = null;
       let foundAt = -1;
       for (let i = 0; i < port.length; i++) {
@@ -375,11 +399,12 @@ export function scoreHeard(capture: readonly Heard[], port: readonly Heard[]): S
     }
     if (score > bestScore) {
       bestScore = score; best = off; bestPairs = pairs; bestTaken = taken;
+      bestWindow = within;
     }
   }
   return {
     matched: bestScore,
-    total: capture.reduce((a, c) => a + c.count, 0),
+    total: bestWindow.reduce((a, c) => a + c.count, 0),
     offset: best,
     pairs: bestPairs,
     extra: port.filter((_, i) => !bestTaken.has(i)),
@@ -402,4 +427,230 @@ export class RecordingClock extends SpeakerClock {
     this.events.push({ at: this.at / 1000, which: -1 });
     super.stop();
   }
+}
+
+/**
+ * The one channel, as the machine the oracle runs on has it.
+ *
+ * DOSBox is given no Sound Blaster, so `PRINCE.EXE` plays the PC
+ * speaker: the tunes of `IBM_SND*.DAT` and not the recordings of
+ * `DIGISND*.DAT`. The two are different lengths -- the speaker's
+ * `sound_15_leveldoor_sliding` is not the Sound Blaster's -- and the
+ * length is what decides, through `play_next_sound`, whether the next
+ * ask is refused. So a port replayed against a speaker capture has to
+ * be the same machine, exactly as `SpeakerClock` makes a cutscene one.
+ *
+ * The rule is `play_next_sound`'s and the tables are the game's:
+ *
+ *     if (current_sound == -1 || (sound_interruptible[current_sound] &&
+ *          sound_prio_table[next_sound] <= sound_prio_table[current_sound]))
+ *
+ * Six of the sounds the game raises in play -- 1 falling, 11 sword
+ * moving, 19 footstep, 20 blast, 21 chopper blade and 22 the first
+ * loose-floor shake -- have **no** speaker tune at all, so on this
+ * machine they are silent and hold the channel for no time. That is
+ * the hardware and not the port: a PC speaker has nothing to play
+ * them with.
+ */
+export class SpeakerChannel {
+  private readonly length = new Map<number, number>();
+  private which = -1;
+  private endsAt = -1;
+  private at = 0;
+  /** Every sound that took the channel, and when. */
+  readonly events: SoundEvent[] = [];
+
+  static async load(assets: Assets): Promise<SpeakerChannel> {
+    const ch = new SpeakerChannel();
+    for (const [i, notes] of await tunesOf(assets)) {
+      let end = 0;
+      for (const n of notes) end = Math.max(end, n.at + n.dur);
+      ch.length.set(i, end);
+    }
+    return ch;
+  }
+
+  /** The run's clock has gone on by `seconds`. */
+  tick(seconds: number): void { this.at += seconds; }
+
+  private mayTake(index: number): boolean {
+    if (!this.playing) return true;
+    return soundInterruptible(this.which)
+      && soundPriority(index) <= soundPriority(this.which);
+  }
+
+  play(index: number): void {
+    if (!this.mayTake(index)) return;
+    this.which = index;
+    this.endsAt = this.at + (this.length.get(index) ?? 0);
+    this.events.push({ at: this.at, which: index });
+  }
+
+  stop(): void {
+    if (this.playing) this.events.push({ at: this.at, which: -1 });
+    this.which = -1;
+    this.endsAt = -1;
+  }
+
+  get playing(): boolean { return this.at < this.endsAt; }
+}
+
+/**
+ * Replay a recording and write down what the player would hear on the
+ * machine the oracle runs on.
+ *
+ * The tick's sound is asked for in `render()`, because that is where
+ * `draw_game_frame` has `play_next_sound`: a driver that steps without
+ * drawing hears nothing at all.
+ */
+export async function recordingSounds(
+  assets: Assets, exe: Uint8Array,
+  rec: { level: number; startMinutes?: number },
+  timeline: readonly { x: number; y: number; shift: boolean }[],
+  ticks: number,
+  /**
+   * Whether the game is told what is in the channel.
+   *
+   * It is not a free choice: `check_sound_playing` is read in three
+   * places that are play and not sound -- `control_crouched`'s level
+   * 1 music, `play_kid`'s death, and the feather fall -- so the
+   * answer changes the run, and which is right was measured against
+   * `gate1`'s capture rather than argued: the deaf model scores
+   * **90 of its 96 noises** and the channel-aware one **26**. So the
+   * default is deaf, which is also what every picture digest in the
+   * suite rests on -- `link.ts` leaves `check_sound_playing` at nought
+   * and the pictures score 19258 of 20011. The ear and the eye agree
+   * about it independently. See `tools/oracle/README.md`.
+   */
+  deaf = true,
+): Promise<SoundEvent[]> {
+  const channel = await SpeakerChannel.load(assets);
+  const game = await PopGame.start(assets, exe, rec.level, {
+    minutesLeft: rec.startMinutes,
+    effects: {
+      sound: (which: number) => channel.play(which),
+      stopSounds: () => channel.stop(),
+      soundPlaying: () => (deaf ? false : channel.playing),
+    },
+  });
+  for (let t = 0; t < ticks; t++) {
+    game.step(timeline[t] ?? { x: 0, y: 0, shift: false });
+    game.render();
+    channel.tick(1 / 12);
+  }
+  return channel.events;
+}
+
+/** When the speaker was sounding: `[start, end]` in seconds. */
+export type Noise = readonly [number, number];
+
+/**
+ * The port's channel as noise, which is the only thing an effect can
+ * be compared as.
+ *
+ * `sound_2_tile_crashing` is a hundred and sixty-nine notes of two
+ * milliseconds at a thousand to eighteen hundred hertz, and
+ * `sound_15_leveldoor_sliding` is seventeen half-cycles between 31 Hz
+ * and 39. Neither has a pitch to read. What they do have is a moment
+ * and a length, and the gate that made no sound at all -- the bug a
+ * human found by playing -- is exactly a missing interval here.
+ */
+export function occupancy(
+  events: readonly SoundEvent[], tunes: Map<number, SoundNote[]>,
+): { at: number; until: number; which: number }[] {
+  const out: { at: number; until: number; which: number }[] = [];
+  for (let e = 0; e < events.length; e++) {
+    const { at, which } = events[e];
+    if (which < 0) {
+      if (out.length) out[out.length - 1].until = Math.min(out[out.length - 1].until, at);
+      continue;
+    }
+    const tune = tunes.get(which);
+    if (!tune) continue;
+    let end = 0;
+    for (const n of tune) end = Math.max(end, n.at + n.dur);
+    if (out.length) out[out.length - 1].until = Math.min(out[out.length - 1].until, at);
+    out.push({ at, until: at + end, which });
+  }
+  return out;
+}
+
+export interface NoiseScore {
+  readonly matched: number;
+  readonly total: number;
+  readonly origin: number;
+  /** Capture noises with no port sound at them, and the other way about. */
+  readonly missing: readonly Noise[];
+  readonly extra: readonly { at: number; until: number; which: number }[];
+}
+
+/** Three ticks. A key edge of a capture is itself worth one or two. */
+export const NOISE_NEAR = 0.25;
+
+/**
+ * Score the port's channel against the capture's noise.
+ *
+ * Unlike a scene, a recording's capture has a **known** origin: the
+ * Ctrl+A restart, whose second `recording_to_script.mjs` prints and
+ * `soundcapture.sh` writes into the digest. It is only known to a
+ * few tenths -- the script's clock is not the emulator's -- so it is
+ * refined over a tenth of a second either way and no further, which
+ * is what stops the search fitting the port to one coincidence. The
+ * first attempt let the offset go free and it chose one two and a
+ * half seconds out on the strength of a single sound.
+ */
+export function scoreNoise(
+  capture: readonly Noise[], port: readonly { at: number; until: number; which: number }[],
+  origin: number, span: number,
+): NoiseScore {
+  let best = origin;
+  let bestN = -1;
+  let bestIn: Noise[] = [];
+  let bestTaken = new Set<number>();
+  for (let d = -10; d <= 10; d++) {
+    const o = origin + d * 0.05;
+    const within = capture.filter(([a]) => a >= o - 0.05 && a <= o + span);
+    const taken = new Set<number>();
+    let n = 0;
+    for (const [a] of within) {
+      for (let i = 0; i < port.length; i++) {
+        if (taken.has(i)) continue;
+        if (Math.abs(port[i].at + o - a) > NOISE_NEAR) continue;
+        taken.add(i);
+        n++;
+        break;
+      }
+    }
+    if (n > bestN) { bestN = n; best = o; bestIn = within; bestTaken = taken; }
+  }
+  const missing: Noise[] = [];
+  const used = new Set<number>();
+  for (const iv of bestIn) {
+    let hit = -1;
+    for (let i = 0; i < port.length; i++) {
+      if (used.has(i)) continue;
+      if (Math.abs(port[i].at + best - iv[0]) > NOISE_NEAR) continue;
+      hit = i; break;
+    }
+    if (hit < 0) missing.push(iv);
+    else used.add(hit);
+  }
+  // A sound the port starts *while the original was still sounding*
+  // is not a sound the original did not make. `animate_leveldoor`
+  // asks for `sound_15_leveldoor_sliding` on each of the forty-odd
+  // ticks the exit door takes to rise, the tune is a quarter of a
+  // second and uninterruptible, so the port starts it again every
+  // three ticks -- and the capture has one unbroken noise of three
+  // and a quarter seconds there, which is the same thing heard.
+  const inside = (t: number): boolean =>
+    bestIn.some(([a, b]) => t >= a - NOISE_NEAR && t <= b + NOISE_NEAR);
+  return {
+    matched: bestN,
+    total: bestIn.length,
+    origin: best,
+    missing,
+    extra: port.filter((p, i) => !bestTaken.has(i) && !inside(p.at + best)
+                                 && p.at + best >= best - 0.05
+                                 && p.at + best <= best + span),
+  };
 }

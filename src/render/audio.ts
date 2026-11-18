@@ -128,6 +128,16 @@ const priorityOf = (i: number): number => PRIORITY[i] ?? 0xff;
  */
 export const soundPriority = priorityOf;
 const interruptibleOf = (i: number): boolean => (INTERRUPTIBLE[i] ?? 1) !== 0;
+/**
+ * `sound_interruptible[i]`, the other half of `play_next_sound`'s test.
+ *
+ * Exported for the same reason `soundPriority` is: the oracle's own
+ * machine has no Sound Blaster and plays the PC speaker, whose tunes
+ * are a different length from the recordings, so the one channel is
+ * busy for different stretches. `tools/dev/sound-common.ts` models
+ * that channel with these two tables, which are the C's.
+ */
+export const soundInterruptible = interruptibleOf;
 
 export class SoundPlayer {
   private readonly assets: Assets;

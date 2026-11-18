@@ -28,11 +28,30 @@ spec="$repo/tools/oracle/sounds/$name.json"
 digest="$repo/tools/oracle/digests/$name.sound.json"
 [ -f "$spec" ] || { echo "$name: no sound spec"; exit 2; }
 mkdir -p "$work"
-python3 -I - "$spec" > "$work/$name.txt" <<'PY'
-import json, sys
-spec = json.load(open(sys.argv[1]))
-print('\n'.join(spec['script']))
-PY
+rec=$(python3 -I -c "import json,sys; print(json.load(open(sys.argv[1])).get('recording',''))" "$spec")
+if [ -n "$rec" ]; then
+  # A recording is reached the way every picture capture reaches one,
+  # and the generated script is used unchanged but for the `wave` that
+  # starts the recorder before anything is played. The schedule is not
+  # touched: `wave` is one `xdotool key` before `origin`.
+  sh=$(python3 -I -c "import json,sys; print(json.load(open(sys.argv[1])).get('shift',0))" "$spec")
+  node "$repo/tools/oracle/recording_to_script.mjs" \
+    "$repo/tools/oracle/recordings/$rec.json" "$work/$name.body.txt" \
+    --settle 0.04 --shift "$sh" >/dev/null 2>&1
+  { echo wave; cat "$work/$name.body.txt"; echo "wait 2"; } > "$work/$name.txt"
+  # The restart is the run's own tick nought and the generator prints
+  # the second it falls on, so a recording's offset is known and not
+  # searched for. It is known to a few tenths -- the script's clock is
+  # not the emulator's -- and `scoreNoise` refines it half a second
+  # either way and no further. Letting it go free was tried first and
+  # it chose an offset two and a half seconds out on one coincidence.
+  origin=$(node "$repo/tools/oracle/recording_to_script.mjs" \
+    "$repo/tools/oracle/recordings/$rec.json" /dev/null --settle 0.04 \
+    --shift "$sh" 2>&1 >/dev/null | sed -n 's/^restart at //p')
+else
+  python3 -I -c "import json,sys; print('\n'.join(json.load(open(sys.argv[1]))['script']))" "$spec" \
+    > "$work/$name.txt"
+fi
 had=0; [ -f "$digest" ] && { had=1; cp "$digest" "$work/$name.json.was"; }
 restore(){ if [ "$had" = 1 ]; then cp "$work/$name.json.was" "$digest"; else rm -f "$digest"; fi; }
 trap restore EXIT
@@ -44,7 +63,8 @@ for i in $(seq 1 "$tries"); do
     --out "$d/rep" --cycles 20000 --speaker >/dev/null 2>&1 || true
   wav=$(find "$d/rep" -name '*.wav' | head -1)
   [ -n "$wav" ] || { echo "  $name try $i: no wave"; continue; }
-  python3 -I "$repo/tools/oracle/sound_notes.py" "$wav" "$d/$name.sound.json" >/dev/null || continue
+  python3 -I "$repo/tools/oracle/sound_notes.py" "$wav" "$d/$name.sound.json" \
+    ${origin:+--origin "$origin"} >/dev/null || continue
   cp "$d/$name.sound.json" "$digest"
   out=$(cd "$repo" && npx tsx tools/dev/sound-report.ts "$name" 2>/dev/null | head -1 || true)
   score=$(awk '{print $2}' <<<"$out")

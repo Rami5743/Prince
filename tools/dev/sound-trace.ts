@@ -25,31 +25,32 @@ import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { SoundPlayer, type AudioSink } from '../../src/render/audio.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
+import { soundids } from '../../src/pop/types.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-/** The names the C gives the indices, so the trace reads like the C. */
-export const SOUND_NAME: Record<number, string> = {
-  0: 'fell_to_death', 1: 'falling', 2: 'tile_crashing', 3: 'button_pressed',
-  4: 'gate_closing', 5: 'gate_opening', 6: 'gate_closing_fast', 7: 'gate_stop',
-  8: 'bumped', 9: 'drink', 10: 'sword_vs_sword', 11: 'sword_moving',
-  12: 'guard_hurt', 13: 'kid_hurt', 14: 'leveldoor_closing',
-  15: 'leveldoor_sliding', 16: 'medium_land', 17: 'soft_land', 18: 'drink_long',
-  19: 'footstep', 20: 'blast', 21: 'chopper_blade', 22: 'loose_shake_1',
-  23: 'loose_shake_2', 24: 'loose_shake_3', 25: 'presentation',
-  26: 'embrace', 27: 'cutscene_2_4_6_12', 28: 'death', 29: 'meet_Jaffar',
-  30: 'big_potion', 31: 'sword', 32: 'shadow_music', 33: 'small_potion',
-  34: 'cutscene_8_9', 35: 'cutscene_8_9', 36: 'out_of_time',
-  37: 'victory', 38: 'blink', 39: 'low_weight', 40: 'cutscene_12_short_time',
-  41: 'end_level_music', 43: 'victory_Jaffar', 44: 'skel_alive',
-  45: 'jump_through_mirror', 46: 'chomped', 47: 'chomper', 48: 'spiked',
-  49: 'spikes', 50: 'story_2_princess', 51: 'princess_door_opening',
-  52: 'story_4_Jaffar_leaves', 53: 'story_3_Jaffar_comes',
-  54: 'intro_music', 55: 'story_1_absence', 56: 'ending_music',
-};
+/**
+ * The names the C gives the indices, so a trace reads like the C.
+ *
+ * Taken from `soundids` and not written out again. The hand-written
+ * table this replaces was wrong from index 9 on -- it had 19 as the
+ * footstep, 23 as `loose_shake_2` and **24 as `loose_shake_3`**, where
+ * the game has 19 `draw_sword`, 23 `footstep` and 24 `death_regular`.
+ * The tables beside it say so without looking anything up: 24 is
+ * priority 1 and uninterruptible, which is music, and 23 is 0xa0, the
+ * least important thing in the game. A trace that calls the death
+ * music a loose floor is worse than no trace, and this project's own
+ * notes have been quoting those names.
+ */
+export const SOUND_NAME: Record<number, string> = Object.fromEntries(
+  Object.entries(soundids).map(([name, i]) => [
+    i, name.replace(/^sound_\d+_/, ''),
+  ]),
+);
+
 const named = (i: number): string => `${i} ${SOUND_NAME[i] ?? '?'}`;
 
 /**
