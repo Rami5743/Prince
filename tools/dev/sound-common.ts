@@ -579,6 +579,8 @@ export interface NoiseScore {
   readonly matched: number;
   readonly total: number;
   readonly origin: number;
+  /** The best score a second either side of it, which says how sharp. */
+  readonly nearby: number;
   /** Capture noises with no port sound at them, and the other way about. */
   readonly missing: readonly Noise[];
   readonly extra: readonly { at: number; until: number; which: number }[];
@@ -607,7 +609,16 @@ export function scoreNoise(
   let bestN = -1;
   let bestIn: Noise[] = [];
   let bestTaken = new Set<number>();
-  for (let d = -10; d <= 10; d++) {
+  const scores = new Map<number, number>();
+  // Five seconds either way, a twentieth at a time. The generator's
+  // `restart at` is the *script's* clock, and a chain that reaches
+  // level 10 with ten `shift+l` and six cutscene waits arrives about
+  // four seconds after the script thinks it does. Widening it is not
+  // letting the offset go free: the peak is a **plateau with sharp
+  // shoulders**, and the report prints how sharp. `level10bsnd`
+  // scores 90 of 90 over a second and a fifth of origin and falls to
+  // 70 a second either side of that, which no coincidence does.
+  for (let d = -100; d <= 100; d++) {
     const o = origin + d * 0.05;
     const within = capture.filter(([a]) => a >= o - 0.05 && a <= o + span);
     const taken = new Set<number>();
@@ -621,7 +632,13 @@ export function scoreNoise(
         break;
       }
     }
+    scores.set(d, n);
     if (n > bestN) { bestN = n; best = o; bestIn = within; bestTaken = taken; }
+  }
+  const bestD = Math.round((best - origin) / 0.05);
+  let nearby = 0;
+  for (const [d, n] of scores) {
+    if (Math.abs(d - bestD) >= 20 && n > nearby) nearby = n;
   }
   const missing: Noise[] = [];
   const used = new Set<number>();
@@ -648,6 +665,7 @@ export function scoreNoise(
     matched: bestN,
     total: bestIn.length,
     origin: best,
+    nearby,
     missing,
     extra: port.filter((p, i) => !bestTaken.has(i) && !inside(p.at + best)
                                  && p.at + best >= best - 0.05

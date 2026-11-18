@@ -125,7 +125,8 @@ async function main(): Promise<void> {
       matched += n.matched;
       total += n.total;
       console.log(`${name.padEnd(12)} ${String(n.matched).padStart(5)} of `
-        + `${String(n.total).padStart(5)} noises   origin ${n.origin.toFixed(2)}s`);
+        + `${String(n.total).padStart(5)} noises   origin ${n.origin.toFixed(2)}s `
+        + `(${n.matched} against ${n.nearby} a second away)`);
       if (show) {
         for (const m of n.missing) {
           console.log(`  ${m[0].toFixed(2).padStart(7)} .. ${m[1].toFixed(2)}`

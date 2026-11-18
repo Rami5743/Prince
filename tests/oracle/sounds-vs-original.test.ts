@@ -37,16 +37,27 @@ const assets = new Assets(
  * over seventy-two seconds, and every note of every one of them, with
  * the port's start inside 0.18 seconds of the original's.
  *
+ * `cutscene2snd` is the scene before level 2 -- the one the player's
+ * five bugs lived in -- and it is exact at +0.00 seconds.
+ *
  * `gate1snd` is the same run as the `gate1` picture digest -- eight
  * hundred ticks of level 1, six rooms, the only probe in the suite
  * that steps on a button and opens the exit door. Four of its
  * ninety-six noises are left: two clicks of under ten milliseconds
  * the port places two or three ticks off, and two past the end of the
  * run, where the capture goes on into the title music starting again.
+ *
+ * `level10bsnd` is **exact, 90 of 90**, and it is the run the gate
+ * stutter was found on: `animate_door` asks for `sound_5_gate_opening`
+ * four times in one tick there, which before the queue in front of
+ * the device started four sounds, each stopping the one before after
+ * nought milliseconds. The capture plays one.
  */
 const EXPECTED: Record<string, number> = {
   title: 212,
+  cutscene2snd: 21,
   gate1snd: 92,
+  level10bsnd: 90,
 };
 
 describe('the sound, against a capture of the original', () => {

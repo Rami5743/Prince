@@ -1,0 +1,15 @@
+{
+  "what": "tbl_cutscenes[2]: the scene before level 2, which is where the player's five bugs lived -- the melody twelve seconds late, the tune running on into the level, and the scene that could not be skipped",
+  "scene": { "kind": "level", "level": 2 },
+  "frames": 240,
+  "script": [
+    "wave",
+    "wait 25",
+    "key Return",
+    "wait 3",
+    "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
+    "wait 25",
+    "wave",
+    "wait 1"
+  ]
+}

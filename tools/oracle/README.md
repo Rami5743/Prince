@@ -2657,3 +2657,198 @@ of black pixels. What it answered:
   as the port draws him. The fall is six rows at terminal velocity and
   `land()` makes that `take_hp(100)`. Holding shift on the way down
   grabs the ledge in room 1.
+
+## The ear: what `PRINCE.EXE` plays, recorded and scored
+
+Every digest above this is a **picture**. The capture chain ran DOSBox
+with `pcspeaker=false`, and in a year nothing in the suite had ever
+compared a sound with anything -- which is why three of the five bugs
+a human found in one sitting by playing the page were sound, and why
+**neither score moved by a single tick** when all five were fixed.
+
+### Taking one
+
+    tools/oracle/soundcapture.sh <name> [tries] [workdir]
+
+`dosbox_oracle.py --speaker` sets `pcspeaker=true`, and a `wave` line
+in the script toggles DOSBox's own recorder, which taps the mixer and
+so works with `nosound=true` and needs no sound card. **It changes
+nothing else.** The game's speaker code and its timer interrupts run
+whatever the mixer does with the result, so `check_sound_playing` and
+every wait built on it are untouched: a sound capture is the same run
+as a picture capture, and the picture digests taken with the speaker
+off stay valid. The video is not grabbed at all, which leaves the
+emulator the whole processor.
+
+`tools/oracle/sounds/<name>.json` is the spec -- a scene like
+`tools/oracle/scenes/`, or `"recording": "<name>"` for a run of play --
+and the digest goes to `tools/oracle/digests/<name>.sound.json`.
+
+### What a capture of a square wave can be read as
+
+The PC speaker has one bit. The recording is a clean two-level square
+wave at +/-5000 and nothing else, so `sound_notes.py` recovers the
+note exactly: zero crossings, half-periods median-filtered over five,
+cut where the **median** moves by more than 2.5 per cent -- under a
+semitone, which is 5.9, and over the mixer's own jitter.
+
+Two things it cannot do, measured rather than assumed:
+
+* **Two notes of the same pitch with no rest between them are one
+  note.** The speaker is a gate and a divisor; writing the same
+  divisor again changes nothing a microphone can hear. The title's own
+  tune has four such pairs, and the port's half is coalesced the same
+  way before the two are compared.
+* **A note of under two and a half cycles has no pitch to read.**
+  `sound_51_princess_door_opening` is a ramp from 39 Hz to 31 whose
+  first five notes are all under sixty milliseconds, so three of its
+  nine are all the original can be *heard* to play. Both sides go
+  through the same filter, so nothing is being excused.
+
+A note's pitch is the **median** of its half-periods and not the mean.
+One transitional half-period survives the trim at either end, and on a
+note of fifteen of them the mean is dragged four per cent: the title's
+69 Hz note, which follows a 147, read 66.4 -- further off than two of
+the tune's own notes are apart. That one mis-read stopped
+`sound_52_story_4_Jaffar_leaves` after fifteen of its seventy-eight
+notes and read its tail as a second sound, and fixing it took the
+title from 149 of 174 to **212 of 212**.
+
+### The stored "divisor" is the pitch in hertz
+
+Settled by the capture, not by reading. `IBM_SND1.DAT` stores the
+title's notes as 73, 110, 117, 147, 156, 185, 196 and 208, and the
+recording of the original playing them measures 73.0, 110.1, 116.5,
+147.1, 155.3, 185.1, 196.1 and 207.0 Hz. As 8253 divisors those would
+be ten and sixteen kilohertz, which nobody can hear. So
+`speakerNotes`'s `hz: n.divisor` was right and the field's name was
+wrong.
+
+### A tune names itself, and where it stops is where it was cut off
+
+Each of the game's speaker sounds is a different sequence of pitches,
+so a run of the capture's notes that follows one of them from its
+first note can only be that sound. What `detect` hands back is the
+sound, the moment it started, and **how many of its notes were heard**
+-- and that last number is the whole of "the scene's music ran on into
+the level", which is nothing at all in a picture.
+
+### `title`: exact
+
+    title   212 of 212 notes   6 of 6 sounds
+
+       2.28 54 intro_music            64/64   port   2.14  -0.14s
+      26.92 55 story_1_absence        25/25   port  26.91  -0.01s
+      44.08 50 story_2_princess        9/9    port  44.17  +0.09s
+      54.56 51 princess_door_opening   3/3    port  54.70  +0.14s
+      56.26 53 story_3_Jaffar_comes   33/33   port  56.43  +0.17s
+      71.82 52 story_4_Jaffar_leaves  78/78   port  72.00  +0.18s
+
+The opening the player hears on **every page load** is the original's,
+sound for sound and note for note, and the port starts each of them
+within 0.18 seconds of where `PRINCE.EXE` does over seventy-two
+seconds. `show_title`'s three `while (check_sound_playing())` waits --
+the ones the length of the music *is* the timing of -- are right.
+
+`cutscene2snd`, the scene before level 2 and the one the player's five
+bugs lived in, is **21 of 21 notes at +0.00s**.
+
+### A level is effects, and an effect has no note in it
+
+`sound_2_tile_crashing` is a hundred and sixty-nine notes of two
+milliseconds apiece at a thousand to eighteen hundred hertz -- a burst
+of noise, not a pitch -- and `sound_15_leveldoor_sliding` is seventeen
+half-cycles sweeping from 39 Hz down to 31 and back. Nothing that
+counts zero crossings over a window can read either, and nothing
+should try. What an effect has is a moment and a length.
+
+So the extractor writes a second track: `active`, every stretch the
+speaker was sounding at all, with gaps under fifty milliseconds
+bridged. The port's half is its channel occupancy -- `SpeakerChannel`,
+which is `play_next_sound`'s own rule with the speaker's lengths --
+and the two are compared on when a noise begins, to within three
+ticks.
+
+    gate1snd   92 of 96 noises   origin 28.45s
+
+Four are left and none of them is a sound the port fails to make: two
+are clicks of under ten milliseconds at ticks 26 and 64 that the port
+places two or three ticks off, and two are past the end of the run,
+where the capture goes on into the title music starting again.
+
+`level10bsnd` is **exact: 90 of 90 noises.** That is the run the gate
+stutter was found on -- `animate_door` asks for
+`sound_5_gate_opening` four times in one tick there, and before the
+queue in front of the device the port started four sounds, each
+stopping the one before after nought milliseconds. The capture plays
+one, and the port now plays one, on the same ticks: 93, 95, 97, 99,
+101 ... and the closing gate's 193, 197, 201 ... every four.
+
+### A long chain's origin is four seconds out, and the peak says so
+
+`recording_to_script.mjs` prints the restart in the **script's**
+clock, and a chain that reaches level 10 with ten `shift+l` and six
+cutscene waits arrives about four seconds after the script thinks it
+does. So the refinement is five seconds either way, a twentieth at a
+time -- and that is not letting the offset go free, because the peak
+is a plateau with sharp shoulders and the report prints how sharp:
+
+    gate1snd      92 of  96   origin 28.45   (92 against 56 a second away)
+    level10bsnd   90 of  90   origin 174.40  (90 against 70 a second away)
+
+`level10bsnd` scores 90 of 90 over a second and a fifth of origin,
+and 70 a second to either side. Nothing coincidental is flat for a
+second and then falls off a cliff.
+
+A sound the port starts while the original was still sounding is
+**not** a sound the original did not make: `animate_leveldoor` asks
+for `sound_15_leveldoor_sliding` on each of the forty-odd ticks the
+exit door takes to rise, the tune is a quarter of a second and
+uninterruptible, so the port starts it afresh every three ticks -- and
+the capture has one unbroken noise of three and a quarter seconds
+there, which is the same thing heard.
+
+### A recording's origin is known, not searched for
+
+A scene's offset has to be searched for; a recording's does not. The
+Ctrl+A restart is the run's own tick nought and
+`recording_to_script.mjs` prints the second it falls on, so
+`soundcapture.sh` writes it into the digest and `scoreNoise` refines
+it half a second either way and no further. Letting it go free was
+tried first and it chose an offset **two and a half seconds out** on
+the strength of one coincidence -- the level 1 music, which the
+original had already played before the restart and the port plays
+after it.
+
+### The ear settles `check_sound_playing`, which the eye could only assume
+
+`check_sound_playing` is read in three places that are *play* and not
+sound: `control_crouched`'s level 1 music, `play_kid`'s death, and the
+feather fall. Every picture digest in the suite rests on `link.ts`
+leaving it at nought and nothing had ever checked it. Scored against
+`gate1`'s capture, with the game told what is in the one channel and
+with it not:
+
+    told what is in the channel    26 of 96
+    deaf (what the pictures use)   90 of 96
+
+Two instruments, a picture and a sound, agreeing independently about
+a thing neither could settle alone.
+
+### `SOUND_NAME` was wrong from index 9 on
+
+`tools/dev/sound-trace.ts` had a hand-written table of names with 19
+as the footstep, 23 as `loose_shake_2` and **24 as `loose_shake_3`**,
+where the game's own `soundids` has 19 `draw_sword`, 23 `footstep` and
+24 `death_regular`. The tables beside it say so without looking
+anything up: 24 is priority 1 and uninterruptible, which is music, and
+23 is 0xa0, the least important thing in the game. This file and
+`CLAUDE.md` have both been quoting the wrong names. It is built from
+`soundids` now and cannot drift again.
+
+### Six sounds have no speaker tune at all
+
+1 falling, 11 sword moving, 19 draw sword, 20 blast, 21 chopper blade
+and 22 the third loose-floor shake are in `DIGISND*.DAT` and not in
+`IBM_SND*.DAT`, so on the machine the oracle runs they are silent and
+hold the channel for no time. That is the hardware and not the port.
