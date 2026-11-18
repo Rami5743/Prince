@@ -2582,7 +2582,26 @@ five minutes on `npm test` and is not a path the original has.
 `tools/dev/sound-trace.ts` is the tool for this: it replays a recording
 with the real `SoundPlayer` behind a stand-in device and prints every
 sound the byte-code asked for, whether it was heard, and what held the
-channel instead.
+channel instead. Two things it found straight away:
+
+* **`play_sound` does not play anything.** It writes the sound into
+  `next_sound`, keeping the most important of however many are asked
+  for in one tick, and `play_next_sound` -- the last line of
+  `draw_game_frame` -- starts that one and no other. The translation
+  went straight to the device on every call, so level 10's two gates
+  rising together asked for `sound_5_gate_opening` **four times in the
+  same tick** and started it four times, each stopping the one before
+  it after nought milliseconds. Twenty-four such ticks in that one
+  recording, none now.
+
+  The *choice* was already right: `SoundPlayer.mayTake` is
+  `play_next_sound`'s own test, and every one of the six ticks in the
+  suite that ask for two different sounds comes out the same under
+  both. What the queue fixes is the stutter.
+
+* The tick's sound is asked for in **`render()`**, because that is
+  where `draw_game_frame` has `play_next_sound`. A driver that steps
+  without drawing hears nothing.
 
 ### Driving the real page, with real audio
 

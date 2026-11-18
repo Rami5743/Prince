@@ -118,6 +118,15 @@ const INTERRUPTIBLE: readonly number[] = [
 ];
 /** An index the tables do not reach is as unimportant as a footstep. */
 const priorityOf = (i: number): number => PRIORITY[i] ?? 0xff;
+/**
+ * `sound_prio_table[i]`, for the queue in front of the device.
+ *
+ * `play_sound` does not start anything in the original: it writes the
+ * sound into `next_sound`, keeping the most important of however many
+ * are asked for in one tick, and `play_next_sound` starts that one.
+ * `PopGame` does the same now, and this is the table it needs.
+ */
+export const soundPriority = priorityOf;
 const interruptibleOf = (i: number): boolean => (INTERRUPTIBLE[i] ?? 1) !== 0;
 
 export class SoundPlayer {

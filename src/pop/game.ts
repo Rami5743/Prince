@@ -15,6 +15,7 @@
  */
 import type { Assets } from '../render/assets.ts';
 import { Surface, PALETTE_SIZE as PALETTE_ENTRIES, type ScreenPalette } from '../render/surface.ts';
+import { soundPriority } from '../render/audio.ts';
 import { buildLevelScene, type LevelScene } from '../game/scene.ts';
 import { readExeTables } from '../game/exe-tables.ts';
 import { flipHorizontally } from '../render/room.ts';
@@ -198,6 +199,11 @@ export class PopGame {
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   private roomTarget = false;
   /**
+   * `next_sound`: the sound this tick has asked for, waiting for
+   * `play_next_sound` at the end of `draw_game_frame`. -1 is none.
+   */
+  private nextSound = -1;
+  /**
    * How much of the death music is left to play.
    *
    * `play_kid` counts `Char.alive` up a tick at a time once the Prince
@@ -365,14 +371,35 @@ export class PopGame {
     outSlots.display_text_bottom = display_text_bottom;
     outSlots.erase_bottom_text = erase_bottom_text;
     outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
+    /**
+     * `play_sound`, which does not play anything.
+     *
+     *     if (next_sound < 0 || sound_prio_table[sound_id]
+     *                            <= sound_prio_table[next_sound]) {
+     *         next_sound = sound_id;
+     *     }
+     *
+     * It writes the sound into `next_sound`, keeping the most
+     * important of however many are asked for in one tick, and
+     * `play_next_sound` -- the last line of `draw_game_frame` --
+     * starts that one and no other.
+     *
+     * The translation went straight to the device on every call, and
+     * a tick that asks for several started several: each one stopped
+     * the one before it after nought milliseconds. Level 10 has two
+     * gates rising together and asks for `sound_5_gate_opening`
+     * **four times in the same tick**, so the gate stuttered where
+     * the original creaks. `tools/dev/sound-trace.ts` counts it.
+     *
+     * The *outcome* is the same in almost every case -- the most
+     * important sound of the tick ends up in the channel either way,
+     * because `SoundPlayer.play` applies `play_next_sound`'s own
+     * rule -- so this is the stutter and not the choice.
+     */
     outSlots.play_sound = (which: number) => {
-      // `play_next_sound` keeps `current_sound` as it takes each one,
-      // and `play_kid` reads it: a Prince who dies while a gate is
-      // opening does not wait for the gate to finish sounding. The
-      // translation read it and nothing ever wrote it, so that one
-      // exception never applied.
-      g.current_sound = which;
-      this.effects?.sound?.(which);
+      if (this.nextSound < 0 || soundPriority(which) <= soundPriority(this.nextSound)) {
+        this.nextSound = which;
+      }
     };
     outSlots.stop_sounds = () => { this.effects?.stopSounds?.(); };
     /**
@@ -782,6 +809,7 @@ export class PopGame {
         // under it. The capture has `LEVEL 1` on ticks 0 to 23.
         this.firstDraw = false;
         draw_kid_hp(g.hitp_curr, g.hitp_max);
+        this.playNextSound();
         return this.surface;
       }
     } else if (screen.different_room) {
@@ -795,6 +823,7 @@ export class PopGame {
     }
     this.tickBottomText();
     this.flash();
+    this.playNextSound();
     return this.upsideDown ? this.flipped() : this.surface;
   }
 
@@ -916,6 +945,34 @@ export class PopGame {
       }
     }
     if (g.flash_time !== 0) --g.flash_time;
+  }
+
+  /**
+   * `play_next_sound`, the last line of `draw_game_frame`.
+   *
+   *     if (next_sound >= 0) {
+   *         if (!check_sound_playing() ||
+   *             (sound_interruptible[current_sound] != 0 &&
+   *              sound_prio_table[next_sound] <= sound_prio_table[current_sound]))
+   *         {
+   *             current_sound = next_sound;
+   *             play_sound_from_buffer(sound_pointers[current_sound]);
+   *         }
+   *     }
+   *     next_sound = -1;
+   *
+   * The test in the middle of it is `SoundPlayer.mayTake`, which is
+   * where the shell keeps it, so what is left here is the queue and
+   * `current_sound`. `play_kid` reads `current_sound`: a Prince who
+   * dies while a gate is opening does not wait for the gate to
+   * finish sounding.
+   */
+  private playNextSound(): void {
+    if (this.nextSound >= 0) {
+      g.current_sound = this.nextSound;
+      this.effects?.sound?.(this.nextSound);
+    }
+    this.nextSound = -1;
   }
 
   /**

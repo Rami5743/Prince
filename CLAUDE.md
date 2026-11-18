@@ -198,6 +198,32 @@ down grabs the ledge in room 1 and he keeps all three flasks.
 Verified in the real page, arriving from level 6 through the real
 transition. `tests/pop/level7-entry.test.ts` pins all four facts.
 
+### `play_sound` does not play anything, and the gate stuttered
+
+`play_sound` writes the sound into `next_sound`, keeping the most
+important of however many are asked for in one tick, and
+`play_next_sound` -- the last line of `draw_game_frame` -- starts that
+one and no other. The translation went straight to the device on
+every call, so a tick that asked for several started several, each
+one stopping the one before it after nought milliseconds.
+
+Level 10 has two gates rising together and asks for
+`sound_5_gate_opening` **four times in the same tick**:
+`tools/dev/sound-trace.ts` counts twenty-four such ticks in that one
+recording, and none in it now. The gate stuttered where the original
+creaks.
+
+The *choice* was already right -- `SoundPlayer.mayTake` is
+`play_next_sound`'s own test, so the most important sound of the tick
+ended up in the channel either way, and every one of the six ticks in
+the suite that ask for two different sounds comes out the same under
+both. What the queue fixes is the stutter. `tests/pop/next-sound.test.ts`.
+
+A thing to know about it: **the tick's sound is asked for in
+`render()`**, because that is where `draw_game_frame` has it. A
+driver that steps without drawing hears nothing, which is what
+`sound-trace.ts` did for its first half hour.
+
 ### Two hypotheses about the scene timing, both dead, with their cost
 
 The capture of the level 1 to 2 transition measures the original's

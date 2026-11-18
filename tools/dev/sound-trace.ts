@@ -167,6 +167,9 @@ async function main(): Promise<void> {
     took = [];
     before = [];
     game.step(timeline[t] ?? { x: 0, y: 0, shift: false });
+    // `play_next_sound` is the last line of `draw_game_frame`, so the
+    // tick's sound is not asked for until the frame is drawn.
+    game.render();
     sink.advance(1 / 12);
     const playing = player.isPlaying;
     const heard = (player as unknown as { playingIndex: number }).playingIndex;

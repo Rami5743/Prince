@@ -2370,6 +2370,546 @@ function encodeTimeline(ticks) {
   return out2.join(",");
 }
 
+// src/dat/sound.ts
+var SOUND_RESOURCE_BASE = 1e4;
+var SPEAKER_END = 18;
+function parseSound(payload) {
+  if (payload.length < 2) return null;
+  const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  switch (payload[0] & 7) {
+    case 1: {
+      if (payload.length < 9) return null;
+      const rate = dv.getUint16(1, true);
+      const count = dv.getUint16(3, true);
+      const samples = payload.subarray(8, 8 + count);
+      if (samples.length === 0) return null;
+      return { kind: "digi", rate: rate || 11e3, samples };
+    }
+    case 2:
+      return { kind: "midi", bytes: payload.subarray(1) };
+    case 0: {
+      if (payload.length < 6) return null;
+      const tempo = dv.getUint16(1, true);
+      const notes = [];
+      for (let o = 3; o + 2 < payload.length; o += 3) {
+        const divisor = dv.getUint16(o, true);
+        if (divisor === SPEAKER_END) break;
+        notes.push({ divisor, length: payload[o + 2] });
+      }
+      if (notes.length === 0) return null;
+      return { kind: "speaker", tempo, notes };
+    }
+    default:
+      return null;
+  }
+}
+
+// src/render/music.ts
+var hzOf = (note) => 440 * 2 ** ((note - 69) / 12);
+var DRUMS = 9;
+function midiNotes(sound) {
+  const b = sound.bytes;
+  if (b.length < 14 || b[0] !== 77 || b[1] !== 84) return [];
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const division = dv.getUint16(12, false);
+  if (division & 32768 || division === 0) return [];
+  const raw = [];
+  const tempos = [];
+  let at = 8 + dv.getUint32(4, false);
+  while (at + 8 <= b.length) {
+    const isTrack = b[at] === 77 && b[at + 1] === 84 && b[at + 2] === 114 && b[at + 3] === 107;
+    const len = dv.getUint32(at + 4, false);
+    const start = at + 8;
+    const end = Math.min(b.length, start + len);
+    at = start + len;
+    if (!isTrack) continue;
+    let p = start;
+    let tick = 0;
+    let status = 0;
+    const varLen = () => {
+      let v = 0;
+      for (let i = 0; i < 4 && p < end; i++) {
+        const c = b[p++];
+        v = v << 7 | c & 127;
+        if (!(c & 128)) break;
+      }
+      return v;
+    };
+    while (p < end) {
+      tick += varLen();
+      if (p >= end) break;
+      let byte = b[p];
+      if (byte & 128) {
+        status = byte;
+        p++;
+      }
+      byte = status;
+      if (byte === 255) {
+        const type = b[p++];
+        const n = varLen();
+        if (type === 81 && n === 3) {
+          tempos.push({ tick, usPerBeat: b[p] << 16 | b[p + 1] << 8 | b[p + 2] });
+        }
+        p += n;
+        if (type === 47) break;
+      } else if (byte === 240 || byte === 247) {
+        const skip = varLen();
+        p += skip;
+      } else {
+        const kind = byte & 240;
+        const ch = byte & 15;
+        const a = b[p++];
+        const two = kind !== 192 && kind !== 208;
+        const c = two ? b[p++] : 0;
+        if (kind === 144 && c > 0) raw.push({ tick, on: true, note: a, vel: c, ch });
+        else if (kind === 128 || kind === 144) raw.push({ tick, on: false, note: a, vel: 0, ch });
+      }
+    }
+  }
+  tempos.sort((x, y) => x.tick - y.tick);
+  raw.sort((x, y) => x.tick - y.tick || (x.on ? 1 : 0) - (y.on ? 1 : 0));
+  let ti = 0;
+  let usPerBeat = 5e5;
+  let lastTick = 0;
+  let lastSec = 0;
+  const seconds = (tick) => {
+    while (ti < tempos.length && tempos[ti].tick <= tick) {
+      const t = tempos[ti++];
+      lastSec += (t.tick - lastTick) * usPerBeat / (division * 1e6);
+      lastTick = t.tick;
+      usPerBeat = t.usPerBeat;
+    }
+    return lastSec + (tick - lastTick) * usPerBeat / (division * 1e6);
+  };
+  const notes = [];
+  const open = /* @__PURE__ */ new Map();
+  for (const e of raw) {
+    const key = e.ch * 128 + e.note;
+    const when = seconds(e.tick);
+    if (e.on) {
+      open.set(key, { at: when, vel: e.vel });
+    } else {
+      const was = open.get(key);
+      if (!was) continue;
+      open.delete(key);
+      if (e.ch === DRUMS) continue;
+      notes.push({
+        at: was.at,
+        dur: Math.max(0.03, when - was.at),
+        hz: hzOf(e.note),
+        level: was.vel / 127,
+        channel: e.ch
+      });
+    }
+  }
+  return notes.sort((a, b2) => a.at - b2.at);
+}
+function speakerNotes(sound) {
+  const notes = [];
+  let at = 0;
+  const tempo = sound.tempo || 1e3;
+  for (const n of sound.notes) {
+    const dur = n.length / tempo;
+    if (n.divisor > 1) {
+      notes.push({ at, dur, hz: n.divisor, level: 1, channel: 0 });
+    }
+    at += dur;
+  }
+  return notes;
+}
+var Tune = class {
+  nodes = [];
+  sink;
+  /** When the last note ends, in the sink's own clock. */
+  endsAt;
+  onended = null;
+  constructor(sink, notes, wave) {
+    this.sink = sink;
+    const t0 = sink.currentTime + 0.03;
+    let end = t0;
+    for (const n of notes.slice(0, 600)) {
+      const osc = sink.createOscillator();
+      const gain = sink.createGain();
+      osc.type = wave;
+      osc.frequency.value = n.hz;
+      const start = t0 + n.at;
+      const stop = start + n.dur;
+      const peak = 0.11 * n.level;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 8e-3);
+      gain.gain.setValueAtTime(peak, Math.max(start + 9e-3, stop - 0.02));
+      gain.gain.linearRampToValueAtTime(0, stop);
+      osc.connect(gain);
+      gain.connect(sink.destination);
+      osc.start(start);
+      osc.stop(stop + 0.01);
+      this.nodes.push({ osc, gain });
+      if (stop > end) end = stop;
+    }
+    this.endsAt = end;
+    const last = this.nodes[this.nodes.length - 1];
+    if (last) last.osc.onended = () => {
+      this.onended?.();
+    };
+  }
+  get empty() {
+    return this.nodes.length === 0;
+  }
+  stop() {
+    const now = this.sink.currentTime;
+    for (const { osc, gain } of this.nodes) {
+      try {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
+        osc.stop(now);
+      } catch {
+      }
+    }
+    this.nodes.length = 0;
+  }
+};
+
+// src/render/audio.ts
+var DIGI_FILES = ["DIGISND1.DAT", "DIGISND2.DAT", "DIGISND3.DAT"];
+var MIDI_FILES = ["MIDISND1.DAT", "MIDISND2.DAT"];
+var SPEAKER_FILES = ["IBM_SND1.DAT", "IBM_SND2.DAT"];
+async function loadSound(assets, index, files = DIGI_FILES) {
+  for (const name of files) {
+    let dat;
+    try {
+      dat = await assets.dat(name);
+    } catch {
+      continue;
+    }
+    if (!dat.has(SOUND_RESOURCE_BASE + index)) continue;
+    const sound = parseSound(dat.get(SOUND_RESOURCE_BASE + index));
+    if (sound) return sound;
+  }
+  return null;
+}
+var PRIORITY = [
+  20,
+  30,
+  35,
+  102,
+  50,
+  55,
+  48,
+  48,
+  75,
+  80,
+  13,
+  18,
+  12,
+  11,
+  105,
+  110,
+  115,
+  120,
+  125,
+  130,
+  145,
+  150,
+  155,
+  160,
+  1,
+  1,
+  1,
+  1,
+  1,
+  19,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  135,
+  140,
+  15,
+  16,
+  21,
+  22,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0
+];
+var INTERRUPTIBLE = [
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+];
+var priorityOf = (i) => PRIORITY[i] ?? 255;
+var soundPriority = priorityOf;
+var interruptibleOf = (i) => (INTERRUPTIBLE[i] ?? 1) !== 0;
+var SoundPlayer = class {
+  assets;
+  context;
+  buffers = /* @__PURE__ */ new Map();
+  /**
+   * The reads in flight, by index.
+   *
+   * A set of indices was enough while nothing waited for one, but
+   * `play` now starts a read and leaves the sound to be played when it
+   * lands, and a second `preload` of the same index has to wait for
+   * that read rather than return as though it were done.
+   */
+  pending = /* @__PURE__ */ new Map();
+  /** Nothing is played until the player has touched the page. */
+  woken = false;
+  /**
+   * What is playing. The original had one channel: a new sound stopped
+   * whatever was in it, which is why the byte-code can ask for silence by
+   * name. Letting them pile up turns a run into a wall of noise.
+   */
+  playing = null;
+  /** Which sound is in the channel, for the rule above. */
+  playingIndex = -1;
+  /**
+   * The last sound asked for that had not been read off the disc yet.
+   *
+   * A one-off -- a button, a footstep, the first drink of the game --
+   * used to be thrown away while its sample loaded, and the player
+   * heard nothing where the original made a noise. The load is quick,
+   * so the sound is still worth having when it lands; anything asked
+   * for since has already taken the channel, and this is dropped.
+   */
+  waitingFor = -1;
+  muted = false;
+  constructor(assets, context) {
+    this.assets = assets;
+    this.context = context;
+  }
+  /** Call from the first key or click: a browser blocks sound before one. */
+  async wake() {
+    this.woken = true;
+    if (this.context.state === "suspended") await this.context.resume();
+  }
+  /**
+   * Play sound `index`, loading it the first time it is asked for.
+   *
+   * A sound that is not loaded yet is not played: the alternative is to
+   * play it late, a second after the thing that made it, which is worse
+   * than silence. The load is started all the same, so the next one is
+   * ready.
+   */
+  play(index) {
+    if (this.muted || !this.woken) return;
+    if (index === SOUND_SILENCE) {
+      this.stop();
+      return;
+    }
+    if (!this.mayTake(index)) return;
+    const buffer = this.buffers.get(index);
+    if (buffer === void 0) {
+      this.waitingFor = index;
+      void this.preload(index);
+      return;
+    }
+    if (buffer === null) return;
+    this.start(index, buffer);
+  }
+  /**
+   * Whether `index` may have the channel, by the original's rule: it
+   * may if nothing is sounding, or if what is sounding may be
+   * interrupted and `index` is at least as important.
+   */
+  mayTake(index) {
+    if (!this.playing) return true;
+    return interruptibleOf(this.playingIndex) && priorityOf(index) <= priorityOf(this.playingIndex);
+  }
+  start(index, what) {
+    this.waitingFor = -1;
+    this.stop();
+    if (what.kind === "tune") {
+      const sink = this.context;
+      if (typeof this.context.createOscillator !== "function") return;
+      const tune = new Tune(sink, what.notes, what.wave);
+      if (tune.empty) return;
+      tune.onended = () => {
+        if (this.playing === tune) {
+          this.playing = null;
+          this.playingIndex = -1;
+        }
+      };
+      this.playing = tune;
+      this.playingIndex = index;
+      return;
+    }
+    const source = this.context.createBufferSource();
+    source.buffer = what.buffer;
+    source.connect(this.context.destination);
+    source.onended = () => {
+      if (this.playing === source) {
+        this.playing = null;
+        this.playingIndex = -1;
+      }
+    };
+    source.start();
+    this.playing = source;
+    this.playingIndex = index;
+  }
+  /**
+   * `check_sound_playing`: something is still in the channel.
+   *
+   * A tune is asked its own end time rather than trusted to report
+   * itself finished. `onended` fires on one oscillator of the many a
+   * tune schedules, and a tune that lost that event -- or never
+   * scheduled a note at all -- would leave the channel looking busy
+   * for ever, which is not a quiet bug: the Prince waits crouched at
+   * the start of level 1 until the opening has finished, and he would
+   * wait there for good.
+   */
+  get isPlaying() {
+    const playing = this.playing;
+    if (!playing) return false;
+    if (playing instanceof Tune) {
+      if ((this.context.currentTime ?? 0) < playing.endsAt) return true;
+      this.playing = null;
+      this.playingIndex = -1;
+      return false;
+    }
+    return true;
+  }
+  /** Empty the one channel, as the original does when a sound starts. */
+  stop() {
+    const source = this.playing;
+    this.playing = null;
+    this.playingIndex = -1;
+    if (!source) return;
+    try {
+      source.stop();
+    } catch {
+    }
+  }
+  /**
+   * What an index turned out to be.
+   *
+   * A recording is looked for first, because that is what the game
+   * sounded like on the hardware this port is measured against. Where
+   * there is none -- all of the music, and four of the effects -- the
+   * MIDI is used, and where there is no MIDI either, the tune the
+   * original wrote for the PC speaker.
+   */
+  async readPlayable(index) {
+    const digi = await loadSound(this.assets, index, DIGI_FILES);
+    if (digi && digi.kind === "digi") {
+      const buffer = this.context.createBuffer(1, digi.samples.length, digi.rate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < digi.samples.length; i++) {
+        channel[i] = (digi.samples[i] - 128) / 128;
+      }
+      return { kind: "digi", buffer };
+    }
+    const midi = await loadSound(this.assets, index, MIDI_FILES);
+    if (midi && midi.kind === "midi") {
+      const notes = midiNotes(midi);
+      if (notes.length) return { kind: "tune", notes, wave: "triangle" };
+    }
+    const beep = await loadSound(this.assets, index, SPEAKER_FILES);
+    if (beep && beep.kind === "speaker") {
+      const notes = speakerNotes(beep);
+      if (notes.length) return { kind: "tune", notes, wave: "square" };
+    }
+    return null;
+  }
+  /** Read a sound and turn it into something playable, once. */
+  async preload(index) {
+    if (this.buffers.has(index)) return;
+    const already = this.pending.get(index);
+    if (already) return already;
+    const read = this.read(index);
+    this.pending.set(index, read);
+    return read;
+  }
+  async read(index) {
+    try {
+      const playable = await this.readPlayable(index);
+      this.buffers.set(index, playable);
+      if (playable && this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
+        this.start(index, playable);
+      }
+    } catch {
+      this.buffers.set(index, null);
+    } finally {
+      this.pending.delete(index);
+      if (this.waitingFor === index) this.waitingFor = -1;
+    }
+  }
+  /** Read every sound the game raises in play, so none of them is late. */
+  async preloadAll(indices) {
+    for (const index of indices) await this.preload(index);
+  }
+};
+
 // src/dat/level.ts
 var ROOM_COUNT = 24;
 var ROOM_WIDTH = 10;
@@ -9645,6 +10185,11 @@ var PopGame = class _PopGame {
   /** `current_target_surface`: the room's 192 rows, or the whole screen. */
   roomTarget = false;
   /**
+   * `next_sound`: the sound this tick has asked for, waiting for
+   * `play_next_sound` at the end of `draw_game_frame`. -1 is none.
+   */
+  nextSound = -1;
+  /**
    * How much of the death music is left to play.
    *
    * `play_kid` counts `Char.alive` up a tick at a time once the Prince
@@ -9778,8 +10323,9 @@ var PopGame = class _PopGame {
       this.deathMusic = DEATH_MUSIC_TICKS;
     };
     out.play_sound = (which) => {
-      g.current_sound = which;
-      this.effects?.sound?.(which);
+      if (this.nextSound < 0 || soundPriority(which) <= soundPriority(this.nextSound)) {
+        this.nextSound = which;
+      }
     };
     out.stop_sounds = () => {
       this.effects?.stopSounds?.();
@@ -10058,6 +10604,7 @@ var PopGame = class _PopGame {
       if (this.firstDraw) {
         this.firstDraw = false;
         draw_kid_hp(g.hitp_curr, g.hitp_max);
+        this.playNextSound();
         return this.surface;
       }
     } else if (screen.different_room) {
@@ -10071,6 +10618,7 @@ var PopGame = class _PopGame {
     }
     this.tickBottomText();
     this.flash();
+    this.playNextSound();
     return this.upsideDown ? this.flipped() : this.surface;
   }
   /** The picture the screen gets while `upside_down` is on. */
@@ -10186,6 +10734,33 @@ var PopGame = class _PopGame {
       }
     }
     if (g.flash_time !== 0) --g.flash_time;
+  }
+  /**
+   * `play_next_sound`, the last line of `draw_game_frame`.
+   *
+   *     if (next_sound >= 0) {
+   *         if (!check_sound_playing() ||
+   *             (sound_interruptible[current_sound] != 0 &&
+   *              sound_prio_table[next_sound] <= sound_prio_table[current_sound]))
+   *         {
+   *             current_sound = next_sound;
+   *             play_sound_from_buffer(sound_pointers[current_sound]);
+   *         }
+   *     }
+   *     next_sound = -1;
+   *
+   * The test in the middle of it is `SoundPlayer.mayTake`, which is
+   * where the shell keeps it, so what is left here is the queue and
+   * `current_sound`. `play_kid` reads `current_sound`: a Prince who
+   * dies while a gate is opening does not wait for the gate to
+   * finish sounding.
+   */
+  playNextSound() {
+    if (this.nextSound >= 0) {
+      g.current_sound = this.nextSound;
+      this.effects?.sound?.(this.nextSound);
+    }
+    this.nextSound = -1;
   }
   /**
    * The tail of `draw_game_frame`: a message counts down and is rubbed
@@ -12065,545 +12640,6 @@ function writeHofFile(bytes) {
   } catch {
   }
 }
-
-// src/dat/sound.ts
-var SOUND_RESOURCE_BASE = 1e4;
-var SPEAKER_END = 18;
-function parseSound(payload) {
-  if (payload.length < 2) return null;
-  const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  switch (payload[0] & 7) {
-    case 1: {
-      if (payload.length < 9) return null;
-      const rate = dv.getUint16(1, true);
-      const count = dv.getUint16(3, true);
-      const samples = payload.subarray(8, 8 + count);
-      if (samples.length === 0) return null;
-      return { kind: "digi", rate: rate || 11e3, samples };
-    }
-    case 2:
-      return { kind: "midi", bytes: payload.subarray(1) };
-    case 0: {
-      if (payload.length < 6) return null;
-      const tempo = dv.getUint16(1, true);
-      const notes = [];
-      for (let o = 3; o + 2 < payload.length; o += 3) {
-        const divisor = dv.getUint16(o, true);
-        if (divisor === SPEAKER_END) break;
-        notes.push({ divisor, length: payload[o + 2] });
-      }
-      if (notes.length === 0) return null;
-      return { kind: "speaker", tempo, notes };
-    }
-    default:
-      return null;
-  }
-}
-
-// src/render/music.ts
-var hzOf = (note) => 440 * 2 ** ((note - 69) / 12);
-var DRUMS = 9;
-function midiNotes(sound) {
-  const b = sound.bytes;
-  if (b.length < 14 || b[0] !== 77 || b[1] !== 84) return [];
-  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  const division = dv.getUint16(12, false);
-  if (division & 32768 || division === 0) return [];
-  const raw = [];
-  const tempos = [];
-  let at = 8 + dv.getUint32(4, false);
-  while (at + 8 <= b.length) {
-    const isTrack = b[at] === 77 && b[at + 1] === 84 && b[at + 2] === 114 && b[at + 3] === 107;
-    const len = dv.getUint32(at + 4, false);
-    const start = at + 8;
-    const end = Math.min(b.length, start + len);
-    at = start + len;
-    if (!isTrack) continue;
-    let p = start;
-    let tick = 0;
-    let status = 0;
-    const varLen = () => {
-      let v = 0;
-      for (let i = 0; i < 4 && p < end; i++) {
-        const c = b[p++];
-        v = v << 7 | c & 127;
-        if (!(c & 128)) break;
-      }
-      return v;
-    };
-    while (p < end) {
-      tick += varLen();
-      if (p >= end) break;
-      let byte = b[p];
-      if (byte & 128) {
-        status = byte;
-        p++;
-      }
-      byte = status;
-      if (byte === 255) {
-        const type = b[p++];
-        const n = varLen();
-        if (type === 81 && n === 3) {
-          tempos.push({ tick, usPerBeat: b[p] << 16 | b[p + 1] << 8 | b[p + 2] });
-        }
-        p += n;
-        if (type === 47) break;
-      } else if (byte === 240 || byte === 247) {
-        const skip = varLen();
-        p += skip;
-      } else {
-        const kind = byte & 240;
-        const ch = byte & 15;
-        const a = b[p++];
-        const two = kind !== 192 && kind !== 208;
-        const c = two ? b[p++] : 0;
-        if (kind === 144 && c > 0) raw.push({ tick, on: true, note: a, vel: c, ch });
-        else if (kind === 128 || kind === 144) raw.push({ tick, on: false, note: a, vel: 0, ch });
-      }
-    }
-  }
-  tempos.sort((x, y) => x.tick - y.tick);
-  raw.sort((x, y) => x.tick - y.tick || (x.on ? 1 : 0) - (y.on ? 1 : 0));
-  let ti = 0;
-  let usPerBeat = 5e5;
-  let lastTick = 0;
-  let lastSec = 0;
-  const seconds = (tick) => {
-    while (ti < tempos.length && tempos[ti].tick <= tick) {
-      const t = tempos[ti++];
-      lastSec += (t.tick - lastTick) * usPerBeat / (division * 1e6);
-      lastTick = t.tick;
-      usPerBeat = t.usPerBeat;
-    }
-    return lastSec + (tick - lastTick) * usPerBeat / (division * 1e6);
-  };
-  const notes = [];
-  const open = /* @__PURE__ */ new Map();
-  for (const e of raw) {
-    const key = e.ch * 128 + e.note;
-    const when = seconds(e.tick);
-    if (e.on) {
-      open.set(key, { at: when, vel: e.vel });
-    } else {
-      const was = open.get(key);
-      if (!was) continue;
-      open.delete(key);
-      if (e.ch === DRUMS) continue;
-      notes.push({
-        at: was.at,
-        dur: Math.max(0.03, when - was.at),
-        hz: hzOf(e.note),
-        level: was.vel / 127,
-        channel: e.ch
-      });
-    }
-  }
-  return notes.sort((a, b2) => a.at - b2.at);
-}
-function speakerNotes(sound) {
-  const notes = [];
-  let at = 0;
-  const tempo = sound.tempo || 1e3;
-  for (const n of sound.notes) {
-    const dur = n.length / tempo;
-    if (n.divisor > 1) {
-      notes.push({ at, dur, hz: n.divisor, level: 1, channel: 0 });
-    }
-    at += dur;
-  }
-  return notes;
-}
-var Tune = class {
-  nodes = [];
-  sink;
-  /** When the last note ends, in the sink's own clock. */
-  endsAt;
-  onended = null;
-  constructor(sink, notes, wave) {
-    this.sink = sink;
-    const t0 = sink.currentTime + 0.03;
-    let end = t0;
-    for (const n of notes.slice(0, 600)) {
-      const osc = sink.createOscillator();
-      const gain = sink.createGain();
-      osc.type = wave;
-      osc.frequency.value = n.hz;
-      const start = t0 + n.at;
-      const stop = start + n.dur;
-      const peak = 0.11 * n.level;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(peak, start + 8e-3);
-      gain.gain.setValueAtTime(peak, Math.max(start + 9e-3, stop - 0.02));
-      gain.gain.linearRampToValueAtTime(0, stop);
-      osc.connect(gain);
-      gain.connect(sink.destination);
-      osc.start(start);
-      osc.stop(stop + 0.01);
-      this.nodes.push({ osc, gain });
-      if (stop > end) end = stop;
-    }
-    this.endsAt = end;
-    const last = this.nodes[this.nodes.length - 1];
-    if (last) last.osc.onended = () => {
-      this.onended?.();
-    };
-  }
-  get empty() {
-    return this.nodes.length === 0;
-  }
-  stop() {
-    const now = this.sink.currentTime;
-    for (const { osc, gain } of this.nodes) {
-      try {
-        gain.gain.cancelScheduledValues(now);
-        gain.gain.setValueAtTime(0, now);
-        osc.stop(now);
-      } catch {
-      }
-    }
-    this.nodes.length = 0;
-  }
-};
-
-// src/render/audio.ts
-var DIGI_FILES = ["DIGISND1.DAT", "DIGISND2.DAT", "DIGISND3.DAT"];
-var MIDI_FILES = ["MIDISND1.DAT", "MIDISND2.DAT"];
-var SPEAKER_FILES = ["IBM_SND1.DAT", "IBM_SND2.DAT"];
-async function loadSound(assets, index, files = DIGI_FILES) {
-  for (const name of files) {
-    let dat;
-    try {
-      dat = await assets.dat(name);
-    } catch {
-      continue;
-    }
-    if (!dat.has(SOUND_RESOURCE_BASE + index)) continue;
-    const sound = parseSound(dat.get(SOUND_RESOURCE_BASE + index));
-    if (sound) return sound;
-  }
-  return null;
-}
-var PRIORITY = [
-  20,
-  30,
-  35,
-  102,
-  50,
-  55,
-  48,
-  48,
-  75,
-  80,
-  13,
-  18,
-  12,
-  11,
-  105,
-  110,
-  115,
-  120,
-  125,
-  130,
-  145,
-  150,
-  155,
-  160,
-  1,
-  1,
-  1,
-  1,
-  1,
-  19,
-  1,
-  1,
-  1,
-  1,
-  1,
-  1,
-  1,
-  1,
-  1,
-  0,
-  1,
-  1,
-  1,
-  1,
-  135,
-  140,
-  15,
-  16,
-  21,
-  22,
-  1,
-  0,
-  1,
-  1,
-  1,
-  1,
-  1,
-  0
-];
-var INTERRUPTIBLE = [
-  0,
-  1,
-  1,
-  1,
-  1,
-  1,
-  0,
-  1,
-  1,
-  1,
-  1,
-  1,
-  1,
-  1,
-  0,
-  0,
-  1,
-  1,
-  0,
-  1,
-  1,
-  1,
-  1,
-  1,
-  0,
-  0,
-  0,
-  0,
-  0,
-  1,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  1,
-  0,
-  1,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0
-];
-var priorityOf = (i) => PRIORITY[i] ?? 255;
-var interruptibleOf = (i) => (INTERRUPTIBLE[i] ?? 1) !== 0;
-var SoundPlayer = class {
-  assets;
-  context;
-  buffers = /* @__PURE__ */ new Map();
-  /**
-   * The reads in flight, by index.
-   *
-   * A set of indices was enough while nothing waited for one, but
-   * `play` now starts a read and leaves the sound to be played when it
-   * lands, and a second `preload` of the same index has to wait for
-   * that read rather than return as though it were done.
-   */
-  pending = /* @__PURE__ */ new Map();
-  /** Nothing is played until the player has touched the page. */
-  woken = false;
-  /**
-   * What is playing. The original had one channel: a new sound stopped
-   * whatever was in it, which is why the byte-code can ask for silence by
-   * name. Letting them pile up turns a run into a wall of noise.
-   */
-  playing = null;
-  /** Which sound is in the channel, for the rule above. */
-  playingIndex = -1;
-  /**
-   * The last sound asked for that had not been read off the disc yet.
-   *
-   * A one-off -- a button, a footstep, the first drink of the game --
-   * used to be thrown away while its sample loaded, and the player
-   * heard nothing where the original made a noise. The load is quick,
-   * so the sound is still worth having when it lands; anything asked
-   * for since has already taken the channel, and this is dropped.
-   */
-  waitingFor = -1;
-  muted = false;
-  constructor(assets, context) {
-    this.assets = assets;
-    this.context = context;
-  }
-  /** Call from the first key or click: a browser blocks sound before one. */
-  async wake() {
-    this.woken = true;
-    if (this.context.state === "suspended") await this.context.resume();
-  }
-  /**
-   * Play sound `index`, loading it the first time it is asked for.
-   *
-   * A sound that is not loaded yet is not played: the alternative is to
-   * play it late, a second after the thing that made it, which is worse
-   * than silence. The load is started all the same, so the next one is
-   * ready.
-   */
-  play(index) {
-    if (this.muted || !this.woken) return;
-    if (index === SOUND_SILENCE) {
-      this.stop();
-      return;
-    }
-    if (!this.mayTake(index)) return;
-    const buffer = this.buffers.get(index);
-    if (buffer === void 0) {
-      this.waitingFor = index;
-      void this.preload(index);
-      return;
-    }
-    if (buffer === null) return;
-    this.start(index, buffer);
-  }
-  /**
-   * Whether `index` may have the channel, by the original's rule: it
-   * may if nothing is sounding, or if what is sounding may be
-   * interrupted and `index` is at least as important.
-   */
-  mayTake(index) {
-    if (!this.playing) return true;
-    return interruptibleOf(this.playingIndex) && priorityOf(index) <= priorityOf(this.playingIndex);
-  }
-  start(index, what) {
-    this.waitingFor = -1;
-    this.stop();
-    if (what.kind === "tune") {
-      const sink = this.context;
-      if (typeof this.context.createOscillator !== "function") return;
-      const tune = new Tune(sink, what.notes, what.wave);
-      if (tune.empty) return;
-      tune.onended = () => {
-        if (this.playing === tune) {
-          this.playing = null;
-          this.playingIndex = -1;
-        }
-      };
-      this.playing = tune;
-      this.playingIndex = index;
-      return;
-    }
-    const source = this.context.createBufferSource();
-    source.buffer = what.buffer;
-    source.connect(this.context.destination);
-    source.onended = () => {
-      if (this.playing === source) {
-        this.playing = null;
-        this.playingIndex = -1;
-      }
-    };
-    source.start();
-    this.playing = source;
-    this.playingIndex = index;
-  }
-  /**
-   * `check_sound_playing`: something is still in the channel.
-   *
-   * A tune is asked its own end time rather than trusted to report
-   * itself finished. `onended` fires on one oscillator of the many a
-   * tune schedules, and a tune that lost that event -- or never
-   * scheduled a note at all -- would leave the channel looking busy
-   * for ever, which is not a quiet bug: the Prince waits crouched at
-   * the start of level 1 until the opening has finished, and he would
-   * wait there for good.
-   */
-  get isPlaying() {
-    const playing = this.playing;
-    if (!playing) return false;
-    if (playing instanceof Tune) {
-      if ((this.context.currentTime ?? 0) < playing.endsAt) return true;
-      this.playing = null;
-      this.playingIndex = -1;
-      return false;
-    }
-    return true;
-  }
-  /** Empty the one channel, as the original does when a sound starts. */
-  stop() {
-    const source = this.playing;
-    this.playing = null;
-    this.playingIndex = -1;
-    if (!source) return;
-    try {
-      source.stop();
-    } catch {
-    }
-  }
-  /**
-   * What an index turned out to be.
-   *
-   * A recording is looked for first, because that is what the game
-   * sounded like on the hardware this port is measured against. Where
-   * there is none -- all of the music, and four of the effects -- the
-   * MIDI is used, and where there is no MIDI either, the tune the
-   * original wrote for the PC speaker.
-   */
-  async readPlayable(index) {
-    const digi = await loadSound(this.assets, index, DIGI_FILES);
-    if (digi && digi.kind === "digi") {
-      const buffer = this.context.createBuffer(1, digi.samples.length, digi.rate);
-      const channel = buffer.getChannelData(0);
-      for (let i = 0; i < digi.samples.length; i++) {
-        channel[i] = (digi.samples[i] - 128) / 128;
-      }
-      return { kind: "digi", buffer };
-    }
-    const midi = await loadSound(this.assets, index, MIDI_FILES);
-    if (midi && midi.kind === "midi") {
-      const notes = midiNotes(midi);
-      if (notes.length) return { kind: "tune", notes, wave: "triangle" };
-    }
-    const beep = await loadSound(this.assets, index, SPEAKER_FILES);
-    if (beep && beep.kind === "speaker") {
-      const notes = speakerNotes(beep);
-      if (notes.length) return { kind: "tune", notes, wave: "square" };
-    }
-    return null;
-  }
-  /** Read a sound and turn it into something playable, once. */
-  async preload(index) {
-    if (this.buffers.has(index)) return;
-    const already = this.pending.get(index);
-    if (already) return already;
-    const read = this.read(index);
-    this.pending.set(index, read);
-    return read;
-  }
-  async read(index) {
-    try {
-      const playable = await this.readPlayable(index);
-      this.buffers.set(index, playable);
-      if (playable && this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
-        this.start(index, playable);
-      }
-    } catch {
-      this.buffers.set(index, null);
-    } finally {
-      this.pending.delete(index);
-      if (this.waitingFor === index) this.waitingFor = -1;
-    }
-  }
-  /** Read every sound the game raises in play, so none of them is late. */
-  async preloadAll(indices) {
-    for (const index of indices) await this.preload(index);
-  }
-};
 
 // src/game/traps.ts
 var SOUND = {
