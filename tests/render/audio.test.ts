@@ -50,6 +50,29 @@ function fakeSink(): { sink: AudioSink; sources: FakeSource[]; resumed: number }
       } as unknown as AudioBufferSourceNode;
     },
     destination: {} as AudioNode,
+    /**
+     * The three a tune needs. Without them `SoundPlayer.start` will
+     * not play a tune at all, and every sound that is music rather
+     * than a recording -- the scene between two levels among them --
+     * is silently dropped, which is not what the browser does.
+     */
+    currentTime: 0,
+    createOscillator(): OscillatorNode {
+      return {
+        type: 'square', frequency: { value: 0 },
+        connect(): void {}, start(): void {}, stop(): void {},
+        onended: null,
+      } as unknown as OscillatorNode;
+    },
+    createGain(): GainNode {
+      const gain = {
+        value: 0,
+        setValueAtTime(): unknown { return gain; },
+        linearRampToValueAtTime(): unknown { return gain; },
+        cancelScheduledValues(): unknown { return gain; },
+      };
+      return { gain, connect(): void {} } as unknown as GainNode;
+    },
   };
   return { sink, sources, get resumed() { return state.resumed; } };
 }
@@ -208,5 +231,44 @@ describe('the MIDI music', () => {
     const melody = notes.filter((n) => n.channel === 0);
     expect(melody.length).toBeGreaterThan(0);
     expect(melody[0].at, 'the melody starts with everything else').toBeLessThan(0.5);
+  });
+});
+
+/**
+ * Why there was no gate-opening sound.
+ *
+ * The scene between two levels plays sound 27, and the original's own
+ * tables mark 27 the most important sound there is (priority 1) and
+ * **not interruptible**. `play_next_sound` will then give the one
+ * channel to nothing else until it has finished -- which is right,
+ * and is why the C stops it: `play_level` runs
+ * `while (check_sound_playing() && !do_paused()) idle(); stop_sounds();`
+ * between the scene and `draw_level_first`, and
+ * `proc_cutscene_frame` runs `stop_sounds()` when a key cuts the
+ * scene short.
+ *
+ * The shell did neither, so the tune played on into the level and
+ * every gate, footstep and loose floor was refused for as long as it
+ * lasted. Measured in a real browser, over the first four seconds of
+ * level 2 reached through the transition: **nought** recorded sounds
+ * started before the two `stop_sounds` went in, and five after.
+ */
+describe('the one channel', () => {
+  it('is held against everything by the scene music until it is stopped', async () => {
+    const f = fakeSink();
+    const player = new SoundPlayer(assets, f.sink);
+    await player.wake();
+    await player.preload(27); // the scene between levels 2, 4, 6 and 12
+    await player.preload(5); // a gate opening
+    player.play(27);
+    expect(player.isPlaying, 'the tune has the channel').toBe(true);
+    player.play(5);
+    expect(player.isPlaying, 'and keeps it: 27 may not be interrupted').toBe(true);
+    expect(f.sources, 'so the gate is never started').toHaveLength(0);
+    // `stop_sounds()`, which is the line the shell was missing.
+    player.stop();
+    expect(player.isPlaying).toBe(false);
+    player.play(5);
+    expect(f.sources, 'and now the gate is heard').toHaveLength(1);
   });
 });

@@ -32,7 +32,7 @@ import { setScreen, full_image_id } from './screen.ts';
 import { link } from './wire.ts';
 import {
   type Scene, show_title, end_sequence, expired, load_intro, tbl_cutscenes,
-  reset_stars, hof_read,
+  reset_stars, hof_read, keysDisabled,
 } from './seg001.ts';
 import type { KeyPress, ScreenPeel } from './screen.ts';
 
@@ -225,8 +225,29 @@ export class CutscenePlayer {
   /** A key the player pressed, for `key_test_quit()` to find. */
   pushKey(key: string, ch: string): void { this.keys.push({ key, ch }); }
   get playing(): SceneName { return this.scene; }
-  /** `disable_keys`: whether a key may cut this short. */
+  /**
+   * A key during the title starts the game rather than skipping to
+   * what comes next, which is what `process_key` does while
+   * `start_level < 0`.
+   */
   get skippable(): boolean { return this.scene.kind === 'title'; }
+
+  /**
+   * `disable_keys`: the scene will not let a key cut it short.
+   *
+   * `proc_cutscene_frame`'s loop is
+   * `if (!disable_keys && do_paused()) { stop_sounds(); ...; return 1; }`
+   * and `do_paused` returns `key || control_shift` -- so **any** key,
+   * shift included, ends a scene. Only `end_sequence_anim` and
+   * `time_expired` set the flag, which is the ending and the
+   * hourglass; the title and all six scenes between the levels take
+   * a key.
+   *
+   * The shell took Escape and nothing else, so the player sat
+   * through every transition: "a long pause that cannot be skipped",
+   * and it is not like that in the original.
+   */
+  get keysDisabled(): boolean { return keysDisabled() !== 0; }
 
   render(): Surface { return this.onscreen; }
 

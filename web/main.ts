@@ -140,6 +140,53 @@ async function boot(): Promise<void> {
     if (then) void changeScene(then);
   }
 
+  /**
+   * A key cut the scene short.
+   *
+   * `proc_cutscene_frame`'s loop is
+   *
+   *     if (!disable_keys && do_paused()) {
+   *         stop_sounds();
+   *         draw_rect(&screen_rect, color_0_black);
+   *         return 1;
+   *     }
+   *
+   * so the sound stops with the picture. Without that the scene's
+   * music -- sound 27, eleven seconds and marked uninterruptible --
+   * went on sounding into the level the player had just skipped to,
+   * and `play_next_sound`'s rule then refused every gate, every
+   * footstep and every loose floor until it had finished.
+   */
+  function skipScene(): void {
+    effects.stopSounds();
+    endScene();
+  }
+
+  /**
+   * `while (check_sound_playing() && !do_paused()) idle(); stop_sounds();`
+   *
+   * `play_level` runs this between the scene and `draw_level_first`,
+   * so the tune the scene started is allowed to finish -- and is
+   * then stopped, rather than being left to play on into the level
+   * and hold the one channel against everything in it. Any key ends
+   * the wait, which is what `do_paused` is doing in that line.
+   *
+   * Nothing is drawn or stepped while it is out: `changeScene` holds
+   * `changing`, and the screen keeps the scene's last frame, which
+   * is the black `fade_out_1` left.
+   */
+  let soundWaitOver: (() => void) | null = null;
+  function waitForSound(): Promise<void> {
+    if (!effects.soundPlaying()) { effects.stopSounds(); return Promise.resolve(); }
+    return new Promise<void>((resolve) => {
+      soundWaitOver = (): void => {
+        soundWaitOver = null;
+        effects.stopSounds();
+        resolve();
+      };
+    });
+  }
+
   type View = { kind: 'title' | 'opening' } | { kind: 'level'; level: number };
   const views: View[] = [{ kind: 'title' }, { kind: 'opening' }];
   /** Ticks played since the page opened, for tests that wait on game time. */
@@ -554,6 +601,10 @@ async function boot(): Promise<void> {
     wakeSound();
     (document.activeElement as HTMLElement | null)?.blur?.();
 
+    // The level is waiting for the scene's music; `do_paused` takes
+    // any key, and the key is spent on ending the wait.
+    if (soundWaitOver) { e.preventDefault(); soundWaitOver(); return; }
+
     /**
      * A scene is playing.
      *
@@ -583,12 +634,27 @@ async function boot(): Promise<void> {
        * would otherwise have fallen into.
        */
       if (cutscene.skippable) {
+        effects.stopSounds();
         cutscene.cancel();
         afterScene = null;
         void changeScene(async () => { await select(levelView(firstLevel)); });
         return;
       }
-      if (keyName(e) === 'escape') endScene();
+      /**
+       * Any key, which is what the original takes.
+       *
+       * `do_paused` ends on `return key || control_shift`, so a
+       * scancode or the shift key alone is enough, and
+       * `proc_cutscene_frame` acts on it for every scene that has
+       * not set `disable_keys` -- the six between the levels among
+       * them. The shell took Escape and nothing else.
+       *
+       * The ending and the hourglass do set it, and the original
+       * will not let a key past those; Escape still gets the player
+       * out of them here, because a page is not a DOS box and there
+       * is nowhere else to go.
+       */
+      if (!cutscene.keysDisabled || keyName(e) === 'escape') skipScene();
       return;
     }
 
@@ -735,6 +801,20 @@ async function boot(): Promise<void> {
     if (next < 0) { await playScene({ kind: 'ending' }, restartGame); return; }
 
     const arrive = async (): Promise<void> => {
+      /**
+       * `play_level`, between the scene and `draw_level_first`:
+       *
+       *     while (check_sound_playing() && !do_paused()) idle();
+       *     stop_sounds();
+       *
+       * The scene's tune is let finish and is then stopped. Without
+       * it the tune played on into the level -- sound 27 is marked
+       * uninterruptible in the original's own table -- and
+       * `play_next_sound`'s rule refused every gate, footstep and
+       * loose floor for as long as it lasted. That is why there was
+       * no gate-opening sound.
+       */
+      await waitForSound();
       await select(next, { seamless: carried.seamless });
       if (!game) return;
       game.remainingTicks = carried.ticks;
@@ -856,6 +936,12 @@ async function boot(): Promise<void> {
     last = now;
     if (owed > STEP_MS * 5) owed = STEP_MS; // came back from a pause
     if (paused) { owed = 0; return; }
+    // `while (check_sound_playing() && !do_paused()) idle();`
+    if (soundWaitOver) {
+      owed = 0;
+      if (!effects.soundPlaying()) soundWaitOver();
+      return;
+    }
     // A scene runs on its own clock: `cutscene_frame_time` is six
     // sixtieths of a second where the game's tick is five, and the
     // waits between the title's pictures are counted in sixtieths too.

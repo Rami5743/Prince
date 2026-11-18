@@ -157,7 +157,47 @@ describe('a cutscene on the page', () => {
       expect(consoleErrors).toEqual([]);
     }, 60000);
 
-  it('a key does not cut one of these short, and Escape does', async () => {
+  /**
+   * `proc_cutscene_frame`:
+   *
+   *     if (!disable_keys && do_paused()) {
+   *         stop_sounds();
+   *         draw_rect(&screen_rect, color_0_black);
+   *         return 1;
+   *     }
+   *
+   * and `do_paused` ends on `return key || control_shift`, so any key
+   * -- an arrow, the space bar, shift on its own -- ends a scene that
+   * has not set `disable_keys`. The six between the levels have not.
+   *
+   * The shell took Escape and nothing else, which is the player's
+   * "a long pause between the levels that cannot be skipped". The
+   * original's own pause, measured off a capture of PRINCE.EXE: the
+   * level 1 to 2 transition is 11.7 seconds from the `shift+l` to
+   * level 2 being on the screen, four of them a black screen waiting
+   * on the music -- and one key at any point in it ends the lot.
+   */
+  it('any key cuts a scene between two levels short', async () => {
+    consoleErrors.length = 0;
+    await page.evaluate(() => (window as unknown as {
+      __princePause(on: boolean): void;
+    }).__princePause(false));
+    await page.evaluate(() => (window as unknown as {
+      __princePlayScene(s: { kind: string; level: number }): Promise<void>;
+    }).__princePlayScene({ kind: 'level', level: 6 }));
+    await page.waitForTimeout(400);
+    expect((await sceneState())?.running, 'it is playing').toBe(true);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(600);
+    // What follows a scene here is whatever the shell queued behind
+    // it -- the title, for a scene started by hand -- so the test is
+    // that the *level's* scene is over, not that nothing is playing.
+    expect((await sceneState())?.playing, 'an arrow key ends it')
+      .not.toEqual({ kind: 'level', level: 6 });
+    expect(consoleErrors).toEqual([]);
+  }, 60000);
+
+  it('a key does not cut the ending short, and Escape does', async () => {
     consoleErrors.length = 0;
     await page.evaluate(() => (window as unknown as {
       __princePlayScene(s: { kind: string }): Promise<void>;

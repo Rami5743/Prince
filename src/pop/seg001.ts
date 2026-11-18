@@ -48,6 +48,16 @@ let cutscene_wait_frames = 0;
 export let cutscene_frame_time = 6;
 // data:588C
 export let disable_keys = 0;
+/**
+ * `disable_keys`, read from outside.
+ *
+ * An exported `let` is live across a module boundary, but a bundler
+ * that rewrites it into a namespace object is not always, and the
+ * shell has to know whether the scene it is showing will take a key.
+ * `proc_cutscene_frame` is `if (!disable_keys && do_paused())`, so
+ * this is the whole of "may a key end this scene".
+ */
+export const keysDisabled = (): number => disable_keys;
 // data:436A
 let hourglass_sandflow = -1;
 // data:5964

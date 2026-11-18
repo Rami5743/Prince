@@ -10614,6 +10614,7 @@ var PopGame = class _PopGame {
 var cutscene_wait_frames = 0;
 var cutscene_frame_time = 6;
 var disable_keys = 0;
+var keysDisabled = () => disable_keys;
 var hourglass_sandflow = -1;
 var hourglass_state = 0;
 var which_torch = 0;
@@ -11473,9 +11474,31 @@ var CutscenePlayer = class _CutscenePlayer {
   get playing() {
     return this.scene;
   }
-  /** `disable_keys`: whether a key may cut this short. */
+  /**
+   * A key during the title starts the game rather than skipping to
+   * what comes next, which is what `process_key` does while
+   * `start_level < 0`.
+   */
   get skippable() {
     return this.scene.kind === "title";
+  }
+  /**
+   * `disable_keys`: the scene will not let a key cut it short.
+   *
+   * `proc_cutscene_frame`'s loop is
+   * `if (!disable_keys && do_paused()) { stop_sounds(); ...; return 1; }`
+   * and `do_paused` returns `key || control_shift` -- so **any** key,
+   * shift included, ends a scene. Only `end_sequence_anim` and
+   * `time_expired` set the flag, which is the ending and the
+   * hourglass; the title and all six scenes between the levels take
+   * a key.
+   *
+   * The shell took Escape and nothing else, so the player sat
+   * through every transition: "a long pause that cannot be skipped",
+   * and it is not like that in the original.
+   */
+  get keysDisabled() {
+    return keysDisabled() !== 0;
   }
   render() {
     return this.onscreen;
@@ -12641,6 +12664,24 @@ async function boot() {
     afterScene = null;
     if (then) void changeScene(then);
   }
+  function skipScene() {
+    effects.stopSounds();
+    endScene();
+  }
+  let soundWaitOver = null;
+  function waitForSound() {
+    if (!effects.soundPlaying()) {
+      effects.stopSounds();
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      soundWaitOver = () => {
+        soundWaitOver = null;
+        effects.stopSounds();
+        resolve();
+      };
+    });
+  }
   const views = [{ kind: "title" }, { kind: "opening" }];
   let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
@@ -12958,6 +12999,11 @@ async function boot() {
     if (e.altKey) return;
     wakeSound();
     document.activeElement?.blur?.();
+    if (soundWaitOver) {
+      e.preventDefault();
+      soundWaitOver();
+      return;
+    }
     if (cutscene?.running) {
       e.preventDefault();
       if (cutscene.wantsText) {
@@ -12965,6 +13011,7 @@ async function boot() {
         return;
       }
       if (cutscene.skippable) {
+        effects.stopSounds();
         cutscene.cancel();
         afterScene = null;
         void changeScene(async () => {
@@ -12972,7 +13019,7 @@ async function boot() {
         });
         return;
       }
-      if (keyName(e) === "escape") endScene();
+      if (!cutscene.keysDisabled || keyName(e) === "escape") skipScene();
       return;
     }
     if (!game) {
@@ -13095,6 +13142,7 @@ async function boot() {
       return;
     }
     const arrive = async () => {
+      await waitForSound();
       await select(next, { seamless: carried.seamless });
       if (!game) return;
       game.remainingTicks = carried.ticks;
@@ -13169,6 +13217,11 @@ async function boot() {
     if (owed > STEP_MS * 5) owed = STEP_MS;
     if (paused) {
       owed = 0;
+      return;
+    }
+    if (soundWaitOver) {
+      owed = 0;
+      if (!effects.soundPlaying()) soundWaitOver();
       return;
     }
     if (sceneFrame(Math.min(owed, STEP_MS * 5))) {
