@@ -176,8 +176,21 @@ async function boot(): Promise<void> {
    * is the black `fade_out_1` left.
    */
   let soundWaitOver: (() => void) | null = null;
+  let soundWaitUntil = 0;
+  /**
+   * A cap the C has no need of, because a DOS sound always ends.
+   *
+   * Here the clock the tune is scheduled against is the browser's,
+   * and a suspended context, a lost `onended` or a device that never
+   * starts would leave the channel looking busy for ever -- which
+   * would be a page frozen between two levels, with nothing on it
+   * but black. The longest tune a scene plays is eighteen seconds,
+   * so twenty-five is never reached by a sound that is really there.
+   */
+  const SOUND_WAIT_CAP_MS = 25000;
   function waitForSound(): Promise<void> {
     if (!effects.soundPlaying()) { effects.stopSounds(); return Promise.resolve(); }
+    soundWaitUntil = performance.now() + SOUND_WAIT_CAP_MS;
     return new Promise<void>((resolve) => {
       soundWaitOver = (): void => {
         soundWaitOver = null;
@@ -939,7 +952,7 @@ async function boot(): Promise<void> {
     // `while (check_sound_playing() && !do_paused()) idle();`
     if (soundWaitOver) {
       owed = 0;
-      if (!effects.soundPlaying()) soundWaitOver();
+      if (!effects.soundPlaying() || now > soundWaitUntil) soundWaitOver();
       return;
     }
     // A scene runs on its own clock: `cutscene_frame_time` is six

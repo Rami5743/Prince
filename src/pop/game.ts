@@ -14,7 +14,7 @@
  * it stands in for.
  */
 import type { Assets } from '../render/assets.ts';
-import { Surface, type ScreenPalette } from '../render/surface.ts';
+import { Surface, PALETTE_SIZE as PALETTE_ENTRIES, type ScreenPalette } from '../render/surface.ts';
 import { buildLevelScene, type LevelScene } from '../game/scene.ts';
 import { readExeTables } from '../game/exe-tables.ts';
 import { flipHorizontally } from '../render/room.ts';
@@ -840,8 +840,12 @@ export class PopGame {
     return out;
   }
 
-  /** The background colour a flash took, to put back on the next tick. */
-  private savedBackground: [number, number, number] | null = null;
+  /**
+   * Which palette entries a flash took, to put back on the next tick.
+   *
+   * Entry nought was not enough: see `flash`.
+   */
+  private flashedEntries: number[] = [];
 
   /**
    * `flash_if_hurt` and `remove_flash_if_hurt`, which the port never
@@ -851,8 +855,32 @@ export class PopGame {
    * `draw_game_frame`, so the flash is on the frame that has just been
    * drawn and the countdown happens after it. The original does it by
    * filling the screen with the colour and blitting the frame back
-   * over it with black punched out, which is the same as giving the
-   * background entry of the palette that colour for one frame.
+   * over it with black punched out.
+   *
+   * **Every black pixel, not the background entry.** The port gave
+   * entry nought the colour and nothing else, and a sprite drawn
+   * with `blitters_0_no_transp` does not use entry nought for its
+   * black -- it uses its own bank's, `paletteBase + 0`, which is
+   * black in the palette and is not entry nought. The torches are
+   * drawn exactly that way (`draw_tile_anim`'s
+   * `add_backtable(id_chtab_1_flameswordpotion, modifier + 1, ...,
+   * blitters_0_no_transp)`), so each flame kept a black box around
+   * it while the rest of the room went red. That is the player's
+   * "the flash is wrong, especially in the area of the torches".
+   *
+   * Measured against a capture of `PRINCE.EXE` taking `shift+t` on
+   * level 2, as the share of the screen that is still black on the
+   * flash frame:
+   *
+   *                        the room   the strip under it
+   *     the original         0.0%           0.0%
+   *     the port, before     2.9%           1.9%
+   *     the port, after      0.0%           0.0%
+   *
+   * and 40.8% / 97.2% on the frames either side of it, in the
+   * capture and in the port alike. So the flash covers the whole 320
+   * by 200, the words and the hit points with it, and leaves nothing
+   * black anywhere.
    *
    * Eight ticks of bright yellow for a sword picked up, four or two of
    * red for a hit point lost or gained, three of green for a potion,
@@ -872,14 +900,20 @@ export class PopGame {
    */
   private flash(): void {
     const pal = this.scene.screenPalette;
-    if (this.savedBackground) {
-      pal.setEntry(0, ...this.savedBackground);
-      this.savedBackground = null;
-    }
+    for (const i of this.flashedEntries) pal.setEntry(i, 0, 0, 0);
+    this.flashedEntries = [];
     const colour = g.flash_time !== 0 ? g.flash_color : 0;
     if (colour > 0) {
-      this.savedBackground = pal.entry(0);
-      pal.setEntry(0, ...pal.entry(colour));
+      const [r, gr, b] = pal.entry(colour);
+      // Every entry that is black is a pixel the original's colour
+      // key would have let the flash through.
+      for (let i = 0; i < PALETTE_ENTRIES; i++) {
+        const [er, eg, eb] = pal.entry(i);
+        if (er === 0 && eg === 0 && eb === 0) {
+          this.flashedEntries.push(i);
+          pal.setEntry(i, r, gr, b);
+        }
+      }
     }
     if (g.flash_time !== 0) --g.flash_time;
   }
