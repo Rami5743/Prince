@@ -96,7 +96,36 @@ export function midiNotes(sound: MidiSound): Note[] {
         p += n;
         if (type === 0x2f) break; // end of track
       } else if (byte === 0xf0 || byte === 0xf7) {
-        p += varLen();
+        /**
+         * `p += varLen()` is not the same thing, and the difference
+         * was the whole of "the sound of the transition is cut off,
+         * comes back, is cut off again, and only returns during the
+         * next level".
+         *
+         * `p += varLen()` reads `p` **before** calling `varLen`, so
+         * the bytes `varLen` consumed for the length were added back
+         * on: the skip landed one byte short of the end of the
+         * sysex, every time. Every melody track in `MIDISND1.DAT`
+         * opens with `F0 07 00 00 34 01 00 0C F7` -- the AdLib
+         * instrument definition -- so the parser came back onto its
+         * last two bytes, `F7 00`, and read them as a delta time of
+         * **15232 ticks**. The melody of every tune in the game was
+         * moved twelve seconds into the future, while the
+         * accompaniment played on time and stopped after two
+         * seconds.
+         *
+         * What that did to the game is worse than what it did to the
+         * music, because the game *waits for the sound*:
+         * `while (check_sound_playing())` holds `show_title`,
+         * `load_intro` and `play_level` where they stand. The scene
+         * between two levels ran until the stranded melody had
+         * finished -- sound 27 measured 33.4 seconds against the
+         * 10.7 the original's own PC-speaker version takes -- and
+         * that is the long pause between levels that cannot be
+         * skipped.
+         */
+        const skip = varLen();
+        p += skip;
       } else {
         const kind = byte & 0xf0;
         const ch = byte & 0x0f;

@@ -12094,7 +12094,8 @@ function midiNotes(sound) {
         p += n;
         if (type === 47) break;
       } else if (byte === 240 || byte === 247) {
-        p += varLen();
+        const skip = varLen();
+        p += skip;
       } else {
         const kind = byte & 240;
         const ch = byte & 15;

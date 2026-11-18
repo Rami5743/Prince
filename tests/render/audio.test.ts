@@ -140,3 +140,73 @@ describe('the sound player', () => {
     expect(f.sources).toHaveLength(0);
   });
 });
+
+/**
+ * The music, against the game's own other copy of it.
+ *
+ * Every tune ships twice: as a standard MIDI file in `MIDISND1..2.DAT`
+ * for an AdLib, and as a tune for the PC speaker in `IBM_SND1..2.DAT`.
+ * They are the same music, so they last the same time -- and that is a
+ * check on the MIDI reader that needs nothing outside the game's own
+ * files.
+ *
+ * It was not true. Every melody track in `MIDISND1.DAT` opens with the
+ * AdLib instrument definition, `F0 07 00 00 34 01 00 0C F7`, and the
+ * reader skipped it with `p += varLen()` -- which reads `p` before
+ * calling `varLen`, so the two bytes `varLen` ate were added back on
+ * and the skip landed one byte short. The reader then found `F7 00`
+ * where a delta time should be and read it as **15232 ticks**: the
+ * melody of every tune in the game was moved twelve seconds into the
+ * future.
+ *
+ * Measured, before the fix against after, in seconds:
+ *
+ *     sound 27, the scene between two levels   33.4 -> 11.0  (speaker 10.7)
+ *     sound 33, the small potion               14.0 ->  2.1  (speaker  2.5)
+ *     sound 30, the big potion                 13.7 ->  3.1  (speaker  2.3)
+ *     sound 54, the title                      46.6 -> 22.8  (speaker 24.7)
+ *     sound 56, the ending                    145.5 -> 121.7 (speaker 120.0)
+ *
+ * And the game *waits for the sound*: `while (check_sound_playing())`
+ * holds `show_title`, `load_intro` and `play_level` where they stand,
+ * so a tune that lasts three times too long is a pause between the
+ * levels that lasts three times too long and cannot be skipped.
+ */
+describe('the MIDI music', () => {
+  it('lasts as long as the same tune does on the PC speaker', async () => {
+    const { loadSound, MIDI_FILES, SPEAKER_FILES } = await import('../../src/render/audio.ts');
+    const { midiNotes, speakerNotes } = await import('../../src/render/music.ts');
+    const end = (ns: readonly { at: number; dur: number }[]): number =>
+      ns.reduce((m, n) => Math.max(m, n.at + n.dur), 0);
+    let compared = 0;
+    for (let i = 0; i < 58; i++) {
+      const midi = await loadSound(assets, i, MIDI_FILES as unknown as string[]);
+      const beep = await loadSound(assets, i, SPEAKER_FILES as unknown as string[]);
+      if (!midi || midi.kind !== 'midi' || !beep || beep.kind !== 'speaker') continue;
+      const a = end(midiNotes(midi));
+      const b = end(speakerNotes(beep));
+      if (a === 0 || b === 0) continue;
+      compared += 1;
+      // Two arrangements of one tune, so not to the millisecond; the
+      // fault this is here for was a factor of three to six.
+      expect(a / b, `sound ${i}: MIDI ${a.toFixed(2)}s, speaker ${b.toFixed(2)}s`)
+        .toBeGreaterThan(0.75);
+      expect(a / b, `sound ${i}: MIDI ${a.toFixed(2)}s, speaker ${b.toFixed(2)}s`)
+        .toBeLessThan(1.45);
+    }
+    expect(compared, 'every tune the game has both ways').toBeGreaterThanOrEqual(17);
+  });
+
+  it('puts the melody at the start of the tune and not twelve seconds in', async () => {
+    const { loadSound, MIDI_FILES } = await import('../../src/render/audio.ts');
+    const { midiNotes } = await import('../../src/render/music.ts');
+    // Sound 27 is the scene before levels 2, 4, 6 and 12, and its
+    // melody is the track that opens with the AdLib sysex.
+    const midi = await loadSound(assets, 27, MIDI_FILES as unknown as string[]);
+    if (!midi || midi.kind !== 'midi') throw new Error('MIDISND has no sound 27');
+    const notes = midiNotes(midi);
+    const melody = notes.filter((n) => n.channel === 0);
+    expect(melody.length).toBeGreaterThan(0);
+    expect(melody[0].at, 'the melody starts with everything else').toBeLessThan(0.5);
+  });
+});
