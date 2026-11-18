@@ -11514,10 +11514,10 @@ function* cutscene_9() {
 }
 function* end_sequence_anim() {
   disable_keys = 1;
-  scr.present();
   out.play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();
+  yield* fade_in_1();
   init_ending_kid();
   savekid();
   yield* proc_cutscene_frame(8);
@@ -12339,11 +12339,24 @@ var CutscenePlayer = class _CutscenePlayer {
        * `load_intro` painted over the screen before it began. Why
        * `expired()`, which is reached from `show_time` in the middle
        * of a level, draws all two hundred is not accounted for; the
-       * capture says it does, and `end_sequence` has not been
-       * captured yet.
+       * capture says it does.
+       *
+       * **`end_sequence` clips, and that is a capture and not a
+       * guess.** It had never been captured when this was written.
+       * It has now -- thirteen `shift+l` and then four `h`, because
+       * `check_the_end` runs `end_sequence()` when the *drawn* room
+       * of level 14 is 5 and `h` is what sets `next_room` -- and the
+       * frames of the princess's room come out matching the port
+       * everywhere above row 192 and differing on **every one of the
+       * 320 pixels of rows 192 to 199**, which are black in the
+       * capture and the floor of the room in the port. Frame for
+       * frame, 2560 of the 3100 pixels that differed were those
+       * eight rows. It is the same fault the six level cutscenes had
+       * and the same cure, and it is a thing the player sees: the
+       * end of the game is the one scene he has earned.
        */
       clip_room: (on) => {
-        this.roomOnly = on && this.scene.kind === "level";
+        this.roomOnly = on && (this.scene.kind === "level" || this.scene.kind === "ending");
       },
       rect: (l, t, r, b, color) => {
         this.target.fillRect(l, t, r - l, b - t, color);

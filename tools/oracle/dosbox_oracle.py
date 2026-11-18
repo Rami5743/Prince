@@ -170,8 +170,23 @@ class Dosbox:
                  '-f', 'x11grab', '-draw_mouse', '0',
                  '-framerate', str(self.fps), '-video_size', '640x400',
                  '-i', self.display + '+192,184',
-                 '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0',
-                 '-pix_fmt', 'yuv444p', self.record],
+                 # **RGB, not YUV.** `-qp 0` is lossless in whatever
+                 # space the encoder works in, and `yuv444p` means
+                 # ffmpeg converts RGB to YUV first -- which rounds.
+                 # The round trip comes back a unit or three off: in
+                 # the ending capture 35208 of the 64000 pixels of a
+                 # frame differed from the port's by one to five
+                 # units where only 33 differed by more, and since
+                 # `digest.py` hashes palette *indices* and a scene's
+                 # palette holds a thousand entries off its fades,
+                 # near-duplicates two units apart, that drift sends
+                 # the two sides to different indices and the frame
+                 # is marked wrong although the picture is right.
+                 # `libx264rgb` keeps the pixels exactly: a random
+                 # 640x400 image round-trips with a maximum
+                 # difference of **nought**.
+                 '-c:v', 'libx264rgb', '-preset', 'ultrafast', '-qp', '0',
+                 '-pix_fmt', 'rgb24', self.record],
                 env=dict(os.environ, DISPLAY=self.display),
                 stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                 stderr=open(self.record + '.log', 'w'), start_new_session=True)
@@ -264,7 +279,7 @@ class Dosbox:
 
 
 def run_script(path, outdir, machine, cycles, autoexec, display,
-               record=None, fps=30, speaker=False, rate=44100):
+               record=None, fps=30, speaker=False, rate=44100, game=GAME):
     outdir = os.path.abspath(outdir)
     workdir = os.path.join(outdir, '_work')
     os.makedirs(workdir, exist_ok=True)
@@ -272,7 +287,7 @@ def run_script(path, outdir, machine, cycles, autoexec, display,
     origin = None
     with Dosbox(workdir, machine=machine, cycles=cycles, display=display,
                 autoexec=autoexec, record=record, fps=fps,
-                speaker=speaker, rate=rate) as db:
+                speaker=speaker, rate=rate, game=game) as db:
         for raw in open(path):
             line = raw.strip()
             if not line or line.startswith('#'):
@@ -350,11 +365,20 @@ def main():
                          '`wave` in the script records what the game plays')
     ap.add_argument('--rate', type=int, default=44100,
                     help='mixer and speaker sample rate')
+    ap.add_argument('--game', default=GAME,
+                    help='the directory mounted as C:. The default is the '
+                         'one in the repository; a capture that can make '
+                         'the game WRITE -- the hall of fame is the only '
+                         'one -- must be given a copy, because `show_title` '
+                         'draws the hall of fame when there is one and a '
+                         'PRINCE.HOF left behind would change every other '
+                         'capture ever taken')
     a = ap.parse_args()
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
     run_script(a.script, a.out, a.machine, a.cycles, a.autoexec, a.display,
-               record=a.record, fps=a.fps, speaker=a.speaker, rate=a.rate)
+               record=a.record, fps=a.fps, speaker=a.speaker, rate=a.rate,
+               game=os.path.abspath(a.game))
 
 
 if __name__ == '__main__':

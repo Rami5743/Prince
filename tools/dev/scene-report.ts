@@ -55,6 +55,8 @@ export interface SceneSpec {
   /** `rem_min` and `rem_tick` when the scene starts; see `playScene`. */
   remMin?: number;
   remTick?: number;
+  /** `hourglass_state` the scene inherits; see `playScene`. */
+  hourglass?: number;
 }
 
 export const assets = new Assets(
@@ -85,7 +87,7 @@ export async function runScene(
     hash.push(fingerprint(rgb, map, mask));
     moved.push(prev === null ? null : movedBetween(prev, rgb));
     prev = rgb;
-  }, undefined, clock, { remMin: spec.remMin, remTick: spec.remTick });
+  }, undefined, clock, { remMin: spec.remMin, remTick: spec.remTick, hourglass: spec.hourglass });
   return { hash, moved };
 }
 

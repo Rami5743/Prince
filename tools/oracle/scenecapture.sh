@@ -33,6 +33,19 @@ spec = json.load(open(sys.argv[1]))
 print('\n'.join(spec['script']))
 PY
 start=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('start',0))" "$spec")
+# A scene that can make the game write gets a copy of the game
+# directory. `end_sequence` is the only one: it asks for a name and
+# `hof_write` puts a PRINCE.HOF beside PRINCE.EXE, and `show_title`
+# draws the hall of fame when there is one -- so one ending capture
+# taken in the repository's own copy would change every capture
+# taken after it.
+gamedir=$(cd "$(dirname "$0")/../.." && pwd)/original/prince1
+if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('writes') else 1)" "$spec"; then
+  gamedir="$work/game"
+  rm -rf "$gamedir"; mkdir -p "$gamedir"
+  cp "$(cd "$(dirname "$0")/../.." && pwd)/original/prince1/"* "$gamedir/"
+  echo "  $name: a copy of the game directory, because it writes"
+fi
 had=0; [ -f "$digest" ] && { had=1; cp "$digest" "$work/$name.json.was"; }
 restore(){ if [ "$had" = 1 ]; then cp "$work/$name.json.was" "$digest"; else rm -f "$digest"; fi; }
 trap restore EXIT
@@ -41,7 +54,8 @@ for i in $(seq 1 "$tries"); do
   d="$work/$name-$i"
   rm -rf "${d:?}"; mkdir -p "$d"
   nice -n 19 python3 "$repo/tools/oracle/dosbox_oracle.py" --script "$work/$name.txt" \
-    --out "$d/rep" --record "$d/run.mkv" --fps 30 --cycles 20000 >/dev/null 2>&1 || true
+    --out "$d/rep" --record "$d/run.mkv" --fps 30 --cycles 20000 \
+    --game "$gamedir" >/dev/null 2>&1 || true
   nice -n 19 python3 "$repo/tools/oracle/scene_frames.py" "$d/run.mkv" "$d/frames" \
     --fps 30 --start "$start" >/dev/null 2>&1 || true
   [ -d "$d/frames" ] || { echo "  $name try $i: no frames"; continue; }

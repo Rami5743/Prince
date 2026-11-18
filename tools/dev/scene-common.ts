@@ -33,6 +33,7 @@ import { Assets } from '../../src/render/assets.ts';
 import { loadSound, SPEAKER_FILES } from '../../src/render/audio.ts';
 import { speakerNotes } from '../../src/render/music.ts';
 import { CutscenePlayer, type SceneName } from '../../src/pop/cutscene.ts';
+import { set_hourglass_state } from '../../src/pop/seg001.ts';
 import { g } from '../../src/pop/state.ts';
 
 /** One sound channel, with the lengths the PC speaker gives. */
@@ -108,7 +109,7 @@ export async function playScene(
    * two of the hour, so 60 or 59, and both give the same picture;
    * the spec says which.
    */
-  clock0: { remMin?: number; remTick?: number } = {},
+  clock0: { remMin?: number; remTick?: number; hourglass?: number } = {},
 ): Promise<void> {
   const sound = clock ?? await SpeakerClock.load(assets);
   sound.reset();
@@ -119,6 +120,19 @@ export async function playScene(
   });
   g.rem_min = clock0.remMin ?? 60;
   g.rem_tick = clock0.remTick ?? 719;
+  /**
+   * The hourglass, which the ending inherits and does not set.
+   *
+   * `hourglass_state` is a module global that the last cutscene left
+   * behind: `cutscene_2_6`, `cutscene_4` and `cutscene_12` each open
+   * with `set_hourglass_state(hourglass_frame())`, and nothing in
+   * `end_sequence` touches it. So the princess's room at the end of
+   * the game still has the hourglass the last scene put on the
+   * carpet, and the capture of it does -- it is there through the
+   * whole fade and the whole embrace. Headless nothing has played,
+   * so it would be nought and no hourglass would be drawn at all.
+   */
+  if (clock0.hourglass !== undefined) set_hourglass_state(clock0.hourglass);
   p.begin(scene);
   for (let i = 0; i < frames; i++) {
     onFrame(i, p.render().toRgb(p.palette.toRgba()));

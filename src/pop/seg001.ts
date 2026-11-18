@@ -430,12 +430,30 @@ export function* cutscene_9(): Scene {
 // seg001:041C
 export function* end_sequence_anim(): Scene {
   disable_keys = 1;
-  scr.present();
   out.play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();
+  yield* fade_in_1();
   init_ending_kid();
   savekid();
+  // **The ending fades in, and this had no `fade_in_1` at all.**
+  // `load_intro` paints the screen black before it calls this, so
+  // without one the princess's room was simply there on the first
+  // frame -- which is what the port did, and what the player saw at
+  // the end of the game he had just finished.
+  //
+  // The first capture ever taken of `end_sequence` settles it: the
+  // screen is black at 218.5 seconds and the room is full at 221.0,
+  // and the sixty-three video frames between are the fade. That is
+  // `fade_in_1`'s sixty-four shades at two sixtieths apiece exactly,
+  // the same fade every other `load_intro` scene has.
+  //
+  // It goes **after** the two characters are placed and not before.
+  // `fade_in_1` is `while (fade_active()) proc_cutscene_frame(1)`,
+  // which draws whoever is in the room on every one of its frames,
+  // and the capture's half-faded frames have the Prince on the floor,
+  // the princess standing over him and the hourglass on the carpet.
+  // Put before the inits it would fade an empty room in.
   yield* proc_cutscene_frame(8);
   seqtbl_offset_shad_char(seqids.seq_108_princess_turn_and_hug);
   yield* proc_cutscene_frame(5);

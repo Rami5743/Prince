@@ -64,8 +64,46 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
 const EXPECTED: Record<string, number> = {
   title: 426,
   /**
-   * `cutscene2` -- 34 of 137, and what it found is worth more than
-   * the number.
+   * `end_sequence`, captured for the first time, and 1 of 564.
+   *
+   * The ending was one of the three parts of the game that had never
+   * been put beside anything, and `tools/oracle/README.md` recorded
+   * why: it needs a thirteen-level chain and then the Prince in room
+   * 5 of level 14. That turns out to be four taps of `h`.
+   * `check_the_end` runs `end_sequence()` when the **drawn** room of
+   * level 14 is 5, and `h` is `next_room = room_L` -- the rooms go 4,
+   * 3, 2, 1, 5, so four of them win the game with nobody moving.
+   *
+   * Two faults came out of it at once and both are fixed, and both
+   * are things the player sees at the end of the game he has just
+   * finished: the port drew the eight rows under the room that the
+   * original leaves black (2560 of the 3100 pixels that differed in
+   * a frame), and **`end_sequence_anim` had no `fade_in_1` at all**,
+   * so the princess's room was simply there instead of fading in
+   * over the capture's sixty-three frames.
+   *
+   * What is left is one DAC unit. After the fade the capture's
+   * colours sit exactly **four** eight-bit units below the port's on
+   * 39125 of a frame's 64000 pixels and equal on the rest -- one
+   * step of a six-bit palette, on the entries whose value is odd.
+   * Flooring every entry to an even value was tried and it is not
+   * that: it takes the other eight scenes from 809 to **157**. So
+   * the pin stays where the port honestly scores until something
+   * explains it.
+   */
+  ending: 1,
+  /**
+   * `cutscene2` -- **72 of 137** on a capture taken with a lossless
+   * RGB encoder, where the same scene read 34 with the old one. See
+   * `dosbox_oracle.py`: `-qp 0` is lossless in whatever space the
+   * encoder works in, and `yuv444p` means ffmpeg rounds the colours
+   * through YUV first. The digest hashes palette *indices* and a
+   * scene's palette holds a thousand entries off its own fades, so
+   * near-duplicates two units apart; a colour a unit or three out
+   * then lands on a different index and the frame is marked wrong
+   * although the picture is right.
+   *
+   * What the old capture found is still worth more than the number.
    *
    * **The eight rows under the room.** Every frame of this scene
    * differed from the capture in rows 192 to 199 and nowhere else:
@@ -122,6 +160,7 @@ const EXPECTED: Record<string, number> = {
    * the end of it -- which is the thing to measure next with
    * `scene-frames.ts` and the capture side by side.
    */
+  cutscene2: 72,
   cutscene4: 36,
   cutscene6: 37,
   cutscene8: 74,

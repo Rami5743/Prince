@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { playScene } from './scene-common.ts';
-import { assets, exe } from './scene-report.ts';
+import { assets, exe, specOf } from './scene-report.ts';
 import type { SceneName } from '../../src/pop/cutscene.ts';
 
 const which = process.argv[2] ?? 'title';
@@ -68,7 +68,14 @@ function png(rgb: Uint8Array, w = 320, h = 200): Uint8Array {
 }
 
 mkdirSync(outdir, { recursive: true });
+// The scene's own spec, when there is one, so that the frames are
+// rendered with the clock and the hourglass the capture had.
+let clock0: { remMin?: number; remTick?: number; hourglass?: number } = {};
+try {
+  const spec = specOf(which);
+  clock0 = { remMin: spec.remMin, remTick: spec.remTick, hourglass: spec.hourglass };
+} catch { /* a scene with no spec is replayed from nothing */ }
 await playScene(assets, exe, scene, to + 1, (i, rgb) => {
   if (i >= from && i <= to) writeFileSync(join(outdir, `t${i}.png`), png(rgb));
-});
+}, undefined, undefined, clock0);
 console.log(`${which} ${from}..${to} -> ${outdir}`);
