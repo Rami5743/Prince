@@ -9842,6 +9842,7 @@ var PopGame = class _PopGame {
     do_startpos();
     g.have_sword = this.levelNumber === 0 || this.levelNumber >= 2 ? 1 : 0;
     g.need_level1_music = this.effects?.sound && this.levelNumber === this.introMusicLevel ? 1 : 0;
+    g.next_room = g.Kid.room;
     g.drawn_room = g.Kid.room;
     load_room_links();
     get_room_address(g.drawn_room);

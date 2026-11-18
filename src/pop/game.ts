@@ -480,6 +480,27 @@ export class PopGame {
      */
     g.need_level1_music = this.effects?.sound && this.levelNumber === this.introMusicLevel
       ? 1 : 0;
+    /**
+     * `draw_level_first`'s first line: `next_room = Kid.room`.
+     *
+     * The translation wrote `check_the_end`'s body out by hand here
+     * and set only `drawn_room`, leaving `next_room` at whatever
+     * `do_startpos` put there. On thirteen of the fourteen levels the
+     * two are the same number and nothing shows.
+     *
+     * **Level 7 is the exception, and it is the whole of "level 7
+     * opens wrong".** `do_startpos` does `next_room = Char.room =
+     * level.start_room`, which is 17, and then `set_start_pos`'s
+     * falling entry does `goto_other_room(3)` -- which moves
+     * `Char.room` to the room below, 1, and leaves `next_room` at 17.
+     * `savekid` carries room 1 into `Kid`, so the C's
+     * `next_room = Kid.room` puts the pair back together before the
+     * first tick; without it the level's first `check_the_end` found
+     * `next_room` 17 against `drawn_room` 1 and drew **room 17**,
+     * which is empty. The player fell down a black screen and landed
+     * dead, with no way to see where he was going.
+     */
+    g.next_room = g.Kid.room;
     g.drawn_room = g.Kid.room;
     load_room_links();
     get_room_address(g.drawn_room);
