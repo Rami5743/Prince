@@ -98,11 +98,17 @@ def notes(data, rate, step=STEP, min_seconds=MIN_SECONDS):
         if (end - start) / rate < min_seconds:
             continue
         # The first and last half-period of a run straddle the
-        # boundary, so the pitch is taken from the inside of it.
+        # boundary, so the pitch is taken from the inside of it -- and
+        # from the *median* of what is inside, not the mean. A note
+        # that follows one an octave away still has one transitional
+        # half-period after the trim, and on a note of fifteen of them
+        # a mean is dragged four per cent by it: the title's 69 Hz
+        # after a 147 read 66.4, which is further off than a tune's
+        # notes are apart.
         inner = half[a + 1:b - 1] or half[a:b]
         if max(inner) > quiet:
             continue
-        hz = rate / (2 * (sum(inner) / len(inner)))
+        hz = rate / (2 * _median(inner))
         out.append([round(start / rate, 4), round((end - start) / rate, 4),
                     round(hz, 1)])
     return out
