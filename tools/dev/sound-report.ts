@@ -85,7 +85,7 @@ export async function sceneSounds(spec: SoundSpec, deaf = true): Promise<SoundEv
 }
 
 /** How long the port's run lasts, in seconds. */
-function spanOf(spec: SoundSpec): number {
+export function spanOf(spec: SoundSpec): number {
   if (spec.recording) {
     const rec = parseRecording(readFileSync(
       join(REPO, 'tools', 'oracle', 'recordings', `${spec.recording}.json`), 'utf8'));
