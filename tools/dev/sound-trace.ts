@@ -189,4 +189,6 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+// Importable for its table of names: only run when it is the tool
+// that was asked for, not when `sound-report.ts` imports `SOUND_NAME`.
+if (process.argv[1]?.endsWith('sound-trace.ts')) await main();

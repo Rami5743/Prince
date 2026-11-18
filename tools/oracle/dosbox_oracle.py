@@ -48,12 +48,14 @@ cputype=386
 cycles=fixed {cycles}
 [mixer]
 nosound=true
+rate={rate}
 [sblaster]
 sbtype=none
 [gus]
 gus=false
 [speaker]
-pcspeaker=false
+pcspeaker={pcspeaker}
+pcrate={rate}
 tandy=off
 disney=false
 [midi]
@@ -84,7 +86,8 @@ def free_display():
 
 class Dosbox:
     def __init__(self, workdir, machine='vgaonly', cycles=3000, display=None,
-                 autoexec='', game=GAME, record=None, fps=30):
+                 autoexec='', game=GAME, record=None, fps=30,
+                 speaker=False, rate=44100):
         # Absolute: DOSBox resolves `captures=` against its own working
         # directory, so a relative path there is silently appended to it and
         # no screenshot is ever written.
@@ -104,6 +107,15 @@ class Dosbox:
         self.record = os.path.abspath(record) if record else None
         self.fps = fps
         self.ffmpeg = None
+        # The PC speaker. DOSBox runs the game's speaker code whatever
+        # this says -- the port writes and the timer interrupts happen
+        # either way, so `check_sound_playing` and every wait built on
+        # it are untouched -- and all `pcspeaker=true` changes is
+        # whether the mixer is given the square wave to carry. So a
+        # sound capture is the same run as a picture capture, and the
+        # forty-four picture digests taken with it off stay valid.
+        self.speaker = speaker
+        self.rate = rate
 
     def __enter__(self):
         os.makedirs(self.capture, exist_ok=True)
@@ -111,7 +123,8 @@ class Dosbox:
         with open(conf, 'w') as f:
             f.write(CONF.format(machine=self.machine, captures=self.capture,
                                 cycles=self.cycles, gamedir=self.game,
-                                autoexec=self.autoexec))
+                                autoexec=self.autoexec, rate=self.rate,
+                                pcspeaker='true' if self.speaker else 'false'))
         dn = int(self.display[1:])
         self.xvfb = subprocess.Popen(
             ['Xvfb', self.display, '-screen', '0', '1024x768x24'],
@@ -251,14 +264,15 @@ class Dosbox:
 
 
 def run_script(path, outdir, machine, cycles, autoexec, display,
-               record=None, fps=30):
+               record=None, fps=30, speaker=False, rate=44100):
     outdir = os.path.abspath(outdir)
     workdir = os.path.join(outdir, '_work')
     os.makedirs(workdir, exist_ok=True)
     made = []
     origin = None
     with Dosbox(workdir, machine=machine, cycles=cycles, display=display,
-                autoexec=autoexec, record=record, fps=fps) as db:
+                autoexec=autoexec, record=record, fps=fps,
+                speaker=speaker, rate=rate) as db:
         for raw in open(path):
             line = raw.strip()
             if not line or line.startswith('#'):
@@ -304,6 +318,12 @@ def run_script(path, outdir, machine, cycles, autoexec, display,
                 # recording are not pulled about by the act of recording.
                 db.key('ctrl+alt+F5')
                 time.sleep(0.4)
+            elif op == 'wave':
+                # ctrl+F6 toggles DOSBox's own wave recording, which
+                # taps the mixer rather than a sound card, so it works
+                # with `nosound=true` and costs the emulator nothing.
+                db.key('ctrl+F6')
+                time.sleep(0.2)
             elif op == 'shot':
                 made.append(db.shot(rest, outdir))
                 print('captured', made[-1], flush=True)
@@ -325,11 +345,16 @@ def main():
                     help='grab the X display to this video file while the '
                          'script runs (lossless; needs ffmpeg)')
     ap.add_argument('--fps', type=int, default=30)
+    ap.add_argument('--speaker', action='store_true',
+                    help='let the mixer carry the PC speaker, so that a '
+                         '`wave` in the script records what the game plays')
+    ap.add_argument('--rate', type=int, default=44100,
+                    help='mixer and speaker sample rate')
     a = ap.parse_args()
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
     run_script(a.script, a.out, a.machine, a.cycles, a.autoexec, a.display,
-               record=a.record, fps=a.fps)
+               record=a.record, fps=a.fps, speaker=a.speaker, rate=a.rate)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,6 @@
+{
+  "what": "show_title: the opening the player hears on every page load, as the PC speaker plays it. Keys untouched.",
+  "scene": { "kind": "title" },
+  "frames": 3100,
+  "script": ["wave", "wait 100", "wave", "wait 1"]
+}

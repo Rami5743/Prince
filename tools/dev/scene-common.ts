@@ -43,7 +43,10 @@ export class SpeakerClock {
   private now = 0;
 
   static async load(assets: Assets): Promise<SpeakerClock> {
-    const clock = new SpeakerClock();
+    // `new this()`, not `new SpeakerClock()`, so that a subclass --
+    // `RecordingClock` in `sound-common.ts`, which writes down what it
+    // was asked to play -- is loaded as itself.
+    const clock = new (this as unknown as new () => SpeakerClock)();
     for (let i = 0; i < 58; i++) {
       const sound = await loadSound(assets, i, SPEAKER_FILES as unknown as string[]);
       if (!sound || sound.kind !== 'speaker') continue;
