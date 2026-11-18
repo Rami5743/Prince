@@ -198,6 +198,50 @@ down grabs the ledge in room 1 and he keeps all three flasks.
 Verified in the real page, arriving from level 6 through the real
 transition. `tests/pop/level7-entry.test.ts` pins all four facts.
 
+### Two hypotheses about the scene timing, both dead, with their cost
+
+The capture of the level 1 to 2 transition measures the original's
+fades exactly: the fade **in** runs from 29.567 to 31.333 and the
+fade **out** from 34.200 to 36.000 -- **54 video frames each**, 1.80
+seconds, where the port takes 63 or 64. And `make_pal_buffer_fadein`
+is given `wait_time` 2, which is 64 shades at two sixtieths = 2.13
+seconds = 64 frames. So the capture and the code disagree by 17 per
+cent, and the obvious move is to believe the capture.
+
+**It scores worse.** `scene-report.ts` over all eight scenes:
+
+    FADE_UNITS   2 (the code)    756 of 1723
+                 1.8             706 of 1716
+                 1.75            689 of 1703
+                 1.6875 (= 54/64) 684 of 1697
+
+And the same for the other half of the drift, the cutscene frame
+being 3.2 video frames in the emulator against the port's 3. Running
+the port's scene clock at that rate, through `SCENE_STEP_MS`:
+
+    1/30 (the code)   756 of 1723
+    1/31              676 of 1735
+    1/32              608 of 1738
+    1/29              670 of 1664
+
+Both directions lose. So the emulator's fade and its cutscene frame
+really are the emulator's, as the round before this one said, and
+making the port keep the emulator's time does not buy the pictures
+back. Do not spend another round on it without something new to go
+on -- what is left is **local**, not a rate, because a constant
+offset is what `scene-report` already searches for.
+
+### Every level's entry, through the transition, against a straight jump
+
+Level 7's fault was invisible to the suite because **every probe
+enters a level by the skip chain or a cheat, never by finishing the
+level before**. So all thirteen transitions were walked in a real
+browser, each arrival put beside the same level entered directly:
+room, frame, x, y, hit points and sword. Every one agrees to the tick
+(frame 45 against 46 where the sample caught one a tick later), level
+13's running entry and level 7's falling entry included, and nothing
+threw. Level 7 was the only one.
+
 ### What this round says about the method
 
 * **Nothing in either score moved, and five real bugs were fixed.**
