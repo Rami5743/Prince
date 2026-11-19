@@ -348,29 +348,25 @@ export function init_princess_right(): void {
 
 // seg001:02B8
 /**
- * The princess at the ending, facing **right**.
+ * The princess at the ending.
  *
- * It called `init_princess`, which leaves her facing left, and the
- * first capture of `end_sequence` says she does not: she stands to
- * the left of the hourglass looking right, towards the Prince, who
- * `init_ending_kid` starts at x 198 running left. Put beside the
- * capture's own frame the port's princess was mirrored, and the
- * whole-frame difference over the frames after the fade is about
- * 700 pixels facing left against 575 facing right. `init_princess_right`
- * is the same call `princess_stand` and `cutscene_2_6` make.
+ * `init_princess()`, which leaves her facing **left** -- exactly as
+ * the C has it. The round before this one changed it to
+ * `init_princess_right` on the strength of a capture that was not
+ * the ending at all (see `end_sequence_anim`), and that cost her
+ * position as well as her facing.
  *
- * Her **x** is still wrong and is not fitted here. The capture puts
- * her centred on 134 where `x = 136` draws her centred on 173, and
- * rendering the scene at every x from 92 to 136 the best is **118**
- * at 247 pixels -- against 639 at 136 -- with what is left sitting
- * on her right edge at x 128 to 143, which is not a position but a
- * mirror. 118 is no constant the C would have, and the port draws a
- * right-facing princess correctly everywhere else: `cutscene9` has
- * one from `princess_stand` and 129 of its 206 frames are exact,
- * which could not happen if the placement were eighteen out.
+ * `load_frame_to_obj` is `obj_x = (char_dx_forward(dx) << 1) - 116`
+ * and `char_dx_forward` negates `dx` for a character facing left, so
+ * turning her round moves her by **four times the frame's own dx**.
+ * That is the whole of the "the capture has her centred on 134 where
+ * `Char.x = 136` draws her centred on 173" that the last round wrote
+ * down and could not account for. Thirty-nine pixels is a direction,
+ * not a position, and the fitted `x = 118` it looked for does not
+ * exist.
  */
 export function init_ending_princess(): void {
-  init_princess_right();
+  init_princess();
   g.Char.x = 136;
   g.Char.y = 164;
   seqtbl_offset_char(seqids.seq_109_princess_stand_PV2);
@@ -452,41 +448,39 @@ export function* cutscene_9(): Scene {
 // seg001:041C
 export function* end_sequence_anim(): Scene {
   disable_keys = 1;
-  // **The hourglass.** `load_intro` calls `reset_cutscene`, which
-  // zeroes `hourglass_state`, so without this line nothing draws one
-  // -- and the capture of the ending has an hourglass on the carpet
-  // through the whole fade and the whole embrace. It is the same
-  // `set_hourglass_state(hourglass_frame())` that opens `cutscene_2_6`,
-  // `cutscene_4` and `cutscene_12`, and the capture says which frame:
-  // tried at 1 to 7 against the capture's own picture the box round
-  // the carpet differs by 703, 700, **664**, 684, 706, 721 and 1002
-  // pixels, and three is what `hourglass_frame()` answers for the
-  // 57 minutes that capture's hall of fame shows.
-  set_hourglass_state(hourglass_frame());
+  // **No hourglass, and no fade.** `load_intro` calls
+  // `reset_cutscene`, which zeroes `hourglass_state`, and
+  // `end_sequence_anim` never sets it again -- so the ending is the
+  // one scene in the princess's room with nothing on the carpet
+  // between the Prince and the princess. The capture agrees to the
+  // pixel: the box `draw_hourglass` would fill, `add_midtable(...,
+  // 19, 0, 168, ...)` at x 152 to 170 and y 141 to 168, is carpet
+  // and nothing else on every frame of the embrace, and a port that
+  // drew one differed there by **338 pixels** on every frame and
+  // nowhere else.
+  //
+  // The round before this one added both a `set_hourglass_state`
+  // and a `fade_in_1` here, measured off a capture in which "the
+  // screen is black at 218.5 seconds and the room is full at
+  // 221.0". **That capture never reached the ending.** Four seconds
+  // after that room it is black again and six after it a level is
+  // starting with `59 MINUTES LEFT` written under it, so what was
+  // measured was a cutscene *between two levels* -- which does fade
+  // in, and which does show the princess with an hourglass beside
+  // her.
+  //
+  // A capture that does reach the ending -- `the tyrant Jaffar lies
+  // dead` and then the hall of fame follow it -- has the princess's
+  // room appear between one video frame and the next: black at
+  // frame 104 and the whole room, 46 colours of it, at 108, with
+  // nothing in between. That is `copy_screen_rect(&screen_rect)`,
+  // which is what the C has here.
+  scr.present();
   out.play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();
-  yield* fade_in_1();
   init_ending_kid();
   savekid();
-  // **The ending fades in, and this had no `fade_in_1` at all.**
-  // `load_intro` paints the screen black before it calls this, so
-  // without one the princess's room was simply there on the first
-  // frame -- which is what the port did, and what the player saw at
-  // the end of the game he had just finished.
-  //
-  // The first capture ever taken of `end_sequence` settles it: the
-  // screen is black at 218.5 seconds and the room is full at 221.0,
-  // and the sixty-three video frames between are the fade. That is
-  // `fade_in_1`'s sixty-four shades at two sixtieths apiece exactly,
-  // the same fade every other `load_intro` scene has.
-  //
-  // It goes **after** the two characters are placed and not before.
-  // `fade_in_1` is `while (fade_active()) proc_cutscene_frame(1)`,
-  // which draws whoever is in the room on every one of its frames,
-  // and the capture's half-faded frames have the Prince on the floor,
-  // the princess standing over him and the hourglass on the carpet.
-  // Put before the inits it would fade an empty room in.
   yield* proc_cutscene_frame(8);
   seqtbl_offset_shad_char(seqids.seq_108_princess_turn_and_hug);
   yield* proc_cutscene_frame(5);

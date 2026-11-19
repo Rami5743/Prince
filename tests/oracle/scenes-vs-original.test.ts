@@ -64,46 +64,65 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
 const EXPECTED: Record<string, number> = {
   title: 512,
   /**
-   * `end_sequence`, captured for the first time, and 1 of 564.
+   * `end_sequence` -- **325 of 480**, from 1.
    *
-   * The ending was one of the three parts of the game that had never
-   * been put beside anything, and `tools/oracle/README.md` recorded
-   * why: it needs a thirteen-level chain and then the Prince in room
-   * 5 of level 14. That turns out to be four taps of `h`.
-   * `check_the_end` runs `end_sequence()` when the **drawn** room of
-   * level 14 is 5, and `h` is `next_room = room_L` -- the rooms go 4,
-   * 3, 2, 1, 5, so four of them win the game with nobody moving.
+   * The ending needs a thirteen-level chain and then the Prince in
+   * room 5 of level 14, which is four taps of `h`: `check_the_end`
+   * runs `end_sequence()` when the **drawn** room of level 14 is 5,
+   * and that level's rooms go 4, 3, 2, 1, 5.
    *
-   * Two faults came out of it at once and both are fixed, and both
-   * are things the player sees at the end of the game he has just
-   * finished: the port drew the eight rows under the room that the
-   * original leaves black (2560 of the 3100 pixels that differed in
-   * a frame), and **`end_sequence_anim` had no `fade_in_1` at all**,
-   * so the princess's room was simply there instead of fading in
-   * over the capture's sixty-three frames.
+   * Everything the round before this one read off the ending's first
+   * capture was read off **the wrong scene**. That capture's
+   * princess room is at 218.5 seconds, it fades in over sixty-three
+   * frames, it has an hourglass on the carpet -- and four seconds
+   * after it the screen is black again and six after it a level is
+   * starting with `59 MINUTES LEFT` written under it. It is a
+   * cutscene between two levels. The chain had lost a `shift+l`.
    *
-   * What is left is one DAC unit. After the fade the capture's
-   * colours sit exactly **four** eight-bit units below the port's on
-   * 39125 of a frame's 64000 pixels and equal on the rest -- one
-   * step of a six-bit palette, on the entries whose value is odd.
-   * Flooring every entry to an even value was tried and it is not
-   * that: it takes the other eight scenes from 1225 to **410**, and
-   * flooring the ending's alone leaves it at 1. **Two independent
-   * captures show the same relation** -- 19998 and 39125 pixels of
-   * a frame differing by exactly four, the rest identical -- so it
-   * is the original's and not one capture's.
+   * A capture that does reach the ending is known by what follows
+   * it: `the tyrant Jaffar lies dead`, the landscape, and then the
+   * hall of fame. In this one the scene is at 231.4 seconds and
+   * there is **no fade and no hourglass** -- black at video frame
+   * 104, the whole room and all 46 of its colours at 108. Which is
+   * what the C has: `end_sequence_anim` opens on
+   * `copy_screen_rect(&screen_rect)`, calls no `fade_in_1`, and
+   * never sets `hourglass_state` after `reset_cutscene` has zeroed
+   * it.
    *
-   * And it is not all that is left. With the low bit ignored a frame
-   * still differs by about 670 pixels, and they are the princess:
-   * the capture stands her to the left of the hourglass centred on
-   * 134 and `Char.x = 136` draws her centred on 173. Rendering at
-   * every x from 92 to 136 the best is 118 at 247 pixels, which is
-   * no constant the C would hold, and the port places a right-facing
-   * princess correctly everywhere else -- `cutscene9` has one from
-   * `princess_stand` and 129 of its 206 frames are exact. So the pin
-   * stays where the port honestly scores until the C is read.
+   * Four things, each measured against that capture:
+   *
+   * * the fade taken out, and the room put up whole: 1 -> 108;
+   * * `init_ending_princess` back to the C's `init_princess`, which
+   *   leaves her facing **left**. The last round turned her round
+   *   and that moved her, because `load_frame_to_obj` is
+   *   `obj_x = (char_dx_forward(dx) << 1) - 116` and
+   *   `char_dx_forward` negates `dx` for a character facing left --
+   *   so a direction is worth four times the frame's own `dx`, and
+   *   the thirty-nine pixels the last round could not account for
+   *   ("centred on 134 where x = 136 draws her centred on 173") is
+   *   exactly that. There is no fitted `x = 118`;
+   * * the hourglass taken out: 108 -> 219. The box
+   *   `draw_hourglass` fills, x 152 to 170 and y 141 to 168, is
+   *   carpet and nothing else on every frame of the capture's
+   *   embrace, and a port that drew one differed there by **338
+   *   pixels** on every frame and nowhere else;
+   * * the spec's `remMin` 57 -> 58: 219 -> 325. `show_hof` prints
+   *   `min - 1`, and the capture's hall of fame reads **57:57**.
+   *
+   * What is left is in three places, and the frames between them
+   * are exact to the pixel -- port 450 to 1042 against capture 492
+   * to 1084, nought unmasked differences:
+   *
+   * * the **fades**, which are the emulator's: `fade_out_1` into the
+   *   story screen and `fade_out_2` into the hall of fame;
+   * * the **cursor** of the name box, which blinks every six
+   *   sixtieths. From capture frame 1203 the run alternates three
+   *   exact, three not, all the way to the end -- the port's blink
+   *   is exactly half a period out of the capture's, and nothing
+   *   else in those frames differs;
+   * * the Prince **running in**, capture 187 to 236.
    */
-  ending: 2,
+  ending: 325,
   /**
    * `cutscene2` -- **72 of 137** on a capture taken with a lossless
    * RGB encoder, where the same scene read 34 with the old one. See

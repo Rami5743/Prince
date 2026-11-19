@@ -11465,7 +11465,7 @@ function init_princess_right() {
   g.Char.direction = directions.dir_0_right;
 }
 function init_ending_princess() {
-  init_princess_right();
+  init_princess();
   g.Char.x = 136;
   g.Char.y = 164;
   seqtbl_offset_char(seqids.seq_109_princess_stand_PV2);
@@ -11533,11 +11533,10 @@ function* cutscene_9() {
 }
 function* end_sequence_anim() {
   disable_keys = 1;
-  set_hourglass_state(hourglass_frame());
+  scr.present();
   out.play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();
-  yield* fade_in_1();
   init_ending_kid();
   savekid();
   yield* proc_cutscene_frame(8);

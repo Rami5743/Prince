@@ -4,8 +4,8 @@
     "kind": "ending"
   },
   "frames": 1600,
-  "start": 218.5,
-  "range": 300,
+  "start": 231.0,
+  "range": 900,
   "writes": true,
   "script": [
     "wait 25",
@@ -48,6 +48,6 @@
     "wait 0.5",
     "wait 60"
   ],
-  "remMin": 57,
+  "remMin": 58,
   "remTick": 684
 }
