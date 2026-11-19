@@ -430,6 +430,17 @@ export function* cutscene_9(): Scene {
 // seg001:041C
 export function* end_sequence_anim(): Scene {
   disable_keys = 1;
+  // **The hourglass.** `load_intro` calls `reset_cutscene`, which
+  // zeroes `hourglass_state`, so without this line nothing draws one
+  // -- and the capture of the ending has an hourglass on the carpet
+  // through the whole fade and the whole embrace. It is the same
+  // `set_hourglass_state(hourglass_frame())` that opens `cutscene_2_6`,
+  // `cutscene_4` and `cutscene_12`, and the capture says which frame:
+  // tried at 1 to 7 against the capture's own picture the box round
+  // the carpet differs by 703, 700, **664**, 684, 706, 721 and 1002
+  // pixels, and three is what `hourglass_frame()` answers for the
+  // 57 minutes that capture's hall of fame shows.
+  set_hourglass_state(hourglass_frame());
   out.play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();

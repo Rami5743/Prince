@@ -11514,6 +11514,7 @@ function* cutscene_9() {
 }
 function* end_sequence_anim() {
   disable_keys = 1;
+  set_hourglass_state(hourglass_frame());
   out.play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();

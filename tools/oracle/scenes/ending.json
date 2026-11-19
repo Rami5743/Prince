@@ -1,5 +1,5 @@
 {
-  "what": "end_sequence: the Prince reaches the princess, the ending music, and the hall of fame -- reached by thirteen shift+l and then four `h`, because `check_the_end` runs end_sequence when the DRAWN room of level 14 is 5 and `h` is what sets next_room",
+  "what": "end_sequence: the Prince reaches the princess, the ending music, and the hall of fame -- reached by thirteen shift+l and then four `h`, because `check_the_end` runs end_sequence when the DRAWN room of level 14 is 5 and `h` is what sets next_room. The hourglass the scene draws comes from hourglass_frame() inside end_sequence_anim, not from the spec: load_intro calls reset_cutscene, which zeroes hourglass_state",
   "scene": {
     "kind": "ending"
   },
@@ -49,6 +49,5 @@
     "wait 60"
   ],
   "remMin": 57,
-  "remTick": 684,
-  "hourglass": 3
+  "remTick": 684
 }
