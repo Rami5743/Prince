@@ -41,6 +41,66 @@
 ## ============================================================
 
 
+## THE PAGE'S SCENES, AGAINST THE PORT'S, PICTURE FOR PICTURE
+
+`tools/dev/page-port.ts` required the page and the headless port to
+draw the same picture on every tick of fourteen levels. It now does
+the same for the **scenes**, which is where four of the last six
+bugs the player met lived, and for the **cheats**:
+
+    npx tsx tools/dev/page-port.ts --scenes --cheats --ticks 600
+
+    level  1 .. 14   pictures 600 of 600   sounds equal
+    scene title      pictures 504 of 504 port / 504 page
+    scene 2,4,6,8,9,12,expired,ending   every one exact
+
+Fourteen levels at six hundred ticks with all eleven cheats thrown
+in, and all nine scenes: the page draws the port's picture and asks
+for the port's sounds, everywhere. `tests/browser/page-vs-port.test.ts`
+runs the scene before level 2 in `npm test`.
+
+A scene cannot be compared the way a level is, and the three things
+that had to be settled first are the finding:
+
+* **A scene's clock is the sound's.** `show_title`, `load_intro` and
+  `pv_scene` all stop at `while (check_sound_playing())`, and the
+  page has to be muted to be stepped at all -- `__princeSceneStep`
+  runs the scene's clock a hundred and fifty times faster than the
+  audio device's. Muted, the page's channel is always empty, so the
+  title's three waits collapse: its holds read
+  `65,102,33,135,117,301,47,80,132,17,60,181` against the port's
+  `65,102,33,135,117,291,301,85,332,80,132,17,7,18,507,60,40`, and
+  the ones that differ are exactly the three sound waits. So the
+  headless side is made **deaf** too and the two runs are the same
+  run. What the waits should be is `scene-report.ts`'s business,
+  against the original.
+* **The princess room's stars and torches are `prandom`.** Measured
+  rather than derived: four runs of `cutscene_2_6` at four seeds,
+  two hundred frames apiece, differ on **194 pixels** and they fall
+  in three blocks -- `x 16..24 y 97..128` (the six stars),
+  `x 96..104` and `x 214..222`, both `y 99..115` (the two torches).
+  That is `PROOM_RANDOM_RECTS` in `seg001.ts`, and it is the same
+  thing `digest.py --cutscene` masks against the original. Without
+  the torches the comparison was **ordered**: playing the title
+  first made every cutscene after it differ, which looked like
+  state leaking out of `pv_scene` and was forty-four pixels of one
+  torch flame.
+* **A scene that ends starts another one.** `endScene` runs whatever
+  was behind it, which for a scene asked for by hand is
+  `restartGame` -- the title. So `running` stays true and, for the
+  title, even the scene's *name* does not change. `__princeSceneState`
+  carries a `count` of scenes begun now, and the comparison stops
+  when that moves.
+
+Two hooks went into the page for it, both narrow: `__princeSceneHash`
+(a fingerprint of the picture a scene has on the screen;
+`CutscenePlayer.render()` draws nothing, so unlike `__princeFrame`
+for a level it can be asked for at any time without changing what it
+measures) and `__princeSeed`. `__princeCommand` is the third: it is
+`process_key` by name rather than by a `KeyboardEvent`, so the cheat
+comparison drives the page's **own** path to `game.cheat` and not a
+second copy of the switch.
+
 ## TWO SCENES WERE BEING CUT OFF BEFORE THEY ENDED: SCENES 2055 -> 2437
 
     measured   19478 of 20232   (unmoved, to the tick)

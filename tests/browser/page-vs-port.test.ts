@@ -18,9 +18,10 @@
  * the byte, on every tick** -- plus the same `play_sound` calls in
  * the same order.
  *
- * Two levels and two hundred ticks apiece, which is what fits in a
- * test. `npx tsx tools/dev/page-port.ts` is the same comparison over
- * all fourteen.
+ * Two levels and two hundred ticks apiece, and **one scene**, which
+ * is what fits in a test. `npx tsx tools/dev/page-port.ts --scenes
+ * --cheats` is the same comparison over all fourteen levels, all
+ * eleven cheats and all nine scenes.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Server } from 'node:http';
@@ -143,6 +144,85 @@ describe('the page and the headless port', () => {
       expect(got.asked).toEqual(port.asked);
     }, 180000);
   }
+
+  /**
+   * And one scene, compared a different way.
+   *
+   * A scene's clock is the sound's -- `show_title`, `load_intro` and
+   * `pv_scene` all stop at `while (check_sound_playing())` -- and the
+   * page has to be muted to be stepped at all, so both sides are made
+   * deaf and what they must agree on is the **sequence of pictures**:
+   * every picture the port draws, in the order it draws them, however
+   * long either side holds one.
+   *
+   * The princess room's six stars and two torches come out of
+   * `prandom` and are blanked on both sides, which is what
+   * `digest.py --cutscene` does against the original.
+   */
+  it('draw the same pictures in the scene before level 2', async () => {
+    const { playScene, SpeakerClock } = await import('../../tools/dev/scene-common.ts');
+    const { PROOM_RANDOM_PIXELS } = await import('../../src/pop/seg001.ts');
+    class Deaf extends SpeakerClock { override get playing(): boolean { return false; } }
+    const assets = new Assets(
+      async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+    const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+    const blank = (rgb: Uint8Array): number => {
+      for (const [x, y] of PROOM_RANDOM_PIXELS) {
+        const at = (y * 320 + x) * 3;
+        rgb[at] = 0; rgb[at + 1] = 0; rgb[at + 2] = 0;
+      }
+      let h = 2166136261;
+      for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+      return h >>> 0;
+    };
+    const portHashes: number[] = [];
+    await playScene(assets, exe, { kind: 'level', level: 2 }, 400,
+      (_i, rgb) => portHashes.push(blank(rgb)),
+      undefined, await Deaf.load(assets), { seed: 1 });
+    const pageHashes = await page.evaluate(async () => {
+      const w = window as unknown as {
+        __princePlayScene(s: unknown): Promise<void>;
+        __princeSceneStep(ms: number): boolean;
+        __princeSceneHash(): number | null;
+        __princeSceneState(): { running: boolean; count: number } | null;
+        __princePlaySound(i: number): void;
+        __princeMute(on: boolean): void;
+        __princePause(on: boolean): void;
+        __princeSeed(n: number): void;
+      };
+      const esc = (): void => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', code: 'Escape', bubbles: true,
+        }));
+      };
+      w.__princeMute(true);
+      w.__princePause(true);
+      for (let i = 0; i < 40 && w.__princeSceneState()?.running; i++) {
+        esc();
+        await new Promise((r) => setTimeout(r, 80));
+      }
+      w.__princePlaySound(-1);
+      await new Promise((r) => setTimeout(r, 250));
+      await w.__princePlayScene({ kind: 'level', level: 2 });
+      w.__princeSeed(1);
+      const mine = w.__princeSceneState()?.count;
+      const out: number[] = [];
+      for (let t = 0; t < 400; t++) {
+        const st = w.__princeSceneState();
+        if (!st || !st.running || st.count !== mine) break;
+        if (!w.__princeSceneStep(1000 / 30)) break;
+        const h = w.__princeSceneHash();
+        if (h !== null) out.push(h);
+      }
+      return out;
+    });
+    const once = (a: readonly number[]): number[] => {
+      const out: number[] = [];
+      for (const h of a) if (out[out.length - 1] !== h) out.push(h);
+      return out;
+    };
+    expect(once(pageHashes)).toEqual(once(portHashes));
+  }, 180000);
 
   it('threw nothing while it did it', () => {
     expect(consoleErrors).toEqual([]);

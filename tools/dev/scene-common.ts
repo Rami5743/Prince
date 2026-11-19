@@ -34,6 +34,7 @@ import { loadSound, SPEAKER_FILES } from '../../src/render/audio.ts';
 import { speakerNotes } from '../../src/render/music.ts';
 import { CutscenePlayer, type SceneName } from '../../src/pop/cutscene.ts';
 import { set_hourglass_state } from '../../src/pop/seg001.ts';
+import { set_seed } from '../../src/pop/seg009.ts';
 import { g } from '../../src/pop/state.ts';
 
 /** One sound channel, with the lengths the PC speaker gives. */
@@ -122,6 +123,18 @@ export async function playScene(
      * thirtieth every capture before this round was taken at.
      */
     stepMs?: number;
+    /**
+     * `random_seed`, for a comparison that needs two runs to agree.
+     *
+     * The princess room's six stars twinkle out of `prandom`, so two
+     * runs of one scene draw different pictures however right both
+     * are -- which is why `digest.py --cutscene` masks them.
+     * `tools/dev/page-port.ts` has no mask and compares the page
+     * with the port picture for picture, so it gives both sides the
+     * same seed instead. Nothing else passes it, and the game's own
+     * seed is the clock.
+     */
+    seed?: number;
   } = {},
 ): Promise<void> {
   const sound = clock ?? await SpeakerClock.load(assets);
@@ -147,6 +160,7 @@ export async function playScene(
    */
   if (clock0.hourglass !== undefined) set_hourglass_state(clock0.hourglass);
   p.begin(scene);
+  if (clock0.seed !== undefined) set_seed(clock0.seed);
   const step = clock0.stepMs ?? SCENE_STEP_MS;
   for (let i = 0; i < frames; i++) {
     onFrame(i, p.render().toRgb(p.palette.toRgba()));

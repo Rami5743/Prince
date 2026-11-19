@@ -11852,6 +11852,16 @@ var stars = [
   { x: 24, y: 120, color: 4 },
   { x: 18, y: 128, color: 0 }
 ];
+var PROOM_RANDOM_RECTS = [
+  [16, 97, 24, 128],
+  [96, 99, 104, 115],
+  [214, 99, 222, 115]
+];
+var PROOM_RANDOM_PIXELS = PROOM_RANDOM_RECTS.flatMap(([x0, y0, x1, y1]) => {
+  const out2 = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) out2.push([x, y]);
+  return out2;
+});
 var N_STAR_COLORS = 5;
 var star_colors = [8, 7, 15, 15, 7];
 function draw_star(which_star, _mark_dirty) {
@@ -12918,10 +12928,12 @@ async function boot() {
     }
     game = null;
     afterScene = then;
+    sceneCount += 1;
     cutscene.begin(scene);
     display.present(cutscene.render(), cutscene.palette.toRgba());
     status.textContent = scene.kind === "title" ? "press any key to begin" : "press Escape to skip";
   }
+  let sceneCount = 0;
   function sceneFrame(ms) {
     if (!cutscene || !cutscene.running) return false;
     const going = cutscene.advance(ms);
@@ -13165,7 +13177,9 @@ async function boot() {
     return mod + code.toLowerCase();
   }
   function command(e) {
-    const key = keyName(e);
+    return commandKey(keyName(e));
+  }
+  function commandKey(key) {
     if (!game) return false;
     switch (key) {
       case "space":
@@ -13568,6 +13582,10 @@ async function boot() {
     return { ...game.kid, hash: h >>> 0 };
   };
   w.__princeAsked = () => [...asked];
+  w.__princeSeed = (n) => {
+    set_seed(n);
+  };
+  w.__princeCommand = (key) => commandKey(key);
   w.__princePause = (on) => {
     paused = on;
   };
@@ -13575,8 +13593,23 @@ async function boot() {
     await playScene(scene, restartGame);
   };
   w.__princeSceneStep = (ms) => sceneFrame(ms);
+  w.__princeSceneHash = () => {
+    if (!cutscene) return null;
+    const rgb = cutscene.render().toRgb(cutscene.palette.toRgba());
+    for (const [x, y] of PROOM_RANDOM_PIXELS) {
+      const at = (y * 320 + x) * 3;
+      rgb[at] = 0;
+      rgb[at + 1] = 0;
+      rgb[at + 2] = 0;
+    }
+    let h = 2166136261;
+    for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+    return h >>> 0;
+  };
   w.__princeSceneState = () => cutscene ? {
     running: cutscene.running,
+    /** How many scenes have been begun; see `sceneCount`. */
+    count: sceneCount,
     playing: cutscene.playing,
     /** `input_str` has the keyboard: the hall of fame is asking for a name. */
     wantsText: cutscene.wantsText,

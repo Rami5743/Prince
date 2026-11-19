@@ -2,6 +2,23 @@
  * The game the player plays, against the game the suite measures.
  *
  *   npx tsx tools/dev/page-port.ts [--levels 1,2,3] [--ticks 400]
+ *                                  [--scenes title,2,ending] [--cheats]
+ *
+ * `--scenes` does the same for the parts of the game that are not a
+ * level, and compares them a different way, because a scene's clock
+ * is the **sound's**: `show_title`, `load_intro` and `pv_scene` all
+ * stop dead at `while (check_sound_playing())`, and the page asks a
+ * real `AudioContext` where the headless side asks a model of the PC
+ * speaker. Those two answer different lengths, so frame for frame
+ * the two sides cannot agree and should not be asked to. What they
+ * must agree on is the **sequence of pictures**: every picture the
+ * port draws, in the order it draws them, however long either side
+ * holds one. A wrong picture, a missing one, or one in the wrong
+ * place is a fault; a picture held two frames longer is the device.
+ *
+ * `--cheats` puts all eleven of `process_key`'s cheats through both
+ * sides at the same ticks, which is the other thing the player does
+ * that no digest covers.
  *
  * `pop-report.ts` and `scene-report.ts` measure `src/pop` through
  * stand-ins. `page-walk.ts` measures the page, but only asks whether
@@ -44,6 +61,9 @@ import { serve } from './serve.mjs';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { SOUND_NAME } from './sound-trace.ts';
+import { playScene, SpeakerClock } from './scene-common.ts';
+import type { SceneName } from '../../src/pop/cutscene.ts';
+import { PROOM_RANDOM_PIXELS } from '../../src/pop/seg001.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
@@ -52,11 +72,31 @@ const PORT = 8143;
 const args = process.argv.slice(2);
 const flag = (name: string, dflt: string): string => {
   const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1] : dflt;
+  // A flag that is on its own -- `--scenes --cheats` -- must not eat
+  // the next flag as its value.
+  const v = i >= 0 ? args[i + 1] : undefined;
+  return v && !v.startsWith('--') ? v : dflt;
 };
 const LEVELS = flag('levels', '1,2,3,4,5,6,7,8,9,10,11,12,13,14')
   .split(',').map(Number);
 const TICKS = Number(flag('ticks', '400'));
+const SCENES = flag('scenes', 'title,2,4,6,8,9,12,expired,ending').split(',');
+const WANT_SCENES = args.includes('--scenes') || args.includes('--only-scenes');
+const WANT_LEVELS = !args.includes('--only-scenes');
+const CHEATS = args.includes('--cheats');
+
+/**
+ * The eleven cheats of `process_key`, and when to throw them in.
+ *
+ * `PopGame.cheat` queues them and `step` drains the queue where the
+ * C reads the keyboard, so both sides take them the same way -- and
+ * the page's own key handler goes through `cheat()` too, which is
+ * the fault the round before last found in it.
+ */
+const CHEAT_KEYS = ['shift+s', 'shift+t', 'k', 'r', 'c', 'shift+c',
+  'shift+i', 'shift+w', 'shift+b', '+', '-'];
+const cheatsAt = (t: number): string | null => (CHEATS && t > 0 && t % 29 === 0
+  ? CHEAT_KEYS[(((t / 29) | 0) - 1) % CHEAT_KEYS.length]! : null);
 
 /**
  * Something to do, and the same thing on both sides.
@@ -108,11 +148,75 @@ async function portSide(level: number): Promise<Side> {
   });
   const hashes: number[] = [];
   for (let t = 0; t < TICKS; t++) {
+    const key = cheatsAt(t);
+    if (key) game.cheat(key);
     game.step(controlsAt(t));
     const surface = game.render();
     hashes.push(fnv(surface.toRgb(game.scene.screenPalette.toRgba())));
   }
   return { hashes, asked };
+}
+
+/** A scene's name as `CutscenePlayer.begin` takes it. */
+const sceneOf = (name: string): SceneName => (
+  name === 'title' ? { kind: 'title' }
+    : name === 'ending' ? { kind: 'ending' }
+      : name === 'expired' ? { kind: 'expired' }
+        : { kind: 'level', level: Number(name) });
+
+/** The pictures a run drew, each one once, in the order they came. */
+const sequence = (hashes: readonly number[]): number[] => {
+  const out: number[] = [];
+  for (const h of hashes) if (out[out.length - 1] !== h) out.push(h);
+  return out;
+};
+
+/** How many of `a`'s pictures `b` draws, in order: a plain LCS. */
+function common(a: readonly number[], b: readonly number[]): number {
+  const prev = new Int32Array(b.length + 1);
+  const cur = new Int32Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = 0;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
+    }
+    prev.set(cur);
+  }
+  return prev[b.length];
+}
+
+/**
+ * A channel that is always empty, for both sides of the comparison.
+ *
+ * `show_title`, `load_intro` and `pv_scene` stop dead at
+ * `while (check_sound_playing())`, and the page has to be muted to
+ * be stepped at all -- `__princeSceneStep` runs the scene's clock a
+ * hundred and fifty times faster than the audio device's, so an
+ * unmuted page would wait for sounds that are still at their first
+ * sample. Muted, the page's channel is always empty. So the
+ * headless side is made deaf too, and the two runs are the same run.
+ * What the waits should be is `scene-report.ts`'s business, against
+ * the original.
+ */
+class DeafClock extends SpeakerClock {
+  override get playing(): boolean { return false; }
+}
+
+/** The headless port's pictures of a scene, one per video frame. */
+async function portScene(name: string, frames: number): Promise<number[]> {
+  const assets = new Assets(
+    async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+  const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+  const hashes: number[] = [];
+  await playScene(assets, exe, sceneOf(name), frames, (_i, rgb) => {
+    for (const [x, y] of PROOM_RANDOM_PIXELS) {
+      const at = (y * 320 + x) * 3;
+      rgb[at] = 0; rgb[at + 1] = 0; rgb[at + 2] = 0;
+    }
+    hashes.push(fnv(rgb));
+  }, undefined, await DeafClock.load(assets), { seed: 1 });
+  return hashes;
 }
 
 let bad = 0;
@@ -139,9 +243,9 @@ async function main(): Promise<void> {
   await page.goto(`http://localhost:${PORT}/web/index.html`, { waitUntil: 'load' });
   await page.waitForFunction('window.__princeReady === true', null, { timeout: 60000 });
 
-  for (const level of LEVELS) {
+  for (const level of (WANT_LEVELS ? LEVELS : [])) {
     const port = await portSide(level);
-    const got = await page.evaluate(async ([lvl, ticks, pattern]) => {
+    const got = await page.evaluate(async ([lvl, ticks, pattern, cheatKeys]) => {
       const w = window as unknown as {
         __princeEnterLevel(l: number): Promise<void>;
         __princePause(on: boolean): void;
@@ -149,19 +253,24 @@ async function main(): Promise<void> {
         __princeStep(n: number, c: unknown, hash: boolean):
         { hash: number } | null;
         __princeAsked(): { tick: number; which: number }[];
+        __princeCommand(key: string): boolean;
       };
       const P = pattern as { x: number; y: number; shift: boolean }[];
       w.__princePause(true);
+      const keys = cheatKeys as string[];
       w.__princeMute(true);
       await w.__princeEnterLevel(lvl as number);
       const before = w.__princeAsked().length;
       const hashes: number[] = [];
       for (let t = 0; t < (ticks as number); t++) {
+        if (keys.length && t > 0 && t % 29 === 0) {
+          w.__princeCommand(keys[(((t / 29) | 0) - 1) % keys.length]!);
+        }
         const r = w.__princeStep(1, P[((t / 11) | 0) % P.length], true);
         hashes.push(r ? r.hash : -1);
       }
       return { hashes, asked: w.__princeAsked().slice(before).map((a) => a.which) };
-    }, [level, TICKS, PATTERN] as const);
+    }, [level, TICKS, PATTERN, CHEATS ? CHEAT_KEYS : []] as const);
 
     let first = -1;
     let differ = 0;
@@ -191,6 +300,77 @@ async function main(): Promise<void> {
       console.log(`  !! level ${level}: the sounds asked for part at ${at}: `
         + `page ${got.asked[at] === undefined ? '--' : named(got.asked[at]!)}, `
         + `port ${port.asked[at] === undefined ? '--' : named(port.asked[at]!)}`);
+    }
+  }
+
+  if (WANT_SCENES) {
+    for (const name of SCENES) {
+      const frames = name === 'title' ? 3100 : name === 'ending' ? 1400 : 500;
+      const port = sequence(await portScene(name, frames));
+      const got = await page.evaluate(async ([which, n]) => {
+        const w = window as unknown as {
+          __princePlayScene(s: unknown): Promise<void>;
+          __princeSceneStep(ms: number): boolean;
+          __princeSceneHash(): number | null;
+          __princeSceneState():
+          { running: boolean; playing: unknown; count: number } | null;
+          __princePlaySound(i: number): void;
+          __princeMute(on: boolean): void;
+          __princePause(on: boolean): void;
+          __princeSeed(n: number): void;
+        };
+        const esc = (): void => {
+          window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', code: 'Escape', bubbles: true,
+          }));
+        };
+        w.__princeMute(true);
+        w.__princePause(true);
+        // `changeScene` lets one scene change happen at a time, and
+        // `load_intro` opens on `while (check_sound_playing())`: a
+        // scene asked for over another one is dropped, and a scene
+        // asked for over a tune runs black until the tune ends.
+        for (let i = 0; i < 40 && w.__princeSceneState()?.running; i++) {
+          esc();
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        w.__princePlaySound(-1);
+        await new Promise((r) => setTimeout(r, 300));
+        const s = which as string;
+        await w.__princePlayScene(s === 'title' ? { kind: 'title' }
+          : s === 'ending' ? { kind: 'ending' }
+            : s === 'expired' ? { kind: 'expired' }
+              : { kind: 'level', level: Number(s) });
+        w.__princeSeed(1);
+        const mine = w.__princeSceneState()?.count;
+        const hashes: number[] = [];
+        for (let t = 0; t < (n as number); t++) {
+          // **This** scene's end, and not `__princeSceneStep`'s
+          // return. When a scene finishes `endScene` runs whatever
+          // was behind it -- for a scene the page was asked for by
+          // hand that is `restartGame`, which puts the title up --
+          // so `running` goes on being true, and for the title the
+          // name does not even change. `count` does.
+          const st = w.__princeSceneState();
+          if (!st || !st.running || st.count !== mine) break;
+          if (!w.__princeSceneStep(1000 / 30)) break;
+          const h = w.__princeSceneHash();
+          if (h !== null) hashes.push(h);
+        }
+        return hashes;
+      }, [name, frames] as const);
+      const page2 = sequence(got);
+      const hit = common(port, page2);
+      const ok = hit === port.length;
+      console.log(`scene ${name.padEnd(8)} pictures ${hit} of ${port.length}`
+        + ` port / ${page2.length} page${ok ? '' : '  DIFFERENT'}`);
+      if (!ok) {
+        bad += 1;
+        let at = 0;
+        while (at < port.length && at < page2.length && port[at] === page2[at]) at += 1;
+        console.log(`  !! scene ${name}: the page's pictures part from the `
+          + `port's at picture ${at} of ${port.length}`);
+      }
     }
   }
 

@@ -778,6 +778,37 @@ const stars = [
   { x: 24, y: 120, color: 4 },
   { x: 18, y: 128, color: 0 },
 ];
+/**
+ * Everything in the princess's room that comes out of `prandom`.
+ *
+ * `draw_star` picks which of the six stars twinkles and
+ * `princess_room_torch` picks each flame's frame, so two runs of one
+ * scene draw different pictures however right both are -- which is
+ * why `digest.py --cutscene` masks exactly these against the
+ * original. `tools/dev/page-port.ts` compares the page with the
+ * headless port and has no digest to take a mask from, so it blanks
+ * these instead.
+ *
+ * Measured rather than derived: four runs of `cutscene_2_6` at four
+ * seeds, two hundred frames apiece, differ on 194 pixels and they
+ * fall in exactly three blocks --
+ *
+ *     x  16..24  y  97..128    the six stars
+ *     x  96..104 y  99..115    the left torch
+ *     x 214..222 y  99..115    the right torch
+ */
+export const PROOM_RANDOM_RECTS: readonly (readonly [number, number, number, number])[] = [
+  [16, 97, 24, 128], [96, 99, 104, 115], [214, 99, 222, 115],
+];
+
+/** The same, pixel by pixel. */
+export const PROOM_RANDOM_PIXELS: readonly (readonly [number, number])[] =
+  PROOM_RANDOM_RECTS.flatMap(([x0, y0, x1, y1]) => {
+    const out: [number, number][] = [];
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) out.push([x, y]);
+    return out;
+  });
+
 const N_STAR_COLORS = 5;
 // data:0DE6
 const star_colors = [8, 7, 15, 15, 7] as const;

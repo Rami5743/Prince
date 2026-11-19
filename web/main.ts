@@ -21,6 +21,8 @@ import {
 import { PopGame as Game } from '../src/pop/game.ts';
 import { CutscenePlayer, type SceneName } from '../src/pop/cutscene.ts';
 import { SoundPlayer } from '../src/render/audio.ts';
+import { set_seed as setSeed } from '../src/pop/seg009.ts';
+import { PROOM_RANDOM_PIXELS } from '../src/pop/seg001.ts';
 import { SOUND } from '../src/game/traps.ts';
 import { SEQUENCE_SOUND, SOUND_SILENCE } from '../src/game/sequence.ts';
 import type { Controls } from '../src/game/kid.ts';
@@ -136,12 +138,24 @@ async function boot(): Promise<void> {
     }
     game = null;
     afterScene = then;
+    sceneCount += 1;
     cutscene.begin(scene);
     display.present(cutscene.render(), cutscene.palette.toRgba());
     status.textContent = scene.kind === 'title'
       ? 'press any key to begin'
       : 'press Escape to skip';
   }
+
+  /**
+   * How many scenes have been begun.
+   *
+   * A scene that ends runs whatever was behind it, and that can be
+   * another scene of the same kind -- the title's own follow-on is
+   * `restartGame`, which puts the title up again. So "is the same
+   * scene still running" cannot be answered by its name, and
+   * `tools/dev/page-port.ts` watches this instead.
+   */
+  let sceneCount = 0;
 
   /** One frame of a scene; answers whether one is still playing. */
   function sceneFrame(ms: number): boolean {
@@ -578,7 +592,17 @@ async function boot(): Promise<void> {
    * read as a direction.
    */
   function command(e: KeyboardEvent): boolean {
-    const key = keyName(e);
+    return commandKey(keyName(e));
+  }
+
+  /**
+   * The same, by the key's name rather than by an event.
+   *
+   * `tools/dev/page-port.ts` drives the cheats through this, so that
+   * what it compares with the headless port is the page's **own**
+   * path to `game.cheat` and not a second copy of the switch.
+   */
+  function commandKey(key: string): boolean {
     if (!game) return false;
     switch (key) {
       case 'space': game.showTime(); return true;
@@ -1128,6 +1152,18 @@ async function boot(): Promise<void> {
   };
   /** Every `play_sound` the byte-code has made; see `asked`. */
   w.__princeAsked = (): { tick: number; which: number }[] => [...asked];
+  /**
+   * `random_seed`, for `tools/dev/page-port.ts`.
+   *
+   * The princess room's stars twinkle out of `prandom`, so two runs
+   * of a scene draw different pictures however right both are. The
+   * page has played a title and some levels by the time it is asked
+   * for a scene and the headless port has not, so the comparison
+   * gives both the same seed.
+   */
+  w.__princeSeed = (n: number): void => { setSeed(n); };
+  /** `process_key` by name: the page's own cheat path. */
+  w.__princeCommand = (key: string): boolean => commandKey(key);
   w.__princePause = (on: boolean): void => { paused = on; };
   /**
    * The cutscenes, for the browser tests: start one, run its clock by
@@ -1137,8 +1173,34 @@ async function boot(): Promise<void> {
     await playScene(scene, restartGame);
   };
   w.__princeSceneStep = (ms: number): boolean => sceneFrame(ms);
+  /**
+   * A fingerprint of the picture a scene has on the screen.
+   *
+   * `CutscenePlayer.render()` hands back the surface the generator
+   * has already drawn on -- it draws nothing itself -- so unlike
+   * `__princeFrame` for a level this can be asked for at any time
+   * without changing what it measures. `tools/dev/page-port.ts`
+   * compares the page's scenes with the headless port's by it.
+   */
+  w.__princeSceneHash = (): number | null => {
+    if (!cutscene) return null;
+    const rgb = cutscene.render().toRgb(cutscene.palette.toRgba());
+    // The six stars and the two torches come out of `prandom`
+    // and no two runs draw them alike, so they are blanked here
+    // exactly as the digest's mask blanks them against the
+    // original. See `PROOM_RANDOM_RECTS`.
+    for (const [x, y] of PROOM_RANDOM_PIXELS) {
+      const at = (y * 320 + x) * 3;
+      rgb[at] = 0; rgb[at + 1] = 0; rgb[at + 2] = 0;
+    }
+    let h = 2166136261;
+    for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+    return h >>> 0;
+  };
   w.__princeSceneState = () => (cutscene ? {
     running: cutscene.running,
+    /** How many scenes have been begun; see `sceneCount`. */
+    count: sceneCount,
     playing: cutscene.playing,
     /** `input_str` has the keyboard: the hall of fame is asking for a name. */
     wantsText: cutscene.wantsText,
