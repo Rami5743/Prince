@@ -190,9 +190,9 @@ const EXPECTED: Record<string, number> = {
    * the end of it -- which is the thing to measure next with
    * `scene-frames.ts` and the capture side by side.
    */
-  cutscene2: 72,
+  cutscene2: 73,
   cutscene4: 131,
-  cutscene6: 70,
+  cutscene6: 75,
   cutscene8: 121,
   cutscene9: 136,
   cutscene12: 70,

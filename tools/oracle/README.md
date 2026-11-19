@@ -2886,6 +2886,116 @@ apiece, the same scripts:
 `cutscene9` was the worst run in the whole suite. Nothing in the port
 changed, and nothing in a scorer or a mask.
 
+### `machine=vgaonly` threw the low bit of red and blue away
+
+`-qp 0` and `libx264rgb` make the recording lossless, and the
+recording was still not what the game drew. **DOSBox 0.74's
+`machine=vgaonly` draws mode 13h through a sixteen-bit lookup.**
+`VGA_DAC_SendColor` builds
+
+    vga.dac.xlat16[i] = ((blue>>1)&0x1f) | (green&0x3f)<<5 | ((red>>1)&0x1f)<<11
+
+which is RGB565: red and blue keep five bits of the DAC's six and
+**their low bit never reaches the screen**. What comes out is
+`(v & ~1) << 2` for red and blue and `v << 2` for green.
+
+The frames say so without any reading of DOSBox at all. Over the
+frames of six different scene captures, red and blue have not one
+odd six-bit value between them and green has twenty to twenty-nine:
+
+    ending      R: 30 vals, 0 odd6   G: 45 vals, 21 odd6   B: 25 vals, 0 odd6
+    cutscene4   R: 32 vals, 0 odd6   G: 61 vals, 29 odd6   B: 30 vals, 0 odd6
+    cutscene2   R: 32 vals, 0 odd6   G: 60 vals, 29 odd6   B: 28 vals, 0 odd6
+    title       R: 32 vals, 0 odd6   G: 52 vals, 26 odd6   B: 27 vals, 0 odd6
+    cutscene9   R: 32 vals, 0 odd6   G: 56 vals, 28 odd6   B: 30 vals, 0 odd6
+    the port    R: 57 vals,27 odd6   G: 50 vals, 24 odd6   B: 44 vals,20 odd6
+
+`machine=svga_s3` takes the true-colour path and renders a DAC entry
+the way the hardware does, `(v << 2) | (v >> 4)` -- 20 comes out 81
+and 60 comes out 243, where `vgaonly` gives 80 and 240 -- and that
+mapping is one-to-one over the sixty-four values, so nothing is
+lost.
+
+**It needs `scaler=normal2x` with it.** The S3 does not double mode
+13h the way `vgaonly` does: it paints 320x200 into the top left of
+the window, and a grab of one shows a non-black box of y 0-191,
+x 0-318 where `vgaonly`'s fills 640x400. The capture's
+`crop 640:400` would take a quarter of the picture, and a scene cut
+that way scores 2 of 137 however right the port is. With
+`normal2x` the window is 640x400 again and every 2x2 block is
+exact, so `--scale 320:200` is lossless. `dosbox_oracle.py` picks
+the scaler off the machine.
+
+#### Why it mattered, and why gameplay never noticed
+
+`digest.py` hashes palette **indices**. A gameplay capture has two
+or three dozen colours far apart, so a red four units out still
+lands on the right entry. A **scene** is nothing but fades and its
+palette holds about a thousand near-duplicates two units apart, and
+there the nearest entry is as likely to be the wrong one as the
+right one. The ending scored **1 of 564** with every pixel of its
+picture right.
+
+#### The port's own expansion was wrong too
+
+Six bits are a *fraction of full scale*: a DAC fed 63 drives the
+line to maximum, so 63 is 255 and not 252.
+`ScreenPalette.toRgba` had a bare `v << 2` under a comment saying it
+was "the way the DAC did", which made every colour in the game 1.2
+per cent dark and the white of the title screen (252,252,252). It
+is `(v << 2) | (v >> 4)` now, which is `round(v * 255 / 63)` for
+every one of the sixty-four values and is what DOSBox's own
+true-colour path emits.
+
+#### A digest says which DAC it was taken through
+
+The two cannot be mixed. With the port on the true expansion and
+the old captures still on RGB565 the gameplay suite fell from 19477
+to **15519** -- `shadow5` 300 of 300 to **0** -- because a port red
+of 231 is nearer the palette's 232 than its 224. So `digest.py`
+writes a `dac` field, `digest-common.ts` reads it with `dacOf`, and
+`PaletteMap` puts the port's pixel through that capture's own DAC
+before it searches the palette.
+
+A digest with no flag is `rgb565`, because every digest taken
+before this round is. It is **not** sniffed from the colours, and
+that is worth saying: the forty gameplay digests also went through
+the YUV encoder, so thirty-one of `b4ff4672`'s thirty-six colours
+are not multiples of four and it is `vgaonly` all the same. A flag
+written where the capture is made knows; a reader looking at the
+colours afterwards does not.
+
+### The emulated CPU is part of the scene's clock
+
+A scene's timing is not only the game's timers. `proc_cutscene_frame`
+draws the whole princess room before it waits for `timer_0`, and
+`fade_in_frame` writes 256 DAC entries before it waits for
+`timer_1`, so on a slow enough machine both are **work-bound** and
+not timer-bound. The same `cutscene2` script, three cycle counts,
+measuring the fade from the last black frame to the first
+full-brightness one and then the gaps between picture changes while
+the scene is held:
+
+    cycles  20000   fade 63 video frames   gaps 3 3 3 3 3 3 3 3 ...
+    cycles  60000   fade 15                gaps 2 3 2 3 2 3 2 3 ...
+    cycles 150000   fade 16                gaps 1 3 5 3 4 5 3 5 ...
+
+At the 20000 the suite captures with, the fade is **63** video
+frames against the port's 64 and the held scene changes every
+**3** -- which is `cutscene_frame_time` 6 at a sixtieth apiece,
+exactly. So the capture and the code agree at that cycle count, and
+`FADE_UNITS` stays at 2. Re-measured on the true-colour digests,
+where a fade frame can match for the first time:
+
+    FADE_UNITS  2 (the code)   1604 of 2224
+                1.8            1445 of 2212
+                1.75           1425 of 2202
+                1.6875 (54/64) 1393 of 2202
+
+Three rounds have now tried to make the port keep the emulator's
+fade time and all three lost. Do not try a fourth without a new
+measurement.
+
 ### The ending: four taps of `h`
 
 This file used to say `end_sequence` was out of reach -- a
@@ -2903,38 +3013,86 @@ capture taken in the repository's own copy would change every capture
 taken after it. `scenecapture.sh` does that for a spec with
 `"writes": true`.
 
-Three faults came out of the first capture, all of them things the
-player sees at the end of the game he has just finished: the eight
-rows under the room (`clip_room`), **no `fade_in_1` at all** in
-`end_sequence_anim`, and **no hourglass**, because `load_intro` calls
-`reset_cutscene` which zeroes `hourglass_state`.
+#### Know which capture reached the ending, because one of them did not
 
-What is left, measured and written down so it is not measured again:
-after the fade the capture's palette is the port's **with the low bit
-of every channel cleared** -- exactly, 57 against 56, 19 against 18,
-63 against 62, every even channel agreeing, 39125 of a frame's 64000
-pixels. Two experiments on it are dead: flooring every fade's final
-palette to an even shade takes the other eight scenes from **1225 to
-410**, and flooring the ending's alone leaves it at **1 of 564**.
-With the low bit ignored a frame still differs by about a thousand
-pixels in the box round the Prince and the princess.
+**The first ending capture never got there.** Everything the round
+that took it read off it was read off the wrong scene. Its princess
+room is at 218.5 seconds, it fades in over sixty-three video frames,
+it has an hourglass on the carpet -- and four seconds after that room
+the screen is black again and six seconds after it a level is
+starting with `59 MINUTES LEFT` written under it. It is a cutscene
+between two levels, which does fade in and does show the princess
+with an hourglass. The chain had lost a `shift+l` somewhere.
 
-**Two captures, taken an hour apart, show the same relation** --
-39125 pixels of a frame differing by exactly four in one and 19998
-in the other, the rest identical -- so it is the original's and not
-one capture's. They also agree about where the scene starts, to the
-frame: black at 218.5 seconds and the room full at 221.0 in both.
+A capture that *has* reached the ending is known by what follows the
+princess's room, and it costs one `ffmpeg -ss` to check:
 
-What is left after the low bit is **the princess**. She faces the
-wrong way in the port -- fixed, `init_princess_right` -- and she
-stands in the wrong place: the capture has her to the left of the
-hourglass centred on 134 where `Char.x = 136` draws her centred on
-173. Rendered at every x from 92 to 136 the best is 118 at 247
-pixels against 639 at 136, and what is left there is on her right
-edge, which is a mirror and not a position. 118 is not a constant
-the C would hold, and the port draws a right-facing princess
-correctly everywhere else: `cutscene9`'s comes from `princess_stand`
-and 129 of its 206 frames are exact.
+    the tyrant Jaffar lies dead ...   the story screen
+    the landscape                     TITLE_MAIN
+    PRINCE OF PERSIA + a name box     the hall of fame
+
+In a capture that does reach it, there is **no fade and no
+hourglass**: the screen is black at video frame 104 and the whole
+room, all 46 of its colours, is there at 108, with nothing in
+between, and the box `draw_hourglass` fills -- `add_midtable(...,
+19, 0, 168, ...)`, x 152 to 170 and y 141 to 168 -- is carpet on
+every frame of the embrace. Both of which are what the C says:
+`end_sequence_anim` opens on `copy_screen_rect(&screen_rect)`, calls
+no `fade_in_1`, and never sets `hourglass_state` after `load_intro`'s
+`reset_cutscene` has zeroed it.
+
+#### What the right capture was worth
+
+    the fade out, the room up whole            1 -> 108 of 480
+    `init_ending_princess` back to the C's
+      `init_princess`, facing left             (with the above)
+    the hourglass out                        108 -> 219
+    the spec's `remMin` 57 -> 58             219 -> 325
+
+`init_ending_princess` is the one to remember, because the last
+round turned the princess round on the strength of that capture and
+the move cost her **position** as well as her facing.
+`load_frame_to_obj` is `obj_x = (char_dx_forward(dx) << 1) - 116`
+and `char_dx_forward` negates `dx` for a character facing left, so a
+direction is worth **four times the frame's own dx**. That is the
+whole of the "the capture has her centred on 134 where `Char.x =
+136` draws her centred on 173" that was written down and could not
+be accounted for: thirty-nine pixels is a direction, not a position,
+and the fitted `x = 118` that was searched for does not exist.
+
+`remMin` is the game's `rem_min` when the scene starts, and the hall
+of fame reads it straight: `show_hof` prints `hof[i].min - 1` and
+`hof[i].tick / 12`. The capture's reads **57:57**, so `rem_min` is
+58 and `rem_tick` is 684.
+
+#### What is left of it
+
+Between the three places below the port is exact **to the pixel** --
+capture frames 492 to 1084 against the port's 450 to 1042, nought
+unmasked differences anywhere:
+
+* the two **fades**, `fade_out_1` into the story screen and
+  `fade_out_2` into the hall of fame;
+* the name box's **cursor**, which blinks every six sixtieths. From
+  capture frame 1203 the run alternates three exact and three not,
+  all the way to the end: the port's blink is exactly half a period
+  out of the capture's and nothing else in those frames differs;
+* the Prince **running in**, capture frames 187 to 236.
+
+And a fourth thing, which is the scorer and not the port.
+`exactAgreement` searches offsets within **+/-16** of the one
+`bestOffset` chose, and over an eighteen-hundred-frame scene the
+emulator's clock wanders further than that: the ending's own offset
+reads **18** at the first drawn frame and **36** by the hall of
+fame. Measured, by widening that window and changing nothing else:
+
+    range 16 (what is used)   ending 325 of 480   scenes 1604 of 2224
+    range 32                  ending 352 of 482   scenes 1648 of 2227
+    range 64                  ending 354 of 482   scenes 1650 of 2227
+
+It is left at 16. Forty-six frames of a scene is not worth loosening
+the one thing that decides whether a picture counts, and the number
+is written here so nobody has to measure it again.
 
 ### Where the start of a scene is, and why it moves
 

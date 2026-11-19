@@ -41,6 +41,147 @@
 ## ============================================================
 
 
+## THE EYE WAS COLOUR-BLIND, AND THE ENDING HAD BEEN MEASURED AGAINST THE WRONG SCENE
+
+Two instruments wrong again, and the second one cost the whole of
+the worst number in the project.
+
+### 1. `machine=vgaonly` threw the low bit of red and blue away
+
+Lossless encoding was not enough. **DOSBox 0.74's `vgaonly` draws
+mode 13h through a sixteen-bit lookup** --
+`vga.dac.xlat16[i] = ((blue>>1)&0x1f) | (green&0x3f)<<5 | ((red>>1)&0x1f)<<11`
+-- so red and blue keep five bits of the DAC's six and the low bit
+of each never reached a single capture this project has ever taken.
+The frames say it without reading a line of DOSBox: over six
+different scene captures, red and blue have **not one odd six-bit
+value between them** and green has twenty to twenty-nine.
+
+`machine=svga_s3` takes the true-colour path and renders a DAC entry
+the way the hardware does, `(v << 2) | (v >> 4)` -- 20 comes out 81
+and 60 comes out 243 -- which is one-to-one over the sixty-four
+values. It needs **`scaler=normal2x`** with it: the S3 does not
+double mode 13h, so it paints 320x200 into the corner of the window
+and the capture's `crop 640:400` would take a quarter of the
+picture. (A scene cut that way scores 2 of 137 however right the
+port is, which is how that was found.)
+
+**And the port's own expansion was wrong too.** Six bits are a
+fraction of full scale, so 63 is 255 and not 252.
+`ScreenPalette.toRgba` had a bare `v << 2` under a comment claiming
+it was what the DAC did, which made every colour in the game 1.2 per
+cent dark and the white of the title screen (252,252,252).
+
+The two cannot be mixed, and that is measured: with the port on the
+true expansion and the old captures still RGB565 the gameplay suite
+fell from 19477 to **15519**, `shadow5` 300 of 300 to **0**. So a
+digest now carries a **`dac` field** saying which DAC its capture
+went through, `PaletteMap` puts the port's pixel through that DAC
+before it searches the palette, and a digest without the field is
+`rgb565` -- which every digest taken before this round is. It is
+deliberately **not** sniffed from the colours: the forty gameplay
+digests also went through the old YUV encoder, so thirty-one of
+`b4ff4672`'s thirty-six colours are not multiples of four and it is
+`vgaonly` all the same.
+
+With the model in place the gameplay score is unchanged to the tick.
+
+### 2. The ending: 1 of 564 to 325 of 480
+
+**The first ending capture never reached the ending.** Everything the
+last round read off it was read off a cutscene between two levels:
+that capture's princess room is at 218.5 seconds, it fades in over
+sixty-three frames and it has an hourglass on the carpet -- and four
+seconds later the screen is black again and six seconds later a
+level is starting with `59 MINUTES LEFT` under it. The chain had
+lost a `shift+l`.
+
+**Check what follows the room.** A capture that reached the ending
+has `the tyrant Jaffar lies dead`, then the landscape, then the hall
+of fame after it. One `ffmpeg -ss` tells you.
+
+In a capture that did reach it there is **no fade and no hourglass**:
+black at video frame 104, the whole room and all 46 of its colours
+at 108, nothing in between, and the box `draw_hourglass` fills is
+carpet on every frame of the embrace. Both of which are what the C
+has had all along -- `end_sequence_anim` opens on
+`copy_screen_rect(&screen_rect)`, calls no `fade_in_1`, and never
+sets `hourglass_state` after `reset_cutscene` zeroed it.
+
+    the fade out, the room up whole        1 -> 108 of 480
+    `init_ending_princess` back to the C's
+      `init_princess`, facing left
+    the hourglass out                    108 -> 219
+    the spec's `remMin` 57 -> 58         219 -> 325
+
+**The princess's "wrong x" was her direction.** `load_frame_to_obj`
+is `obj_x = (char_dx_forward(dx) << 1) - 116` and `char_dx_forward`
+negates `dx` for a character facing left, so turning a character
+round moves them by **four times the frame's own dx**. The
+thirty-nine pixels the last round wrote down and could not account
+for -- "the capture has her centred on 134 where `Char.x = 136`
+draws her centred on 173" -- is exactly that, and the fitted
+`x = 118` it went looking for does not exist.
+
+`remMin` is read straight by the hall of fame: `show_hof` prints
+`hof[i].min - 1`, and the capture's reads **57:57**.
+
+Between what is left the port is exact **to the pixel** -- capture
+frames 492 to 1084 against the port's 450 to 1042, nought unmasked
+differences. What is left is the two fades, the name box's cursor
+(from capture frame 1203 the run alternates three exact and three
+not, so the port's six-sixtieth blink is half a period out and
+nothing else in those frames differs), and the Prince running in.
+
+### The emulated CPU is part of a scene's clock
+
+`proc_cutscene_frame` draws the whole room before it waits for
+`timer_0` and `fade_in_frame` writes 256 DAC entries before it waits
+for `timer_1`, so on a slow enough machine both are **work-bound**.
+Same script, three cycle counts:
+
+    cycles  20000   fade 63 video frames   held scene changes every 3
+    cycles  60000   fade 15                every 2 or 3
+    cycles 150000   fade 16                every 3 to 7
+
+At the 20000 the suite captures with, the fade is 63 frames against
+the port's 64 and the held scene changes every 3, which is
+`cutscene_frame_time` 6 at a sixtieth apiece. **The capture and the
+code agree at that cycle count**, which is why `FADE_UNITS` is 2.
+Re-measured on the true-colour digests, where a fade frame can match
+for the first time: 2 gives 1604, 1.8 gives 1445, 1.75 gives 1425,
+1.6875 gives 1393. Three rounds have tried to make the port keep the
+emulator's fade time; all three lost.
+
+### Two things left where they are, with their numbers
+
+* **`exactAgreement`'s window.** It searches offsets within +/-16 of
+  the one `bestOffset` chose, and over an eighteen-hundred-frame
+  scene the emulator's clock wanders further: the ending's own
+  offset reads 18 at the first drawn frame and 36 by the hall of
+  fame. Widening it and changing nothing else: range 32 gives
+  1648 of 2227, range 64 gives 1650. **It stays at 16** -- 46
+  frames is not worth loosening the one thing that decides whether a
+  picture counts.
+* **A scene spec's `start` is good for one capture.** Two captures
+  of the ending's own script put the scene twelve seconds apart, and
+  a scene outside `range` reads 1 however right the port is. The
+  ending carries `start: 231.0, range: 900` now. Three fresh
+  `cutscene8` captures all came back 1 of 37 and all three had
+  mis-skipped the chain -- the scene at 95 seconds in them is not
+  cutscene 8 -- so `cutscene8` kept its old capture.
+
+### What this round says about method
+
+* **Check the instrument before the port, and then check the
+  instrument again.** Last round found the encoder; this round found
+  the emulated video card behind it and a wrong expansion in the
+  port itself.
+* **Know what you captured.** A capture of the wrong scene is
+  indistinguishable from a capture of the right one until you look
+  at what comes after it, and three "faults" were written into the
+  port off one.
+
 ## THE ORACLE HAS AN EAR NOW, AND THE EYE WAS THROWING HALF ITS LIGHT AWAY
 
 Two instruments this round, and between them they found five faults
@@ -452,12 +593,14 @@ the last two, which is where `prandom` takes the attract mode over.)
 and, for the first time, the parts of the game that are not
 gameplay, by `tools/dev/scene-report.ts`:
 
-    title              473 of   582   the opening, every page load
-    expired            158 of   173   the hourglass
-    cutscene2           72 of   137   cutscene8    122 of 188
-    cutscene4          130 of   136   cutscene9    129 of 206
-    cutscene6           70 of   137   cutscene12    70 of 136
-    ending               1 of   564   captured for the first time
+    title              512 of   616   the opening, every page load
+    expired            167 of   188   the hourglass
+    cutscene2           73 of   136   cutscene8    121 of 188
+    cutscene4          131 of   136   cutscene9    136 of 206
+    cutscene6           75 of   136   cutscene12    70 of 136
+    ending             325 of   480   from 1
+
+    scenes            1610 of  2222
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:
