@@ -150,6 +150,28 @@ the other eight scenes from 1225 to 410 -- and flooring the ending's
 alone leaves it at 1. With the low bit ignored a frame still differs
 by a thousand pixels round the Prince and the princess.
 
+### 4. The demo, which needs no key at all
+
+The last of the three parts of the game with no capture. Boot the
+original and press **nothing**: at about 108.5 seconds the title has
+run its story, the screen goes black and the demo level is drawn.
+There is no Ctrl+A -- a key during the attract mode starts a real
+game -- so `--after-blank` from `--start 106` is the whole of the
+numbering and `--anchor-text` is not used, because the demo draws no
+level title.
+
+**219 of 221, first try**, and its two missing ticks are the last
+two: the demo's fight is `autocontrol_opponent`, which reads
+`prandom`, and the port's own demo at seeds 1 and 77777 is the same
+picture for 218 ticks and differs on 372 of the 381 after that. So
+every tick of the demo that anything could adjudicate is drawn
+exactly.
+
+A recording may carry `seed` now, and `demo` is the only one that
+does: `PopGame.start` seeds level 0 from the clock, which is the C's
+own `random_seed = (dword)time(NULL)` -- right in the browser, where
+the attract mode should differ every time, and wrong for a replay.
+
 ### What the two instruments say about method
 
 * **A capture is cheap and it is the authority**, and that now
@@ -420,9 +442,12 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         19258 of 20011   96%
+    measured         19477 of 20232   96%
     retired           1883 of  3767   50%
-    all              21141 of 23778   89%
+    all              21360 of 23999   89%
+
+(`demo` is the new one: 219 of 221, and its two missing ticks are
+the last two, which is where `prandom` takes the attract mode over.)
 
 and, for the first time, the parts of the game that are not
 gameplay, by `tools/dev/scene-report.ts`:
