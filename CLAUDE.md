@@ -41,6 +41,224 @@
 ## ============================================================
 
 
+## THE ROOMS WERE THE UNMEASURED HALF, AND JAFFAR'S FLASH WAS HALF A SECOND OF WHITE
+
+    measured   20631 of 21385   96%   (was 19478 of 20232)
+    scenes      2442 of  2601   94%   (was 2440 of 2636)
+    sounds       417 of   419         (unmoved)
+
+    rooms2      1153 of  1153  100%   -- new: all 24 rooms of level 2
+    title        586 of   633  ->  588 of 633
+    cutscene8    168 of   192  ->  168 of 180
+    cutscene9    181 of   205  ->  181 of 194
+    expired      190 of   229  ->  190 of 217
+
+### 1. `measured` had not moved in five rounds because it was not measuring the rooms
+
+Walked every recording that has a digest and counted which rooms it
+ever has on the screen:
+
+    level  1  21 rooms  9 drawn     level  8  21 rooms   2 drawn
+    level  2  24 rooms  3 drawn     level  9  24 rooms   3 drawn
+    level  3  22 rooms  3 drawn     level 10  19 rooms   2 drawn
+    level  4  24 rooms  4 drawn     level 11  23 rooms   2 drawn
+    level  5  19 rooms  6 drawn     level 12  24 rooms   2 drawn
+    level  6  14 rooms  6 drawn     level 13  11 rooms   9 drawn
+    level  7  24 rooms  2 drawn     level 14   6 rooms   4 drawn
+
+**59 of 266.** A recording of a level reaches the rooms a player
+walks through and no others, so the original's picture of the other
+two hundred and seven had never been put beside the port's at all.
+Every gameplay shortfall has an account beside it and the accounts
+are right; what they do not fix is that four fifths of the game was
+never looked at.
+
+**`tools/dev/room-tour.ts`** prints a depth-first walk of a level's
+`roomlinks` as `h`, `j`, `u` and `n` cheats -- `next_room = room_L`,
+`room_R`, `room_A`, `room_B` -- twenty-four ticks on each room, with
+the Prince left standing where the level put him. `check_the_end`
+does `loadkid`, `anim_tile_modif`, `start_chompers`,
+`check_fall_flo` and `check_shadow`, so a room drawn this way raises
+everything that room raises: its guard, its chompers, its falling
+floors, its shadow.
+
+**Round 14's rule does not bite here, and that is the point.** A
+probe whose cheat has to land inside a few ticks cannot be captured,
+because the emulator takes a cheat several ticks after the tick it
+is asked for -- that is what killed `gate2c` on a six-tick window.
+A tour does not care *when* the cheat lands: the room is still for
+two seconds either side of it, so the ticks the emulator spends
+reading the key are the only ones lost and every tick after it is
+the same picture on both sides. Nothing is pressed, so there is no
+key edge, no shift to choose and no key lottery; nobody fights, so
+the only `prandom` left is the flames the digest masks.
+
+`probe-seeds.ts` says so before a capture is spent -- two seeds
+77776 apart, on each level's tour:
+
+    levels 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14   0 ticks differ
+    level 13                                          41 ticks differ
+
+level 13's 41 being `check_fall_flo` on room 23, the same six floors
+that are the whole of what `level13` and `jaffar` are short.
+
+The first one captured:
+
+    rooms2 try 1  gaps 46: 781 of 1146   clock 46: 782 of 1146
+    rooms2 try 1  gaps 49: 170 of 1137   clock 49: 170 of 1137
+    rooms2 try 2  gaps 46: 1153 of 1153  clock 46: 1153 of 1153
+    rooms2 try 2  gaps 49: 1153 of 1153  clock 49: 1153 of 1153
+
+**1153 of 1153** -- 1156 ticks, 46 room changes, all twenty-four
+rooms of level 2, every one to the pixel, under both numberings and
+both `--start` values. (The first try is the capture lottery this
+file has measured five times over.) A tour costs about thirteen
+minutes of DOSBox at two tries.
+
+### 2. Jaffar's flash was five cutscene frames of white, not five blinks
+
+`proc_cutscene_frame` sets the background colour, waits
+`delay_ticks(1)` -- two sixtieths -- and puts it back, all inside
+one cutscene frame. The driver put it back in `step()`, where the
+next frame is the next **cutscene** frame. `pv_scene` is the one
+place that shows: `flash_time` is 5 and `cutscene_frame_time` is 7,
+so the white stayed up for five cutscene frames end to end.
+
+Port frames of the title, mean brightness:
+
+    before   2103  83.9   2104..2120  168.5   2121  84.2
+    after    2104 and 2107 and 2111 and 2114 and 2118 are 168,
+             everything between them 84
+
+A fresh capture of `PRINCE.EXE` reads 84 on every frame but two --
+2097 and 2111 are 168 and 2098, 2101, 2104, 2108 and 2112 are not
+-- which is five two-sixtieth blinks grabbed at sixty a second and
+halved back to thirty by `--untear`. `remove_flash` is owed those
+two sixtieths on the scene's own clock now. Title 586 -> 588, and
+the player sees Jaffar conjure instead of the screen going white
+for half a second.
+
+### 3. Three scenes were measured past the end of their own scene
+
+The round before this one found two scenes whose `frames` stopped
+**before** the scene did, and wrote the rule down: "the port's own
+last changing frame, and then a little". It swept the six cutscenes
+upwards and none gained. Nobody swept downwards.
+
+`exactAgreement` truncates to `min(capture frames, port frames)`, so
+a `frames` past the end of the port's scene adds capture frames
+nothing can agree with -- and for a scene reached by a chain of
+`shift+l`, what the capture draws there is **the next level**:
+
+    cutscene8   capture frame 429 (report 318): the whole screen
+                changes and level 8 is up; the port's picture last
+                changed on 309
+    cutscene9   481 (report 357): level 9; the port's on 343
+    expired     817 (report 464): the level again; the port's on 435
+
+Swept, agreed of total:
+
+    cutscene8   310: 168/180   318: 168/180   320: 168/182
+                340: 168/191   380: 168/192  (was)
+    cutscene9   350: 181/194   356: 181/194   360: 181/196
+                420: 181/205  (was)
+    expired     450: 190/217   460: 190/217   470: 190/222
+                480: 190/229  (was)
+
+**The title is left at 3100 and that is a measurement too**: its
+capture stops at 2998 and the port's title is still changing at 3000
+and 3060, so its last two frames are the clock, not the next level.
+
+### 4. The hourglass sand is real, and it is the grab
+
+Job 1 of the round was the title's twenty-one frames of hourglass
+sand. A fresh title capture, every failing frame diffed against the
+port's pixel by pixel with the digest's own mask on:
+
+    13 frames   5-6 px at x 161, y 157..164   the hourglass sand
+     5 frames   252-366 px, x 123..161, y 124..166   the princess
+                and the hourglass, one DAC unit apart
+    11 frames   ~41000 px, the whole screen, mean one shade apart
+     4 frames   19460 px, mean 168 against 84   the flash, above
+     4 frames   the scene's two ends
+
+So the sand is really there, and it is **the cutscene-frame clock
+against the drift the fade needs**, not a phase the port can fix.
+`draw_hourglass` advances `hourglass_sandflow` once per cutscene
+frame in the port exactly as in the C, and the same is true of the
+capture -- but the capture's fade covers its 64 shades in 54 video
+frames where the port takes 63, so `exactAgreement` walks the drift
+to line the **shade** up, and at a drift that is not a multiple of
+the cutscene frame the **sand** is then one step out. One frame in
+three and a half, which is thirteen of the forty-four.
+
+`cutscene2`'s own remainder, the same way, against a fresh capture:
+
+    10 frames   252-359 px inside the princess's 17x43 box, one DAC
+                unit apart -- the split palette burst `--untear`
+                cannot undo
+    13 frames   the whole screen, one shade apart
+     3 frames   the first three shades of the fade-in
+
+Two things were tried for it and both lose, with their cost:
+
+* **stepping the fade clock after the generator instead of before**
+  (so a fade starts in the frame it is asked for) -- title 586 ->
+  **599**, and ending 805 -> 791, expired 190 -> 184, cutscene9 181
+  -> 179: **2440 -> 2431** in all.
+* **a flat cutscene fade rate re-swept** against the current
+  `wait_time`-aware model (`POP_CUTSCENE_FADE_UNITS`, which only
+  touches the `wait_time` nought fades):
+
+      2 everywhere   2414      1.7143   2188
+      1.8            2244      1.68     2185
+      1.75           2194      1.6      2189
+
+  against the kept `{6: 2, 7: 12/7}`'s **2440**. The capture's fade
+  really is 54 to 57 video frames for 64 shades, read off a fresh
+  `cutscene2` capture shade by shade (the brightest channel steps
+  2,2,3,5,6,7,9,9,10,12,13,... over frames 33 to 86) -- and a port
+  that runs at the capture's rate scores **worse**, because
+  `exactAgreement` charges `SLIP` 2 for each change of drift and
+  gains 1 for a match. A port slower than the capture needs a
+  **monotone** drift and pays once per step; a port at the capture's
+  own rate but a different phase has to wobble up and down, and
+  wobbling costs more than it gains. The fade stays at two
+  sixtieths a shade.
+
+### 5. The emulator's cutscene frame is 3 video frames, where it keeps time
+
+Measured off the digests by grouping each capture's changes (two
+frames one apart are one cutscene frame torn in half) and taking the
+gaps between groups:
+
+    cutscene2    26 cutscene frames   every one of 24 gaps is 3
+    cutscene4    26                   every one of 24 gaps is 3
+    cutscene6    26                   3.083
+    cutscene12   26                   3.364 (three frames changed
+                                      nothing: gaps of 5 and 6)
+    cutscene8    60                   3.357
+    cutscene9    72                   3.309
+    expired     102                   3.388, a regular interleave --
+                                      3433433433434333433433343...
+
+So `cutscene_frame_time` 6 is **exactly** three video frames where
+the emulator keeps time, and the long scenes are the emulator
+falling behind its own timer. Making the port keep the emulator's
+time was tried again, scaling the cutscene frame alone (the fade
+clock is separate now, which the three earlier attempts did not
+have):
+
+    scale 1.00, fade 2        (the port)      2440
+    scale 1.13, fade 2                        1962
+    scale 1.13, fade 1.695                    1757
+    scale 1.09, fade 1.635                    1874
+    scale 1.10, fade 1.65                     1855
+    scale 1.20, fade 1.80                     1666
+
+That is the fifth round to try the scene clock and the fifth to
+lose. **Do not spend a sixth on it.**
+
 ## THIS ROUND, IN ONE BLOCK
 
     measured   19478 of 20232   96%   unmoved, to the tick

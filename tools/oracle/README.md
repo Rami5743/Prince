@@ -298,6 +298,66 @@ three tiles further along. `where.py` is what showed it: it prints the
 bounding box of whatever moved in each tick, which tells `the port draws
 him somewhere else` apart from `the port does not draw him at all`.
 
+## A probe that draws a room, and the unmeasured half of the game
+
+Every recording in the suite plays. A recording of a level reaches
+the rooms a player walks through and no others, and counting them
+says what that leaves out: **59 of the game's 266 rooms** had ever
+been on the screen of a capture. Ten levels had two or three rooms
+apiece -- level 12 two of twenty-four, level 7 two of twenty-four,
+level 9 three. The original's picture of the other two hundred and
+seven had never been put beside the port's at all.
+
+`tools/dev/room-tour.ts` writes a probe that draws them. It is a
+depth-first walk of the level's `roomlinks` as `h`, `j`, `u` and
+`n` cheats -- `next_room = room_L`, `room_R`, `room_A`, `room_B` --
+twenty-four ticks on each room, with the Prince left standing where
+the level put him. `check_the_end` does `loadkid`,
+`anim_tile_modif`, `start_chompers`, `check_fall_flo` and
+`check_shadow`, so a room drawn this way raises everything that
+room raises.
+
+    npx tsx tools/dev/room-tour.ts 2 24
+    node tools/oracle/make_probe.mjs '1156.' \
+      tools/oracle/recordings/rooms2.json --level 2 --cheat 28:h ...
+    npx tsx tools/dev/probe-seeds.ts rooms2
+    tools/oracle/firstcapture.sh rooms2 0 2
+
+**Why a tour can be captured where `gate2c` could not.** The rule
+from `gate2c` is that a probe whose cheat has to land inside a few
+ticks cannot be captured: `recording_to_script.mjs` sends a cheat
+at the same `(t - 1) / 12` every control edge goes out at, and the
+emulator reads it several ticks later. A tour does not care when
+the cheat lands. The room is still for two seconds either side of
+it, so the ticks the emulator spends reading the key are the only
+ones lost and every tick after it is the same picture on both
+sides. Nothing is pressed, so there is no key edge, no `--shift` to
+choose and no key lottery; nobody fights, so the only `prandom`
+left is the flames the digest masks.
+
+Measured by `probe-seeds.ts` before a capture was spent, two seeds
+77776 apart: the tours of levels 1 to 12 and 14 draw **every tick
+the same**, and level 13's differ on 41, which is `check_fall_flo`
+dropping six floors on room 23 -- the same six that are the whole
+of what `level13` and `jaffar` are short.
+
+And measured against the original: `rooms2` is **1153 of 1153**.
+1156 ticks, 46 room changes, all twenty-four rooms of level 2,
+every one to the pixel, under both numberings and both `--start`
+values. Its first try scored 781 and 170, which is the capture
+lottery the rest of this file describes; two tries is enough.
+
+Three things to know when writing one:
+
+* a tour of a level from 9 up needs `--minutes 59`, for the reason
+  under "The hour runs while the chain is skipping";
+* level 7 kills a Prince who is left standing, so its tour needs
+  Shift held over the fall;
+* the tour's `--cheat` ticks are two seconds apart on purpose. A
+  room change costs the emulator about four video frames of redraw,
+  and with the room still either side of it that costs the ticks it
+  falls in and nothing after them.
+
 ## What a capture cannot settle
 
 Two things in the harness are a tick wide, and neither of them is the
