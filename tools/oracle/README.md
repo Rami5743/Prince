@@ -2852,3 +2852,80 @@ anything up: 24 is priority 1 and uninterruptible, which is music, and
 and 22 the third loose-floor shake are in `DIGISND*.DAT` and not in
 `IBM_SND*.DAT`, so on the machine the oracle runs they are silent and
 hold the channel for no time. That is the hardware and not the port.
+
+
+## The encoder was throwing the scenes away, and the ending
+
+### `-pix_fmt yuv444p` is not lossless, and a scene's palette cannot take it
+
+`-qp 0` makes x264 lossless **in the space it works in**, and
+`yuv444p` makes ffmpeg convert the grabbed RGB to YUV first. That
+rounds. A random 640x400 image round-trips a unit or three out;
+`libx264rgb` with `-pix_fmt rgb24` round-trips with a maximum
+difference of **nought**, and the recorder uses it now.
+
+It matters because `digest.py` hashes palette **indices**. A gameplay
+capture has two or three dozen colours and they are far apart --
+`0fbffa60`'s palette has 42 entries and `level3`'s 26 -- so which one
+a pixel is is never in doubt, which is what this file has always
+said. A **scene** is nothing but fades, and its palette holds about a
+thousand entries, near-duplicates two units apart. A colour a unit or
+three out then maps to a different index and the frame is marked
+wrong although the picture is right.
+
+All eight scenes taken again with the lossless encoder, one capture
+apiece, the same scripts:
+
+    title       426 -> 473 of 582     cutscene6     37 ->  70 of 137
+    expired     108 -> 158 of 173     cutscene8     74 -> 122 of 188
+    cutscene2    34 ->  72 of 137     cutscene9      8 -> 129 of 206
+    cutscene4    36 -> 130 of 136     cutscene12    33 ->  70 of 136
+
+    the same eight   756 of 1723  ->  1224 of 1695
+
+`cutscene9` was the worst run in the whole suite. Nothing in the port
+changed, and nothing in a scorer or a mask.
+
+### The ending: four taps of `h`
+
+This file used to say `end_sequence` was out of reach -- a
+thirteen-level chain and then the Prince in room 5 of level 14.
+`check_the_end` runs `end_sequence()` when the **drawn** room of
+level 14 is 5, and `h` is `next_room = room_L`. Level 14's rooms link
+4 -> 3 -> 2 -> 1 -> 5, so four taps of `h` win the game with nobody
+moving, and the whole scene is four seconds of script after the
+chain. `tools/oracle/scenes/ending.json` is it.
+
+A scene that can make the game **write** gets a copy of the game
+directory: `hof_write` puts a `PRINCE.HOF` beside `PRINCE.EXE` and
+`show_title` draws the hall of fame when there is one, so one ending
+capture taken in the repository's own copy would change every capture
+taken after it. `scenecapture.sh` does that for a spec with
+`"writes": true`.
+
+Three faults came out of the first capture, all of them things the
+player sees at the end of the game he has just finished: the eight
+rows under the room (`clip_room`), **no `fade_in_1` at all** in
+`end_sequence_anim`, and **no hourglass**, because `load_intro` calls
+`reset_cutscene` which zeroes `hourglass_state`.
+
+What is left, measured and written down so it is not measured again:
+after the fade the capture's palette is the port's **with the low bit
+of every channel cleared** -- exactly, 57 against 56, 19 against 18,
+63 against 62, every even channel agreeing, 39125 of a frame's 64000
+pixels. Two experiments on it are dead: flooring every fade's final
+palette to an even shade takes the other eight scenes from **1225 to
+410**, and flooring the ending's alone leaves it at **1 of 564**.
+With the low bit ignored a frame still differs by about a thousand
+pixels in the box round the Prince and the princess.
+
+### Where the start of a scene is, and why it moves
+
+A scene reached by playing begins where the chain puts it, and the
+chain's own clock is not the script's. Two captures of the ending,
+the same script, started the scene at **231.0** and at **218.5**
+seconds -- twelve seconds apart -- so a scene spec's `start` is good
+for the capture it was read off and no other. The ending's begins
+with the black `load_intro` paints: a mean-brightness sweep of the
+video at half-second steps finds it in seconds, and that is how both
+were found.

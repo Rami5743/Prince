@@ -41,6 +41,125 @@
 ## ============================================================
 
 
+## THE ORACLE HAS AN EAR NOW, AND THE EYE WAS THROWING HALF ITS LIGHT AWAY
+
+Two instruments this round, and between them they found five faults
+in parts of the game nothing had ever looked at.
+
+### 1. The sound, compared with the original for the first time
+
+Every one of the fifty digests before this round was a **picture**.
+The capture chain ran DOSBox with `pcspeaker=false`, nothing in the
+suite had ever compared a sound with anything, and that is why three
+of the five bugs a human found in one sitting were sound while
+neither score moved by a tick.
+
+`dosbox_oracle.py --speaker` lets the mixer carry the PC speaker's
+square wave and a `wave` line in the script toggles DOSBox's own
+recorder, which taps the mixer, works with `nosound=true` and costs
+the emulator no wall clock. **It changes nothing else** -- the game's
+speaker code and its timer interrupts run whatever the mixer does
+with the result -- so a sound capture is the same run as a picture
+capture and every picture digest stays valid.
+
+    title         212 of 212 notes    6 of 6 sounds
+    cutscene2snd   21 of  21 notes    1 of 1 sound    +0.00s
+    gate1snd       92 of  96 noises   origin 28.45  (92 against 56)
+    level10bsnd    90 of  90 noises   origin 174.40 (90 against 70)
+    sounds        415 of 419
+
+The title the player hears on **every page load** is the original's,
+sound for sound and note for note, with every start inside 0.18
+seconds over seventy-two seconds. `level10bsnd` is the run the gate
+stutter was found on and it is exact.
+
+The whole instrument is written up in `tools/oracle/README.md` --
+what a square wave can be read as, what it cannot (two notes of one
+pitch with no rest between them are one note; a note under two and a
+half cycles has no pitch), why an effect is measured as *noise* and
+not as notes, and why a recording's origin is known and not searched
+for. Three things fell out of building it:
+
+* **The stored "divisor" is the pitch in hertz.** The title's notes
+  are 73, 110, 117, 147, 156, 185, 196, 208 and the recording of the
+  original playing them measures 73.0, 110.1, 116.5, 147.1, 155.3,
+  185.1, 196.1, 207.0 Hz. As 8253 divisors those would be ten and
+  sixteen kilohertz.
+* **The ear settles `check_sound_playing`, which the eye could only
+  assume.** It is read in three places that are *play* and not sound.
+  Against `gate1`'s capture, with the game told what is in the one
+  channel: **26 of 96**. Deaf, which is what every picture digest
+  rests on: **90 of 96**.
+* **`SOUND_NAME` was wrong from index 9 on** and this file had been
+  quoting it: 19 is `draw_sword` and not the footstep, 23 is the
+  footstep, **24 is `death_regular`** and not `loose_shake_3`. It is
+  built from `soundids` now.
+
+### 2. Every scene capture had been thrown away in YUV
+
+`-qp 0` is lossless in whatever space the encoder works in, and
+`-pix_fmt yuv444p` makes ffmpeg convert the grabbed RGB to YUV first,
+which rounds: a test image comes back a unit or three out, and
+`libx264rgb` with `-pix_fmt rgb24` comes back with a maximum
+difference of **nought**.
+
+It mattered because `digest.py` hashes palette **indices** and a
+scene's palette holds a thousand entries off its own fades, near
+duplicates two units apart. A gameplay capture has two or three dozen
+colours far apart (`0fbffa60` has 42, `level3` 26) and never noticed.
+A scene is nothing but fades.
+
+    title       426 -> 473 of 582     cutscene6     37 ->  70 of 137
+    expired     108 -> 158 of 173     cutscene8     74 -> 122 of 188
+    cutscene2    34 ->  72 of 137     cutscene9      8 -> 129 of 206
+    cutscene4    36 -> 130 of 136     cutscene12    33 ->  70 of 136
+
+    the same eight scenes   756 of 1723  ->  1224 of 1695
+
+`cutscene9` was the worst run in the suite at 8 of 207. Not one frame
+of that came from a change to the port, a scorer or a mask: the
+pictures were right and the instrument was rounding them away. **So
+before reading a scene's shortfall as timing, check when its capture
+was taken.**
+
+### 3. The ending is reachable, and three faults were in it
+
+`tools/oracle/README.md` had the ending down as out of reach -- a
+thirteen-level chain *and* the Prince in room 5 of level 14. It is
+**four taps of `h`**. `check_the_end` runs `end_sequence()` when the
+*drawn* room of level 14 is 5, `h` is `next_room = room_L`, and that
+level's rooms go 4, 3, 2, 1, 5. The game is won with nobody moving.
+
+All three faults are things the player sees at the end of the game he
+has just finished, and none could be seen by any other means:
+
+* the port drew the **eight rows under the room** that the original
+  leaves black -- 2560 of the 3100 pixels of a frame;
+* **`end_sequence_anim` had no `fade_in_1` at all**, so the
+  princess's room was simply *there* where the capture fades it in
+  over sixty-three video frames;
+* and no **hourglass**, because `load_intro` calls `reset_cutscene`,
+  which zeroes `hourglass_state`.
+
+It is pinned at 1 of 564, which is what the port honestly scores, and
+what is left is written up in the commit and in the test: after the
+fade the capture's palette is the port's **with the low bit of every
+channel cleared**, exactly, on 39125 of a frame's 64000 pixels.
+Flooring every fade's target to an even shade is **dead** -- it takes
+the other eight scenes from 1225 to 410 -- and flooring the ending's
+alone leaves it at 1. With the low bit ignored a frame still differs
+by a thousand pixels round the Prince and the princess.
+
+### What the two instruments say about method
+
+* **A capture is cheap and it is the authority**, and that now
+  includes what the machine *plays*. Three of last round's five bugs
+  and three of this round's were settled by taking a capture rather
+  than by reading.
+* **Check the instrument before the port.** A thousand frames of
+  scene were being lost to a colour conversion, and every one of them
+  had been written up as the emulator's clock.
+
 ## FIVE BUGS THE PLAYER FOUND BY PLAYING, AND ALL FIVE WERE REAL
 
 Everything above and below this is the tick score. **These five were
@@ -308,13 +427,27 @@ captures of a real PRINCE.EXE:
 and, for the first time, the parts of the game that are not
 gameplay, by `tools/dev/scene-report.ts`:
 
-    title              426 of   606   the opening, every page load
-    expired            108 of   177   the hourglass
-    cutscene2           34 of   137   cutscene8     74 of 188
-    cutscene4           36 of   135   cutscene9      8 of 207
-    cutscene6           37 of   137   cutscene12    33 of 136
+    title              473 of   582   the opening, every page load
+    expired            158 of   173   the hourglass
+    cutscene2           72 of   137   cutscene8    122 of 188
+    cutscene4          130 of   136   cutscene9    129 of 206
+    cutscene6           70 of   137   cutscene12    70 of 136
+    ending               1 of   564   captured for the first time
 
-**The pictures are not what is short.** Frames of each put beside the
+and what the player *hears*, for the first time, by
+`tools/dev/sound-report.ts`:
+
+    title         212 of 212 notes    gate1snd      92 of  96 noises
+    cutscene2snd   21 of  21 notes    level10bsnd   90 of  90 noises
+
+**Most of what used to be short was the encoder, not the clock** --
+see the top of this file: the same eight scenes went from 756 to 1224
+on captures taken losslessly, with no change to the port. What
+follows was written before that and is kept because the frame-level
+readings in it are still right; the *conclusion* that the remainder
+is all the emulator's clock is now only about the remainder.
+
+Frames of each put beside the
 port's come out diff 0 outside the mask -- `cutscene9` at capture
 frames 198, 240 and 278 is the port's 82, 121 and 139 to the pixel.
 What moves is *when*, and both things that move it are the
