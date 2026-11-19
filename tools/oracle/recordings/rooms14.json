@@ -1,11 +1,11 @@
 {
  "format": "prince-input-recording",
  "version": 1,
- "recordedAt": "2026-11-19T16:36:03.226Z",
+ "recordedAt": "2026-11-19T19:29:20.968Z",
  "level": 14,
  "startMinutes": 59,
  "ticksPerSecond": 12,
- "timeline": "268.",
+ "timeline": "220.",
  "events": [],
  "states": [],
  "cheats": [
@@ -23,7 +23,7 @@
   },
   {
    "tick": 100,
-   "key": "h"
+   "key": "j"
   },
   {
    "tick": 124,
@@ -35,14 +35,6 @@
   },
   {
    "tick": 172,
-   "key": "j"
-  },
-  {
-   "tick": 196,
-   "key": "j"
-  },
-  {
-   "tick": 220,
    "key": "j"
   }
  ]

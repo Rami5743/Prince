@@ -210,6 +210,71 @@ const EXPECTED: Record<string, number> = {
    */
   rooms2: 1153,
   /**
+   * The other room tours, each the whole of its level.
+   *
+   *     rooms3    1060 of 1060   22 rooms, 3 drawn before
+   *     rooms4    1154 of 1154   24 rooms, 4 drawn before
+   *     rooms5     914 of  914   19 rooms, 6 drawn before
+   *     rooms6     626 of  627   14 rooms, 6 drawn before
+   *     rooms8     967 of  967   21 rooms, 2 drawn before
+   *     rooms9    1104 of 1104   24 rooms, 3 drawn before
+   *     rooms10    749 of  750   19 rooms, 2 drawn before
+   *     rooms11   1104 of 1105   23 rooms, 2 drawn before
+   *     rooms12   1157 of 1157   24 rooms, 2 drawn before
+   *
+   * Six of the nine are exact, and the three that are not are one
+   * tick each: `rooms6` 485, `rooms10` 0 and 101, `rooms11` 0, 412,
+   * 532, 580 and 724.
+   *
+   * **`rooms8` is `startMinutes` again and nothing else.** It read
+   * 944 of 967 with the default hour and its twenty-three missing
+   * ticks were 26 to 48 in one block, which is the block
+   * `tools/oracle/README.md` names under "The hour runs while the
+   * chain is skipping": seven `shift+l` cost enough play that the
+   * capture arrives with `59 MINUTES LEFT` where a port given a
+   * fresh hour writes `60`. With `startMinutes` 59 it is **967 of
+   * 967**. Levels 9 and up were given 59 from the start for the
+   * same reason.
+   */
+  rooms3: 1060,
+  rooms4: 1154,
+  rooms5: 914,
+  rooms6: 626,
+  rooms8: 967,
+  rooms9: 1104,
+  rooms10: 749,
+  rooms11: 1104,
+  rooms12: 1157,
+  /**
+   * **451 of 483**, and its thirty-two are ticks 3 to 52 in one
+   * block: `check_fall_flo` drops six floors on level 13's room 23
+   * at `-(prandom(0xff) & 0x0f)` ticks apiece, the room the level
+   * starts in and the room this tour starts on. It is the same
+   * `prandom` that is the whole of what `level13` and `jaffar` are
+   * short, and `probe-seeds.ts` said so before the capture: two
+   * seeds differ on 41 of the 532 ticks and all of them are at the
+   * start. Every tick from 53 to the end is drawn exactly.
+   */
+  rooms13: 451,
+  /**
+   * **Level 1's tour is not here, and the reason is the capture's
+   * tick nought.** Its two captures scored 97 and 100 of about 995
+   * -- and at an offset of **+52** the same capture agrees with the
+   * port on **929 of its 997**, so the run is right and the
+   * numbering is not. Level 1 is the one level a chain reaches with
+   * no `shift+l` in front of it, so the Ctrl+A is sent while the
+   * level is still coming up and DOSBox takes it about four seconds
+   * late; `split_ticks.py --after-blank` then finds a blank that is
+   * not the restart. Re-split eight ways (both numberings, with and
+   * without `--anchor-text`, `--start` 22 to 31) it reads 97, 100,
+   * 189 and, with `--after-blank` dropped and `--start 31.3`, 710
+   * of 1006. Hand-picking a `--start` until the score is good is
+   * fitting the instrument to the port, so the probe is kept and
+   * the digest is not. Level 1 is also the best-covered level in
+   * the suite -- nine of its twenty-one rooms and twelve recordings
+   * -- so it is the one tour worth least.
+   */
+  /**
    * 572 against the capture this file was written for, **574**
    * against a fresh one split with `--numbering clock`.
    *

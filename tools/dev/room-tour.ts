@@ -78,6 +78,20 @@ const hold = Number(process.argv[3] ?? 24);
  * to gain by moving earlier.
  */
 const first = Number(process.argv[4] ?? 28);
+/**
+ * Rooms the tour must not draw, as `--avoid 5`.
+ *
+ * `check_the_end` runs `end_sequence()` when the drawn room of level
+ * 14 is room 5, so a tour that walks into it wins the game: the
+ * original plays the ending and the headless port, which has no
+ * scene player, goes on drawing the level. `rooms14` scored 106 of
+ * 269 that way and parts company on the exact tick the fourth cheat
+ * lands -- 106, with every tick before it drawn.
+ */
+const avoid = new Set<number>(
+  (process.argv.includes('--avoid')
+    ? process.argv[process.argv.indexOf('--avoid') + 1] : '')
+    .split(',').filter(Boolean).map(Number));
 
 const game = await PopGame.start(assets, exe, level, { minutesLeft: 60, seed: 1 });
 game.step({ x: 0, y: 0, shift: false });
@@ -92,7 +106,9 @@ const queue = [startRoom];
 while (queue.length) {
   const r = queue.pop()!;
   for (const [, n] of neighbours(r)) {
-    if (n >= 1 && n <= 24 && !reachable.has(n)) { reachable.add(n); queue.push(n); }
+    if (n >= 1 && n <= 24 && !avoid.has(n) && !reachable.has(n)) {
+      reachable.add(n); queue.push(n);
+    }
   }
 }
 const visited = new Set<number>([startRoom]);
@@ -100,7 +116,7 @@ const moves: { key: string; to: number }[] = [];
 const back: Record<string, string> = { h: 'j', j: 'h', u: 'n', n: 'u' };
 const walk = (r: number): void => {
   for (const [k, n] of neighbours(r)) {
-    if (!(n >= 1 && n <= 24) || visited.has(n)) continue;
+    if (!(n >= 1 && n <= 24) || avoid.has(n) || visited.has(n)) continue;
     visited.add(n);
     moves.push({ key: k, to: n });
     walk(n);
