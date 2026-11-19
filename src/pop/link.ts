@@ -93,4 +93,12 @@ export const out = {
   erase_bottom_text: (_arg: number): void => {},
   /** `play_death_music`, which `play_kid` then waits out. */
   play_death_music: (): void => {},
+  /**
+   * `sound_interruptible[which] = value`.
+   *
+   * The only place the game writes that table is
+   * `animate_leveldoor`, and it writes it on every tick of a level
+   * door moving.
+   */
+  set_sound_interruptible: (_which: number, _value: boolean): void => {},
 };

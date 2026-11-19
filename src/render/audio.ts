@@ -127,7 +127,24 @@ const priorityOf = (i: number): number => PRIORITY[i] ?? 0xff;
  * `PopGame` does the same now, and this is the table it needs.
  */
 export const soundPriority = priorityOf;
-const interruptibleOf = (i: number): boolean => (INTERRUPTIBLE[i] ?? 1) !== 0;
+/**
+ * `sound_interruptible[]`, which the game **writes**.
+ *
+ * It is a table in memory, not a constant: `animate_leveldoor` sets
+ * `sound_interruptible[sound_15_leveldoor_sliding]` to 0 before every
+ * `play_sound` of the door going up and to 1 before every one of it
+ * coming down, so the rising door holds the channel for all
+ * forty-three of its ticks and the falling one does not. The port had
+ * the table as a constant and both lines were missing.
+ */
+const interruptible = new Uint8Array(64);
+for (let i = 0; i < interruptible.length; i++) interruptible[i] = INTERRUPTIBLE[i] ?? 1;
+const interruptibleOf = (i: number): boolean => (interruptible[i] ?? 1) !== 0;
+
+/** `sound_interruptible[index] = value`, which `animate_leveldoor` does. */
+export function setSoundInterruptible(index: number, value: boolean): void {
+  if (index >= 0 && index < interruptible.length) interruptible[index] = value ? 1 : 0;
+}
 /**
  * `sound_interruptible[i]`, the other half of `play_next_sound`'s test.
  *

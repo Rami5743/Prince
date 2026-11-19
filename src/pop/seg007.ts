@@ -358,6 +358,10 @@ export function animate_leveldoor(): void {
         g.trob.type = -1;
         out.play_sound(soundids.sound_14_leveldoor_closing);
       } else if (g.trob.type === 4) {
+        // `sound_interruptible[sound_15_leveldoor_sliding] = 1`, which
+        // the translation did not have: a level door coming **down**
+        // may be cut off, where one going up may not.
+        out.set_sound_interruptible(soundids.sound_15_leveldoor_sliding, true);
         out.play_sound(soundids.sound_15_leveldoor_sliding);
       }
     } else {
@@ -375,6 +379,15 @@ export function animate_leveldoor(): void {
           }
         }
       } else {
+        // `sound_interruptible[sound_15_leveldoor_sliding] = 0`, which
+        // the translation did not have either. It is asked for on
+        // each of the forty-three ticks the door takes to rise, and
+        // without this the forty-second of them could cut the
+        // forty-first off after eighty-three milliseconds -- which is
+        // not a sound. The static table happens to hold 0 for 15, so
+        // the rising door was right by luck; the line above, which
+        // sets it to 1, is what made the luck run out.
+        out.set_sound_interruptible(soundids.sound_15_leveldoor_sliding, false);
         out.play_sound(soundids.sound_15_leveldoor_sliding);
       }
     }

@@ -15,7 +15,7 @@
  */
 import type { Assets } from '../render/assets.ts';
 import { Surface, PALETTE_SIZE as PALETTE_ENTRIES, type ScreenPalette } from '../render/surface.ts';
-import { soundPriority } from '../render/audio.ts';
+import { soundPriority, setSoundInterruptible } from '../render/audio.ts';
 import { buildLevelScene, type LevelScene } from '../game/scene.ts';
 import { readExeTables } from '../game/exe-tables.ts';
 import { flipHorizontally } from '../render/room.ts';
@@ -402,6 +402,9 @@ export class PopGame {
     outSlots.display_text_bottom = display_text_bottom;
     outSlots.erase_bottom_text = erase_bottom_text;
     outSlots.play_death_music = () => { this.deathMusic = DEATH_MUSIC_TICKS; };
+    // `sound_interruptible[which] = value`, which only
+    // `animate_leveldoor` writes.
+    outSlots.set_sound_interruptible = setSoundInterruptible;
     /**
      * `play_sound`, which does not play anything.
      *

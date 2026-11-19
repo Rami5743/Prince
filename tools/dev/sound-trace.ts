@@ -163,14 +163,27 @@ async function main(): Promise<void> {
   });
 
   let heardLast = -2;
+  let run = game;
   for (let t = 0; t < limit; t++) {
     asked = [];
     took = [];
     before = [];
-    game.step(timeline[t] ?? { x: 0, y: 0, shift: false });
+    /**
+     * The two things `digest-common.ts`'s replay does and this did
+     * not: the button that answers `Press Button to Continue`, and
+     * the restart after a death.
+     *
+     * Without them a recording that kills the Prince -- `gate1` does,
+     * at tick 558 -- stood still for the rest of the run, and the
+     * trace stopped before the exit door it was wanted for.
+     */
+    const now = timeline[t] ?? { x: 0, y: 0, shift: false };
+    if (now.shift && !(timeline[t - 1]?.shift)) run.pressButton();
+    run.step(now);
+    if (run.restartDue) run = await run.restart(assets, exe);
     // `play_next_sound` is the last line of `draw_game_frame`, so the
     // tick's sound is not asked for until the frame is drawn.
-    game.render();
+    run.render();
     sink.advance(1 / 12);
     const playing = player.isPlaying;
     const heard = (player as unknown as { playingIndex: number }).playingIndex;

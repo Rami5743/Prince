@@ -2728,7 +2728,12 @@ var INTERRUPTIBLE = [
 ];
 var priorityOf = (i) => PRIORITY[i] ?? 255;
 var soundPriority = priorityOf;
-var interruptibleOf = (i) => (INTERRUPTIBLE[i] ?? 1) !== 0;
+var interruptible = new Uint8Array(64);
+for (let i = 0; i < interruptible.length; i++) interruptible[i] = INTERRUPTIBLE[i] ?? 1;
+var interruptibleOf = (i) => (interruptible[i] ?? 1) !== 0;
+function setSoundInterruptible(index, value) {
+  if (index >= 0 && index < interruptible.length) interruptible[index] = value ? 1 : 0;
+}
 var SoundPlayer = class {
   assets;
   context;
@@ -4278,6 +4283,15 @@ var out = {
   },
   /** `play_death_music`, which `play_kid` then waits out. */
   play_death_music: () => {
+  },
+  /**
+   * `sound_interruptible[which] = value`.
+   *
+   * The only place the game writes that table is
+   * `animate_leveldoor`, and it writes it on every tick of a level
+   * door moving.
+   */
+  set_sound_interruptible: (_which, _value) => {
   }
 };
 
@@ -6579,6 +6593,7 @@ function animate_leveldoor() {
         g.trob.type = -1;
         out.play_sound(soundids.sound_14_leveldoor_closing);
       } else if (g.trob.type === 4) {
+        out.set_sound_interruptible(soundids.sound_15_leveldoor_sliding, true);
         out.play_sound(soundids.sound_15_leveldoor_sliding);
       }
     } else {
@@ -6594,6 +6609,7 @@ function animate_leveldoor() {
           }
         }
       } else {
+        out.set_sound_interruptible(soundids.sound_15_leveldoor_sliding, false);
         out.play_sound(soundids.sound_15_leveldoor_sliding);
       }
     }
@@ -10358,6 +10374,7 @@ var PopGame = class _PopGame {
     out.play_death_music = () => {
       this.deathMusic = DEATH_MUSIC_TICKS;
     };
+    out.set_sound_interruptible = setSoundInterruptible;
     out.play_sound = (which) => {
       if (this.nextSound < 0 || soundPriority(which) <= soundPriority(this.nextSound)) {
         this.nextSound = which;
