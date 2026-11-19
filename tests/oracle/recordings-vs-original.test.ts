@@ -257,6 +257,49 @@ const EXPECTED: Record<string, number> = {
    */
   rooms13: 451,
   /**
+   * **942 of 1129**, and the whole of its 187 is the fall level 7
+   * opens with.
+   *
+   * `set_start_pos` drops the Prince down a three-room shaft and
+   * `land()` makes six rows of terminal velocity `take_hp(100)`, so
+   * he is dead on tick 17 and a tour played past a dead Prince is
+   * a different run: the first try of this probe, with nothing done
+   * about it, scored **292 of 1131** and 342 at its best offset.
+   * Nothing the player can hold saves him -- measured in the port
+   * at fifteen Shift hold lengths, he grabs and dies four ticks
+   * after the grab is let go, every time (hold 0 dies at 17, hold
+   * 40 at 52) -- and `shift+w` does not either, because the fall
+   * has already started. `r` does: `resurrect` on tick 24 leaves
+   * him alive in room 3 with three flasks.
+   *
+   * What is left is one offset. At **-20** the capture agrees with
+   * the port on **1028 of its 1129**, which is twenty ticks more
+   * than `exactAgreement`'s window can walk, and the twenty are the
+   * death: `Char.alive` does not advance while the death music is
+   * playing and the port's `RESTART_PROMPT_DELAY` is a constant 46.
+   * Fifty ticks the port never draws anywhere are the death
+   * animation itself. Every one of the twenty-four rooms is on the
+   * screen of both runs.
+   */
+  rooms7: 942,
+  /**
+   * **221 of 221**, the five rooms of level 14 a tour may draw.
+   *
+   * The sixth is room 5, where `check_the_end` runs
+   * `end_sequence()`: the first tour of this level **won the game**
+   * and parted company on the exact tick the fourth cheat landed,
+   * 106 of 269, with every tick before it drawn -- the original
+   * playing the ending while the headless port, which has no scene
+   * player, went on drawing the level. `room-tour.ts --avoid 5` is
+   * the fix.
+   *
+   * Thirteen `shift+l` is the longest chain in the suite and it
+   * shows: the first two captures of this came back **nought at
+   * every offset from -600 to +600**, which is a lost skip, and the
+   * four tries after them found one that is exact.
+   */
+  rooms14: 221,
+  /**
    * **Level 1's tour is not here, and the reason is the capture's
    * tick nought.** Its two captures scored 97 and 100 of about 995
    * -- and at an offset of **+52** the same capture agrees with the

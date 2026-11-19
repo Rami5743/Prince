@@ -153,3 +153,4 @@ rooms2 0  (one capture; try 1 scored 781, try 2 1153 on all four splits)
 # The room tours. No keys, so no shift: 0 is the only one there is.
 rooms3 0   rooms4 0   rooms5 0   rooms6 0   rooms8 0
 rooms9 0   rooms10 0  rooms11 0  rooms12 0  rooms13 0
+rooms7 0   rooms14 0

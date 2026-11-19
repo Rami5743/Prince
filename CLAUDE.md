@@ -43,15 +43,31 @@
 
 ## THE ROOMS WERE THE UNMEASURED HALF, AND JAFFAR'S FLASH WAS HALF A SECOND OF WHITE
 
-    measured   20631 of 21385   96%   (was 19478 of 20232)
+    measured   31080 of 32056   97%   (was 19478 of 20232)
     scenes      2442 of  2601   94%   (was 2440 of 2636)
     sounds       417 of   419         (unmoved)
 
-    rooms2      1153 of  1153  100%   -- new: all 24 rooms of level 2
+    rooms drawn by a capture   250 of 266   (was 59 of 266)
+
+    rooms2    1153 of 1153   rooms9    1104 of 1104
+    rooms3    1060 of 1060   rooms10    749 of  750
+    rooms4    1154 of 1154   rooms11   1104 of 1105
+    rooms5     914 of  914   rooms12   1157 of 1157
+    rooms6     626 of  627   rooms13    451 of  483
+    rooms7     942 of 1129   rooms14    221 of  221
+    rooms8     967 of  967
+
     title        586 of   633  ->  588 of 633
     cutscene8    168 of   192  ->  168 of 180
     cutscene9    181 of   205  ->  181 of 194
     expired      190 of   229  ->  190 of 217
+
+**Twelve room tours, 11602 ticks, eight of them exact.** Every room
+of levels 2, 3, 4, 5, 6*, 8, 9, 10*, 11*, 12, 13* and 14 is now
+drawn by the original and by the port and the two pictures are the
+same picture (* one tick, or the account below). Only level 1's
+twelve rooms, three of level 7's and room 5 of level 14 are left,
+and each has a reason written down.
 
 ### 1. `measured` had not moved in five rounds because it was not measuring the rooms
 
@@ -114,6 +130,65 @@ rooms of level 2, every one to the pixel, under both numberings and
 both `--start` values. (The first try is the capture lottery this
 file has measured five times over.) A tour costs about thirteen
 minutes of DOSBox at two tries.
+
+**The four that are not exact, and what each one is:**
+
+* **`rooms8` was `startMinutes` and nothing else.** 944 of 967, and
+  the twenty-three were ticks 26 to 48 in one block -- the block
+  the README names under "The hour runs while the chain is
+  skipping". Seven `shift+l` cost enough play that the capture
+  arrives with `59 MINUTES LEFT` where a port given a fresh hour
+  writes `60`. With `startMinutes` 59 it is **967 of 967**. Levels
+  9 and up were given 59 from the start. **Give any new probe past
+  level 8 the hour its capture arrived with.**
+* **`rooms13`'s thirty-two are ticks 3 to 52**, `check_fall_flo`
+  dropping six floors on room 23 -- the room level 13 starts in and
+  the same `prandom` that is the whole of what `level13` and
+  `jaffar` are short. Every tick from 53 on is exact.
+* **`rooms7`'s 187 are the fall level 7 opens with.** The Prince is
+  dead on tick 17 and a tour played past a dead Prince scored **292
+  of 1131** (342 at its best offset). Nothing a player can hold
+  saves him: fifteen Shift hold lengths measured in the port, and
+  he grabs and dies four ticks after the grab is let go every time
+  -- hold 0 dies at 17, hold 40 at 52 -- and `shift+w` does not
+  either, because the fall has already started. **`r` does:**
+  `resurrect` on tick 24 leaves him alive in room 3 with three
+  flasks, and it took the probe to **942 of 1129**. What is left is
+  one offset: at **-20** the capture agrees on **1028 of 1129**,
+  twenty ticks more than `exactAgreement` can walk, and the twenty
+  are the death -- `Char.alive` does not advance while the death
+  music plays and the port's `RESTART_PROMPT_DELAY` is a constant
+  46.
+* **`rooms14` won the game the first time.** Room 5 of level 14 is
+  where `check_the_end` runs `end_sequence()`, so the tour's fourth
+  cheat ended the level: the original played the ending while the
+  headless port, which has no scene player, went on drawing the
+  level -- 106 of 269, parting company on that exact tick with
+  every tick before it drawn. `room-tour.ts --avoid 5` is the fix
+  and the rebuilt probe is **221 of 221**. Its thirteen `shift+l`
+  is the longest chain in the suite and two captures of it came
+  back **nought at every offset from -600 to +600**, which is a
+  lost skip; four tries found one.
+
+**`rooms1` has no digest and that is a measurement.** Two captures
+read 97 and 100 of about 995 -- and at an offset of **+52** the
+same capture agrees with the port on **929 of its 997**, so the run
+is right and the capture's tick nought is not. Level 1 is the one
+level a chain reaches with no `shift+l` in front of it, so Ctrl+A
+is sent while the level is still coming up and DOSBox takes it
+about four seconds late; `split_ticks.py --after-blank` then finds
+a blank that is not the restart. Re-split eight ways -- both
+numberings, with and without `--anchor-text`, `--start` 22 to 31 --
+it reads 97, 100, 189, and 710 of 1006 with `--after-blank` dropped
+and `--start 31.3`. Picking a `--start` by score is fitting the
+instrument to the port, so the probe is kept and the digest is not.
+
+And one thing to know about the instrument that picks the probes:
+**`probe-seeds.ts`'s threshold is three hundred pixels**, which is
+"bigger than a torch". It said 0 for `rooms8`, whose twenty-three
+missing ticks were the hour's text, and for `rooms14`, whose ending
+it could never reach because the port it replays has no scene
+player to diverge into. It is a filter, not a proof.
 
 ### 2. Jaffar's flash was five cutscene frames of white, not five blinks
 
@@ -1880,9 +1955,12 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         19478 of 20232   96%
+    measured         31080 of 32056   97%
     retired           1883 of  3767   50%
-    all              21361 of 23999   89%
+    all              32963 of 35823   92%
+
+(The jump is the twelve room tours: see the top of this file. The
+suite had drawn 59 of the game's 266 rooms and now draws 250.)
 
 (`demo` is the new one: 219 of 221, and its two missing ticks are
 the last two, which is where `prandom` takes the attract mode over.)
