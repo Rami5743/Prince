@@ -3235,6 +3235,7 @@ var FONT_OFFSET = 107020;
 function looksLikeGlyph(exe, o) {
   return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
 }
+var UNDERSCORE_ROWS = [0, 0, 0, 0, 0, 0, 0, 252];
 function readFont(exe, base = FONT_OFFSET) {
   const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
   const firstChar = exe[base];
@@ -3251,10 +3252,11 @@ function readFont(exe, base = FONT_OFFSET) {
     const height = exe[o];
     const width = exe[o + 2];
     const stride = Math.ceil(width / 8);
+    const broken = dv.getUint16(o + 4, true) !== 1;
     const pixels = new Uint8Array(width * height);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
+        const byte = broken ? UNDERSCORE_ROWS[y] ?? 0 : exe[o + 6 + y * stride + (x >> 3)] ?? 0;
         pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
       }
     }
@@ -12813,8 +12815,12 @@ async function boot() {
     }
     void sound.wake();
   };
+  const asked = [];
   const effects = {
-    sound: (which) => sound?.play(which),
+    sound: (which) => {
+      if (asked.length < 4e3) asked.push({ tick: ticksPlayed, which });
+      return sound?.play(which);
+    },
     stopSounds: () => sound?.stop(),
     soundPlaying: () => sound?.isPlaying ?? false
   };
@@ -13469,13 +13475,24 @@ async function boot() {
     if (game) game.drawRoomNow(room);
     frame();
   };
-  w.__princeStep = (n, c = {}) => {
+  w.__princeEnterLevel = async (level) => {
+    await select(views.findIndex((v) => v.kind === "level" && v.level === level));
+    frame();
+  };
+  w.__princeStep = (n, c = {}, hash = false) => {
     if (!game || changing || building > 0) return null;
     watchRoom = null;
     for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
-    display.present(game.render(), game.scene.screenPalette.toRgba());
-    return { ...game.kid };
+    const surface = game.render();
+    const rgba = game.scene.screenPalette.toRgba();
+    display.present(surface, rgba);
+    if (!hash) return { ...game.kid };
+    const rgb = surface.toRgb(rgba);
+    let h = 2166136261;
+    for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+    return { ...game.kid, hash: h >>> 0 };
   };
+  w.__princeAsked = () => [...asked];
   w.__princePause = (on) => {
     paused = on;
   };

@@ -41,6 +41,110 @@
 ## ============================================================
 
 
+## THE ENDING'S CAPTURE WAS PRESSING ITS OWN KEYS: SCENES 1874 -> 1995
+
+    measured   19478 of 20232   (unmoved, to the tick)
+    scenes      1995 of  2235   (was 1874 of 2238)
+    sounds       417 of   419   (unmoved)
+
+    ending       325 of   480  ->  446 of 477   68% -> 94%
+
+### 1. `do_wait` takes any key, and the spec was sending three
+
+The round before this one fixed the ending's chain by sending the
+four `h` **three times over, twelve seconds apart** -- the chain
+drifts, and a group spent on a level that is not up yet is lost.
+Three captures then reached the ending and scored 281, 303 and 285
+of about 555, none of them beating the pinned 325 of 480, and the
+remainder was written up as the emulator's clock wandering past
+`exactAgreement`'s sixteen frames over eighteen hundred frames.
+
+**It was not the clock, and the frames say so in one picture.**
+`tools/dev/scene-apart.ts` is new -- `scene-report --first` prints
+the first forty misses, which tells you nothing about a scene that
+is a hundred and fifty short; this prints the comparison as *runs*.
+On the ending it printed one solid block:
+
+    same  capture 396..799    port 380..786    (63)
+    DIFF  capture 800..1150   port 787..1137   (175)
+    same  capture 1151..1153  port 1138..1140
+
+A run that goes wrong and then comes **right again** is not a clock
+running away. Put the two frames side by side and the capture is
+showing the landscape where the port is still showing the story
+text. Counting the frames each side holds each picture:
+
+                            text   landscape
+    the capture (3 groups)   342          22
+    the port                 450         121
+
+and 450 and 121 are `pop_wait(900)` and `do_wait(start_timer(240))`
+at a sixtieth apiece, to the frame. So the **capture** was short.
+
+`do_wait` is
+`while (check_timer(timer) == 0 && do_paused() == 0) idle();`
+and `do_paused` ends on `return key || control_shift`: **any key
+ends it**. `disable_keys` guards `proc_cutscene_frame` and nothing
+else. The third group of `h` lands about twenty-eight seconds after
+the first, by which time `end_sequence_anim` is long over, and it
+walked straight into the story text and cut it off -- and the one
+after it cut the landscape off.
+
+So the spec sends **one** group of four `h`, and waits **45
+seconds** after the last `shift+l` instead of twenty. A long wait
+can only ever be too long: the chain can lag, it cannot run early.
+Three captures that way:
+
+    text 454 frames, landscape 123   (the port: 450 and 121)
+    355, 362 and 372 of about 477
+
+against the 325 of 480 that was pinned. `remMin` was swept 55 to 60
+against the new capture and **58 still wins**, 372 against 256 for
+every other value.
+
+**The lesson is the one this file keeps learning.** A capture is the
+authority, but only about what it captured. A script that presses
+keys to reach a scene is pressing them *into* the scene as well, and
+every wait in `seg001.c` that is a `do_wait` will take them.
+
+### 2. `_` is eight bytes `PRINCE.EXE` does not hold
+
+With the keys out of the way the ending's remainder was a comb: one
+frame in three wrong, from the moment the hall of fame asks for a
+name to the end of the capture. The round before this one read that
+as "the port's six-sixtieth blink is half a period out".
+
+It is not a phase. Diffed pixel by pixel, the capture changes
+**six** pixels as the cursor blinks -- x 72 to 77 on row 92, a clean
+bar -- and the port changed **thirteen**, on rows 86 to 91.
+
+`draw_text_cursor` is `draw_text_character('_')` and nothing else,
+so this is the font. The 1527 bytes at `FONT_OFFSET` are SDLPoP's
+`hc_font_data` -- the DOS game's own font, glyph for glyph -- byte
+for byte, **except for eight of them**: 1008 to 1015, the eight rows
+of `_`. Where the font has `00 00 00 00 00 00 00 fc` the release has
+seven bytes of a far-pointer table, `f0 03 b2 00 08 00 b0`, and one
+byte fewer, with the glyph's `flags` word reading 0xF001 where every
+other glyph in the font has 1. Both `PRINCE.EXE` and `UNCRKD.EXE`
+have it, and the clean glyph is nowhere in either.
+
+That missing byte is also the whole of why every offset in the table
+**from the backtick on is one past the glyph it names**, which
+`looksLikeGlyph` has been stepping over since the font went in.
+Nobody had asked why.
+
+`UNDERSCORE_ROWS` in `src/render/font.ts` puts the eight rows back
+where the glyph's `flags` word says the release has written over
+them. **372 -> 446 of 477**, and the player who has just finished
+the game types their name against an underscore instead of a smear.
+`tests/render/font.test.ts` pins the glyph.
+
+### 3. What is left of the ending
+
+Thirty-one frames of 477: the two fades -- `fade_out_1` into the
+story screen and `fade_out_2` into the hall of fame -- and the
+Prince running in. The 175-frame block is gone and so is the comb.
+
 ## THE TEAR WAS THE GRAB, AND IT IS GONE: SCENES 1610 -> 1874
 
     measured   19478 of 20232   (unmoved, to the tick)
@@ -1120,9 +1224,9 @@ gameplay, by `tools/dev/scene-report.ts`:
     cutscene2          122 of   135   cutscene8    168 of 192
     cutscene4          131 of   135   cutscene9    181 of 205
     cutscene6          110 of   135   cutscene12   110 of 135
-    ending             325 of   480   from 1
+    ending             446 of   477   from 1
 
-    scenes            1874 of  2238
+    scenes            1995 of  2235
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:

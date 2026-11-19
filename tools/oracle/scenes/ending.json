@@ -1,5 +1,5 @@
 {
-  "what": "end_sequence: the Prince reaches the princess, the ending music, and the hall of fame -- reached by thirteen shift+l and then four `h`, because `check_the_end` runs end_sequence when the DRAWN room of level 14 is 5 and `h` is what sets next_room. The hourglass the scene draws comes from hourglass_frame() inside end_sequence_anim, not from the spec: load_intro calls reset_cutscene, which zeroes hourglass_state. The four h are sent three times over, twelve seconds apart: the chain drifts, two captures in a row put the last level up eighteen seconds after the script expected it and the taps were spent on a level that was not there yet. A group of four reaches room 5 from any of 4, 3, 2 and 1, and once end_sequence_anim is running it sets disable_keys, so the groups that follow are ignored",
+  "what": "end_sequence: the Prince reaches the princess, the ending music, the landscape and the hall of fame -- reached by thirteen shift+l and then ONE group of four `h`, because `check_the_end` runs end_sequence when the DRAWN room of level 14 is 5 and `h` is what sets next_room. A group of four reaches room 5 from any of 4, 3, 2 and 1. The hourglass the scene draws comes from hourglass_frame() inside end_sequence_anim, not from the spec: load_intro calls reset_cutscene, which zeroes hourglass_state. **There is exactly one group of four, and the wait in front of it is long.** The round before this one sent the group three times over, twelve seconds apart, because the chain drifts and a group spent on a level that is not up yet is lost. That works and it ruins the scene: `end_sequence`'s own `pop_wait(900)` and `do_wait(start_timer(240))` are `do_paused()` loops, which **any key ends**, and `disable_keys` guards `proc_cutscene_frame` and not `do_wait`. So the third group landed inside the story text and cut it short. Measured, the same scene both ways: the text holds 342 frames and the landscape 22 with three groups, and 454 and 123 with one -- against the port's 450 and 121, which is `900` and `240` sixtieths to the frame. The drift is covered by waiting 45 seconds after the last shift+l instead, which can only ever be too long, never too short.",
   "scene": {
     "kind": "ending"
   },
@@ -36,8 +36,7 @@
     "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
     "wait 10",
     "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
-    "wait 10",
-    "wait 10",
+    "wait 45",
     "key h",
     "wait 0.5",
     "key h",
@@ -45,26 +44,7 @@
     "key h",
     "wait 0.5",
     "key h",
-    "wait 0.5",
-    "wait 12",
-    "key h",
-    "wait 0.5",
-    "key h",
-    "wait 0.5",
-    "key h",
-    "wait 0.5",
-    "key h",
-    "wait 0.5",
-    "wait 12",
-    "key h",
-    "wait 0.5",
-    "key h",
-    "wait 0.5",
-    "key h",
-    "wait 0.5",
-    "key h",
-    "wait 0.5",
-    "wait 80"
+    "wait 90"
   ],
   "remMin": 58,
   "remTick": 684

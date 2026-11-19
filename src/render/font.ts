@@ -51,6 +51,35 @@ function looksLikeGlyph(exe: Uint8Array, o: number): boolean {
     && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
 }
 
+/**
+ * The eight rows of `_`, which the release does not hold.
+ *
+ * The 1527 bytes at `FONT_OFFSET` are SDLPoP's `hc_font_data` -- the
+ * DOS game's own font, glyph for glyph -- byte for byte, **except for
+ * eight of them**: 1008 to 1015, which are the eight rows of `_`
+ * (0x5F). Where the font has `00 00 00 00 00 00 00 fc` the release has
+ * seven bytes of a far-pointer table, `f0 03 b2 00 08 00 b0`, and one
+ * byte fewer. That one missing byte is the whole of why every offset in
+ * the table from the backtick on is one past the glyph it names, which
+ * `looksLikeGlyph` is here to step over; and it is also why `_` itself
+ * reads as a thirteen-pixel smear across rows 1, 3, 5 and 6 of its own
+ * box, with its `flags` word 0xF001 where every other glyph in the font
+ * has 1.
+ *
+ * **The capture settles which of the two is the game.** The hall of
+ * fame asks for a name, and `input_str` blinks a cursor at it --
+ * `draw_text_cursor` is `draw_text_character('_')` and nothing else.
+ * In a capture of `PRINCE.EXE` that reaches the ending, **exactly six
+ * pixels change** as it blinks: x 72 to 77 on row 92, which is a clean
+ * bar on the glyph's eighth row, drawn from a baseline of 92 and a
+ * `heightAbove` of 7. The port reading the release's own bytes changed
+ * **thirteen**, on rows 86 to 91, and was wrong on every third frame
+ * of the hall of fame for as long as the name box was up -- about
+ * seventy frames of `ending`'s score, and a smudge where the player
+ * who has just finished the game types their name.
+ */
+const UNDERSCORE_ROWS = [0, 0, 0, 0, 0, 0, 0, 0xfc];
+
 export function readFont(exe: Uint8Array, base = FONT_OFFSET): Font {
   const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
   const firstChar = exe[base];
@@ -67,10 +96,19 @@ export function readFont(exe: Uint8Array, base = FONT_OFFSET): Font {
     const height = exe[o];
     const width = exe[o + 2];
     const stride = Math.ceil(width / 8);
+    /**
+     * `flags`: one bit a pixel, uncompressed, which is 1 for every
+     * glyph of this font. Where it is not, the release has something
+     * else written over the glyph's rows -- see `UNDERSCORE_ROWS`,
+     * which is the only one.
+     */
+    const broken = dv.getUint16(o + 4, true) !== 1;
     const pixels = new Uint8Array(width * height);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const byte = exe[o + 6 + y * stride + (x >> 3)] ?? 0;
+        const byte = broken
+          ? (UNDERSCORE_ROWS[y] ?? 0)
+          : (exe[o + 6 + y * stride + (x >> 3)] ?? 0);
         pixels[y * width + x] = (byte >> (7 - (x & 7))) & 1;
       }
     }

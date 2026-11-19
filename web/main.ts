@@ -81,8 +81,27 @@ async function boot(): Promise<void> {
     }
     void sound.wake();
   };
+  /**
+   * Every sound the byte-code **asked** for, and when.
+   *
+   * `SoundPlayer.started` says what reached the channel, which is a
+   * property of the audio device's own clock: a page stepped as fast
+   * as a test can drive it hears a different set from a page played
+   * at twelve ticks a second, because `play_next_sound`'s rule asks
+   * whether something is still sounding. What `play_sound` *asked*
+   * for is not -- it is the game, and nothing else. So that is what
+   * `tools/dev/page-port.ts` puts beside the headless port's, and
+   * the difference between the two lists is the device.
+   *
+   * Capped, because a page left running for an hour should not grow
+   * a list of every footstep in it.
+   */
+  const asked: { tick: number; which: number }[] = [];
   const effects = {
-    sound: (which: number) => sound?.play(which),
+    sound: (which: number) => {
+      if (asked.length < 4000) asked.push({ tick: ticksPlayed, which });
+      return sound?.play(which);
+    },
     stopSounds: () => sound?.stop(),
     soundPlaying: () => sound?.isPlaying ?? false,
   };
@@ -1061,13 +1080,51 @@ async function boot(): Promise<void> {
     if (game) game.drawRoomNow(room);
     frame();
   };
-  w.__princeStep = (n: number, c: Partial<Controls> = {}) => {
+  /**
+   * A level entered exactly as `select` does, and no more.
+   *
+   * `__princeShow` is a **look**: it also forces `drawn_room` through
+   * `drawRoomNow`, which runs `check_the_end` a second time and is a
+   * state change the headless port has not made. A page driven
+   * through it cannot be compared with `src/pop` tick for tick, so
+   * `tools/dev/page-port.ts` comes in this way instead -- the same
+   * `PopGame.start(assets, exe, level, { effects })` the headless
+   * side calls, and nothing after it.
+   */
+  w.__princeEnterLevel = async (level: number): Promise<void> => {
+    await select(views.findIndex((v) => v.kind === 'level' && v.level === level));
+    frame();
+  };
+  /**
+   * `hash` asks for a fingerprint of **the picture that was just
+   * presented**.
+   *
+   * A caller that wants one must not call `__princeFrame()` for it:
+   * that is `game.render()` a second time, and `render` is
+   * `draw_game_frame` -- it ticks the words under the room, takes the
+   * flash off, and calls `play_next_sound`. So the hash is taken here,
+   * off the very surface the display was given, and only when it is
+   * asked for, because hashing 192000 bytes a tick is not something
+   * the page's own loop or a fuzz run should pay for.
+   */
+  w.__princeStep = (n: number, c: Partial<Controls> = {}, hash = false) => {
     if (!game || changing || building > 0) return null;
     watchRoom = null;
     for (let i = 0; i < n; i++) game.step({ x: 0, y: 0, shift: false, ...c });
-    display.present(game.render(), game.scene.screenPalette.toRgba());
-    return { ...game.kid };
+    // `render()` first and the palette after it, in that order:
+    // `draw_game_frame` is where `flash()` puts the colour up, so a
+    // palette read before it is the palette of the tick before.
+    const surface = game.render();
+    const rgba = game.scene.screenPalette.toRgba();
+    display.present(surface, rgba);
+    if (!hash) return { ...game.kid };
+    const rgb = surface.toRgb(rgba);
+    let h = 2166136261;
+    for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+    return { ...game.kid, hash: h >>> 0 };
   };
+  /** Every `play_sound` the byte-code has made; see `asked`. */
+  w.__princeAsked = (): { tick: number; which: number }[] => [...asked];
   w.__princePause = (on: boolean): void => { paused = on; };
   /**
    * The cutscenes, for the browser tests: start one, run its clock by

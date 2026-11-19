@@ -69,7 +69,7 @@ const EXPECTED: Record<string, number> = {
    */
   title: 560,
   /**
-   * `end_sequence` -- **325 of 480**, from 1.
+   * `end_sequence` -- **446 of 477**, from 1.
    *
    * The ending needs a thirteen-level chain and then the Prince in
    * room 5 of level 14, which is four taps of `h`: `check_the_end`
@@ -121,35 +121,59 @@ const EXPECTED: Record<string, number> = {
    * * the **fades**, which are the emulator's: `fade_out_1` into the
    *   story screen and `fade_out_2` into the hall of fame;
    * * the **cursor** of the name box, which blinks every six
-   *   sixtieths. From capture frame 1203 the run alternates three
-   *   exact, three not, all the way to the end -- the port's blink
-   *   is exactly half a period out of the capture's, and nothing
-   *   else in those frames differs;
+   *   sixtieths and alternated three exact, three not, all the way
+   *   to the end. That was read here as the port's blink being half
+   *   a period out. It was the glyph: see below;
    * * the Prince **running in**, capture 187 to 236.
    */
   /**
-   * And the ending is the one scene the untear did not reach.
+   * **The keys that reached the ending were cutting it short.**
    *
-   * Its thirteen-`shift+l` chain drifts: two captures in a row put
-   * the last level up about eighteen seconds after the script
-   * expected it and the four `h` were spent on a level that was not
-   * there yet, so both scored 0 of 282. The spec now sends the four
-   * `h` three times over, twelve seconds apart -- a group of four
-   * reaches room 5 from any of 4, 3, 2 and 1, and
-   * `end_sequence_anim` sets `disable_keys`, so the groups after the
-   * one that works are ignored -- and three tries then gave three
-   * captures that reached it: 281, 303 and 285 of about 555.
+   * The round before this one found the chain drifts -- two captures
+   * in a row put the last level up about eighteen seconds after the
+   * script expected it and the four `h` were spent on a level that
+   * was not there yet, both scoring 0 of 282 -- and answered it by
+   * sending the four `h` **three times over, twelve seconds apart**.
+   * Three captures then reached the ending and scored 281, 303 and
+   * 285 of about 555, none of them beating the 325 of 480 that was
+   * pinned, and the remainder was written up as the emulator's clock
+   * wandering past `exactAgreement`'s sixteen frames.
    *
-   * None of them beats the 325 of 480 pinned here, so the old
-   * capture stays. What they say is where the remainder is: the
-   * first eight hundred frames are all but exact, and then the two
-   * part company altogether -- port frame 787 against capture 1091
-   * differs on 25855 pixels and 788 against 1092 on 40949 of 64000,
-   * which is two different pictures and not a shade. Over eight
-   * hundred frames the emulator's clock has wandered past
-   * `exactAgreement`'s sixteen.
+   * It is not the clock. `end_sequence` shows the story text and
+   * then the landscape by
+   * `pop_wait(900)` / `start_timer(240)` / `transition_ltr()` /
+   * `do_wait(timer)`, and `do_wait` is
+   * `while (check_timer() == 0 && do_paused() == 0)`: **any key ends
+   * it**. `disable_keys` guards `proc_cutscene_frame` and nothing
+   * else, so the third group of `h` -- which lands about
+   * twenty-eight seconds after the first, by which time
+   * `end_sequence_anim` is long over -- walked straight into the
+   * story text and cut it off. Measured, the same scene both ways:
+   *
+   *     three groups of `h`   text 342 frames   landscape  22
+   *     one group             text 454          landscape 123
+   *     the port                  450                     121
+   *
+   * which is `900` and `240` sixtieths to the frame. So the spec
+   * sends **one** group of four `h` and waits forty-five seconds
+   * after the last `shift+l` instead, which can only ever be too
+   * long and never too short. Three captures that way: 355, 362 and
+   * **372** of about 477, against the 325 of 480 that was pinned.
+   *
+   * Then the cursor of the name box, which the round before this one
+   * read as the port's blink being half a period out. It is not that
+   * either: `draw_text_cursor` is `draw_text_character('_')`, and
+   * the `_` of the font in `PRINCE.EXE` is **eight bytes the release
+   * does not hold** -- see `UNDERSCORE_ROWS` in `src/render/font.ts`.
+   * The capture changes six pixels as it blinks, x 72 to 77 on row
+   * 92; the port changed thirteen, on rows 86 to 91. With the glyph
+   * right: **372 -> 446 of 477.**
+   *
+   * What is left is the two fades, `fade_out_1` into the story
+   * screen and `fade_out_2` into the hall of fame, and the Prince
+   * running in.
    */
-  ending: 325,
+  ending: 446,
   /**
    * `cutscene2` -- **72 of 137** on a capture taken with a lossless
    * RGB encoder, where the same scene read 34 with the old one. See

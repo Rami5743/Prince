@@ -41,6 +41,28 @@ function inkedColumns(surface: Surface, color: number): { x0: number; x1: number
 }
 
 describe('the font in the executable', () => {
+  /**
+   * The one glyph the release does not hold.
+   *
+   * `_` is what `draw_text_cursor` draws, so it is the cursor of the
+   * hall of fame's name box, and the capture of the original changes
+   * exactly six pixels as it blinks -- one bar, on the glyph's eighth
+   * row. The release's own bytes for those eight rows are seven bytes
+   * of a far-pointer table and `flags` 0xF001 where every other glyph
+   * in the font has 1; read straight they draw a thirteen-pixel smear
+   * two rows up. See `UNDERSCORE_ROWS`.
+   */
+  it('has `_` as one bar on its last row, and nothing else', () => {
+    const g = font.glyphs['_'.charCodeAt(0) - font.firstChar]!;
+    expect(g).not.toBeNull();
+    expect([g.width, g.height]).toEqual([6, 8]);
+    const row = (y: number): string => Array.from(
+      { length: g.width }, (_, x) => (g.sprite.pixels[y * g.width + x] ? '#' : '.'),
+    ).join('');
+    for (let y = 0; y < 7; y++) expect(row(y), `row ${y}`).toBe('......');
+    expect(row(7)).toBe('######');
+  });
+
   it('is the original\'s, with its own measurements', () => {
     expect(font.firstChar).toBe(32);
     expect(font.lastChar).toBe(131);
