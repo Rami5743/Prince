@@ -41,6 +41,52 @@
 ## ============================================================
 
 
+## THIS ROUND, IN ONE BLOCK
+
+    measured   19478 of 20232   96%   unmoved, to the tick
+    scenes      2440 of  2636   93%   was 2029 of 2236
+    sounds       417 of   419         unmoved
+
+    title        560 of   633  ->  586 of 633    the cutscene fade's rate
+    ending       446 of   477  ->  805 of 836    `frames` was half the capture
+    expired      167 of   188  ->  190 of 229    `frames` cut the fade off
+    cutscene12   119 of   135  ->  122 of 135    a better capture
+    everything else frame for frame
+
+Four sections follow, newest first. What moved a number: a cutscene
+fade's rate is not in the code (`wait_time` nought) and the port was
+running every fade at `fade_in_2`'s two sixtieths; and two scenes'
+`frames` stopped the comparison before the scene did. What did not
+move a number and is right anyway: `next_sound` in a scene,
+`mid_draw` in the capture's splitter, and the page compared with the
+port over the scenes, the cheats and all thirteen transitions.
+
+**The scenes' remaining 196, with what each is:**
+
+    title        47   the pv_scene fade-out: 21 frames differ by the
+                      five pixels of hourglass sand, whose phase is
+                      on the cutscene-frame clock and not the
+                      shade's, and 2 by the princess one frame on.
+                      30 of its 53 fade frames are exact to the pixel.
+    ending       31   the two fades and the Prince running in
+    expired      39   27 inside the scene, 12 after the port's own
+                      last picture (frame 435 of 480)
+    cutscene8    24   12 inside, 12 after (the port's scene ends at
+                      309 of 380)
+    cutscene9    24   13 inside, 11 after (345 of 420)
+    cutscene12   13   the split burst
+    cutscene2     7   the split burst, which costs about seven a
+    cutscene6     7   cutscene and is what `--untear` cannot undo
+    cutscene4     4   the control: no figure in a palette row on the
+                      near side of the tear, and no capture lottery
+
+`tools/dev/scene-moves.ts` prints the capture's per-frame moved box
+beside the port's, which reads a scene's shortfall without the
+capture's video being to hand; `scene-apart.ts` prints the same
+comparison as runs. Between them, and a `--untear`'d capture kept
+rather than thrown away, a scene's remainder can be read in minutes
+instead of being written off as the clock.
+
 ## EVERY SCENE TAKEN FOUR TIMES AGAIN: ONE MOVED
 
     scenes      2440 of  2636   93%   (was 2437)
