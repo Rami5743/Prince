@@ -41,6 +41,54 @@
 ## ============================================================
 
 
+## TWO SCENES WERE BEING CUT OFF BEFORE THEY ENDED: SCENES 2055 -> 2437
+
+    measured   19478 of 20232   (unmoved, to the tick)
+    scenes      2437 of  2636   (was 2055 of 2236)   92%
+    sounds       417 of   419   (unmoved)
+
+    ending       446 of   477  ->  805 of 836   94% -> 96%
+    expired      167 of   188  ->  190 of 229   89% -> 83%
+
+A scene spec's `frames` says how many video frames of the port to
+play. It is **not** a free parameter: `exactAgreement` truncates the
+comparison to `min(capture frames, port frames)`, so a `frames` that
+stops before the scene does throws away every frame after it,
+agreed or not. Nobody had ever checked one against the scene's own
+length.
+
+* **`expired`** asked for 420 and the port's picture last changes on
+  **435**. `time_expired` is `fade_in_1`, 102 cutscene frames at six
+  sixtieths and `fade_out_1`; the fifteen frames cut off are the end
+  of that fade and the capture agrees with twenty-three of the
+  changes in them. **167 of 188 -> 190 of 229.** Past about 480 the
+  capture is drawing the next level, which the port is not being
+  asked to play, so the denominator grows and the agreed count does
+  not: 480 is where it plateaus.
+* **`ending`** asked for 1600 against a capture 3737 frames long and
+  an offset of 1060, so **barely half of it was being looked at**.
+  The scene never ends -- `input_str` spins on the hall of fame's
+  cursor and nobody types, in the capture or in the port -- so the
+  comparison runs as far as the capture does.
+
+      frames 1600   446 of 477   94%
+      frames 1800   512 of 543   94%
+      frames 2100   612 of 643   95%
+      frames 2500   745 of 776   96%
+      frames 3000   805 of 836   96%   and it plateaus
+
+  Three hundred and fifty-nine frames, and the **percentage rises
+  the whole way**, which says what they are: the blinking underscore
+  the round before this one put back into the font, drawn right for
+  two thousand frames nobody was counting.
+
+The six cutscenes and the title were swept the same way and none of
+them gains a frame -- their `frames` already cover their scenes
+(`cutscene8` ends at 309 of 380, `cutscene9` at 345 of 420) and
+anything past the end is the next level. So the check is: **the
+port's own last changing frame, and then a little**, and `frames`
+beyond that buys nothing and costs percentage.
+
 ## A CUTSCENE FADE HAS NO CLOCK: SCENES 2029 -> 2055
 
     measured   19478 of 20232   (unmoved, to the tick)
@@ -1463,13 +1511,13 @@ and, for the first time, the parts of the game that are not
 gameplay, by `tools/dev/scene-report.ts`:
 
     title              586 of   633   the opening, every page load
-    expired            167 of   188   the hourglass
+    expired            190 of   229   the hourglass
     cutscene2          129 of   136   cutscene8    168 of 192
     cutscene4          131 of   135   cutscene9    181 of 205
     cutscene6          128 of   135   cutscene12   119 of 135
-    ending             446 of   477   from 1
+    ending             805 of   836   from 1
 
-    scenes            2055 of  2236
+    scenes            2437 of  2636
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:

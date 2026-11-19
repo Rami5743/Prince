@@ -182,7 +182,18 @@ const EXPECTED: Record<string, number> = {
    * screen and `fade_out_2` into the hall of fame, and the Prince
    * running in.
    */
-  ending: 446,
+  /**
+   * And 446 to **805 of 836** on a spec that lets the port play to
+   * the end of the capture. The ending does not finish: `input_str`
+   * spins on the hall of fame's cursor and nobody types, in the
+   * capture or in the port, so the comparison runs as far as the
+   * capture does -- 3737 frames against a `frames` of 1600, which
+   * covered barely half of it past an offset of 1060. 1800 gives 512
+   * of 543, 2100 gives 612 of 643, 2500 gives 745 of 776, and 3000
+   * plateaus at 805 of 836 with the percentage rising 94 -> 96 the
+   * whole way.
+   */
+  ending: 805,
   /**
    * `cutscene2` -- **72 of 137** on a capture taken with a lossless
    * RGB encoder, where the same scene read 34 with the old one. See
@@ -231,7 +242,15 @@ const EXPECTED: Record<string, number> = {
    * Its eight rows under the room are **drawn**, where the scene
    * before level 2 has them black -- see `clip_room`.
    */
-  expired: 167,
+  /**
+   * And 167 to **190 of 229**, for the same reason as the ending and
+   * a smaller one: `time_expired` is `fade_in_1`, 102 cutscene
+   * frames at six sixtieths and `fade_out_1`, and the port's picture
+   * last changes on frame **435** where the spec asked for 420. The
+   * fifteen frames that were cut off are the end of the fade and the
+   * capture agrees with twenty-three of the changes in them.
+   */
+  expired: 190,
   /**
    * The other five scenes between the levels, captured the same way
    * and all of them short for the same two reasons: the fades, and
