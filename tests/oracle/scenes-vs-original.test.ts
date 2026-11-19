@@ -62,7 +62,7 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
  * princess-room fades; see the note above.
  */
 const EXPECTED: Record<string, number> = {
-  title: 473,
+  title: 512,
   /**
    * `end_sequence`, captured for the first time, and 1 of 564.
    *
@@ -103,7 +103,7 @@ const EXPECTED: Record<string, number> = {
    * `princess_stand` and 129 of its 206 frames are exact. So the pin
    * stays where the port honestly scores until the C is read.
    */
-  ending: 1,
+  ending: 2,
   /**
    * `cutscene2` -- **72 of 137** on a capture taken with a lossless
    * RGB encoder, where the same scene read 34 with the old one. See
@@ -152,7 +152,7 @@ const EXPECTED: Record<string, number> = {
    * Its eight rows under the room are **drawn**, where the scene
    * before level 2 has them black -- see `clip_room`.
    */
-  expired: 158,
+  expired: 167,
   /**
    * The other five scenes between the levels, captured the same way
    * and all of them short for the same two reasons: the fades, and
@@ -172,10 +172,10 @@ const EXPECTED: Record<string, number> = {
    * `scene-frames.ts` and the capture side by side.
    */
   cutscene2: 72,
-  cutscene4: 130,
+  cutscene4: 131,
   cutscene6: 70,
-  cutscene8: 122,
-  cutscene9: 129,
+  cutscene8: 121,
+  cutscene9: 136,
   cutscene12: 70,
 };
 

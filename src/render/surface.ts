@@ -61,13 +61,32 @@ export class ScreenPalette {
     this.dirty = true;
   }
 
-  /** RGBA bytes, expanding each 6-bit component the way the DAC did. */
+  /**
+   * RGBA bytes, expanding each 6-bit component the way the DAC did.
+   *
+   * **The six bits are a fraction of full scale, not the high bits of
+   * a byte.** A DAC fed 63 drives the line to its maximum, so 63 is
+   * 255 and not 252, and the expansion is `(v << 2) | (v >> 4)` --
+   * the six bits with their own top two repeated underneath, which is
+   * `round(v * 255 / 63)` for every one of the sixty-four values.
+   * The port used a bare `v << 2`, which is every colour in the game
+   * 1.2 per cent dark and a white that is not white.
+   *
+   * DOSBox agrees: `machine=svga_s3` renders a DAC entry of 60 as
+   * 243 and one of 20 as 81, which is this formula and not `v << 2`.
+   * (`machine=vgaonly`, which the oracle used to run, goes through a
+   * 16-bit RGB565 lookup instead and throws the low bit of red and
+   * blue away -- see `tools/oracle/README.md`.)
+   */
   toRgba(): Uint8Array {
     if (this.dirty) {
       for (let i = 0; i < PALETTE_SIZE; i++) {
-        this.rgba[i * 4] = (this.rgb6[i * 3] << 2) & 0xff;
-        this.rgba[i * 4 + 1] = (this.rgb6[i * 3 + 1] << 2) & 0xff;
-        this.rgba[i * 4 + 2] = (this.rgb6[i * 3 + 2] << 2) & 0xff;
+        const r = this.rgb6[i * 3] & 0x3f;
+        const g = this.rgb6[i * 3 + 1] & 0x3f;
+        const b = this.rgb6[i * 3 + 2] & 0x3f;
+        this.rgba[i * 4] = (r << 2) | (r >> 4);
+        this.rgba[i * 4 + 1] = (g << 2) | (g >> 4);
+        this.rgba[i * 4 + 2] = (b << 2) | (b >> 4);
         this.rgba[i * 4 + 3] = 255;
       }
       this.dirty = false;

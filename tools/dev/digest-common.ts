@@ -221,6 +221,47 @@ export interface Digest {
   /** Per tick, or null for a tick the capture does not have. */
   hash?: (number | null)[];
   ticks: Moved[];
+  /** Which DAC the capture's emulator rendered through; see `dacOf`. */
+  dac?: DacMode;
+}
+
+/**
+ * How the emulator that made a capture turned the game's six-bit DAC
+ * entries into the eight-bit pixels ffmpeg grabbed.
+ *
+ * * `vga` -- the hardware's own, `(v << 2) | (v >> 4)`: 63 is 255 and
+ *   20 is 81. One-to-one over the sixty-four values, so nothing is
+ *   lost. `machine=svga_s3`.
+ * * `rgb565` -- DOSBox 0.74's `machine=vgaonly`, which draws mode 13h
+ *   through `vga.dac.xlat16`, a **sixteen-bit** lookup:
+ *   `(blue>>1) | (green<<5) | ((red>>1)<<11)`. Red and blue keep five
+ *   bits, so **the low bit of each is thrown away** and what comes
+ *   out is `(v & ~1) << 2`; green keeps its six and comes out
+ *   `v << 2`. Every capture taken before this round is this one, and
+ *   over the frames of six different scene captures there is not one
+ *   odd six-bit red or blue in any of them.
+ */
+export type DacMode = 'vga' | 'rgb565';
+
+/**
+ * Which of the two a digest was taken through.
+ *
+ * The flag `digest.py` writes, and `rgb565` when there is none --
+ * because **every digest in the repository was taken with
+ * `machine=vgaonly`**, which is what the harness ran until this
+ * round.
+ *
+ * It is not sniffed from the palette. `vgaonly` can only emit
+ * multiples of four, so that would seem to settle it, but the forty
+ * gameplay digests were also taken through the **YUV** encoder the
+ * round before last, which puts every colour a unit or three off its
+ * own grid: thirty-one of `b4ff4672`'s thirty-six colours are not
+ * multiples of four and the capture is `vgaonly` all the same. A
+ * flag written where the capture is made knows; a reader looking at
+ * the colours afterwards does not.
+ */
+export function dacOf(digest: Digest): DacMode {
+  return digest.dac ?? 'rgb565';
 }
 
 const CRC_TABLE = (() => {
@@ -260,13 +301,38 @@ export function unpackMask(runs: readonly number[]): Uint8Array {
 export class PaletteMap {
   private readonly palette: readonly number[][];
   private readonly cache = new Map<number, number>();
+  private readonly dac: DacMode;
 
-  constructor(palette: readonly number[][]) { this.palette = palette; }
+  /**
+   * `dac` is the capture's own DAC -- see `dacOf`. The port's pixel is
+   * put through it before the palette is searched, because the
+   * capture's palette holds what that DAC could emit and nothing
+   * else. Under `rgb565` a port colour whose six-bit red is odd has
+   * **no** exact entry to find, and in a scene's palette of a
+   * thousand near-duplicates two units apart the nearest entry is
+   * then as likely to be the wrong one as the right one. That is the
+   * whole of the ending's `1 of 564`: every pixel of its picture was
+   * right.
+   */
+  constructor(palette: readonly number[][], dac: DacMode = 'rgb565') {
+    this.palette = palette;
+    this.dac = dac;
+  }
 
-  indexOf(r: number, g: number, b: number): number {
-    const key = (r << 16) | (g << 8) | b;
+  /** One eight-bit component as this capture's emulator would show it. */
+  private through(c: number, green: boolean): number {
+    const v = (c >> 2) & 0x3f;
+    if (this.dac === 'vga') return (v << 2) | (v >> 4);
+    return green ? v << 2 : (v & 0x3e) << 2;
+  }
+
+  indexOf(r0: number, g0: number, b0: number): number {
+    const key = (r0 << 16) | (g0 << 8) | b0;
     const hit = this.cache.get(key);
     if (hit !== undefined) return hit;
+    const r = this.through(r0, false);
+    const g = this.through(g0, true);
+    const b = this.through(b0, false);
     let best = 0;
     let bestD = Infinity;
     for (let i = 0; i < this.palette.length; i++) {
@@ -290,7 +356,7 @@ export class PaletteMap {
  */
 export function blankHash(digest: Digest): number | null {
   if (!digest.palette || !digest.mask) return null;
-  const map = new PaletteMap(digest.palette);
+  const map = new PaletteMap(digest.palette, dacOf(digest));
   const mask = unpackMask(digest.mask);
   const black = map.indexOf(0, 0, 0);
   const bytes = new Uint8Array(W * H * 2);
@@ -359,7 +425,7 @@ export async function runOf<T extends Playable>(
   cheats: ReadonlyMap<number, readonly string[]> = new Map(),
 ): Promise<Run> {
   const mask = digest.mask ? unpackMask(digest.mask) : new Uint8Array(W * H);
-  const map = new PaletteMap(digest.palette ?? []);
+  const map = new PaletteMap(digest.palette ?? [], dacOf(digest));
   let game = await start();
   const hash: number[] = [];
   const moved: Moved[] = [];

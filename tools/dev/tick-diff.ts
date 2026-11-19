@@ -29,7 +29,7 @@ import { PNG } from 'pngjs';
 import { Assets } from '../../src/render/assets.ts';
 import { Game } from '../../src/game/game.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
-import { unpackMask, PaletteMap, type Digest } from './digest-common.ts';
+import { unpackMask, PaletteMap, dacOf, type Digest } from './digest-common.ts';
 
 const W = 320, H = 200;
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -52,7 +52,7 @@ const slip = arg('slip', 0);
 
 const digest = JSON.parse(readFileSync(join(dir, '..', 'dos.json'), 'utf8')) as Digest;
 const mask = digest.mask ? unpackMask(digest.mask) : new Uint8Array(W * H);
-const map = new PaletteMap(digest.palette ?? []);
+const map = new PaletteMap(digest.palette ?? [], dacOf(digest));
 
 /** A capture's tick as indices into its own palette, flames taken out. */
 function captured(t: number): Uint16Array | null {

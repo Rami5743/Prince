@@ -30,7 +30,7 @@ import { Assets } from '../../src/render/assets.ts';
 import type { SceneName } from '../../src/pop/cutscene.ts';
 import { playScene, SpeakerClock } from './scene-common.ts';
 import {
-  exactAgreement, fingerprint, unpackMask, PaletteMap, type Digest, type Run, type Moved,
+  exactAgreement, fingerprint, unpackMask, PaletteMap, dacOf, type Digest, type Run, type Moved,
 } from './digest-common.ts';
 import { movedBetween } from './digest-common.ts';
 
@@ -79,7 +79,7 @@ export async function runScene(
   spec: SceneSpec, digest: Digest, clock?: SpeakerClock,
 ): Promise<Run> {
   const mask = digest.mask ? unpackMask(digest.mask) : new Uint8Array(320 * 200);
-  const map = new PaletteMap(digest.palette ?? []);
+  const map = new PaletteMap(digest.palette ?? [], dacOf(digest));
   const hash: number[] = [];
   const moved: Moved[] = [];
   let prev: Uint8Array | null = null;

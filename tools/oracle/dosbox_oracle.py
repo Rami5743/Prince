@@ -40,7 +40,7 @@ captures={captures}
 memsize=16
 [render]
 aspect=false
-scaler=none
+scaler={scaler}
 frameskip=0
 [cpu]
 core=normal
@@ -67,6 +67,28 @@ c:
 """
 
 
+# The emulated video card, and why it is not `vgaonly`.
+#
+# **DOSBox 0.74's `machine=vgaonly` draws mode 13h through a 16-bit
+# RGB565 lookup** -- `vga.dac.xlat16[i] = (blue>>1) | (green<<5) |
+# ((red>>1)<<11)` -- so the low bit of red and of blue never reaches
+# the screen. Every capture ever taken before this was that: measured
+# over the frames of six different scene captures, **not one has an
+# odd six-bit red or an odd six-bit blue**, while green has plenty.
+#
+# `machine=svga_s3` takes the true-colour path and renders a DAC
+# entry the way the hardware does, `(v << 2) | (v >> 4)`: an entry of
+# 60 comes out 243 and one of 20 comes out 81, where `vgaonly` gives
+# 240 and 80. That mapping is one-to-one over the sixty-four values,
+# so nothing is thrown away.
+#
+# It cost the whole of the ending. `digest.py` hashes palette
+# *indices*, a scene's palette holds about a thousand near-duplicates
+# two units apart, and a red four units out picks the neighbour: the
+# ending scored **1 of 564** with every pixel of its picture right.
+MACHINE = 'svga_s3'
+
+
 def free_display():
     """An X display number nothing else is using.
 
@@ -85,7 +107,7 @@ def free_display():
 
 
 class Dosbox:
-    def __init__(self, workdir, machine='vgaonly', cycles=3000, display=None,
+    def __init__(self, workdir, machine=MACHINE, cycles=3000, display=None,
                  autoexec='', game=GAME, record=None, fps=30,
                  speaker=False, rate=44100):
         # Absolute: DOSBox resolves `captures=` against its own working
@@ -95,6 +117,12 @@ class Dosbox:
         self.capture = os.path.join(self.workdir, 'capture')
         self.display = display or free_display()
         self.machine = machine
+        # `machine=svga_s3` does not double mode 13h the way `vgaonly`
+        # does, so the S3 paints 320x200 into the top left of the
+        # window and the capture's crop would take a quarter of it.
+        # `normal2x` is a plain pixel double, so both machines put the
+        # same 640x400 on the display.
+        self.scaler = 'normal2x' if machine.startswith('svga') else 'none'
         self.cycles = cycles
         self.autoexec = autoexec
         self.game = game
@@ -122,6 +150,7 @@ class Dosbox:
         conf = os.path.join(self.workdir, 'dosbox.conf')
         with open(conf, 'w') as f:
             f.write(CONF.format(machine=self.machine, captures=self.capture,
+                                scaler=self.scaler,
                                 cycles=self.cycles, gamedir=self.game,
                                 autoexec=self.autoexec, rate=self.rate,
                                 pcspeaker='true' if self.speaker else 'false'))
@@ -351,7 +380,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--script', required=True)
     ap.add_argument('--out', required=True)
-    ap.add_argument('--machine', default='vgaonly')
+    ap.add_argument('--machine', default=MACHINE)
     ap.add_argument('--cycles', type=int, default=3000)
     ap.add_argument('--autoexec', default='prince megahit')
     ap.add_argument('--display', default=None,

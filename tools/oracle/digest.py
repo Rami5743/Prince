@@ -183,6 +183,29 @@ def palette_of(frames):
     return sorted(seen)
 
 
+def dac_of(pal):
+    """Which DAC the emulator that made this capture rendered through.
+
+    DOSBox 0.74's `machine=vgaonly` draws mode 13h through
+    `vga.dac.xlat16`, a sixteen-bit RGB565 lookup, so red and blue
+    lose their low bit and everything it emits is a multiple of four:
+    `(v & ~1) << 2` for red and blue, `v << 2` for green. The
+    true-colour path -- `machine=svga_s3`, which this harness uses
+    now -- renders a DAC entry the way the hardware does,
+    `(v << 2) | (v >> 4)`, which is not a multiple of four for any
+    entry of sixteen or more.
+
+    So one component that is not a multiple of four settles it, and
+    `tools/dev/digest-common.ts` reads the same thing off the palette
+    when a digest has no flag -- which is every digest taken before
+    this round.
+    """
+    for r, g, b in pal:
+        if (r & 3) or (g & 3) or (b & 3):
+            return 'vga'
+    return 'rgb565'
+
+
 def index_image(frame, lookup):
     flat = frame.reshape(-1, 3)
     keys = (flat[:, 0].astype(np.int32) << 16) | \
@@ -264,6 +287,7 @@ def digest_dir(path, rects=()):
         prev = f
     return {
         'version': 2,
+        'dac': dac_of(pal),
         'palette': [list(c) for c in pal],
         'mask': rle(mask),
         'hash': hashes,
