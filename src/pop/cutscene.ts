@@ -32,7 +32,7 @@ import { setScreen, full_image_id } from './screen.ts';
 import { link } from './wire.ts';
 import {
   type Scene, show_title, end_sequence, expired, load_intro, tbl_cutscenes,
-  reset_stars, hof_read, keysDisabled,
+  reset_stars, hof_read, keysDisabled, frameTime,
 } from './seg001.ts';
 import type { KeyPress, ScreenPeel } from './screen.ts';
 
@@ -120,6 +120,48 @@ function blankLevel(): typeof g.level {
     guards_color: new Uint8Array(24),
   };
 }
+
+/**
+ * A sweep hook for the cutscene fade's rate, and nothing else.
+ *
+ * The rate a cutscene's fade runs at is not in the code -- its
+ * `wait_time` is nought -- so it is read off a capture, and reading
+ * it off again means running `scene-report.ts` at several values.
+ * Nought, which is what a browser gives, means "use the measured
+ * one". It is read through `globalThis` because `process` does not
+ * exist on a page.
+ */
+/**
+ * Sixtieths a shade of a **cutscene** fade takes, by
+ * `cutscene_frame_time`, as captures of the original measure it.
+ *
+ * There is no third value to find in the code: `fade_in_1` and
+ * `fade_out_1` pass `wait_time` nought, so `fade_out_frame`'s
+ * `do_simple_wait(timer_1)` returns at once and
+ * `proc_cutscene_frame`'s inner loop spins as fast as the machine
+ * can compute and write a palette until the cutscene frame's own
+ * timer stops. A faster machine fades faster, and the original on
+ * real hardware faster than either; what a capture can say is what
+ * the oracle's DOSBox at 20000 cycles does, and these are the two
+ * frame times any scene uses.
+ *
+ * Six is every scene but one, and three shades fit in its six
+ * sixtieths -- the same two sixtieths a shade that `wait_time` 2
+ * would have given, which is why the six cutscenes never showed
+ * this. Seven is what `pv_scene` switches to before Jaffar
+ * conjures, and there the capture is unambiguous: 63 shades over 54
+ * video frames, stepping 1, 1, 1, 1, 1, 2 without a break, which is
+ * seven shades every six frames. `ceil(T / 2)` shades in T
+ * sixtieths -- four in seven, 1.75 -- is the arithmetic of the
+ * `do..while` and predicts it to two per cent; the capture is kept
+ * because the capture is the authority, and it is worth eleven
+ * frames of the title (575 against 586).
+ */
+const CUTSCENE_FADE_RATE: Record<number, number> = { 6: 2, 7: 12 / 7 };
+
+const CUTSCENE_FADE_SWEEP = Number(
+  (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.POP_CUTSCENE_FADE_UNITS ?? '') || 0;
 
 export class CutscenePlayer {
   /** `offscreen_surface`, where the picture is composed. */
@@ -385,10 +427,62 @@ export class CutscenePlayer {
    */
   private static readonly FADE_UNITS = 2;
 
+  /**
+   * And the cutscene fade, which has no wait of its own.
+   *
+   * `make_pal_buffer_fadein` is given `wait_time` 2 by `fade_in_2`
+   * and **0** by `fade_in_1` -- SDLPoP writes the second one
+   * `/*0*\/ 2`, keeping the original's value in the comment beside
+   * its own substitution. With nought there is no timer between two
+   * shades, so what paces a cutscene's fade is not `wait_time` but
+   * `proc_cutscene_frame`'s own loop:
+   *
+   *     do { ... proc_fade_frame(...) ... }
+   *     while (!has_timer_stopped(timer_0));
+   *
+   * -- a `do..while`, so a cutscene frame of `cutscene_frame_time`
+   * sixtieths fits **ceil(T / 2)** shades in, the last of them
+   * started with one sixtieth still to run. At the six sixtieths
+   * every scene but one uses that is three shades in six, which is
+   * the two sixtieths a shade `fade_in_2` has anyway and is why the
+   * six cutscenes never showed it. At **seven**, which `pv_scene`
+   * switches to before Jaffar conjures, it is four shades in seven.
+   *
+   * The capture says the same thing without the arithmetic. One of
+   * the title, grabbed at sixty and untorn, measures `pv_scene`'s
+   * fade-out shade by shade against the port's own frames:
+   *
+   *     cap frame  2373 2374 2375 2376 2377 2378 2379 2380 ...
+   *     shade         0    2    3    4    5    6    8    9
+   *
+   * -- 63 shades over 54 video frames, 1, 1, 1, 1, 1, 2 without a
+   * break, which is 1.71 sixtieths a shade against this model's
+   * 1.75; and the same capture's `fade_in_2` of the story screen
+   * forty frames later steps one shade per video frame exactly,
+   * which is `wait_time` 2. Two rates in one capture, from the two
+   * `wait_time`s, and the port keeps both.
+   *
+   * Flat rates were swept and all of them lose, because they move
+   * the six cutscenes' fades as well:
+   *
+   *     2 (every fade)        scenes 2029 of 2236
+   *     1.7143 (every fade)          1818 of 2232
+   *     1.75   (every fade)          1833 of 2230
+   *     1.6667 (every fade)          1829 of 2221
+   */
+  private cutsceneFadeUnits(): number {
+    if (CUTSCENE_FADE_SWEEP) return CUTSCENE_FADE_SWEEP;
+    const t = frameTime();
+    return CUTSCENE_FADE_RATE[t] ?? t / Math.ceil(t / 2);
+  }
+
+  /** The `wait_time` the fade now running was started with. */
+  private fadeUnits = CutscenePlayer.FADE_UNITS;
+
   private fadeClock(units: number): void {
     this.fadeOwed += units;
-    while (this.fadeOwed >= CutscenePlayer.FADE_UNITS) {
-      this.fadeOwed -= CutscenePlayer.FADE_UNITS;
+    while (this.fadeOwed >= this.fadeUnits) {
+      this.fadeOwed -= this.fadeUnits;
       this.fadeStep();
     }
   }
@@ -524,7 +618,7 @@ export class CutscenePlayer {
         this.onscreen.clear(0);
       },
       set_bg_attr: (color) => this.setBackground(color),
-      fade_start: (dir, rows) => this.fadeStart(dir, rows),
+      fade_start: (dir, rows, waitTime) => this.fadeStart(dir, rows, waitTime),
       fade_active: () => this.fade !== null,
       blit_image: (chtab, id, x, y, blit) => this.blitSprite(chtab, id, x, y, blit),
       load_intro_images: (which) => this.loadIntroImages(which),
@@ -672,7 +766,9 @@ export class CutscenePlayer {
   }
 
   // seg009:1A51 / seg009:1D28
-  private fadeStart(dir: 'in' | 'out', rows: number): void {
+  private fadeStart(dir: 'in' | 'out', rows: number, waitTime = 2): void {
+    this.fadeUnits = waitTime === 0 ? this.cutsceneFadeUnits() : waitTime;
+    this.fadeOwed = 0;
     const original = this.palette.rgb6.slice();
     const faded = original.slice();
     this.copyRect(0, 0, 320, 200);

@@ -41,6 +41,151 @@
 ## ============================================================
 
 
+## A CUTSCENE FADE HAS NO CLOCK: SCENES 2029 -> 2055
+
+    measured   19478 of 20232   (unmoved, to the tick)
+    scenes      2055 of  2236   (was 2029 of 2236)   91% -> 92%
+    sounds       417 of   419   (unmoved)
+
+    title        560 of   633  ->  586 of 633   88% -> 93%
+
+### 1. `fade_in_1` passes `wait_time` **0**, and SDLPoP writes it `/*0*/ 2`
+
+`title` was the largest single shortfall left and had never had a
+frame-level reading. `tools/dev/scene-apart.ts` puts the whole of it
+in one block:
+
+    same  capture 2316..2380  port 2315..2373  (20)
+    DIFF  capture 2387..2448  port 2380..2441  (49)
+    same  capture 2449..2998  port 2442..2991  (63)
+
+Forty-nine of the seventy-three, in one place, and the place is
+**`pv_scene`'s fade-out** -- the princess's room inside the title,
+the last thing before the story screen. A fresh capture reproduces
+it to the frame (DIFF 2387..2448) so it is not the capture's.
+
+Both sides start that fade on the **same video frame**, 2374. The
+mean brightness of every frame of it, the port's beside the
+capture's:
+
+    port  83.2 80.6 78.0 75.4 72.9 70.3 67.8 65.2 62.7 60.1 ...
+    cap   83.2      78.1 75.5 72.8 70.3 67.7      62.7 60.1 ...
+
+Matched shade by shade against the port's own frames the capture
+reads 0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 15, ... -- **63 shades
+over 54 video frames, stepping 1, 1, 1, 1, 1, 2 without a break.**
+Seven shades every six frames, where the port does one a frame. And
+forty frames later, in the same capture, `fade_in_2` of the story
+screen steps **one shade per video frame exactly**, which is what
+the port does to every fade in the game.
+
+Two different rates in one capture, and the C says why in a comment
+it has had all along:
+
+    fade_in_2:  make_pal_buffer_fadein(surface, which_rows, 2)
+    fade_in_1:  make_pal_buffer_fadein(surface, 0x6689, /*0*/ 2)
+
+`/*0*/` is the **original's** value, kept beside SDLPoP's
+substitution. With nought there is no timer between two shades at
+all -- `fade_out_frame`'s `do_simple_wait(timer_1)` returns at once
+-- and `proc_cutscene_frame`'s inner loop, which has no
+`delay_ticks(1)` while fading, spins until the cutscene frame's own
+timer stops. **So a cutscene fade is not on a clock. It runs at
+whatever rate the machine can compute and write a palette**, and the
+port had been reading `wait_time` 2 out of SDLPoP and applying it to
+every fade in the game.
+
+`ceil(cutscene_frame_time / 2)` shades fit in a cutscene frame,
+which is the arithmetic of the `do..while`:
+
+* at **6**, which every scene but one uses, three shades in six
+  sixtieths -- the same two sixtieths a shade `wait_time` 2 gives,
+  which is why the six cutscenes never showed this;
+* at **7**, which `pv_scene` switches to before Jaffar conjures,
+  four in seven: 1.75 sixtieths a shade against the capture's 1.714.
+
+`CUTSCENE_FADE_RATE` in `src/pop/cutscene.ts` is `{6: 2, 7: 12/7}`
+-- the capture's numbers, with `t / ceil(t / 2)` as the fallback for
+a frame time no capture has measured. `scr.fade_start` takes the
+`wait_time` now, so `fade_in_2` and `fade_out_2` keep their 2.
+
+**Flat rates were swept again and every one of them loses**, because
+a flat rate moves the six cutscenes' fades as well:
+
+    2      (every fade, the old port)   scenes 2029 of 2236
+    1.7143 (every fade)                        1818 of 2232
+    1.75   (every fade)                        1833 of 2230
+    1.6667 (every fade)                        1829 of 2221
+    {6: 2, 7: 1.75}                            2044 of 2236
+    {6: 2, 7: 12/7}  (kept)                    2055 of 2236
+
+That is the fourth round to touch the fade rate and the first to
+win, and what it had that the other three did not is the `/*0*/`:
+the rate was never a constant to be fitted, it is **two** constants
+and only one of them is in the code.
+
+### 2. `next_sound` is a scene's queue too, and the port had none
+
+`play_sound` does not play anything. In a level `PopGame` has had
+the queue since the gate stuttered; in a **scene** the line is in
+`proc_cutscene_frame`:
+
+    if (!check_sound_playing()) {
+        play_next_sound();
+    }
+
+-- so a sound asked for while another is still in the channel is
+**held** until the channel is free instead of cutting it off, and
+`next_sound` survives from one cutscene frame to the next because
+`play_next_sound` is the only thing that clears it. The port's
+cutscene `play_sound` went straight to the channel. `pv_scene` asks
+for five sounds and two of them land on top of a sound already
+playing.
+
+`show_title` and `end_sequence` are the exception and the C says so
+by name: their three sounds go through `play_sound_from_buffer`, and
+those three stay immediate.
+
+**It moves no score, and it is measured both ways: 2055 of 2236
+either side of it.** The call site and the first
+`play_next_sound` after it are separated by no timer wait, so a
+queued sound starts on the same sixtieth the old code started it on
+unless something else is in the channel. What it fixes is the
+cutting-off, which only an ear can hear.
+
+### 3. Thirteen frames of the title are the capture's screen tear
+
+`scene_frames.py --untear` dropped frames where the grab caught the
+original's **palette** write half done. There is a second tear and
+it is the **picture**. `draw_proom_drects` composes the princess
+room offscreen and copies the rectangles that changed one at a time,
+and in DOSBox that copy straddles a video frame:
+
+    cap 1885   into (182,150)-(212,166)   out (97,99)-(221,149)
+    cap 2205   into (161,150)-(214,166)   out (97,99)-(221,149)
+    cap 2307   into (161,150)-(319,165)   out (16,99)-(319,149)
+
+-- the split at row 150 every time. Each of the thirteen is
+**exactly the top of the frame before over the bottom of the frame
+after, to the pixel** (`B == topA + bottomC`, 0 px differ, all
+thirteen), which is a picture neither of them ever held.
+
+The rule is `mid_draw` in `scene_frames.py`: every row the frame
+owes to the one after it is above every row it owes to the one
+before it. Nothing else is needed -- outside those rows the frame is
+one of its neighbours, so the frame is the composite. `MIN_TEAR` is
+16 pixels a side, because a tear of one or two pixels on row 99 is a
+torch flickering between two screen writes and the digest masks the
+princess room's torches, so such a frame hashes the same as the
+whole one and is worth keeping. Without the threshold it drops 30
+frames and 17 of them were agreeing; with it, on the same capture:
+
+    no mid_draw   559 of 637
+    mid_draw      559 of 624      the same agreed, 13 fewer misses
+
+It needs a fresh capture to land, so the digests in the repository
+do not have it yet.
+
 ## THE ENDING'S CAPTURE WAS PRESSING ITS OWN KEYS: SCENES 1874 -> 2029
 
     measured   19478 of 20232   (unmoved, to the tick)
@@ -1317,14 +1462,14 @@ the last two, which is where `prandom` takes the attract mode over.)
 and, for the first time, the parts of the game that are not
 gameplay, by `tools/dev/scene-report.ts`:
 
-    title              560 of   633   the opening, every page load
+    title              586 of   633   the opening, every page load
     expired            167 of   188   the hourglass
     cutscene2          129 of   136   cutscene8    168 of 192
     cutscene4          131 of   135   cutscene9    181 of 205
     cutscene6          128 of   135   cutscene12   119 of 135
     ending             446 of   477   from 1
 
-    scenes            2029 of  2236
+    scenes            2055 of  2236
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:

@@ -55,8 +55,16 @@ export interface ScreenOps {
   clear_screen(): void;
   /** `set_bg_attr(0, color)`, which is how `do_flash` flashes. */
   set_bg_attr(color: number): void;
-  /** `make_pal_buffer_fadein` / `make_pal_buffer_fadeout`. */
-  fade_start(dir: 'in' | 'out', rows: number): void;
+  /**
+   * `make_pal_buffer_fadein` / `make_pal_buffer_fadeout`.
+   *
+   * `waitTime` is the third argument those two take, which is how
+   * long `fade_in_frame` holds a shade. It is **2** for `fade_in_2`
+   * and `fade_out_2` and **0** for `fade_in_1` and `fade_out_1`, and
+   * the difference is the whole of why a cutscene's fade is faster
+   * than the title's -- see `CutscenePlayer.fadeClock`.
+   */
+  fade_start(dir: 'in' | 'out', rows: number, waitTime?: number): void;
   /** Whether the fade still has shades to go. */
   fade_active(): boolean;
   /** `method_6_blit_img_to_scr(get_image(chtab, id), x, y, blit)`. */

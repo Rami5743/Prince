@@ -37,6 +37,7 @@ import {
 import { get_torch_frame, clear_tile_wipes } from './seg007.ts';
 import { prandom, input_str, type StrBuffer } from './seg009.ts';
 import { out } from './link.ts';
+import { soundPriority } from '../render/audio.ts';
 import { scr, FADE_CUTSCENE_ROWS, full_image_id } from './screen.ts';
 
 /** What a cutscene yields: how long to wait, in sixtieths of a second. */
@@ -58,6 +59,62 @@ export let disable_keys = 0;
  * this is the whole of "may a key end this scene".
  */
 export const keysDisabled = (): number => disable_keys;
+/**
+ * `next_sound`, and why a scene has one of its own.
+ *
+ * `play_sound` does not play anything: it writes the sound into
+ * `next_sound`, keeping the most important of however many are asked
+ * for, and something else starts it later. In a level that something
+ * is `play_next_sound` at the end of `draw_game_frame`, which
+ * `PopGame` has. In a **scene** it is `proc_cutscene_frame`, and the
+ * line there is
+ *
+ *     if (!check_sound_playing()) {
+ *         play_next_sound();
+ *     }
+ *
+ * -- so a sound asked for while another is still in the channel is
+ * **held** until the channel is free, instead of cutting it off, and
+ * `next_sound` survives from one cutscene frame to the next because
+ * `play_next_sound` is the only thing that clears it.
+ *
+ * That is the scene's clock and not only its sound. `pv_scene` is
+ * three `do { proc_cutscene_frame(1) } while (check_sound_playing())`
+ * waits one after another, so every cutscene frame a sound starts
+ * late is a cutscene frame the whole of the rest of the scene runs
+ * late. The port played every one of them straight to the channel,
+ * which is both a sound cut short and a scene that ends early.
+ *
+ * `show_title` and `end_sequence` are the exception and the C says so
+ * by name: their three sounds go through `play_sound_from_buffer`,
+ * which is `out.play_sound` here, and not through this.
+ */
+let next_sound = -1;
+
+/** `play_sound`: into the queue, by priority. */
+function play_sound(which: number): void {
+  if (next_sound < 0 || soundPriority(which) <= soundPriority(next_sound)) {
+    next_sound = which;
+  }
+}
+
+/**
+ * `play_next_sound`.
+ *
+ * The C's own test --
+ * `!check_sound_playing() || (sound_interruptible[current_sound] &&
+ * prio[next] <= prio[current])` -- is already true wherever
+ * `proc_cutscene_frame` reaches this, because it only calls it when
+ * nothing is playing.
+ */
+function play_next_sound(): void {
+  if (next_sound >= 0) {
+    g.current_sound = next_sound;
+    out.play_sound(next_sound);
+  }
+  next_sound = -1;
+}
+
 // data:436A
 let hourglass_sandflow = -1;
 // data:5964
@@ -201,9 +258,9 @@ export function* proc_cutscene_frame(wait_frames: number): Scene {
       --g.flash_time;
       remove_flash();
     }
-    // `play_next_sound`. The C queues a sound in `next_sound` and
-    // plays it at the top of the next frame; this port's `play_sound`
-    // goes straight to the speaker, so the queue has nothing to do.
+    if (!out.check_sound_playing()) {
+      play_next_sound();
+    }
     yield cutscene_frame_time;
     --cutscene_wait_frames;
   } while (cutscene_wait_frames);
@@ -412,7 +469,7 @@ export function init_ending_kid(): void {
 
 // seg001:034D
 export function* cutscene_8(): Scene {
-  out.play_sound(soundids.sound_35_cutscene_8_9);
+  play_sound(soundids.sound_35_cutscene_8_9);
   set_hourglass_state(hourglass_frame());
   init_mouse_cu8();
   savekid();
@@ -430,7 +487,7 @@ export function* cutscene_8(): Scene {
 
 // seg001:03B7
 export function* cutscene_9(): Scene {
-  out.play_sound(soundids.sound_35_cutscene_8_9);
+  play_sound(soundids.sound_35_cutscene_8_9);
   set_hourglass_state(hourglass_frame());
   princess_stand();
   saveshad();
@@ -476,7 +533,7 @@ export function* end_sequence_anim(): Scene {
   // nothing in between. That is `copy_screen_rect(&screen_rect)`,
   // which is what the C has here.
   scr.present();
-  out.play_sound(soundids.sound_26_embrace);
+  play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();
   init_ending_kid();
@@ -502,7 +559,7 @@ export function* time_expired(): Scene {
   disable_keys = 1;
   set_hourglass_state(7);
   hourglass_sandflow = -1;
-  out.play_sound(soundids.sound_36_out_of_time);
+  play_sound(soundids.sound_36_out_of_time);
   yield* fade_in_1();
   yield* proc_cutscene_frame(2);
   yield* proc_cutscene_frame(100);
@@ -517,7 +574,7 @@ export function* cutscene_12(): Scene {
     set_hourglass_state(frame_num);
     init_princess_x156();
     saveshad();
-    out.play_sound(soundids.sound_40_cutscene_12_short_time);
+    play_sound(soundids.sound_40_cutscene_12_short_time);
     yield* fade_in_1();
     yield* proc_cutscene_frame(2);
     seqtbl_offset_shad_char(98); // princess turn around [PV1]
@@ -530,7 +587,7 @@ export function* cutscene_12(): Scene {
 
 // seg001:0584
 export function* cutscene_4(): Scene {
-  out.play_sound(soundids.sound_27_cutscene_2_4_6_12);
+  play_sound(soundids.sound_27_cutscene_2_4_6_12);
   set_hourglass_state(hourglass_frame());
   princess_lying();
   saveshad();
@@ -541,7 +598,7 @@ export function* cutscene_4(): Scene {
 
 // seg001:05B8
 export function* cutscene_2_6(): Scene {
-  out.play_sound(soundids.sound_27_cutscene_2_4_6_12);
+  play_sound(soundids.sound_27_cutscene_2_4_6_12);
   set_hourglass_state(hourglass_frame());
   init_princess_right();
   saveshad();
@@ -558,23 +615,23 @@ export function* pv_scene(): Scene {
   init_vizier();
   savekid();
   yield* proc_cutscene_frame(2);
-  out.play_sound(soundids.sound_50_story_2_princess);
+  play_sound(soundids.sound_50_story_2_princess);
   do {
     yield* proc_cutscene_frame(1);
   } while (out.check_sound_playing());
   cutscene_frame_time = 8;
   yield* proc_cutscene_frame(5);
-  out.play_sound(soundids.sound_4_gate_closing);
+  play_sound(soundids.sound_4_gate_closing);
   do {
     yield* proc_cutscene_frame(1);
   } while (out.check_sound_playing());
-  out.play_sound(soundids.sound_51_princess_door_opening);
+  play_sound(soundids.sound_51_princess_door_opening);
   yield* proc_cutscene_frame(3);
   seqtbl_offset_shad_char(98); // princess turn around [PV1]
   yield* proc_cutscene_frame(5);
   seqtbl_offset_kid_char(96); // Jaffar walk [PV1]
   yield* proc_cutscene_frame(6);
-  out.play_sound(soundids.sound_53_story_3_Jaffar_comes);
+  play_sound(soundids.sound_53_story_3_Jaffar_comes);
   seqtbl_offset_kid_char(97); // Jaffar stop [PV1]
   yield* proc_cutscene_frame(4);
   yield* proc_cutscene_frame(18);
@@ -596,7 +653,7 @@ export function* pv_scene(): Scene {
   seqtbl_offset_kid_char(100); // Jaffar end conjuring and walk [PV1]
   hourglass_sandflow = 0;
   yield* proc_cutscene_frame(6);
-  out.play_sound(soundids.sound_52_story_4_Jaffar_leaves);
+  play_sound(soundids.sound_52_story_4_Jaffar_leaves);
   yield* proc_cutscene_frame(24);
   hourglass_state = 2;
   yield* proc_cutscene_frame(9);
@@ -666,6 +723,7 @@ export function reset_cutscene(): void {
   hourglass_sandflow = -1;
   cutscene_frame_time = 6;
   clear_tile_wipes();
+  next_sound = -1;
 }
 
 // seg001:0908
@@ -698,14 +756,14 @@ export function remove_flash(): void {
  * same reason, so this is the same two loops.
  */
 export function* fade_in_1(): Scene {
-  scr.fade_start('in', FADE_CUTSCENE_ROWS);
+  scr.fade_start('in', FADE_CUTSCENE_ROWS, 0);
   while (scr.fade_active()) {
     yield* proc_cutscene_frame(1);
   }
 }
 
 export function* fade_out_1(): Scene {
-  scr.fade_start('out', FADE_CUTSCENE_ROWS);
+  scr.fade_start('out', FADE_CUTSCENE_ROWS, 0);
   while (scr.fade_active()) {
     yield* proc_cutscene_frame(1);
   }
@@ -805,12 +863,12 @@ function* pop_wait(time: number): Scene {
  * ends on `do_simple_wait(1)` whatever `wait_time` says.
  */
 function* fade_in_2(which_rows: number): Scene {
-  scr.fade_start('in', which_rows);
+  scr.fade_start('in', which_rows, 2);
   while (scr.fade_active()) yield 1;
 }
 
 function* fade_out_2(which_rows: number): Scene {
-  scr.fade_start('out', which_rows);
+  scr.fade_start('out', which_rows, 2);
   while (scr.fade_active()) yield 1;
 }
 

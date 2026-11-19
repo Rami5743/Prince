@@ -63,11 +63,20 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
  */
 const EXPECTED: Record<string, number> = {
   /**
-   * `title` -- **560 of 633**, from 512 of 616, on a capture taken
-   * at sixty frames a second and read with `scene_frames.py
-   * --untear`. Nothing in the port changed between the two.
+   * `title` -- **586 of 633**, from 560, from 512 of 616.
+   *
+   * 512 to 560 was a capture taken at sixty frames a second and read
+   * with `scene_frames.py --untear`, with nothing in the port
+   * changed. 560 to 586 is the port: a **cutscene** fade has
+   * `wait_time` nought, so its rate is not in the code at all, and
+   * `pv_scene` -- the princess's room inside the title -- switches
+   * `cutscene_frame_time` to seven before Jaffar conjures, where a
+   * capture measures its fade-out at seven shades every six video
+   * frames against the two sixtieths a shade the port gave every
+   * fade in the game. See `CUTSCENE_FADE_RATE` in
+   * `src/pop/cutscene.ts`.
    */
-  title: 560,
+  title: 586,
   /**
    * `end_sequence` -- **446 of 477**, from 1.
    *

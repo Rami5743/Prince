@@ -76,6 +76,13 @@ from PIL import Image
 
 W, H = 320, 200
 
+# How much of the picture must be on each side of the split before a
+# frame is read as a torn one. A tear of a pixel or two is a torch
+# flickering between two screen writes, and the digest masks the
+# princess room's torches, so such a frame hashes the same as the
+# whole one and is worth keeping.
+MIN_TEAR = 16
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -128,6 +135,46 @@ def main():
         d = frame.astype(np.int16)[into] - before.astype(np.int16)[into]
         return bool(np.abs(d).max() <= 6)
 
+    def mid_draw(before, frame, after):
+        """Did the grab catch this frame halfway through a *screen* write?
+
+        `mid_burst` is about the palette. This is about the picture.
+        `draw_proom_drects` composes the princess room in the offscreen
+        buffer and then copies the rectangles that changed to the
+        screen one at a time -- `while (drects_count) copy_screen_rect`
+        -- and in DOSBox that copy is slow enough to straddle a video
+        frame. The grab then holds the new bottom of the figure over
+        the old top, and the next frame puts the top right.
+
+        The signature is exact and it is not something the game can do:
+        the change *into* the frame and the change *out* of it are two
+        bands, one wholly above the other, **touching**. Measured on a
+        capture of the title, nine of its eleven single-frame misses
+        read
+
+            into (182,150)-(212,166)   out (97, 99)-(221,149)
+            into (161,150)-(214,166)   out (97, 99)-(221,149)
+            ...
+
+        -- the split at row 150 every time, with row 149 on the other
+        side of it. Two bands that are genuinely two things, the
+        hourglass sand at rows 157-164 and a torch at rows 97-110, are
+        forty-seven rows apart and are not touched.
+        """
+        into = (frame != before).any(axis=2)
+        out = (frame != after).any(axis=2)
+        if into.sum() < MIN_TEAR or out.sum() < MIN_TEAR:
+            return False
+        ri = np.nonzero(into.any(axis=1))[0]
+        ro = np.nonzero(out.any(axis=1))[0]
+        # Every row the frame owes to the one after it is **above**
+        # every row it owes to the one before it. Nothing else is
+        # needed: outside those rows the frame is the one before, and
+        # outside these it is the one after, so the frame is exactly
+        # the top of one over the bottom of the other and is a picture
+        # neither of them ever held.
+        return bool(ro[-1] < ri[0])
+
     def take(idx, arr):
         """Take one changed frame, judging the one before it.
 
@@ -142,7 +189,7 @@ def main():
             return
         (i0, a0), (i1, a1), (i2, a2) = win
         del win[0]
-        if i2 == i1 + 1 and mid_burst(a0, a1, a2):
+        if i2 == i1 + 1 and (mid_burst(a0, a1, a2) or mid_draw(a0, a1, a2)):
             dropped += 1
         else:
             emit(i1, a1)

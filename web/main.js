@@ -11332,6 +11332,19 @@ var cutscene_wait_frames = 0;
 var cutscene_frame_time = 6;
 var disable_keys = 0;
 var keysDisabled = () => disable_keys;
+var next_sound = -1;
+function play_sound(which) {
+  if (next_sound < 0 || soundPriority(which) <= soundPriority(next_sound)) {
+    next_sound = which;
+  }
+}
+function play_next_sound() {
+  if (next_sound >= 0) {
+    g.current_sound = next_sound;
+    out.play_sound(next_sound);
+  }
+  next_sound = -1;
+}
 var hourglass_sandflow = -1;
 var hourglass_state = 0;
 var which_torch = 0;
@@ -11444,6 +11457,9 @@ function* proc_cutscene_frame(wait_frames) {
     if (g.flash_time) {
       --g.flash_time;
       remove_flash();
+    }
+    if (!out.check_sound_playing()) {
+      play_next_sound();
     }
     yield cutscene_frame_time;
     --cutscene_wait_frames;
@@ -11592,7 +11608,7 @@ function init_ending_kid() {
   play_seq();
 }
 function* cutscene_8() {
-  out.play_sound(soundids.sound_35_cutscene_8_9);
+  play_sound(soundids.sound_35_cutscene_8_9);
   set_hourglass_state(hourglass_frame());
   init_mouse_cu8();
   savekid();
@@ -11608,7 +11624,7 @@ function* cutscene_8() {
   yield* fade_out_1();
 }
 function* cutscene_9() {
-  out.play_sound(soundids.sound_35_cutscene_8_9);
+  play_sound(soundids.sound_35_cutscene_8_9);
   set_hourglass_state(hourglass_frame());
   princess_stand();
   saveshad();
@@ -11625,7 +11641,7 @@ function* cutscene_9() {
 function* end_sequence_anim() {
   disable_keys = 1;
   scr.present();
-  out.play_sound(soundids.sound_26_embrace);
+  play_sound(soundids.sound_26_embrace);
   init_ending_princess();
   saveshad();
   init_ending_kid();
@@ -11649,7 +11665,7 @@ function* time_expired() {
   disable_keys = 1;
   set_hourglass_state(7);
   hourglass_sandflow = -1;
-  out.play_sound(soundids.sound_36_out_of_time);
+  play_sound(soundids.sound_36_out_of_time);
   yield* fade_in_1();
   yield* proc_cutscene_frame(2);
   yield* proc_cutscene_frame(100);
@@ -11662,7 +11678,7 @@ function* cutscene_12() {
     set_hourglass_state(frame_num);
     init_princess_x156();
     saveshad();
-    out.play_sound(soundids.sound_40_cutscene_12_short_time);
+    play_sound(soundids.sound_40_cutscene_12_short_time);
     yield* fade_in_1();
     yield* proc_cutscene_frame(2);
     seqtbl_offset_shad_char(98);
@@ -11673,7 +11689,7 @@ function* cutscene_12() {
   }
 }
 function* cutscene_4() {
-  out.play_sound(soundids.sound_27_cutscene_2_4_6_12);
+  play_sound(soundids.sound_27_cutscene_2_4_6_12);
   set_hourglass_state(hourglass_frame());
   princess_lying();
   saveshad();
@@ -11682,7 +11698,7 @@ function* cutscene_4() {
   yield* fade_out_1();
 }
 function* cutscene_2_6() {
-  out.play_sound(soundids.sound_27_cutscene_2_4_6_12);
+  play_sound(soundids.sound_27_cutscene_2_4_6_12);
   set_hourglass_state(hourglass_frame());
   init_princess_right();
   saveshad();
@@ -11697,23 +11713,23 @@ function* pv_scene() {
   init_vizier();
   savekid();
   yield* proc_cutscene_frame(2);
-  out.play_sound(soundids.sound_50_story_2_princess);
+  play_sound(soundids.sound_50_story_2_princess);
   do {
     yield* proc_cutscene_frame(1);
   } while (out.check_sound_playing());
   cutscene_frame_time = 8;
   yield* proc_cutscene_frame(5);
-  out.play_sound(soundids.sound_4_gate_closing);
+  play_sound(soundids.sound_4_gate_closing);
   do {
     yield* proc_cutscene_frame(1);
   } while (out.check_sound_playing());
-  out.play_sound(soundids.sound_51_princess_door_opening);
+  play_sound(soundids.sound_51_princess_door_opening);
   yield* proc_cutscene_frame(3);
   seqtbl_offset_shad_char(98);
   yield* proc_cutscene_frame(5);
   seqtbl_offset_kid_char(96);
   yield* proc_cutscene_frame(6);
-  out.play_sound(soundids.sound_53_story_3_Jaffar_comes);
+  play_sound(soundids.sound_53_story_3_Jaffar_comes);
   seqtbl_offset_kid_char(97);
   yield* proc_cutscene_frame(4);
   yield* proc_cutscene_frame(18);
@@ -11735,7 +11751,7 @@ function* pv_scene() {
   seqtbl_offset_kid_char(100);
   hourglass_sandflow = 0;
   yield* proc_cutscene_frame(6);
-  out.play_sound(soundids.sound_52_story_4_Jaffar_leaves);
+  play_sound(soundids.sound_52_story_4_Jaffar_leaves);
   yield* proc_cutscene_frame(24);
   hourglass_state = 2;
   yield* proc_cutscene_frame(9);
@@ -11808,6 +11824,7 @@ function reset_cutscene() {
   hourglass_sandflow = -1;
   cutscene_frame_time = 6;
   clear_tile_wipes();
+  next_sound = -1;
 }
 function do_flash(color) {
   if (color) scr.set_bg_attr(color);
@@ -11816,13 +11833,13 @@ function remove_flash() {
   scr.set_bg_attr(0);
 }
 function* fade_in_1() {
-  scr.fade_start("in", FADE_CUTSCENE_ROWS);
+  scr.fade_start("in", FADE_CUTSCENE_ROWS, 0);
   while (scr.fade_active()) {
     yield* proc_cutscene_frame(1);
   }
 }
 function* fade_out_1() {
-  scr.fade_start("out", FADE_CUTSCENE_ROWS);
+  scr.fade_start("out", FADE_CUTSCENE_ROWS, 0);
   while (scr.fade_active()) {
     yield* proc_cutscene_frame(1);
   }
@@ -11869,6 +11886,9 @@ var tbl_cutscenes = [
   null,
   null
 ];
+function frameTime() {
+  return cutscene_frame_time;
+}
 function start_timer(length) {
   return scr.now() + length;
 }
@@ -11880,11 +11900,11 @@ function* pop_wait(time) {
   yield* do_wait(start_timer(time));
 }
 function* fade_in_2(which_rows) {
-  scr.fade_start("in", which_rows);
+  scr.fade_start("in", which_rows, 2);
   while (scr.fade_active()) yield 1;
 }
 function* fade_out_2(which_rows) {
-  scr.fade_start("out", which_rows);
+  scr.fade_start("out", which_rows, 2);
   while (scr.fade_active()) yield 1;
 }
 function* transition_ltr() {
@@ -12089,6 +12109,10 @@ function blankLevel() {
     guards_color: new Uint8Array(24)
   };
 }
+var CUTSCENE_FADE_RATE = { 6: 2, 7: 12 / 7 };
+var CUTSCENE_FADE_SWEEP = Number(
+  globalThis.process?.env?.POP_CUTSCENE_FADE_UNITS ?? ""
+) || 0;
 var CutscenePlayer = class _CutscenePlayer {
   /** `offscreen_surface`, where the picture is composed. */
   offscreen = new Surface();
@@ -12341,10 +12365,60 @@ var CutscenePlayer = class _CutscenePlayer {
    * parity rather than removing it. It is not kept.
    */
   static FADE_UNITS = 2;
+  /**
+   * And the cutscene fade, which has no wait of its own.
+   *
+   * `make_pal_buffer_fadein` is given `wait_time` 2 by `fade_in_2`
+   * and **0** by `fade_in_1` -- SDLPoP writes the second one
+   * `/*0*\/ 2`, keeping the original's value in the comment beside
+   * its own substitution. With nought there is no timer between two
+   * shades, so what paces a cutscene's fade is not `wait_time` but
+   * `proc_cutscene_frame`'s own loop:
+   *
+   *     do { ... proc_fade_frame(...) ... }
+   *     while (!has_timer_stopped(timer_0));
+   *
+   * -- a `do..while`, so a cutscene frame of `cutscene_frame_time`
+   * sixtieths fits **ceil(T / 2)** shades in, the last of them
+   * started with one sixtieth still to run. At the six sixtieths
+   * every scene but one uses that is three shades in six, which is
+   * the two sixtieths a shade `fade_in_2` has anyway and is why the
+   * six cutscenes never showed it. At **seven**, which `pv_scene`
+   * switches to before Jaffar conjures, it is four shades in seven.
+   *
+   * The capture says the same thing without the arithmetic. One of
+   * the title, grabbed at sixty and untorn, measures `pv_scene`'s
+   * fade-out shade by shade against the port's own frames:
+   *
+   *     cap frame  2373 2374 2375 2376 2377 2378 2379 2380 ...
+   *     shade         0    2    3    4    5    6    8    9
+   *
+   * -- 63 shades over 54 video frames, 1, 1, 1, 1, 1, 2 without a
+   * break, which is 1.71 sixtieths a shade against this model's
+   * 1.75; and the same capture's `fade_in_2` of the story screen
+   * forty frames later steps one shade per video frame exactly,
+   * which is `wait_time` 2. Two rates in one capture, from the two
+   * `wait_time`s, and the port keeps both.
+   *
+   * Flat rates were swept and all of them lose, because they move
+   * the six cutscenes' fades as well:
+   *
+   *     2 (every fade)        scenes 2029 of 2236
+   *     1.7143 (every fade)          1818 of 2232
+   *     1.75   (every fade)          1833 of 2230
+   *     1.6667 (every fade)          1829 of 2221
+   */
+  cutsceneFadeUnits() {
+    if (CUTSCENE_FADE_SWEEP) return CUTSCENE_FADE_SWEEP;
+    const t = frameTime();
+    return CUTSCENE_FADE_RATE[t] ?? t / Math.ceil(t / 2);
+  }
+  /** The `wait_time` the fade now running was started with. */
+  fadeUnits = _CutscenePlayer.FADE_UNITS;
   fadeClock(units) {
     this.fadeOwed += units;
-    while (this.fadeOwed >= _CutscenePlayer.FADE_UNITS) {
-      this.fadeOwed -= _CutscenePlayer.FADE_UNITS;
+    while (this.fadeOwed >= this.fadeUnits) {
+      this.fadeOwed -= this.fadeUnits;
       this.fadeStep();
     }
   }
@@ -12481,7 +12555,7 @@ var CutscenePlayer = class _CutscenePlayer {
         this.onscreen.clear(0);
       },
       set_bg_attr: (color) => this.setBackground(color),
-      fade_start: (dir, rows) => this.fadeStart(dir, rows),
+      fade_start: (dir, rows, waitTime) => this.fadeStart(dir, rows, waitTime),
       fade_active: () => this.fade !== null,
       blit_image: (chtab, id, x, y, blit) => this.blitSprite(chtab, id, x, y, blit),
       load_intro_images: (which) => this.loadIntroImages(which),
@@ -12627,7 +12701,9 @@ var CutscenePlayer = class _CutscenePlayer {
     this.palette.setEntry(0, ...this.palette.entry(color));
   }
   // seg009:1A51 / seg009:1D28
-  fadeStart(dir, rows) {
+  fadeStart(dir, rows, waitTime = 2) {
+    this.fadeUnits = waitTime === 0 ? this.cutsceneFadeUnits() : waitTime;
+    this.fadeOwed = 0;
     const original = this.palette.rgb6.slice();
     const faded = original.slice();
     this.copyRect(0, 0, 320, 200);
