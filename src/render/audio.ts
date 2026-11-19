@@ -156,6 +156,34 @@ export function setSoundInterruptible(index: number, value: boolean): void {
  */
 export const soundInterruptible = interruptibleOf;
 
+/**
+ * The slowest recording a browser will take, in hertz.
+ *
+ * The Web Audio spec only obliges an implementation to support sample
+ * rates from 8000 to 96000, and Chromium's `createBuffer` throws
+ * `NotSupportedError` below 3000. **Exactly one sound in the game is
+ * under either number**, and it is
+ * `sound_15_leveldoor_sliding` -- the exit door -- recorded at
+ * **2750 Hz**, where every other recording in `DIGISND*.DAT` is at
+ * 8200, 11000 or 14000.
+ *
+ * So the door threw where it was read, `read`'s `catch` wrote the
+ * index down as "neither a recording nor a tune", and
+ * `play(sound_15_leveldoor_sliding)` returned on that for the rest of
+ * the session. The player reported "no exit door sound"; the whole of
+ * it was this one number, and no measurement against the original
+ * could see it -- the capture, the port and the oracle all agree that
+ * the door sounds for 3.5 seconds, because none of them goes through
+ * a browser.
+ *
+ * Holding each sample for an integer number of the new rate's is not
+ * a resampling: it is a zero-order hold, which is exactly what the
+ * DAC it was recorded for did with it. The waveform and the length
+ * come out the same to the sample. 2750 x 3 = 8250 Hz, which is above
+ * the rate the spec guarantees, so no browser can refuse it.
+ */
+const MIN_BUFFER_RATE = 8000;
+
 export class SoundPlayer {
   private readonly assets: Assets;
   private readonly context: AudioSink;
@@ -320,11 +348,17 @@ export class SoundPlayer {
   private async readPlayable(index: number): Promise<Playable> {
     const digi = await loadSound(this.assets, index, DIGI_FILES);
     if (digi && digi.kind === 'digi') {
-      const buffer = this.context.createBuffer(1, digi.samples.length, digi.rate);
+      // A browser will not make a buffer at the rate this one was
+      // recorded at, so hold each sample for `hold` of the new rate's
+      // -- which is what the DAC did anyway. See `MIN_BUFFER_RATE`.
+      const hold = Math.max(1, Math.ceil(MIN_BUFFER_RATE / digi.rate));
+      const buffer = this.context.createBuffer(
+        1, digi.samples.length * hold, digi.rate * hold);
       const channel = buffer.getChannelData(0);
       // Unsigned eight-bit with silence at 128, which is what the DAC took.
       for (let i = 0; i < digi.samples.length; i++) {
-        channel[i] = (digi.samples[i] - 128) / 128;
+        const v = (digi.samples[i] - 128) / 128;
+        for (let k = 0; k < hold; k++) channel[i * hold + k] = v;
       }
       return { kind: 'digi', buffer };
     }

@@ -20,7 +20,7 @@ import {
   specOf, digestOf, sceneSounds, spanOf,
 } from '../../tools/dev/sound-report.ts';
 import {
-  tunesOf, detect, heardOf, scoreHeard, occupancy, scoreNoise,
+  tunesOf, detect, heardOf, scoreHeard, noises, scoreNoise,
   type SoundNote, type Noise,
 } from '../../tools/dev/sound-common.ts';
 import { Assets } from '../../src/render/assets.ts';
@@ -42,10 +42,31 @@ const assets = new Assets(
  *
  * `gate1snd` is the same run as the `gate1` picture digest -- eight
  * hundred ticks of level 1, six rooms, the only probe in the suite
- * that steps on a button and opens the exit door. Four of its
- * ninety-six noises are left: two clicks of under ten milliseconds
- * the port places two or three ticks off, and two past the end of the
- * run, where the capture goes on into the title music starting again.
+ * that steps on a button and opens the exit door, and the capture
+ * that settles the bug the player reported as "no exit door sound".
+ *
+ * The door is **exact**. `animate_leveldoor` asks for
+ * `sound_15_leveldoor_sliding` on each of the forty-three ticks the
+ * door takes to rise; the tune is a quarter of a second and, with
+ * `sound_interruptible[15]` at 0, it holds the channel until it ends,
+ * so the port sounds unbroken from tick 696 to tick 738 -- 3.500
+ * seconds. The capture of the original has one unbroken noise there
+ * of **3.498**. And `sound_41_end_level_music`, which the Prince's
+ * climb into the door asks for at tick 768, agrees to four
+ * milliseconds: the capture's three stretches are 0.683, 1.062 and
+ * 6.791 (the last cut off by the end of the recording) where the
+ * game's own tune has 0.688, 1.063 and 9.375.
+ *
+ * Those three stretches are why this read 92 and not 94. The
+ * capture's extractor breaks a noise at a rest of over fifty
+ * milliseconds and `occupancy` did not, so a tune with rests in it
+ * arrived as one interval against three and the report called two of
+ * the three "the original alone". `noises()` splits the port's side
+ * by the same rule.
+ *
+ * Two are left: clicks of nought and eight milliseconds at 30.65 and
+ * 33.81 seconds, which no origin pairs with anything the port plays
+ * -- the seven blips around them all sit a steady 0.216 s off.
  *
  * `level10bsnd` is **exact, 90 of 90**, and it is the run the gate
  * stutter was found on: `animate_door` asks for `sound_5_gate_opening`
@@ -56,7 +77,7 @@ const assets = new Assets(
 const EXPECTED: Record<string, number> = {
   title: 212,
   cutscene2snd: 21,
-  gate1snd: 92,
+  gate1snd: 94,
   level10bsnd: 90,
 };
 
@@ -71,7 +92,7 @@ describe('the sound, against a capture of the original', () => {
       let got: number;
       let of: number;
       if (spec.recording) {
-        const chan = occupancy(events, tunes);
+        const chan = noises(events, tunes);
         const s = scoreNoise((digest.active ?? []) as readonly Noise[], chan,
                              digest.origin ?? 0, spanOf(spec));
         got = s.matched;

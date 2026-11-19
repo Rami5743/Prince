@@ -22,7 +22,7 @@ import type { SceneName } from '../../src/pop/cutscene.ts';
 import { playScene } from './scene-common.ts';
 import {
   tunesOf, detect, heardOf, scoreHeard, RecordingClock, recordingSounds,
-  occupancy, scoreNoise,
+  occupancy, noises, scoreNoise,
   type SoundDigest, type SoundNote, type SoundEvent, type Noise,
 } from './sound-common.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
@@ -119,9 +119,10 @@ async function main(): Promise<void> {
       // two-millisecond notes and half-cycle sweeps, which have no
       // pitch for a tune to be read out of. So the comparison is
       // when the speaker was sounding and when it was not.
-      const noises = (digest.active ?? []) as readonly Noise[];
-      const chan = occupancy(events, tunes);
-      const n = scoreNoise(noises, chan, digest.origin ?? spec.origin ?? 0, spanOf(spec));
+      const captured = (digest.active ?? []) as readonly Noise[];
+      const chan = args.includes('--whole')
+        ? occupancy(events, tunes) : noises(events, tunes);
+      const n = scoreNoise(captured, chan, digest.origin ?? spec.origin ?? 0, spanOf(spec));
       matched += n.matched;
       total += n.total;
       console.log(`${name.padEnd(12)} ${String(n.matched).padStart(5)} of `

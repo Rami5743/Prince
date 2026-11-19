@@ -575,6 +575,58 @@ export function occupancy(
   return out;
 }
 
+/**
+ * The gap a silence has to be before the ear hears two noises and not
+ * one. It is `ACTIVE_GAP` in `tools/oracle/sound_notes.py`, and it has
+ * to be the same number on both sides or the two lists are not lists
+ * of the same thing.
+ */
+export const NOISE_GAP = 0.05;
+
+/**
+ * The port's channel as the capture's extractor would have heard it.
+ *
+ * `occupancy` gives one interval per sound: from the moment the
+ * byte-code took the channel to the end of the tune or to whatever
+ * took it next. The **capture** has no such thing. It has zero
+ * crossings, and `sound_notes.py` reads a rest longer than fifty
+ * milliseconds as the end of one noise and the start of another --
+ * so a tune with rests in it arrives as several noises where the port
+ * arrives as one, and every noise after the first reads as a sound
+ * the original made and the port did not.
+ *
+ * That is the whole of `gate1snd`'s shortfall and it was not the
+ * port. `sound_41_end_level_music` is one `play_sound` at the tick
+ * the Prince climbs into the exit door, and the game's own tune has
+ * two rests of 63 ms in its first two seconds: stretches of 0.688,
+ * 1.063 and 9.375 seconds. The capture of the original measures
+ * **0.683, 1.062 and 6.791** (the last cut off by the end of the
+ * recording), starting 94.281 against the tune's own 94.285. The two
+ * agree to four milliseconds and the report called two of the three
+ * "the original alone".
+ *
+ * So the port's side is split here by the same rule, and the two
+ * lists are comparable for the first time.
+ */
+export function noises(
+  events: readonly SoundEvent[], tunes: Map<number, SoundNote[]>,
+): { at: number; until: number; which: number }[] {
+  const out: { at: number; until: number; which: number }[] = [];
+  for (const iv of occupancy(events, tunes)) {
+    const tune = tunes.get(iv.which);
+    if (!tune) continue;
+    let run: { at: number; until: number; which: number } | null = null;
+    for (const n of tune) {
+      const a = iv.at + n.at;
+      const b = Math.min(iv.at + n.at + n.dur, iv.until);
+      if (a >= iv.until) break;
+      if (run && a - run.until <= NOISE_GAP) run.until = Math.max(run.until, b);
+      else { run = { at: a, until: b, which: iv.which }; out.push(run); }
+    }
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+
 export interface NoiseScore {
   readonly matched: number;
   readonly total: number;

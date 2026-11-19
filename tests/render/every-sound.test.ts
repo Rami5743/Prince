@@ -49,4 +49,36 @@ describe('every sound the game can ask for', () => {
     const samples = (door as { kind: 'digi'; samples: Uint8Array; rate: number });
     expect(samples.samples.length / samples.rate).toBeGreaterThan(1.5);
   }, 60000);
+
+  /**
+   * And the rate it is recorded at, which is the whole of "the exit
+   * door makes no sound".
+   *
+   * `sound_15_leveldoor_sliding` is at **2750 Hz** and every other
+   * recording in the game is at 8200, 11000 or 14000. The Web Audio
+   * spec only obliges a browser to take 8000 and up, and Chromium's
+   * `createBuffer` throws `NotSupportedError` under 3000 -- so the
+   * door threw where it was read, `SoundPlayer.read`'s `catch` wrote
+   * it down as "neither a recording nor a tune", and every
+   * `play(15)` for the rest of the session returned on that.
+   *
+   * Nothing measured against the original could see it. The capture
+   * of `PRINCE.EXE` has one unbroken noise of 3.498 seconds over the
+   * forty-two ticks the door rises and the port sounds for 3.500, so
+   * `sound-report.ts` reads the door as exact -- because neither side
+   * of that comparison goes through a browser.
+   * `tests/browser/exit-door.test.ts` is the one that does: nought
+   * plays before this, three after.
+   *
+   * So the number is pinned here, with the rule that reads it.
+   */
+  it('is the one recording in the game a browser will not take raw', async () => {
+    const slow: string[] = [];
+    for (const [name, index] of Object.entries(soundids)) {
+      const got = await loadSound(assets, index as number, DIGI);
+      if (got?.kind !== 'digi') continue;
+      if (got.rate < 8000) slow.push(`${index} ${name} at ${got.rate} Hz`);
+    }
+    expect(slow).toEqual(['15 sound_15_leveldoor_sliding at 2750 Hz']);
+  }, 120000);
 });

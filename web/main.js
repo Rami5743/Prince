@@ -2753,6 +2753,7 @@ var interruptibleOf = (i) => (interruptible[i] ?? 1) !== 0;
 function setSoundInterruptible(index, value) {
   if (index >= 0 && index < interruptible.length) interruptible[index] = value ? 1 : 0;
 }
+var MIN_BUFFER_RATE = 8e3;
 var SoundPlayer = class {
   assets;
   context;
@@ -2919,10 +2920,16 @@ var SoundPlayer = class {
   async readPlayable(index) {
     const digi = await loadSound(this.assets, index, DIGI_FILES);
     if (digi && digi.kind === "digi") {
-      const buffer = this.context.createBuffer(1, digi.samples.length, digi.rate);
+      const hold = Math.max(1, Math.ceil(MIN_BUFFER_RATE / digi.rate));
+      const buffer = this.context.createBuffer(
+        1,
+        digi.samples.length * hold,
+        digi.rate * hold
+      );
       const channel = buffer.getChannelData(0);
       for (let i = 0; i < digi.samples.length; i++) {
-        channel[i] = (digi.samples[i] - 128) / 128;
+        const v = (digi.samples[i] - 128) / 128;
+        for (let k = 0; k < hold; k++) channel[i * hold + k] = v;
       }
       return { kind: "digi", buffer };
     }
