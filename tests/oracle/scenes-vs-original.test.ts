@@ -87,9 +87,21 @@ const EXPECTED: Record<string, number> = {
    * 39125 of a frame's 64000 pixels and equal on the rest -- one
    * step of a six-bit palette, on the entries whose value is odd.
    * Flooring every entry to an even value was tried and it is not
-   * that: it takes the other eight scenes from 809 to **157**. So
-   * the pin stays where the port honestly scores until something
-   * explains it.
+   * that: it takes the other eight scenes from 1225 to **410**, and
+   * flooring the ending's alone leaves it at 1. **Two independent
+   * captures show the same relation** -- 19998 and 39125 pixels of
+   * a frame differing by exactly four, the rest identical -- so it
+   * is the original's and not one capture's.
+   *
+   * And it is not all that is left. With the low bit ignored a frame
+   * still differs by about 670 pixels, and they are the princess:
+   * the capture stands her to the left of the hourglass centred on
+   * 134 and `Char.x = 136` draws her centred on 173. Rendering at
+   * every x from 92 to 136 the best is 118 at 247 pixels, which is
+   * no constant the C would hold, and the port places a right-facing
+   * princess correctly everywhere else -- `cutscene9` has one from
+   * `princess_stand` and 129 of its 206 frames are exact. So the pin
+   * stays where the port honestly scores until the C is read.
    */
   ending: 1,
   /**

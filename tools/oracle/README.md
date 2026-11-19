@@ -2919,6 +2919,23 @@ palette to an even shade takes the other eight scenes from **1225 to
 With the low bit ignored a frame still differs by about a thousand
 pixels in the box round the Prince and the princess.
 
+**Two captures, taken an hour apart, show the same relation** --
+39125 pixels of a frame differing by exactly four in one and 19998
+in the other, the rest identical -- so it is the original's and not
+one capture's. They also agree about where the scene starts, to the
+frame: black at 218.5 seconds and the room full at 221.0 in both.
+
+What is left after the low bit is **the princess**. She faces the
+wrong way in the port -- fixed, `init_princess_right` -- and she
+stands in the wrong place: the capture has her to the left of the
+hourglass centred on 134 where `Char.x = 136` draws her centred on
+173. Rendered at every x from 92 to 136 the best is 118 at 247
+pixels against 639 at 136, and what is left there is on her right
+edge, which is a mirror and not a position. 118 is not a constant
+the C would hold, and the port draws a right-facing princess
+correctly everywhere else: `cutscene9`'s comes from `princess_stand`
+and 129 of its 206 frames are exact.
+
 ### Where the start of a scene is, and why it moves
 
 A scene reached by playing begins where the chain puts it, and the
@@ -2929,3 +2946,35 @@ for the capture it was read off and no other. The ending's begins
 with the black `load_intro` paints: a mean-brightness sweep of the
 video at half-second steps finds it in seconds, and that is how both
 were found.
+
+
+## The demo, which needs no key at all
+
+The third of the three parts of the game that had never been
+captured. Boot the original and press **nothing**: at about 108.5
+seconds the title has run its story, the screen goes black and the
+demo level is drawn.
+
+    printf 'wait 150\n' > demo.txt
+    python3 tools/oracle/dosbox_oracle.py --script demo.txt --out rep \
+        --record run.mkv --fps 30 --cycles 20000
+    python3 tools/oracle/split_ticks.py run.mkv dos --crop 640:400:0:0 \
+        --scale 320:200 --start 106 --after-blank --fps 30 --rate 12 --hybrid
+    python3 tools/oracle/digest.py dos tools/oracle/digests/demo.json
+
+There is no Ctrl+A: a key during the attract mode starts a real
+game. So `--after-blank` is the whole of the numbering, and
+`--anchor-text` is not used because the demo draws no level title.
+The gap-walk wins here -- 219 of 221 against the clock numbering's
+208.
+
+Its **two** missing ticks are the last two, and that is where it
+stops being adjudicable: the demo's fight is `autocontrol_opponent`,
+which reads `prandom`, and the original seeds `prandom` from its
+clock. The port's own demo rendered at seeds 1 and 77777 is the same
+picture for 218 ticks and differs on 372 of the 381 after that.
+
+A recording may carry `seed` for this, and `demo` is the only one
+that does: `PopGame.start` seeds level 0 from the clock, which is
+the C's own `random_seed = (dword)time(NULL)` and is right in the
+browser and wrong for a replay.
