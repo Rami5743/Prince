@@ -100,10 +100,10 @@ describe("level 12's shadow", () => {
     get_tile(15, 1, 0);
     g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_0_empty;
     game.drawRoomNow(15);
-    let rgb = new Uint8Array();
+    let rgb = new Uint8Array(0);
     for (let t = 0; t < 8; t++) {
       game.step({ x: 0, y: 0, shift: false });
-      rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+      rgb = new Uint8Array(game.render().toRgb(game.scene.screenPalette.toRgba()));
     }
     // He is in the air, a third of the way down the room.
     expect(g.Guard.charid).toBe(charids.charid_1_shadow);
