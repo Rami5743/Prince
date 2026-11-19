@@ -18,10 +18,11 @@
  * the byte, on every tick** -- plus the same `play_sound` calls in
  * the same order.
  *
- * Two levels and two hundred ticks apiece, and **one scene**, which
- * is what fits in a test. `npx tsx tools/dev/page-port.ts --scenes
- * --cheats` is the same comparison over all fourteen levels, all
- * eleven cheats and all nine scenes.
+ * Two levels and two hundred ticks apiece, one scene and one level
+ * reached by finishing the one before, which is what fits in a test.
+ * `npx tsx tools/dev/page-port.ts --scenes --cheats --entries` is the
+ * same comparison over all fourteen levels, all eleven cheats, all
+ * nine scenes and all thirteen transitions.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Server } from 'node:http';
@@ -223,6 +224,102 @@ describe('the page and the headless port', () => {
     };
     expect(once(pageHashes)).toEqual(once(portHashes));
   }, 180000);
+
+  /**
+   * And one level reached **by finishing the one before**.
+   *
+   * Every probe in the suite enters a level by the skip chain or a
+   * cheat, never by playing out of the door, and level 7's black
+   * screen hid behind that for the whole life of the port. This
+   * drives the page through the real transition -- Shift+L, the
+   * scene, `play_level`'s wait on the sound, `nextLevel`'s carry and
+   * `select` -- and requires the level that comes up to be the
+   * headless port's, given the carry the port worked out for itself
+   * from its own run of the level before.
+   *
+   * Level 7 because its entry is the one that differs:
+   * `do_startpos` puts the Prince in room 17 and `set_start_pos`
+   * drops him into room 1.
+   *
+   * The transition has to run unpaused, so the page's loop plays a
+   * few ticks of the new level before the poll can stop it. How many
+   * is the machine's business, so the port is run at each of nine
+   * starting points and the best taken; agreeing still needs a
+   * hundred and fifty identical pictures.
+   */
+  it('reaches level 7 through the transition and draws the port\'s level', async () => {
+    const assets = new Assets(
+      async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+    const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+    const effects = { sound: () => {}, stopSounds: () => {}, soundPlaying: () => false };
+    const AFTER = 150;
+    const portSideOf = async (idle: number): Promise<number[]> => {
+      const before = await PopGame.start(assets, exe, 6, { effects });
+      for (let t = 0; t < 60; t++) {
+        before.step(PATTERN[((t / 11) | 0) % PATTERN.length]!);
+        before.render();
+      }
+      const carried = {
+        ticks: before.remainingTicks, sword: before.hasSword,
+        lives: before.maxHitPoints, seamless: before.seamlessExit,
+        hp: before.hitPoints,
+      };
+      const g = await PopGame.start(assets, exe, 7,
+        { effects, seamless: carried.seamless });
+      g.remainingTicks = carried.ticks;
+      g.hasSword = carried.sword || g.hasSword;
+      g.beginningHitPoints = carried.lives;
+      if (carried.seamless) g.carryHitPoints(carried.hp, carried.lives);
+      for (let t = 0; t < idle; t++) { g.step({ x: 0, y: 0, shift: false }); g.render(); }
+      const out: number[] = [];
+      for (let t = 0; t < AFTER; t++) {
+        g.step(PATTERN[((t / 11) | 0) % PATTERN.length]!);
+        const rgb = g.render().toRgb(g.scene.screenPalette.toRgba());
+        let h = 2166136261;
+        for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+        out.push(h >>> 0);
+      }
+      return out;
+    };
+    const got = await page.evaluate(async ([after, pattern]) => {
+      const w = window as unknown as {
+        __princeEnterLevel(l: number): Promise<void>;
+        __princePause(on: boolean): void;
+        __princeMute(on: boolean): void;
+        __princeCommand(key: string): boolean;
+        __princeStep(n: number, c: unknown, hash: boolean): { hash: number } | null;
+        __princeLevel(): number;
+      };
+      const P = pattern as { x: number; y: number; shift: boolean }[];
+      w.__princeMute(true);
+      w.__princePause(true);
+      await w.__princeEnterLevel(6);
+      for (let t = 0; t < 60; t++) w.__princeStep(1, P[((t / 11) | 0) % P.length], false);
+      w.__princeCommand('shift+l');
+      w.__princePause(false);
+      const until = Date.now() + 40000;
+      while (Date.now() < until && w.__princeLevel() !== 7) {
+        await new Promise((r) => setTimeout(r, 2));
+      }
+      w.__princePause(true);
+      await new Promise((r) => setTimeout(r, 50));
+      const hashes: number[] = [];
+      for (let t = 0; t < (after as number); t++) {
+        const r = w.__princeStep(1, P[((t / 11) | 0) % P.length], true);
+        hashes.push(r ? r.hash : -1);
+      }
+      return { level: w.__princeLevel(), hashes };
+    }, [AFTER, PATTERN] as const);
+    expect(got.level).toBe(7);
+    let best = AFTER + 1;
+    for (let k = 0; k <= 8 && best > 0; k++) {
+      const port = await portSideOf(k);
+      let n = 0;
+      for (let t = 0; t < AFTER; t++) if (got.hashes[t] !== port[t]) n += 1;
+      best = Math.min(best, n);
+    }
+    expect(best, 'ticks on which the page and the port differ').toBe(0);
+  }, 300000);
 
   it('threw nothing while it did it', () => {
     expect(consoleErrors).toEqual([]);

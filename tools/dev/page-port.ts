@@ -20,6 +20,15 @@
  * sides at the same ticks, which is the other thing the player does
  * that no digest covers.
  *
+ * `--entries` enters each level **by finishing the one before** --
+ * Shift+L through the real transition, the scene, `play_level`'s
+ * wait on the sound and `nextLevel`'s carry -- and compares the
+ * level that comes up with the headless port given the carry it
+ * worked out for itself. That is the path no digest has ever
+ * covered: every probe enters a level by the skip chain or a cheat,
+ * and level 7's black screen hid behind that for the whole life of
+ * the port.
+ *
  * `pop-report.ts` and `scene-report.ts` measure `src/pop` through
  * stand-ins. `page-walk.ts` measures the page, but only asks whether
  * a sound happened and whether the picture moved. Neither puts the
@@ -82,8 +91,15 @@ const LEVELS = flag('levels', '1,2,3,4,5,6,7,8,9,10,11,12,13,14')
 const TICKS = Number(flag('ticks', '400'));
 const SCENES = flag('scenes', 'title,2,4,6,8,9,12,expired,ending').split(',');
 const WANT_SCENES = args.includes('--scenes') || args.includes('--only-scenes');
-const WANT_LEVELS = !args.includes('--only-scenes');
+
+const WANT_LEVELS = !args.includes('--only-scenes') && !args.includes('--only-entries');
 const CHEATS = args.includes('--cheats');
+const WANT_ENTRIES = args.includes('--entries') || args.includes('--only-entries');
+const ENTRY_LEVELS = flag('entries', '2,3,4,5,6,7,8,9,10,11,12,13,14')
+  .split(',').map(Number);
+/** Ticks played in the level before, and in the level arrived at. */
+const BEFORE = 60;
+const AFTER = 150;
 
 /**
  * The eleven cheats of `process_key`, and when to throw them in.
@@ -217,6 +233,61 @@ async function portScene(name: string, frames: number): Promise<number[]> {
     hashes.push(fnv(rgb));
   }, undefined, await DeafClock.load(assets), { seed: 1 });
   return hashes;
+}
+
+/**
+ * The headless port's own transition: `nextLevel`'s carry, by hand.
+ *
+ * `web/main.ts`'s `nextLevel` reads five things off the level that
+ * has just been finished and puts them back on the one that
+ * follows, and this is the same five. If either side's carry is
+ * wrong the pictures part on the first tick.
+ */
+async function portEntry(level: number, idle: number): Promise<Side> {
+  const assets = new Assets(
+    async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+  const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+  const effects = {
+    sound: () => {}, stopSounds: () => {}, soundPlaying: () => false,
+  };
+  const before = await PopGame.start(assets, exe, level - 1, { effects });
+  for (let t = 0; t < BEFORE; t++) { before.step(controlsAt(t)); before.render(); }
+  const carried = {
+    ticks: before.remainingTicks,
+    sword: before.hasSword,
+    lives: before.maxHitPoints,
+    seamless: before.seamlessExit,
+    hp: before.hitPoints,
+  };
+  const asked: number[] = [];
+  const game = await PopGame.start(assets, exe, level, {
+    seamless: carried.seamless,
+    effects: { ...effects, sound: (which: number) => { asked.push(which); } },
+  });
+  game.remainingTicks = carried.ticks;
+  game.hasSword = carried.sword || game.hasSword;
+  game.beginningHitPoints = carried.lives;
+  if (carried.seamless) game.carryHitPoints(carried.hp, carried.lives);
+  /**
+   * The ticks the page's own loop played before it could be stopped.
+   *
+   * The transition has to run unpaused -- the scene, the wait on the
+   * sound and `select` are all on the page's `requestAnimationFrame`
+   * clock -- so by the time the level is up and the loop is paused
+   * again a few of its ticks have gone by, with nothing held. The
+   * port plays the same few before the comparison starts.
+   */
+  for (let t = 0; t < idle; t++) {
+    game.step({ x: 0, y: 0, shift: false });
+    game.render();
+  }
+  const hashes: number[] = [];
+  for (let t = 0; t < AFTER; t++) {
+    game.step(controlsAt(t));
+    const surface = game.render();
+    hashes.push(fnv(surface.toRgb(game.scene.screenPalette.toRgba())));
+  }
+  return { hashes, asked };
 }
 
 let bad = 0;
@@ -370,6 +441,101 @@ async function main(): Promise<void> {
         while (at < port.length && at < page2.length && port[at] === page2[at]) at += 1;
         console.log(`  !! scene ${name}: the page's pictures part from the `
           + `port's at picture ${at} of ${port.length}`);
+      }
+    }
+  }
+
+  if (WANT_ENTRIES) {
+    for (const level of ENTRY_LEVELS) {
+      const got = await page.evaluate(async ([lvl, before, after, pattern]) => {
+        const w = window as unknown as {
+          __princeEnterLevel(l: number): Promise<void>;
+          __princePause(on: boolean): void;
+          __princeMute(on: boolean): void;
+          __princeCommand(key: string): boolean;
+          __princeStep(n: number, c: unknown, hash: boolean): { hash: number } | null;
+          __princeAsked(): { tick: number; which: number }[];
+          __princeLevel(): number;
+          __princeState(): { ticks: number } | null;
+        };
+        const P = pattern as { x: number; y: number; shift: boolean }[];
+        w.__princeMute(true);
+        w.__princePause(true);
+        await w.__princeEnterLevel((lvl as number) - 1);
+        for (let t = 0; t < (before as number); t++) {
+          w.__princeStep(1, P[((t / 11) | 0) % P.length], false);
+        }
+        // Shift+L, and then the page's own loop: the scene, the wait
+        // on the sound, `nextLevel`'s carry and `select`. None of it
+        // happens while the loop is paused.
+        w.__princeCommand('shift+l');
+        w.__princePause(false);
+        // Polled as tightly as the page allows and stopped the
+        // instant the level is up: every turn of the loop between
+        // the two is a tick of the level the port has not played.
+        const until = Date.now() + 40000;
+        while (Date.now() < until && w.__princeLevel() !== (lvl as number)) {
+          await new Promise((r) => setTimeout(r, 2));
+        }
+        w.__princePause(true);
+        await new Promise((r) => setTimeout(r, 50));
+        const arrived = w.__princeLevel();
+        const idle = w.__princeState()?.ticks ?? 0;
+        const mark = w.__princeAsked().length;
+        const hashes: number[] = [];
+        for (let t = 0; t < (after as number); t++) {
+          const r = w.__princeStep(1, P[((t / 11) | 0) % P.length], true);
+          hashes.push(r ? r.hash : -1);
+        }
+        return {
+          arrived, idle, hashes,
+          asked: w.__princeAsked().slice(mark).map((a) => a.which),
+        };
+      }, [level, BEFORE, AFTER, PATTERN] as const);
+      /**
+       * How many ticks the page's own loop played before it could be
+       * stopped, searched rather than asked for.
+       *
+       * The transition has to run unpaused -- the scene, the wait on
+       * the sound and `select` are all on the page's
+       * `requestAnimationFrame` clock -- and the loop goes on
+       * stepping the new level until the poll notices it. How many
+       * turns that is depends on the machine, and
+       * `__princeState().ticks` is the loop's own count, which is
+       * not quite the number of `step`s. So the port is run at each
+       * of nine starting points and the best taken: nothing is
+       * excused by it, because agreeing needs a hundred and fifty
+       * identical pictures and no wrong alignment gives that.
+       */
+      let port: Side | null = null;
+      let differ = AFTER + 1;
+      let first = -1;
+      let idle = got.idle;
+      for (let k = 0; k <= 8; k++) {
+        const side = await portEntry(level, k);
+        let n = 0;
+        let at = -1;
+        for (let t = 0; t < AFTER; t++) {
+          if (got.hashes[t] !== side.hashes[t]) { n += 1; if (at < 0) at = t; }
+        }
+        if (n < differ) { differ = n; first = at; port = side; idle = k; }
+        if (differ === 0) break;
+      }
+      if (!port) { bad += 1; continue; }
+      const here = got.arrived === level;
+      console.log(`entry ${String(level).padStart(2)}`
+        + `  arrived at ${got.arrived} after ${idle} free ticks`
+        + `  pictures ${AFTER - differ} of ${AFTER}`
+        + (first < 0 ? '' : `  first apart at ${first}`));
+      if (!here) {
+        bad += 1;
+        console.log(`  !! entry ${level}: Shift+L out of level ${level - 1} `
+          + `reached level ${got.arrived}`);
+      } else if (differ) {
+        bad += 1;
+        console.log(`  !! entry ${level}: the level reached through the `
+          + `transition differs from the port's on ${differ} of ${AFTER} `
+          + `ticks, from tick ${first}`);
       }
     }
   }

@@ -84,16 +84,36 @@ draw the same picture on every tick of fourteen levels. It now does
 the same for the **scenes**, which is where four of the last six
 bugs the player met lived, and for the **cheats**:
 
-    npx tsx tools/dev/page-port.ts --scenes --cheats --ticks 600
+    npx tsx tools/dev/page-port.ts --scenes --cheats --entries
 
     level  1 .. 14   pictures 600 of 600   sounds equal
     scene title      pictures 504 of 504 port / 504 page
     scene 2,4,6,8,9,12,expired,ending   every one exact
 
 Fourteen levels at six hundred ticks with all eleven cheats thrown
-in, and all nine scenes: the page draws the port's picture and asks
-for the port's sounds, everywhere. `tests/browser/page-vs-port.test.ts`
-runs the scene before level 2 in `npm test`.
+in, all nine scenes and all thirteen transitions: the page draws the
+port's picture and asks for the port's sounds, everywhere.
+`tests/browser/page-vs-port.test.ts` runs the scene before level 2
+and the arrival at level 7 in `npm test`.
+
+And `--entries` enters each level **by finishing the one before**:
+Shift+L, the scene, `play_level`'s wait on the sound, `nextLevel`'s
+carry and `select`, against the headless port given the carry it
+worked out for itself off its own run of the level before.
+
+    entry  2 .. 14   arrived  pictures 150 of 150, every one
+
+**All thirteen, exact.** That is the path no digest has ever
+covered -- every probe enters a level by the skip chain or a cheat
+-- and it is how level 7's black screen hid for the whole life of
+the port. The alignment is searched over nine starting points
+because the transition has to run unpaused (the scene, the sound
+wait and `select` are all on the page's `requestAnimationFrame`
+clock) and the loop plays a few ticks of the new level before the
+poll can stop it; `__princeState().ticks` is the loop's own count
+and is not the number of `step`s, which cost an hour. Nothing is
+excused by the search: agreeing needs a hundred and fifty identical
+pictures.
 
 A scene cannot be compared the way a level is, and the three things
 that had to be settled first are the finding:
