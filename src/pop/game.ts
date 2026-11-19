@@ -78,6 +78,23 @@ export interface PopOptions {
   readonly prefix?: string;
   readonly effects?: PopEffects;
   /**
+   * What a restart carries over from the life before it.
+   *
+   * In the C there is no restart: `play_level`'s own loop goes back
+   * to `start_level` with every global where it stood, so the clock,
+   * the flasks the level begins with and `checkpoint` are simply
+   * still there. Here a restart is a fresh `PopGame` with fresh
+   * globals, so the shell has to hand them across -- and **they have
+   * to be in place before `startLevel`**, because `do_startpos`
+   * reads them.
+   */
+  readonly carried?: {
+    readonly rem_min: number;
+    readonly rem_tick: number;
+    readonly hitp_beg_lev: number;
+    readonly checkpoint: number;
+  };
+  /**
    * `seamless`, carried in from the level before.
    *
    * In the C this is an ordinary global: `play_frame` sets it when the
@@ -255,6 +272,27 @@ export class PopGame {
     game.minutesLeft = options.minutesLeft ?? 60;
     game.seed = options.seed;
     game.install(exe);
+    /**
+     * **Before `startLevel`, which is where `do_startpos` reads them.**
+     *
+     * This used to be done by `restart` *after* `PopGame.start` had
+     * returned, and that is the whole of "level 3's checkpoint does
+     * not work". `do_startpos` opens on
+     * `if (current_level == 3 && checkpoint)`, which moves the start
+     * to room 2 position 6 and takes the loose floor away -- and by
+     * the time the carried `checkpoint` was written the Prince had
+     * already been placed at the top of the level from a zeroed one.
+     * `hitp_beg_lev` was the same fault: `do_startpos` reads it for
+     * `hitp_max = hitp_curr`, and the patch that put the flasks back
+     * afterwards is gone with this.
+     */
+    const carried = options.carried;
+    if (carried) {
+      g.rem_min = carried.rem_min;
+      g.rem_tick = carried.rem_tick;
+      g.checkpoint = carried.checkpoint;
+      g.hitp_beg_lev = carried.hitp_beg_lev;
+    }
     game.startLevel();
     return game;
   }
@@ -276,16 +314,9 @@ export class PopGame {
       hitp_beg_lev: g.hitp_beg_lev,
       checkpoint: g.checkpoint,
     };
-    const game = await PopGame.start(assets, exe, this.levelNumber, { effects: this.effects });
-    g.rem_min = carried.rem_min;
-    g.rem_tick = carried.rem_tick;
-    g.checkpoint = carried.checkpoint;
-    if (carried.hitp_beg_lev !== g.hitp_beg_lev) {
-      g.hitp_beg_lev = carried.hitp_beg_lev;
-      g.hitp_max = carried.hitp_beg_lev;
-      g.hitp_curr = carried.hitp_beg_lev;
-      g.hitp_delta = 1;
-    }
+    const game = await PopGame.start(
+      assets, exe, this.levelNumber, { effects: this.effects, carried },
+    );
     // Beginning a level again is not an opening, and does not wait for
     // one: the Prince stands straight up.
     g.need_level1_music = 0;

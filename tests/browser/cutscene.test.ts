@@ -32,8 +32,14 @@ beforeAll(async () => {
   const preinstalled = '/opt/pw-browsers/chromium';
   browser = await chromium.launch(
     existsSync(preinstalled)
-      ? { executablePath: preinstalled, args: ['--no-sandbox'] }
-      : {},
+      // `--autoplay-policy=no-user-gesture-required`: without it the
+      // page holds on a black screen until the player touches it,
+      // because the opening is not started into a context the browser
+      // will not let sound. `tests/browser/sound-gate.test.ts` is the
+      // one that launches without the flag and tests that hold.
+      ? { executablePath: preinstalled,
+          args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] }
+      : { args: ['--autoplay-policy=no-user-gesture-required'] },
   );
   page = await browser.newPage();
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });

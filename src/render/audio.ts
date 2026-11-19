@@ -186,6 +186,21 @@ export class SoundPlayer {
   }
 
   /**
+   * Whether the context is really running.
+   *
+   * `wake` resolves either way: a browser that will not sound before
+   * the player has touched the page resolves `resume()` and leaves
+   * the state `suspended`. The page asks this before it starts the
+   * opening, because an opening played into a suspended context is
+   * not only silent -- `show_title` waits on
+   * `while (check_sound_playing())` three times and all three fall
+   * through at once.
+   */
+  get awake(): boolean {
+    return this.woken && this.context.state === 'running';
+  }
+
+  /**
    * Play sound `index`, loading it the first time it is asked for.
    *
    * A sound that is not loaded yet is not played: the alternative is to

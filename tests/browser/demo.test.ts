@@ -31,14 +31,30 @@ beforeAll(async () => {
   const preinstalled = '/opt/pw-browsers/chromium';
   browser = await chromium.launch(
     existsSync(preinstalled)
-      ? { executablePath: preinstalled, args: ['--no-sandbox'] }
-      : {},
+      // `--autoplay-policy=no-user-gesture-required`: without it the
+      // page holds on a black screen until the player touches it,
+      // because the opening is not started into a context the browser
+      // will not let sound. `tests/browser/sound-gate.test.ts` is the
+      // one that launches without the flag and tests that hold.
+      ? { executablePath: preinstalled,
+          args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] }
+      : { args: ['--autoplay-policy=no-user-gesture-required'] },
   );
   page = await browser.newPage();
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
   page.on('pageerror', (e) => consoleErrors.push(String(e)));
   await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'load' });
   await page.waitForFunction('window.__princeReady === true', null, { timeout: 30000 });
+  /**
+   * Silence. This test drives a scene with `__princeSceneStep`, a
+   * hundred and fifty times faster than the clock, and `show_title`
+   * waits three times on `while (check_sound_playing())` -- which
+   * the audio answers on the wall clock. Until this round the page
+   * never sounded at all and the waits fell straight through; now
+   * they are real, and a test that drives has to mute.
+   */
+  await page.evaluate(() => (window as unknown as
+    { __princeMute(on: boolean): void }).__princeMute(true));
 }, 60000);
 
 afterAll(async () => {

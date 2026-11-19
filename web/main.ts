@@ -951,7 +951,54 @@ async function boot(): Promise<void> {
     setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 10000);
   });
 
-  await restartGame();
+  /**
+   * **The opening does not begin until the page can make a noise.**
+   *
+   * A browser will not let a page sound before the player has touched
+   * it, and `show_title` is the first thing the page does -- so every
+   * sound and every tune of the opening was dropped by
+   * `SoundPlayer.play`'s `if (!this.woken) return`, on every page
+   * load, for as long as there has been sound here. The title the
+   * `sound-report` scores at 212 notes of 212 was being played to
+   * nobody.
+   *
+   * And it was worse than silence. `show_title` stops dead at
+   * `while (check_sound_playing())` three times over, and with
+   * nothing in the channel all three fell through at once: the
+   * opening ran at the wrong speed as well as mute.
+   *
+   * So the page holds on the game's own black screen until the
+   * context is allowed to run -- which it may already be, because a
+   * browser remembers a site the player has used before, and because
+   * `--autoplay-policy=no-user-gesture-required` says so. When it is
+   * not, the first key or tap wakes it and is **spent** on that; the
+   * original's "any key begins the game" starts from the frame after.
+   */
+  async function waitUntilThePageCanSound(): Promise<void> {
+    // `wakeSound` builds the context and starts a `resume()`, which
+    // is **not** waited for: a blocked `AudioContext.resume()` leaves
+    // its promise pending until the page is touched, so awaiting it
+    // here would hang before the prompt was ever drawn. The state is
+    // read instead, which is synchronous and says the same thing.
+    wakeSound();
+    if (!sound || sound.awake) return;
+    display.present(titleSurface, titlePalette.toRgba());
+    status.textContent = 'press any key to begin';
+    (window as unknown as Record<string, unknown>).__princeWaitingForSound = true;
+    await new Promise<void>((resolve) => {
+      const go = (e: Event): void => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.removeEventListener('keydown', go, true);
+        window.removeEventListener('pointerdown', go, true);
+        wakeSound();
+        void sound?.wake().then(resolve, resolve);
+      };
+      window.addEventListener('keydown', go, true);
+      window.addEventListener('pointerdown', go, true);
+    });
+    (window as unknown as Record<string, unknown>).__princeWaitingForSound = false;
+  }
 
   /**
    * The original steps the game twelve times a second. Driving that from the
@@ -1063,8 +1110,30 @@ async function boot(): Promise<void> {
   };
   w.__princeLevel = () => (views[current].kind === 'level'
     ? (views[current] as { level: number }).level : 0);
-  w.__princeReady = true;
+  /**
+   * Silence, for a test that drives a scene faster than the clock.
+   *
+   * `show_title` stops at `while (check_sound_playing())` three
+   * times, and `__princeSceneStep` runs the scene's clock a hundred
+   * and fifty times faster than the wall clock the audio keeps -- so
+   * a driven scene now waits for ever where it used to fall straight
+   * through, because until this round the page never made a sound at
+   * all. A test that drives has to mute.
+   */
+  w.__princeMute = (on: boolean): void => { if (sound) sound.muted = on; };
   void RoomRenderer;
+
+  /**
+   * The hooks are in place, and the opening is the last thing.
+   *
+   * `__princeReady` is set **after** it, because that is what it has
+   * always meant to the browser tests: the page is up and the title
+   * is running. A test that wants to watch the page wait for a
+   * gesture watches `__princeWaitingForSound` instead.
+   */
+  await waitUntilThePageCanSound();
+  await restartGame();
+  w.__princeReady = true;
 }
 
 boot().catch((err: unknown) => {

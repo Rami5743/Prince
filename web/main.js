@@ -2773,6 +2773,20 @@ var SoundPlayer = class {
     if (this.context.state === "suspended") await this.context.resume();
   }
   /**
+   * Whether the context is really running.
+   *
+   * `wake` resolves either way: a browser that will not sound before
+   * the player has touched the page resolves `resume()` and leaves
+   * the state `suspended`. The page asks this before it starts the
+   * opening, because an opening played into a suspended context is
+   * not only silent -- `show_title` waits on
+   * `while (check_sound_playing())` three times and all three fall
+   * through at once.
+   */
+  get awake() {
+    return this.woken && this.context.state === "running";
+  }
+  /**
    * Play sound `index`, loading it the first time it is asked for.
    *
    * A sound that is not loaded yet is not played: the alternative is to
@@ -10252,6 +10266,13 @@ var PopGame = class _PopGame {
     game.minutesLeft = options.minutesLeft ?? 60;
     game.seed = options.seed;
     game.install(exe);
+    const carried = options.carried;
+    if (carried) {
+      g.rem_min = carried.rem_min;
+      g.rem_tick = carried.rem_tick;
+      g.checkpoint = carried.checkpoint;
+      g.hitp_beg_lev = carried.hitp_beg_lev;
+    }
     game.startLevel();
     return game;
   }
@@ -10272,16 +10293,12 @@ var PopGame = class _PopGame {
       hitp_beg_lev: g.hitp_beg_lev,
       checkpoint: g.checkpoint
     };
-    const game = await _PopGame.start(assets, exe, this.levelNumber, { effects: this.effects });
-    g.rem_min = carried.rem_min;
-    g.rem_tick = carried.rem_tick;
-    g.checkpoint = carried.checkpoint;
-    if (carried.hitp_beg_lev !== g.hitp_beg_lev) {
-      g.hitp_beg_lev = carried.hitp_beg_lev;
-      g.hitp_max = carried.hitp_beg_lev;
-      g.hitp_curr = carried.hitp_beg_lev;
-      g.hitp_delta = 1;
-    }
+    const game = await _PopGame.start(
+      assets,
+      exe,
+      this.levelNumber,
+      { effects: this.effects, carried }
+    );
     g.need_level1_music = 0;
     return game;
   }
@@ -13311,7 +13328,26 @@ async function boot() {
       URL.revokeObjectURL(url);
     }, 1e4);
   });
-  await restartGame();
+  async function waitUntilThePageCanSound() {
+    wakeSound();
+    if (!sound || sound.awake) return;
+    display.present(titleSurface, titlePalette.toRgba());
+    status.textContent = "press any key to begin";
+    window.__princeWaitingForSound = true;
+    await new Promise((resolve) => {
+      const go = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.removeEventListener("keydown", go, true);
+        window.removeEventListener("pointerdown", go, true);
+        wakeSound();
+        void sound?.wake().then(resolve, resolve);
+      };
+      window.addEventListener("keydown", go, true);
+      window.addEventListener("pointerdown", go, true);
+    });
+    window.__princeWaitingForSound = false;
+  }
   const STEP_MS = 1e3 / FRAMES_PER_SECOND;
   let paused = false;
   let owed = 0;
@@ -13414,8 +13450,13 @@ async function boot() {
     if (at >= 0) void changeScene(() => select(at));
   };
   w.__princeLevel = () => views[current].kind === "level" ? views[current].level : 0;
-  w.__princeReady = true;
+  w.__princeMute = (on) => {
+    if (sound) sound.muted = on;
+  };
   void RoomRenderer;
+  await waitUntilThePageCanSound();
+  await restartGame();
+  w.__princeReady = true;
 }
 boot().catch((err) => {
   const status = document.getElementById("status");
