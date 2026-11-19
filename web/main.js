@@ -12151,6 +12151,10 @@ var CutscenePlayer = class _CutscenePlayer {
   savedBackground = null;
   /** `remove_flash` has been asked for and is owed the next frame. */
   flashPending = false;
+  /** The sixtieths of `do_flash`'s own wait that are still to run. */
+  flashOwed = 0;
+  /** `delay_ticks(1)`: what `proc_cutscene_frame` waits with the colour up. */
+  static FLASH_UNITS = 2;
   exe;
   /** The game's own font, out of the executable, for the hall of fame. */
   font;
@@ -12308,6 +12312,7 @@ var CutscenePlayer = class _CutscenePlayer {
    */
   advance(ms) {
     if (!this.gen) return false;
+    if (this.flashPending && this.flashOwed <= 0) this.takeFlashDown();
     const units = ms / UNIT_MS;
     this.owed += units;
     this.fadeClock(units);
@@ -12317,16 +12322,42 @@ var CutscenePlayer = class _CutscenePlayer {
       this.elapsed += this.pending;
       this.step();
     }
+    if (this.flashPending) this.flashOwed -= units;
     return this.gen !== null;
   }
-  step() {
-    if (this.flashPending) {
-      this.flashPending = false;
-      if (this.savedBackground) {
-        this.palette.setEntry(0, ...this.savedBackground);
-        this.savedBackground = null;
-      }
+  /**
+   * `remove_flash`, put off by the two sixtieths the C waits.
+   *
+   * `proc_cutscene_frame` sets the background colour, waits
+   * `delay_ticks(1)` -- two sixtieths -- and puts it back, all inside
+   * one cutscene frame. A driver that draws once a frame has nothing
+   * in between to show that on, so the colour goes back once the
+   * scene's own clock has run those two sixtieths on, which is the
+   * next frame of a thirtieth-of-a-second replay and the frame after
+   * that of a sixtieth one.
+   *
+   * It used to go back in `step()`, where the next frame is the next
+   * **cutscene** frame, and Jaffar conjuring the hourglass in
+   * `pv_scene` is the one place that shows: `cutscene_frame_time` is
+   * 7 there and `flash_time` is 5, so the white stayed up for five
+   * cutscene frames end to end. In the port's own video frames that
+   * is **seventeen frames of white**, mean brightness 168 against
+   * the room's 84 on every one of them (2104 to 2120 of the title).
+   * The original blinks five times: a capture of it reads 84 on
+   * every frame around them and 168 on two (the sixty-a-second grab
+   * catches the two-sixtieth flash, `--untear` halves it back to
+   * thirty, and three of the five fall in the half that goes).
+   * `scene-report` title 586 -> 588.
+   */
+  takeFlashDown() {
+    if (!this.flashPending) return;
+    this.flashPending = false;
+    if (this.savedBackground) {
+      this.palette.setEntry(0, ...this.savedBackground);
+      this.savedBackground = null;
     }
+  }
+  step() {
     const r = this.gen.next();
     if (r.done) {
       this.gen = null;
@@ -12455,6 +12486,7 @@ var CutscenePlayer = class _CutscenePlayer {
     g.flash_color = 0;
     this.savedBackground = null;
     this.flashPending = false;
+    this.flashOwed = 0;
     this.fade = null;
     this.roomOnly = false;
     free_peels();
@@ -12705,6 +12737,7 @@ var CutscenePlayer = class _CutscenePlayer {
   setBackground(color) {
     if (color === 0) {
       this.flashPending = this.savedBackground !== null;
+      this.flashOwed = _CutscenePlayer.FLASH_UNITS;
       return;
     }
     if (!this.savedBackground) this.savedBackground = this.palette.entry(0);

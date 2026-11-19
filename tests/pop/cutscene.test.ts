@@ -274,13 +274,19 @@ describe('the title sequence', () => {
       expect(seen.sounds).toEqual([54, 55, 50, 4, 51, 53, 52]);
       /**
        * Jaffar conjuring the hourglass: `flash_time = 5` and
-       * `flash_color = 15`, five frames of white behind the room.
-       * `cutscene_frame_time` is 7 by then, so thirty-five sixtieths
-       * -- and the C sets the colour and puts it back inside one
-       * frame, which would show nothing at all if the driver did not
-       * hold it for the frame it was asked on.
+       * `flash_color = 15`, five blinks of white behind the room.
+       *
+       * The C sets the colour, waits `delay_ticks(1)` -- two
+       * sixtieths -- and puts it back, all inside one cutscene
+       * frame, so each blink is **two sixtieths** and not the whole
+       * cutscene frame. `cutscene_frame_time` is 7 by then, and
+       * holding the colour for the whole of it put seventeen
+       * consecutive video frames of white on the title where a
+       * capture of the original has two: mean brightness 168 against
+       * the room's 84, port frames 2104 to 2120. This driver steps a
+       * sixtieth at a time, so five blinks of two is ten.
        */
-      expect(seen.flashed).toBe(5 * 7);
+      expect(seen.flashed).toBe(5 * 2);
       // A minute or so, with no speaker to wait for.
       expect(seen.seconds).toBeGreaterThan(50);
       expect(seen.seconds).toBeLessThan(90);

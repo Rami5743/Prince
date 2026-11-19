@@ -1,10 +1,10 @@
 {
-  "what": "tbl_cutscenes[8]: the scene the game plays before level 8, reached by the same chain of shift+l a recording of that level uses",
+  "what": "tbl_cutscenes[8]: the scene the game plays before level 8, reached by the same chain of shift+l a recording of that level uses **`frames` was 380 and the scene is 308 long.** The port's own picture last changes on frame 309 and the capture goes on to draw level 8: at capture frame 429 (report 318) the whole screen changes and the level is up, which the port is not being asked to play, so every frame after that is denominator and can never be agreed. Swept: 310 and 318 both read 168 of 180, 320 reads 168 of 182, 340 and 380 read 168 of 191 and 192. 318 is where the agreed count plateaus.",
   "scene": {
     "kind": "level",
     "level": 8
   },
-  "frames": 380,
+  "frames": 318,
   "start": 116.5,
   "range": 300,
   "script": [

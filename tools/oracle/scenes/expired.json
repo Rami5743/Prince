@@ -1,9 +1,9 @@
 {
-  "what": "expired(): the hourglass, reached by taking the hour off level 1 with the '-' cheat and waiting out the last minute. Seventy-five presses for fifty-nine minutes: a capture of fifty-nine landed fifty-six of them and stopped at '4 MINUTES LEFT', and the cheat refuses to go below one, so the extra taps cost nothing. **frames was 420 and the scene is 436 long**: time_expired is fade_in_1, 102 cutscene frames at six sixtieths and fade_out_1, and the port's own picture last changes on frame 435, so 420 cut the last fifteen frames of the fade out of the comparison and with them twenty-three the capture agreed with (167 of 188 -> 190 of 229). Past about 480 the capture is drawing the next level, which the port is not being asked to play, so the denominator grows and the agreed count does not.",
+  "what": "expired(): the hourglass, reached by taking the hour off level 1 with the '-' cheat and waiting out the last minute. Seventy-five presses for fifty-nine minutes: a capture of fifty-nine landed fifty-six of them and stopped at '4 MINUTES LEFT', and the cheat refuses to go below one, so the extra taps cost nothing. **frames was 420 and the scene is 436 long**: time_expired is fade_in_1, 102 cutscene frames at six sixtieths and fade_out_1, and the port's own picture last changes on frame 435, so 420 cut the last fifteen frames of the fade out of the comparison and with them twenty-three the capture agreed with (167 of 188 -> 190 of 229). Past about 450 the capture is drawing the level again, which the port is not being asked to play, so the denominator grows and the agreed count does not: swept, 450 and 460 read 190 of 217, 470 reads 190 of 222 and 480 reads 190 of 229, so 450 is where the agreed count plateaus and 480 was 12 frames of pure denominator.",
   "scene": {
     "kind": "expired"
   },
-  "frames": 480,
+  "frames": 450,
   "start": 75.0,
   "range": 900,
   "script": [

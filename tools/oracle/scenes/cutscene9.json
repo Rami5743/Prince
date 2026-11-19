@@ -1,10 +1,10 @@
 {
-  "what": "tbl_cutscenes[9]: the scene the game plays before level 9, reached by the same chain of shift+l a recording of that level uses",
+  "what": "tbl_cutscenes[9]: the scene the game plays before level 9, reached by the same chain of shift+l a recording of that level uses **`frames` was 420 and the scene is 342 long.** Same as `cutscene8`: the port's picture last changes on 343, the capture draws level 9 from capture frame 481 (report 357), and everything past that is denominator. Swept: 350 and 356 read 181 of 194, 360 reads 181 of 196, 420 reads 181 of 205. 356 is the plateau.",
   "scene": {
     "kind": "level",
     "level": 9
   },
-  "frames": 420,
+  "frames": 356,
   "start": 138.5,
   "range": 300,
   "script": [
