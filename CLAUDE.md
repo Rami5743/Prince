@@ -147,10 +147,17 @@ princess's own 17-by-43 box, every one exactly **one DAC unit
 brighter in the capture**, on three frames of every six. The other
 57000 pixels are the port's picture to the byte on the same frame.
 
-The one thing that differs is which palette bank she is drawn out of:
+The one thing that differs is which palette bank she is drawn out of,
+and **all six scenes fit it**. Figures on screen in the middle of the
+fade, by palette row, with the score beside them:
 
-    cutscene2/6/12   standing, seq 94    359 px, all palette row 9
-    cutscene4        lying,    seq 103   402 px, all palette row 10
+    cutscene2    standing princess  row 9   359 px      73 of 136
+    cutscene6    standing princess  row 9   359 px      75 of 136
+    cutscene12   standing princess  row 9   359 px      70 of 136
+    cutscene9    standing princess  row 9   359 px     136 of 206
+    cutscene8    crouching princess row 10  285 px     121 of 188
+                 + the mouse        row 7    40 px
+    cutscene4    lying princess     row 10  402 px     131 of 136
 
 `make_pal_buffer_fadein` is given `FADE_CUTSCENE_ROWS` = 0x6689 --
 rows 0, 3, 7, 9, 10, 13, 14 -- and `fade_in_frame` walks them in that
@@ -158,16 +165,30 @@ order writing sixteen DAC entries apiece. A thirty frames a second
 grab and a two-sixtieth fade step beat together exactly, which
 `cutscene.ts` has said since the title was captured; this says
 **where in the write the grab lands: after row 9 and before row 10.**
-A princess in row 9 is on the near side of the tear and is caught one
-shade on; one in row 10 is on the far side and is not. Rows 0 and 3
-are on the near side too and show nothing, because what is visible of
-row 0 is index 0, whose target is black and never moves.
+
+Rows 7 and 9 are on the near side and are caught one shade on; rows
+10, 13 and 14 are not written yet. Rows 0 and 3 are on the near side
+too and cost nothing: what is visible of row 0 is index 0, whose
+target is black and never moves, and row 3's hundred and fifty-nine
+pixels are the princess-room torches the cutscene mask covers. So
+**`cutscene4` is the only one of the six with nothing in row 7 or row
+9, and it is the only one that keeps its fade.** `cutscene8` loses
+its fade on forty pixels of mouse.
 
 So the port's scene pictures are right and the remaining 612 of the
-scenes is, for these three, the instrument.
-`tests/pop/cutscene-fade-rows.test.ts` pins the one fact the
-explanation rests on -- row 9 standing, row 10 lying -- so that if it
-ever stops being true the scores are looked at again.
+scenes is, for five of the six, the instrument.
+`tests/pop/cutscene-fade-rows.test.ts` pins the rows the explanation
+rests on, so that if they ever stop being true the scores are looked
+at again.
+
+**And that is `cutscene8`'s one lost frame.** Its pin went 122 to 121
+when the DAC model went in, the only number that moved the wrong way.
+`scene-report cutscene8 --first` shows it failing on the same three
+frames of every six, from frame 4 to frame 56, with the drift walking
+-1 to 6 -- the mouse's forty pixels of row 7. The frame the DAC model
+cost is one of that alternating run that had been matching under the
+old `v << 2` by a rounding coincidence, on a capture that is still
+`rgb565` because three attempts to retake it mis-skipped the chain.
 
 **Do not spend another round on the scene fade rate.** Three have
 gone on it and this one says why they all lost: the rate is already

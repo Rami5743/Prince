@@ -59,15 +59,19 @@ import { FADE_CUTSCENE_ROWS } from '../../src/pop/screen.ts';
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-/** Which palette rows the princess's own pixels are in, once the fade is over. */
-async function princessRows(level: number): Promise<Map<number, number>> {
+/**
+ * Which palette rows the moving figures of a scene are drawn out of,
+ * taken in the middle of the fade -- which is where it matters, and
+ * where `cutscene_8`'s princess is still crouching.
+ */
+async function princessRows(level: number, at = 30): Promise<Map<number, number>> {
   const clock = await SpeakerClock.load(assets);
   const p = await CutscenePlayer.create(assets, exe, {
     sound: (w: number) => clock.play(w),
     soundPlaying: () => clock.playing,
     stopSounds: () => clock.stop(),
   });
-  await playScene(assets, exe, { kind: 'level', level }, 100, () => {}, p, clock, {});
+  await playScene(assets, exe, { kind: 'level', level }, at, () => {}, p, clock, {});
   const px = (p.render() as unknown as { pixels: Uint8Array }).pixels;
   // The room is rows 13 and 14, the background is row 0 and the
   // hourglass sand is row 3; what is left is the princess.
@@ -94,6 +98,30 @@ describe('the princess of a cutscene, and which palette row she is in', () => {
   it('and level 6 and level 12 draw the standing one, as level 2 does', async () => {
     expect([...(await princessRows(6)).keys()]).toEqual([9]);
     expect([...(await princessRows(12)).keys()]).toEqual([9]);
+  }, 120000);
+
+  /**
+   * And the two that are left fit the same model and finish it.
+   *
+   * `cutscene_9` is `princess_stand()`, which is
+   * `init_princess_right()` again -- row 9, and it scores 66%.
+   * `cutscene_8` is `princess_crouching()`, which is row **10** like
+   * the lying one -- but it also puts the mouse on the carpet, and
+   * the mouse is row **7**. It scores 64%.
+   *
+   * So the rows that lose frames are 7 and 9 and the rows that do
+   * not are 10, 13 and 14, which places the grab inside the
+   * original's palette write **after row 9 and before row 10**:
+   * rows 0, 3, 7 and 9 are written and caught one shade on, rows 10,
+   * 13 and 14 are not yet written. Row 0's visible pixels are index
+   * 0, whose target is black and never moves, and row 3's hundred
+   * and fifty-nine are the princess-room torches the cutscene mask
+   * covers -- which is why `cutscene4`, whose only figure is row 10,
+   * loses nothing at all.
+   */
+  it('and cutscene 9 is row 9 while cutscene 8 is rows 10 and 7', async () => {
+    expect([...(await princessRows(9)).keys()].sort((a, b) => a - b)).toEqual([9]);
+    expect([...(await princessRows(8)).keys()].sort((a, b) => a - b)).toEqual([7, 10]);
   }, 120000);
 
   /**
