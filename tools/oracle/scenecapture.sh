@@ -17,7 +17,13 @@
 #   the video it is, and `tools/dev/scene-report.ts` finds the frame
 #   it begins on by looking;
 # * `digest.py --cutscene` masks the six stars and the two torches of
-#   the princess's room, which come out of `prandom`.
+#   the princess's room, which come out of `prandom`;
+# * the grab is at **sixty** frames a second and `scene_frames.py`
+#   is given `--untear`, because a thirty frames a second grab lands
+#   in the middle of the original's own palette write about half the
+#   time and a frame caught there is the instrument and not the game.
+#   It renumbers back to thirty, so the spec's `frames`, `start` and
+#   `range` are unchanged. `scene_frames.py` has the measurement.
 set -euo pipefail
 name=${1:?usage: scenecapture.sh <name> [tries] [workdir]}
 tries=${2:-2}
@@ -54,10 +60,10 @@ for i in $(seq 1 "$tries"); do
   d="$work/$name-$i"
   rm -rf "${d:?}"; mkdir -p "$d"
   nice -n 19 python3 "$repo/tools/oracle/dosbox_oracle.py" --script "$work/$name.txt" \
-    --out "$d/rep" --record "$d/run.mkv" --fps 30 --cycles 20000 \
+    --out "$d/rep" --record "$d/run.mkv" --fps 60 --cycles 20000 \
     --game "$gamedir" >/dev/null 2>&1 || true
   nice -n 19 python3 "$repo/tools/oracle/scene_frames.py" "$d/run.mkv" "$d/frames" \
-    --fps 30 --start "$start" >/dev/null 2>&1 || true
+    --fps 60 --untear --start "$start" >/dev/null 2>&1 || true
   [ -d "$d/frames" ] || { echo "  $name try $i: no frames"; continue; }
   python3 "$repo/tools/oracle/digest.py" "$d/frames" "$d/$name.json" --cutscene >/dev/null 2>&1 || continue
   cp "$d/$name.json" "$digest"

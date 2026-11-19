@@ -44,6 +44,16 @@ export interface SceneSpec {
   scene: SceneName;
   /** How many video frames the capture is asked for. */
   frames: number;
+  /**
+   * How many frames a second the capture was grabbed at.
+   *
+   * Thirty unless it says otherwise, which is what every capture
+   * taken before the tear was found was. `frames`, `start` and
+   * `range` are all in the capture's own frames, so they double
+   * with it, and the replay steps at one of them -- see
+   * `scene_frames.py --untear` for why a scene is grabbed at sixty.
+   */
+  fps?: number;
   /** The `dosbox_oracle.py` script that reaches it, line by line. */
   script: string[];
   /** What the capture is, in one line, for the report. */
@@ -78,6 +88,7 @@ export function specOf(name: string): SceneSpec {
 export async function runScene(
   spec: SceneSpec, digest: Digest, clock?: SpeakerClock,
 ): Promise<Run> {
+  const stepMs = 1000 / (spec.fps ?? 30);
   const mask = digest.mask ? unpackMask(digest.mask) : new Uint8Array(320 * 200);
   const map = new PaletteMap(digest.palette ?? [], dacOf(digest));
   const hash: number[] = [];
@@ -87,7 +98,9 @@ export async function runScene(
     hash.push(fingerprint(rgb, map, mask));
     moved.push(prev === null ? null : movedBetween(prev, rgb));
     prev = rgb;
-  }, undefined, clock, { remMin: spec.remMin, remTick: spec.remTick, hourglass: spec.hourglass });
+  }, undefined, clock, {
+    remMin: spec.remMin, remTick: spec.remTick, hourglass: spec.hourglass, stepMs,
+  });
   return { hash, moved };
 }
 
@@ -155,8 +168,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const { hits, next, top } = bestOffset(digest, port, spec.range ?? 240);
     let offset = top[0].o;
     let best: ReturnType<typeof exactAgreement> | null = null;
+    /**
+     * The drift window, in the capture's own frames.
+     *
+     * `exactAgreement` searches offsets within sixteen frames of the
+     * one `bestOffset` chose, which over a scene is about half a
+     * second of the emulator's clock wandering. A capture grabbed at
+     * sixty frames a second has twice as many frames in that same
+     * half second, so the window is scaled with it: the time it
+     * stands for does not change.
+     */
+    const drange = Math.round((16 * (spec.fps ?? 30)) / 30);
     for (const cand of top) {
-      const got = exactAgreement(shifted(digest, cand.o), port);
+      const got = exactAgreement(shifted(digest, cand.o), port, undefined, drange);
       if (!best || got.agreed > best.agreed) { best = got; offset = cand.o; }
     }
     const sl = shifted(digest, offset);

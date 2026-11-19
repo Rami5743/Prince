@@ -41,6 +41,157 @@
 ## ============================================================
 
 
+## THE TEAR WAS THE GRAB, AND IT IS GONE: SCENES 1610 -> 1874
+
+    measured   19478 of 20232   (unmoved, to the tick)
+    scenes      1874 of  2238   (was 1610 of 2222)
+    sounds       417 of   419   (unmoved)
+
+### 1. `scene_frames.py --untear`: the instrument again, for the fourth time
+
+The round before this one proved **where** the scenes' 612 went --
+the grab lands inside the original's own palette write, after row 9
+and before row 10, and the three worst cutscenes are the three with
+a princess in row 9. It then said the pictures were right and left
+the score where it was. Explaining a shortfall is not recovering it.
+
+**The burst is about half the step, and at sixty frames a second
+its two halves fall in two different frames.** `fade_in_frame`
+computes the whole palette and writes it in one go, `set_pal_arr`
+per row in the order of `which_rows`. On the hardware that is 768
+`OUT`s, under a millisecond of a fourteen-millisecond frame; in
+DOSBox an emulated `OUT` to 0x3C9 costs enough that the write takes
+about sixteen milliseconds of the twenty-eight the fade spends on a
+shade. So the emulator really does put a half-written palette on the
+screen, for half of every step, and a thirty frames a second grab
+lands on it about half the time.
+
+Grabbed at sixty, one capture of `cutscene2`, pixels changed per
+frame through the fade-in:
+
+    72   393 px  rows  99-166   the early rows: a shade on
+    73  2659 px  rows  21-191   the rest of the burst: the frame whole
+    74   393 px                 the next burst, half done
+    75  3413 px                 whole again
+
+A frame is mid-burst when the change **into** it is a plain palette
+step -- no pixel moved by more than one DAC unit -- and is less than
+half the size of the change **out** of it. Rows 13 and 14 are the
+room, which is most of the screen, so the far side of a split burst
+is always the big one. `--untear` drops those frames and renumbers
+what is left back to thirty a second, so **nothing downstream
+changes**: the digest, the spec's `frames`, `start` and `range`, and
+the replay's thirtieth are all as they were.
+
+Three ways of reading the same sixty-frame grab of `cutscene2`:
+
+    the pinned 30fps capture                  73 of 136
+    60fps, every changed frame, halved        62 of 136
+    60fps, untorn, halved                    112 of 135
+    60fps, untorn, port stepped at a 60th     95 of 153
+
+The last is why the halving stays and why `SceneSpec.fps` and
+`playScene`'s `stepMs` are there but unused by any spec: a port that
+draws twice as often has two identical frames per shade and gains
+nothing by it, while losing on everything that is not a fade.
+
+**Every scene retaken, with no change to the port:**
+
+    title       512 of 616  ->  560 of 633
+    cutscene2    73 of 136  ->  122 of 135
+    cutscene4   131 of 136  ->  131 of 135   the control
+    cutscene6    75 of 136  ->  110 of 135
+    cutscene8   121 of 188  ->  168 of 192
+    cutscene9   136 of 206  ->  181 of 205
+    cutscene12   70 of 136  ->  110 of 135
+    expired     167 of 188  ->  167 of 191   kept the old capture
+    ending      325 of 480  ->  unchanged; see below
+
+`cutscene4` is the control and it does not move: it is the only one
+of the six with no figure in a palette row on the near side of the
+tear, it was already at 96%, and it stays there. The three that sat
+at 54% are the three with a standing princess in row 9.
+
+`expired`'s two tries scored 167 of 191 and 162 of 184 against the
+pinned 167 of 188 -- the same agreed count on more frames -- so its
+old capture is kept. Its figures are the hourglass, which the mask
+covers, so there was nothing there for the tear to take.
+
+**The ending could not be recaptured.** Both tries scored 0: the
+thirteen-`shift+l` chain lost a skip and the game was still standing
+in a level room at 290 seconds, where a capture that reaches the end
+has the princess's room. It keeps its 325 of 480 and its thirty
+frames a second capture. That chain is the most fragile thing in
+the suite and it is the one place the tear is still being counted
+against the port.
+
+### 2. The page, walked and listened to: `tools/dev/page-walk.ts`
+
+    npx tsx tools/dev/page-walk.ts [--levels 1,2,3] [--ticks 500]
+
+Four of the last five bugs the player met were in `web/main.ts` or
+`src/render`, where no tick score can see them, so there is now a
+thing that does what the player does. It drives `web/index.html` in
+Chromium with a real `AudioContext`, wrapped so that every `start()`
+is written down, and walks all fourteen levels -- played, then put
+through all eleven cheats -- and then the six scenes between the
+levels, the hourglass and the ending, each at the clock the player
+hears. At each it asks the two questions the suite cannot: **did a
+sound happen, and did the picture change**, and with them: did
+anything throw, did any global stop being a number, did the screen
+go black and stay black.
+
+    level  1  pictures  60  changes 100  lit 39333  [6:gate_closing_fast]
+    level  7  pictures  64  changes 100  lit 35086  [0:fell_to_death 1:falling]  (he died)
+    cutscene 2  pictures 79  lit 51738  [27:cutscene_2_4_6_12]
+    the ending  pictures 104 lit 41457  [26:embrace 56:ending_music]
+
+It comes back clean. Four things it taught on the way, every one of
+them about the page rather than the port, and all four are now in
+the tool so that nobody has to learn them again:
+
+* **`__princeShow(level, 1)` is a *look*, not a start.** It leaves
+  room 1 on the screen, and on level 6 that is not where the Prince
+  is -- the walk sat watching an empty room for five hundred ticks
+  while the game played somewhere else. A key puts `drawn_room`
+  back, which is what the page itself does.
+* **`load_intro` opens on `while (check_sound_playing())`**, so a
+  scene asked for while the title's twenty-three-second tune is
+  still in the channel runs black and silent until it ends. That is
+  the original's own behaviour; the walk now asks for
+  `SOUND_SILENCE` first.
+* **`changeScene` lets one scene change happen at a time**, so a
+  scene asked for while another is running is dropped on the floor.
+* **A dead Prince is not a still picture.** `Press Button to
+  Continue` holds the screen, and levels 5, 6 and 11 kill anyone who
+  runs right off the start.
+
+### 3. Two new instruments inside the page, and why
+
+* **`SoundPlayer.failed`**, and `__princeSoundFailures()` on the
+  page. `read` catches whatever the decoding throws and writes the
+  sound down as "neither a recording nor a tune", after which every
+  `play` of it returns on one line, silently. That is exactly how
+  the exit door was lost for the whole life of the port --
+  `sound_15_leveldoor_sliding` is recorded at 2750 Hz and Chromium's
+  `createBuffer` throws under 3000 -- and no measurement this
+  project takes could see it, because none of them goes through
+  `AudioContext`. `tests/browser/every-sound-reads.test.ts` now asks
+  the page to read all fifty-eight and to **play** every index of
+  `soundids` and count the nodes that start. Both come back clean,
+  and either would have caught the door the day it broke.
+* **`SoundPlayer.started`**, and `__princeHeard()`. The last two
+  hundred sounds that really reached the channel, by index, so a
+  walk through the page can say *which* sound was heard where
+  instead of how long its buffer was. It is what turned "level 6
+  made no sound" into "level 6 starts on `25:presentation`".
+
+One thing it settled on the way: every level but the first asks for
+`15:leveldoor_sliding` on tick 1 and `14:leveldoor_closing` on tick
+3. That is the entry door closing behind the Prince, and the
+headless port asks for the same two on the same two ticks -- so the
+page and `src/pop` agree, and it is the game.
+
 ## THE EXIT DOOR WAS 2750 HZ, AND THE THREE BAD CUTSCENES ARE ONE PALETTE ROW
 
     measured   19478 of 20232     scenes   1610 of 2222
@@ -880,14 +1031,14 @@ the last two, which is where `prandom` takes the attract mode over.)
 and, for the first time, the parts of the game that are not
 gameplay, by `tools/dev/scene-report.ts`:
 
-    title              512 of   616   the opening, every page load
+    title              560 of   633   the opening, every page load
     expired            167 of   188   the hourglass
-    cutscene2           73 of   136   cutscene8    121 of 188
-    cutscene4          131 of   136   cutscene9    136 of 206
-    cutscene6           75 of   136   cutscene12    70 of 136
+    cutscene2          122 of   135   cutscene8    168 of 192
+    cutscene4          131 of   135   cutscene9    181 of 205
+    cutscene6          110 of   135   cutscene12   110 of 135
     ending             325 of   480   from 1
 
-    scenes            1610 of  2222
+    scenes            1874 of  2238
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:

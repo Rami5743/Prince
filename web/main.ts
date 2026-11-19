@@ -1121,6 +1121,37 @@ async function boot(): Promise<void> {
    * all. A test that drives has to mute.
    */
   w.__princeMute = (on: boolean): void => { if (sound) sound.muted = on; };
+  /**
+   * Which of the game's sounds this browser will not read.
+   *
+   * `SoundPlayer.read` catches whatever the decoding throws and
+   * writes the sound down as "neither a recording nor a tune", after
+   * which every `play` of it returns on one line and the player hears
+   * nothing. That is how the exit door was lost for the whole life of
+   * the page -- `sound_15_leveldoor_sliding` is recorded at 2750 Hz
+   * and Chromium's `createBuffer` throws under 3000 -- and no
+   * measurement this project takes outside a browser could see it,
+   * because none of them goes through `AudioContext`. So the page can
+   * now be asked, and `tests/browser/every-sound-reads.test.ts` asks
+   * it: every index of the game must come back readable.
+   */
+  w.__princeSoundFailures = async (): Promise<[number, string][]> => {
+    wakeSound();
+    await sound?.preloadAll(Array.from({ length: 58 }, (_, i) => i));
+    return sound ? [...sound.failed.entries()] : [];
+  };
+  /**
+   * The sounds that really reached the channel, newest last, by
+   * index. `tools/dev/page-walk.ts` reads it to say what was heard
+   * where.
+   */
+  w.__princeHeard = (): number[] => (sound ? [...sound.started] : []);
+  /** Play one sound through the page's own channel, by index. */
+  w.__princePlaySound = (which: number): void => {
+    wakeSound();
+    sound?.stop();
+    sound?.play(which);
+  };
   void RoomRenderer;
 
   /**

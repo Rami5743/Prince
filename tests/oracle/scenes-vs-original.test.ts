@@ -62,7 +62,12 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
  * princess-room fades; see the note above.
  */
 const EXPECTED: Record<string, number> = {
-  title: 512,
+  /**
+   * `title` -- **560 of 633**, from 512 of 616, on a capture taken
+   * at sixty frames a second and read with `scene_frames.py
+   * --untear`. Nothing in the port changed between the two.
+   */
+  title: 560,
   /**
    * `end_sequence` -- **325 of 480**, from 1.
    *
@@ -190,12 +195,33 @@ const EXPECTED: Record<string, number> = {
    * the end of it -- which is the thing to measure next with
    * `scene-frames.ts` and the capture side by side.
    */
-  cutscene2: 73,
+  /**
+   * And then the fade stopped being the instrument's.
+   *
+   * Every one of these was taken again at **sixty** frames a second
+   * with `scene_frames.py --untear`, which drops the frames the grab
+   * caught in the middle of the original's own palette write and
+   * renumbers what is left back to thirty. Nothing in the port
+   * changed between the two columns:
+   *
+   *     cutscene2     73 of 136  ->  122 of 135
+   *     cutscene4    131 of 136  ->  131 of 135
+   *     cutscene6     75 of 136  ->  110 of 135
+   *     cutscene8    121 of 188  ->  168 of 192
+   *     cutscene9    136 of 206  ->  181 of 205
+   *     cutscene12    70 of 136  ->  110 of 135
+   *
+   * `cutscene4` is the control: it is the only one of the six with
+   * no figure in a palette row on the near side of the tear, it was
+   * already at 96%, and it does not move. The three that were at
+   * 54% are the three with a standing princess in row 9.
+   */
+  cutscene2: 122,
   cutscene4: 131,
-  cutscene6: 75,
-  cutscene8: 121,
-  cutscene9: 136,
-  cutscene12: 70,
+  cutscene6: 110,
+  cutscene8: 168,
+  cutscene9: 181,
+  cutscene12: 110,
 };
 
 describe('the scenes, against a capture of the original', () => {

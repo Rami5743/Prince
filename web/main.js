@@ -2788,6 +2788,32 @@ var SoundPlayer = class {
    */
   waitingFor = -1;
   muted = false;
+  /**
+   * The sounds that would not read, and why.
+   *
+   * `read` writes a sound that threw down as `null` -- "neither a
+   * recording nor a tune" -- and every later `play` of it returns on
+   * that one line, silently. That is exactly how the exit door was
+   * lost: `sound_15_leveldoor_sliding` is recorded at 2750 Hz and
+   * Chromium's `createBuffer` throws under 3000, so the door went
+   * quiet in the browser and in no other measurement this project
+   * takes. Nothing in the game has no sound -- `every-sound.test.ts`
+   * pins that every index of `soundids` has a recording, a tune or a
+   * beep behind it -- so an entry here is always a fault, and the
+   * page is now able to say so instead of going quiet.
+   */
+  failed = /* @__PURE__ */ new Map();
+  /**
+   * The last couple of hundred sounds that really reached the
+   * channel, in order, by index.
+   *
+   * Not what the byte-code asked for -- `tools/dev/sound-trace.ts`
+   * has that -- but what `start` did with it, which is the thing a
+   * walk through the page in a real browser can read back and say
+   * "the gate creaked here". Bounded, because a long game would
+   * otherwise grow it for ever.
+   */
+  started = [];
   constructor(assets, context) {
     this.assets = assets;
     this.context = context;
@@ -2846,6 +2872,8 @@ var SoundPlayer = class {
   }
   start(index, what) {
     this.waitingFor = -1;
+    this.started.push(index);
+    if (this.started.length > 200) this.started.shift();
     this.stop();
     if (what.kind === "tune") {
       const sink = this.context;
@@ -2961,8 +2989,9 @@ var SoundPlayer = class {
       if (playable && this.waitingFor === index && !this.muted && this.woken && this.mayTake(index)) {
         this.start(index, playable);
       }
-    } catch {
+    } catch (err) {
       this.buffers.set(index, null);
+      this.failed.set(index, String(err));
     } finally {
       this.pending.delete(index);
       if (this.waitingFor === index) this.waitingFor = -1;
@@ -13495,6 +13524,17 @@ async function boot() {
   w.__princeLevel = () => views[current].kind === "level" ? views[current].level : 0;
   w.__princeMute = (on) => {
     if (sound) sound.muted = on;
+  };
+  w.__princeSoundFailures = async () => {
+    wakeSound();
+    await sound?.preloadAll(Array.from({ length: 58 }, (_, i) => i));
+    return sound ? [...sound.failed.entries()] : [];
+  };
+  w.__princeHeard = () => sound ? [...sound.started] : [];
+  w.__princePlaySound = (which) => {
+    wakeSound();
+    sound?.stop();
+    sound?.play(which);
   };
   void RoomRenderer;
   await waitUntilThePageCanSound();

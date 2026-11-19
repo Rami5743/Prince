@@ -2191,9 +2191,56 @@ consecutive video frames, one change each**, where the port changed
 every third frame. `CutscenePlayer.advance` steps the fade off the
 wall clock now.
 
+### The odd frames of a fade were the grab, and `--untear` takes them away
+
+For three rounds the first bullet of "what a scene capture cannot
+settle" was the fade's odd frames, and it was right about the cause
+and wrong that nothing could be done.
+
+`fade_in_frame` computes the whole palette and then writes it in one
+burst, `set_pal_arr` per row in the order of `which_rows` -- 0, 3, 7,
+9, 10, 13, 14 for a cutscene. On the hardware that burst is 768
+`OUT`s, under a millisecond of a fourteen-millisecond frame. In
+DOSBox an emulated `OUT` to 0x3C9 costs enough that the burst takes
+about **half** of the two sixtieths the fade spends on a shade, so
+the emulator puts a half-written palette on the screen for half of
+every step and a thirty frames a second grab lands on it about half
+the time. What the capture showed was the instrument.
+
+Grabbed at **sixty** the two halves fall in two different frames, and
+telling them apart is then arithmetic. One capture of `cutscene2`,
+the fade-in, pixels changed per frame:
+
+    72   393 px  rows  99-166   the early rows: a shade on
+    73  2659 px  rows  21-191   the rest of the burst: whole
+    74   393 px                 the next burst, half done
+    75  3413 px                 whole again
+
+A frame is mid-burst when the change **into** it is a plain palette
+step -- no pixel moved by more than one DAC unit -- and is less than
+half the size of the change **out** of it. Rows 13 and 14 are the
+room, which is most of the screen, so the far side of the tear is
+always the big one. `scene_frames.py --untear` drops those frames and
+renumbers what is left to thirty a second, so nothing downstream
+changes: the digest, the spec's `frames`, `start` and `range`, and
+the replay's thirtieth are all as they were.
+
+    the pinned 30fps capture                  73 of 136
+    60fps, every changed frame, halved        62 of 136
+    60fps, untorn, halved                    112 of 135
+    60fps, untorn, port stepped at a 60th     95 of 153
+
+The last line is why the halving stays and why `SceneSpec.fps` is
+there but unused: a port that draws twice as often has two identical
+frames per shade and gains nothing by it, and loses on everything
+that is not a fade.
+
 ### What a scene capture cannot settle
 
-* **The odd frames of a fade.** With the three faults above fixed the
+* **A fade caught mid-burst.** Settled; see `--untear` above. What
+  follows is the reading that stood before it, kept because the
+  frame-level numbers in it are still right. With the three faults
+  above fixed the
   port draws the capture's fade exactly on every **even** frame and
   matches no odd one, from 17 to 63 and again at every other fade. A
   fade step is two sixtieths, 33.3ms, and the grab is thirty frames a

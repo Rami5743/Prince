@@ -109,7 +109,20 @@ export async function playScene(
    * two of the hour, so 60 or 59, and both give the same picture;
    * the spec says which.
    */
-  clock0: { remMin?: number; remTick?: number; hourglass?: number } = {},
+  clock0: {
+    remMin?: number; remTick?: number; hourglass?: number;
+    /**
+     * How much time one frame of the capture is, in milliseconds.
+     *
+     * A grab of thirty frames a second cannot say which of two
+     * pictures the original showed inside a thirtieth, and a fade
+     * writes its palette in two halves -- see `scene_frames.py
+     * --untear`. A sixty frames a second capture can, so the replay
+     * has to be able to step at a sixtieth too. The default is the
+     * thirtieth every capture before this round was taken at.
+     */
+    stepMs?: number;
+  } = {},
 ): Promise<void> {
   const sound = clock ?? await SpeakerClock.load(assets);
   sound.reset();
@@ -134,11 +147,12 @@ export async function playScene(
    */
   if (clock0.hourglass !== undefined) set_hourglass_state(clock0.hourglass);
   p.begin(scene);
+  const step = clock0.stepMs ?? SCENE_STEP_MS;
   for (let i = 0; i < frames; i++) {
     onFrame(i, p.render().toRgb(p.palette.toRgba()));
     // The hall of fame asks for a name. Nobody is typing in a capture
     // either, so nothing is pushed: `input_str` spins on its cursor.
-    p.advance(SCENE_STEP_MS);
-    sound.tick(SCENE_STEP_MS);
+    p.advance(step);
+    sound.tick(step);
   }
 }
