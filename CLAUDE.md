@@ -41,6 +41,119 @@
 ## ============================================================
 
 
+## FIVE MORE THE PLAYER FOUND BY PLAYING, AND FOUR WERE IN THE PORT
+
+Same round as the two instruments below. The scores before and
+after: measured 19477 -> **19478**, scenes 1610 both ways, sounds
+415 both ways. Four real faults, one of them on every page load, and
+the suite saw **one tick** of them.
+
+### 1. The opening was silent, and ran at the wrong speed because of it
+
+A browser will not let a page sound before the player has touched
+it, and `show_title` was the first thing the page did -- so every
+sound and every tune of the opening went into `SoundPlayer.play`'s
+`if (!this.woken) return` and was dropped, on **every page load**.
+`sound-report` scores the title at 212 notes of 212, which is the
+clearest statement there is that the model was right and the page
+was not.
+
+Worse than silence: `show_title` stops dead at
+`while (check_sound_playing())` three times over, and with nothing
+ever in the channel all three fell through at once. From the page
+being ready to the demo starting:
+
+    before   71.0s, nought sounds started
+    after   100.7s, 563          (the capture draws the demo at ~108.5s)
+
+The page now holds on the game's own black screen with `press any
+key to begin` until the context is allowed to run. Two things that
+cost an hour:
+
+* **`AudioContext.resume()` does not resolve while it is blocked.**
+  Awaiting it before drawing the prompt hangs before the prompt.
+  Read `state` instead.
+* **Headless Chromium has no autoplay policy.** A context made with
+  no gesture reads `running` under every value of
+  `--autoplay-policy` and under none -- measured, four out of four.
+  So the fault cannot be reproduced with a flag.
+  `tests/browser/sound-gate.test.ts` puts the policy back itself.
+  The rest of the browser suite passes
+  `--autoplay-policy=no-user-gesture-required` so that it tests the
+  game and not the policy, and the two tests that drive a scene with
+  `__princeSceneStep` -- a hundred and fifty times faster than the
+  clock the audio keeps -- call the new `__princeMute`.
+
+### 2. The box behind the shadow was `blitters_3_xor`
+
+The VGA's XOR write-mode XORs the sprite's byte into the screen's,
+so a sprite pixel of **nought changes nothing**: `d ^ 0 == d`.
+`Surface.blitXor` XORed `base + v`, so every *transparent* pixel of
+the sprite's box had the bank's palette base XORed into what was
+behind it. The Kid's bank base is **112**.
+
+The only thing in the game drawn that way is the shadow -- an
+`blitters_2_or` and a `blitters_3_xor` of one frame a pixel apart --
+and on level 12 he carries a sword, which puts him in a bank whose
+base is not nought. `blitOr` already had the `if (v === 0) return`
+that `blitXor` did not.
+
+**`shadow6` is exact now, 279 of 280 to 280**, and that tick had been
+written off in this repository as "the comparison running off the
+end of the capture".
+
+### 3. Level 3's checkpoint never fired
+
+`do_startpos` opens on `if (current_level == 3 && checkpoint)`, and
+`PopGame.restart` carried `checkpoint` across **after**
+`PopGame.start` had already run `startLevel()`. Same shape as the
+cheats applied before the tick: the state put back on the wrong side
+of the call that reads it. `hitp_beg_lev` was the same fault with a
+patch over it; the carried set goes in before `startLevel` now and
+the patch is gone. Without the fix the test reads "expected 9 to be
+2" -- room 9, the top of the level.
+
+### 4. `sound_interruptible` is a table the game **writes**
+
+`animate_leveldoor` sets `sound_interruptible[15]` to 0 before every
+`play_sound` of the level door going up and to 1 before every one of
+it coming down. The port had the table as a constant and neither
+line.
+
+Measured first, as the rule says: over `gate1` the port asks for
+sound 15 on **42 consecutive ticks** and a real `SoundPlayer` turns
+those into **three whole plays** of a 1.613-second recording, not 42
+eighty-three-millisecond attacks. So the rising door was already
+right -- by luck, because the static table holds 0 for 15 -- and the
+luck is what the second line takes away.
+
+`tests/render/every-sound.test.ts` is the other half: **every** index
+in `soundids` has a recording, a tune or a beep behind it. (31, 34,
+42 and 57 have none and none of them is a `soundids` value.)
+
+### 5. Two comparisons, and one that cannot exist
+
+* **The transition is pinned on the page.** The capture says 11.7
+  seconds from the `shift+l` to level 2, about four of them black.
+  The page: scene starts at 0.02s, ends at 7.04s, level up at
+  11.09s -- three runs of three -- against 7.1s for the whole thing
+  before the wait went in. `tests/browser/cutscene.test.ts`.
+* **Level 12's shadow cannot be reached by a probe**, and the line
+  is `if (curr_tile2 == tiles_22_sword) return;` in `check_shadow`:
+  the tile at row 0 column 1 of room 15 *is* a sword when the level
+  begins (raw 54, masked 22) and no cheat writes a tile. Same wall
+  as the mirror of level 4. `tests/pop/shadow12.test.ts` pins both
+  halves.
+
+### What this half of the round says about method
+
+* **Measure before fixing, even when the fix looks obvious.** The
+  exit door was reported as silent and is not; what was actually
+  wrong was a table two lines away from it.
+* **The page is not the port.** Three of these four are in
+  `web/main.ts` or in `src/render`, and the tick scores moved by
+  one between them.
+
 ## THE EYE WAS COLOUR-BLIND, AND THE ENDING HAD BEEN MEASURED AGAINST THE WRONG SCENE
 
 Two instruments wrong again, and the second one cost the whole of
@@ -583,9 +696,9 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         19477 of 20232   96%
+    measured         19478 of 20232   96%
     retired           1883 of  3767   50%
-    all              21360 of 23999   89%
+    all              21361 of 23999   89%
 
 (`demo` is the new one: 219 of 221, and its two missing ticks are
 the last two, which is where `prandom` takes the attract mode over.)
