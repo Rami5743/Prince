@@ -24,9 +24,18 @@
 #   time and a frame caught there is the instrument and not the game.
 #   It renumbers back to thirty, so the spec's `frames`, `start` and
 #   `range` are unchanged. `scene_frames.py` has the measurement.
+#
+# **And a scene has a capture lottery after all.** The line above
+# used to say it did not, on the grounds that nothing is pressed in
+# one. It is not the keys: it is where the sixty-frames-a-second grab
+# falls against the emulator's palette write, which `--untear` can
+# only undo when the two halves of a burst land in two different
+# frames. Four captures of `cutscene6`, same script, same port:
+# **110, 116, 118 and 128** of 135. So the default is four tries and
+# not two, for the same reason `recapture.sh` takes four.
 set -euo pipefail
 name=${1:?usage: scenecapture.sh <name> [tries] [workdir]}
-tries=${2:-2}
+tries=${2:-4}
 work=${3:-/tmp/scenecapture}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 spec="$repo/tools/oracle/scenes/$name.json"

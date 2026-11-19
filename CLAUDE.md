@@ -41,13 +41,16 @@
 ## ============================================================
 
 
-## THE ENDING'S CAPTURE WAS PRESSING ITS OWN KEYS: SCENES 1874 -> 1995
+## THE ENDING'S CAPTURE WAS PRESSING ITS OWN KEYS: SCENES 1874 -> 2022
 
     measured   19478 of 20232   (unmoved, to the tick)
-    scenes      1995 of  2235   (was 1874 of 2238)
+    scenes      2022 of  2237   (was 1874 of 2238)   84% -> 90%
     sounds       417 of   419   (unmoved)
 
     ending       325 of   480  ->  446 of 477   68% -> 94%
+    cutscene2    122 of   135  ->  129 of 136
+    cutscene6    110 of   135  ->  128 of 135
+    cutscene12   110 of   135  ->  112 of 136
 
 ### 1. `do_wait` takes any key, and the spec was sending three
 
@@ -139,7 +142,85 @@ them. **372 -> 446 of 477**, and the player who has just finished
 the game types their name against an underscore instead of a smear.
 `tests/render/font.test.ts` pins the glyph.
 
-### 3. What is left of the ending
+### 4. A scene has a capture lottery, and it is worth twelve frames
+
+`cutscene2` scored 122 of 135 and `cutscene6` and `cutscene12` 110,
+on one untorn capture apiece -- and all three are the **same scene
+from the same generator**, `cutscene_2_6`. Twelve frames between two
+runs of one piece of code wanted an account.
+
+Put the failing frames side by side, with the digest's own mask on,
+and the whole of `cutscene6`'s fade-in difference is **359 pixels in
+the princess's own 17-by-43 box, one DAC unit apart**, on one frame
+in three; plus two frames in twenty-five where the capture has no
+picture matching the port's at all, which is the fade running 7
+shades per 6 video frames against the port's 6. Both are the fade's
+beat against the grab -- the same thing `--untear` was built for, and
+the half of it `--untear` cannot undo: when a palette burst is split
+so that **both** sixtieth-frames of a step carry row 9 one shade out,
+there is no whole frame in the pair to keep.
+
+Which half of a step the burst falls in is where DOSBox happened to
+start, so it is different in every capture. Measured: four captures
+of `cutscene6`, same script, same port, minutes apart --
+
+    110   116   118   128    of 135
+
+-- which is the twelve frames, and more. `tools/oracle/README.md`
+used to say a scene had no capture lottery because no key is pressed
+in one. It has one, it is the grab, and `scenecapture.sh` takes
+**four** tries by default now rather than two, as `recapture.sh` has
+since the round that measured 314, 315, 456 and 529 for `9b60bf3a`.
+
+### 5. The page, against the port, tick for tick
+
+`page-walk.ts` asks of the page whether a sound happened and whether
+the picture moved. That is a floor. **`tools/dev/page-port.ts` is the
+ceiling**: the same inputs into the page and into the headless
+`PopGame`, with two things required to be equal on every tick --
+
+* **the picture**, a hash of the very surface `display.present` was
+  given against a hash of what `PopGame.render()` hands back, which
+  is equality to the byte;
+* **the `play_sound` calls**, in order. Not what was *heard*: that is
+  the audio device's clock, and a page stepped as fast as Chromium
+  can go hears a different set from one played at twelve ticks a
+  second. What the byte-code asked for is the game.
+
+    npx tsx tools/dev/page-port.ts [--levels 1,2] [--ticks 400]
+
+    level  1  pictures 400 of 400  sounds 23 page / 23 port
+    ...
+    level 14  pictures 400 of 400  sounds 53 page / 53 port
+
+**Fourteen levels, 5600 ticks: every picture the same picture, every
+sound the same sound.** So the page is not diverging from the port
+today -- and the next time it does, this says so on the first tick
+instead of after a player reports it.
+`tests/browser/page-vs-port.test.ts` runs two of the fourteen (level
+1, and level 7 because its opening is the one that differs) in
+`npm test`.
+
+Three things the page needed before it could be compared at all, and
+all three are the kind of thing that makes a comparison a lie:
+
+* **`__princeEnterLevel`**, because `__princeShow` is a *look*: it
+  also forces `drawn_room` through `drawRoomNow`, which runs
+  `check_the_end` a second time. The headless port has made no such
+  call.
+* **a hash from `__princeStep` itself**, because `__princeFrame()`
+  is `game.render()` *again* -- and `render` is `draw_game_frame`: it
+  ticks the words under the room, takes the flash off and calls
+  `play_next_sound`. A comparison that read the picture that way
+  would be changing the thing it measured. (`page-walk.ts` does read
+  it that way, every fifth tick, which is worth knowing when reading
+  its sound counts.)
+* **the palette read after `render()` and not before it**, which
+  `__princeStep` had the wrong way round: `flash()` puts the colour
+  up inside `draw_game_frame`, so a palette read first is the palette
+  of the tick before.
+
+### 6. What is left of the ending
 
 Thirty-one frames of 477: the two fades -- `fade_out_1` into the
 story screen and `fade_out_2` into the hall of fame -- and the
@@ -1221,12 +1302,12 @@ gameplay, by `tools/dev/scene-report.ts`:
 
     title              560 of   633   the opening, every page load
     expired            167 of   188   the hourglass
-    cutscene2          122 of   135   cutscene8    168 of 192
+    cutscene2          129 of   136   cutscene8    168 of 192
     cutscene4          131 of   135   cutscene9    181 of 205
-    cutscene6          110 of   135   cutscene12   110 of 135
+    cutscene6          128 of   135   cutscene12   112 of 136
     ending             446 of   477   from 1
 
-    scenes            1995 of  2235
+    scenes            2022 of  2237
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:

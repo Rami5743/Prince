@@ -261,13 +261,47 @@ const EXPECTED: Record<string, number> = {
    * no figure in a palette row on the near side of the tear, it was
    * already at 96%, and it does not move. The three that were at
    * 54% are the three with a standing princess in row 9.
+   *
+   * ### And a scene has a capture lottery after all
+   *
+   * `cutscene2` scored 122 and `cutscene6` and `cutscene12` 110 on
+   * one untorn capture apiece -- and all three are the **same scene
+   * from the same generator**, `cutscene_2_6`. Twelve frames between
+   * two runs of one piece of code wanted an account, and it is not
+   * the port.
+   *
+   * With the digest's own mask on, the whole of `cutscene6`'s
+   * fade-in difference is **359 pixels of the princess's own
+   * 17-by-43 box, one DAC unit apart**, on one frame in three; plus
+   * two frames in twenty-five for which the capture has no picture
+   * matching the port's at all, which is its fade running 7 shades
+   * per 6 video frames against the port's 6. Both are the fade's
+   * beat against the grab -- what `--untear` was built for, and the
+   * half of it `--untear` cannot undo: when a burst is split so that
+   * **both** sixtieth-frames of a step carry row 9 one shade out,
+   * there is no whole frame in the pair to keep. Only the bright
+   * colours move on every shade, so what a one-shade slip shows is
+   * the princess and nothing else.
+   *
+   * Which half of a step the burst falls in is where DOSBox happened
+   * to start, so it differs in every capture. Four captures of
+   * `cutscene6`, same script, same port, minutes apart:
+   *
+   *     110   116   118   128   of 135
+   *
+   * `scenecapture.sh` takes four tries by default now rather than
+   * two, as `recapture.sh` has since `9b60bf3a` read 314, 315, 456
+   * and 529. Three more tries apiece moved `cutscene2` to **129**,
+   * `cutscene6` to **128** and `cutscene12` to **112**; `cutscene8`
+   * came back 166 against its 168 and `cutscene9` 180 against 181,
+   * so those two keep the captures they had.
    */
-  cutscene2: 122,
+  cutscene2: 129,
   cutscene4: 131,
-  cutscene6: 110,
+  cutscene6: 128,
   cutscene8: 168,
   cutscene9: 181,
-  cutscene12: 110,
+  cutscene12: 112,
 };
 
 describe('the scenes, against a capture of the original', () => {

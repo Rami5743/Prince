@@ -13477,7 +13477,6 @@ async function boot() {
   };
   w.__princeEnterLevel = async (level) => {
     await select(views.findIndex((v) => v.kind === "level" && v.level === level));
-    frame();
   };
   w.__princeStep = (n, c = {}, hash = false) => {
     if (!game || changing || building > 0) return null;

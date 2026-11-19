@@ -2269,6 +2269,173 @@ that is not a fade.
   counterpart at all, **one pixel at (102,110)** and three at x 103
   and x 214.
 
+## A scene has a capture lottery, and it is the grab
+
+This file used to say a scene had none, on the grounds that nothing
+is pressed in one. It has one, and it is worth more than a dozen
+frames.
+
+`cutscene2` scored 122 of 135 and `cutscene6` and `cutscene12` 110,
+on one untorn capture apiece -- and all three are the **same scene
+from the same generator**, `cutscene_2_6`, with the same figures in
+the same palette rows. Two runs of one piece of code twelve frames
+apart is not the port.
+
+Put the failing frames beside the port's with the digest's own mask
+on, and the whole of `cutscene6`'s fade-in difference is **359
+pixels inside the princess's own 17-by-43 box, one DAC unit apart**,
+on one frame in three; plus two frames in twenty-five for which the
+capture holds no picture matching the port's at all, which is its
+fade running 7 shades per 6 video frames against the port's 6.
+
+Both are the fade's beat against the grab -- what `--untear` was
+built for, and the half of it `--untear` cannot undo. When a palette
+burst is split so that **both** sixtieth-frames of a step carry row
+9 one shade out, there is no whole frame in the pair to keep. And
+only the bright colours move on every shade of a 64-step fade, so
+what a one-shade slip shows is the princess and nothing else, which
+is why `cutscene4` -- the one with her lying down in row 10 -- was
+never short.
+
+Which half of a step the burst falls in is wherever DOSBox happened
+to start, so it is different in every capture:
+
+    four captures of `cutscene6`, same script, same port
+    110   116   118   128    of 135
+
+So `scenecapture.sh` takes **four** tries by default rather than
+two, for the same reason `recapture.sh` does. Three more tries
+apiece, keeping the best:
+
+    cutscene2    122 -> 129 of 136
+    cutscene6    110 -> 128 of 135
+    cutscene12   110 -> 112 of 136
+    cutscene8    168 -> kept (three tries gave 1, 166 and 1)
+    cutscene9    181 -> kept (174, 180, 177)
+
+`cutscene8`'s and `cutscene12`'s chains still lose a `shift+l` about
+one try in three, which reads as 1 of 35 and is unmistakable.
+
+## The page, against the port, tick for tick
+
+`tools/dev/page-port.ts`. Every score in this directory is of
+`src/pop` through a stand-in; `page-walk.ts` is of the page but asks
+only whether a sound happened and whether the picture moved. This
+drives both from the same inputs and requires, on every tick:
+
+* the **picture** -- a hash of the surface `display.present` was
+  given against a hash of what `PopGame.render()` returns, which is
+  equality to the byte;
+* the **`play_sound` calls**, in order. Not what was *heard*, which
+  is the audio device's clock: a page stepped as fast as Chromium
+  can go hears a different set from one played at twelve ticks a
+  second. What the byte-code asked for is the game.
+
+Fourteen levels, four hundred ticks apiece: **every picture the same
+picture and every sound the same sound.** The point is not the
+number, it is that there is now a number at all.
+
+## A script that reaches a scene is pressing keys *into* it
+
+`ending`'s spec sent the four `h` **three times over, twelve seconds
+apart**, because the thirteen-`shift+l` chain drifts and a group of
+taps spent on a level that is not up yet is lost. It works -- three
+captures in a row reached the ending -- and it **ruins the scene it
+reaches**, which took a round to notice because the damage looks
+exactly like the emulator's clock running away.
+
+`end_sequence` is, after the embrace:
+
+    fade_in_2(offscreen, 0x800);
+    pop_wait(timer_0, 900);              // the story text, 15 s
+    start_timer(timer_0, 240);
+    draw_full_image(TITLE_MAIN);
+    transition_ltr();
+    do_wait(timer_0);                    // the landscape, 4 s
+
+and `do_wait` is
+`while (check_timer(timer) == 0 && do_paused() == 0) idle();`.
+`do_paused` ends on `return key || control_shift`, so **any key ends
+either wait**. `disable_keys` -- which `end_sequence_anim` sets -- is
+read by `proc_cutscene_frame` and by nothing else, and
+`end_sequence_anim` is over by the time these two waits are reached.
+
+The third group of `h` lands about twenty-eight seconds after the
+first. Measured, the same scene both ways, in video frames:
+
+                            text   landscape
+    three groups of `h`      342          22
+    one group                454         123
+    the port                 450         121
+
+450 and 121 are `900` and `240` sixtieths at a thirtieth of a second
+apiece, to the frame. So the capture was wrong and the port was
+right, and the 175-frame block in the middle of `scene-apart`'s
+output was the original being interrupted, not the port drifting.
+
+The spec now sends **one** group of four and waits **45 seconds**
+after the last `shift+l` rather than twenty. That is the right shape
+for this kind of drift: the chain can only ever be *late*, because
+every `shift+l` is sent on the wall clock and the game answers it
+when it gets there, so a wait that is too long costs nothing and a
+wait that is too short costs the capture. Three captures: 355, 362
+and **372** of about 477, against the 325 of 480 that was pinned.
+
+**Read this as a rule for any scene reached by playing.** Count how
+long the scene itself runs and make sure the last key the script
+sends lands before it starts -- or inside a stretch the scene spends
+in `proc_cutscene_frame` with `disable_keys` set, which is the only
+place a key is thrown away.
+
+### `tools/dev/scene-apart.ts`
+
+What found it. `scene-report.ts --first` prints the first forty
+frames that do not match, which is the right thing for a scene that
+is a dozen short and useless for one that is a hundred and fifty
+short: forty lines of a fade say nothing about frame eight hundred.
+`scene-apart` prints the same comparison as **runs** -- every stretch
+the port draws the capture's picture on and every stretch it does
+not, with both sides' frame numbers:
+
+    npx tsx tools/dev/scene-apart.ts <name> [digest.json]
+
+A remainder that is a fade reads as a comb of ones. A remainder that
+is two different pictures reads as one long `DIFF`, and a long `DIFF`
+with agreement **after** it is not a clock: a clock that has run away
+does not come back.
+
+### And then the cursor, which was a glyph
+
+With the keys gone the ending's remainder was a comb of one frame in
+three for the whole of the hall of fame. The round before this one
+had read the same comb as "the port's six-sixtieth blink is half a
+period out of the capture's".
+
+It is not a phase. Diffed pixel by pixel with the digest's own mask
+on, the capture changes **six** pixels as the cursor blinks -- x 72
+to 77 on row 92, one clean bar -- and the port changed **thirteen**,
+scattered over rows 86 to 91.
+
+`draw_text_cursor` is `set_curr_pos(xpos, ypos); draw_text_character('_')`
+and nothing else, so this is the font. The 1527 bytes at
+`FONT_OFFSET` are SDLPoP's `hc_font_data` -- the DOS game's own font,
+glyph for glyph -- byte for byte, **except for eight of them**: 1008
+to 1015, which are the eight rows of `_`. Where the font has
+`00 00 00 00 00 00 00 fc` the release has seven bytes of a
+far-pointer table, `f0 03 b2 00 08 00 b0`, and one byte fewer, and
+the glyph's `flags` word reads 0xF001 where every other glyph in the
+font has 1. `PRINCE.EXE` and `UNCRKD.EXE` both have it and the clean
+glyph is in neither.
+
+That one missing byte is also the whole of why every offset in the
+table **from the backtick on is one past the glyph it names**, which
+`readFont`'s `looksLikeGlyph` has been sniffing its way around since
+the font went in without anybody asking why.
+
+`UNDERSCORE_ROWS` in `src/render/font.ts` puts the rows back wherever
+a glyph's `flags` word says the release has written over them -- the
+only one is `_`. **372 -> 446 of 477.**
+
 ## A cheat cannot be placed inside a few ticks: `gate2c`
 
 `gate2b` is the longest run in the suite -- 1653 ticks of level 2,

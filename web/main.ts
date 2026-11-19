@@ -1092,8 +1092,11 @@ async function boot(): Promise<void> {
    * side calls, and nothing after it.
    */
   w.__princeEnterLevel = async (level: number): Promise<void> => {
+    // And no `frame()` after it, which `__princeShow` does: `frame` is
+    // the page's tick -- it calls `game.step` and `game.render` -- so
+    // a comparison that began with one would be a tick ahead of the
+    // headless port before it had started.
     await select(views.findIndex((v) => v.kind === 'level' && v.level === level));
-    frame();
   };
   /**
    * `hash` asks for a fingerprint of **the picture that was just
