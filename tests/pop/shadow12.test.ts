@@ -68,4 +68,56 @@ describe("level 12's shadow", () => {
     expect(g.Guard.x).toBe(0x51);
     expect(g.Guard.y).toBe(0xe8);
   }, 60000);
+
+  /**
+   * And the box behind him is gone, in the picture.
+   *
+   * `blitters_3_xor` is the VGA write-mode that XORs the sprite's
+   * byte into the screen's, so a sprite pixel of nought changes
+   * nothing: `d ^ 0 == d`. `Surface.blitXor` XORed `base + v`, and
+   * the shadow's bank base on every level is **112**, so every
+   * transparent pixel of his bounding box had 112 XORed into what was
+   * behind it. The shadow is the one thing in the game drawn that way
+   * -- `drawShadow` is a `blitters_2_or` and a `blitters_3_xor` of
+   * one frame a pixel apart.
+   *
+   * `shadow6` going 279 of 280 to exact is the measurement. This is
+   * the thing the player sees, on the level he reported it on, and
+   * the two readings beside each other on the eighth tick of the
+   * shadow's fall -- the pixels of the stone ledge behind him, at
+   * x 42 to 49 and y 62 to 65:
+   *
+   *     before   29 of the 32 black
+   *     after     0 of the 32, and the wall's own 48,69,89 in most
+   *               of them (his own leg crosses a few)
+   *
+   * No capture could ever have said so: `check_shadow` returns on the
+   * sword still being in room 15 and no cheat writes a tile, so the
+   * first test above is the reason there is no `shadow12` digest.
+   */
+  it('and the stone behind him is stone, not a black box', async () => {
+    const game = await PopGame.start(assets, exe, 12);
+    get_tile(15, 1, 0);
+    g.curr_room_tiles[g.curr_tilepos] = tiles.tiles_0_empty;
+    game.drawRoomNow(15);
+    let rgb = new Uint8Array();
+    for (let t = 0; t < 8; t++) {
+      game.step({ x: 0, y: 0, shift: false });
+      rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+    }
+    // He is in the air, a third of the way down the room.
+    expect(g.Guard.charid).toBe(charids.charid_1_shadow);
+    expect(g.Guard.y).toBe(69);
+    let black = 0;
+    const seen = new Set<string>();
+    for (let y = 62; y <= 65; y++) {
+      for (let x = 42; x <= 49; x++) {
+        const i = (y * 320 + x) * 3;
+        seen.add(`${rgb[i]},${rgb[i + 1]},${rgb[i + 2]}`);
+        if (!rgb[i] && !rgb[i + 1] && !rgb[i + 2]) black++;
+      }
+    }
+    expect(black, `the box is back: ${[...seen].join(' ')}`).toBe(0);
+    expect([...seen]).toContain('48,69,89');
+  }, 60000);
 });
