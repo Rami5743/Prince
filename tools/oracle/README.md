@@ -2269,6 +2269,52 @@ that is not a fade.
   counterpart at all, **one pixel at (102,110)** and three at x 103
   and x 214.
 
+## A cheat cannot be placed inside a few ticks: `gate2c`
+
+`gate2b` is the longest run in the suite -- 1653 ticks of level 2,
+rooms 5, 4 and 6 -- and it is retired because the guard of room 4 is
+on the screen from **tick 29** and the Prince fights him. There is no
+prefix to keep and no way round the room.
+
+So: kill the guard. `k` is `kill_guard`, which is
+`guardhp_delta = -guardhp_curr` and nothing random, and a recording
+has carried cheats since `killguard6`. `gate2c` is `gate2b` with `k`
+on tick 58, and headless it is a model probe -- the Prince survives
+all 1653 ticks where he otherwise dies at 180, the tour grows to
+rooms 5, 4, 6 and 1, and two seeds 77776 apart draw **every tick the
+same** (`tools/dev/probe-seeds.ts`, which is `probe-check.ts` for a
+recording that has cheats).
+
+**The window is six ticks wide and the oracle cannot hit it.**
+
+    k at 50-55   the Prince dies at 180: the keys are a fight, and
+                 with no guard to fight he runs into the drop
+    k at 56-61   1653 ticks, four rooms, two seeds nought apart
+    k at 62      two seeds part on 56 ticks
+    k at 65      ... on 750: the guard has already made a choice
+
+Four captures scored 38, 40, 40 and **169** of 1617, and sweeping the
+*port's* kill tick against the best of them says where the emulator
+read the key:
+
+    port k@56   98 of 1617     port k@61  167
+    port k@58  169             port k@62  163
+    port k@59  168             port k@64  855
+    port k@60  168             port k@66   97
+
+Six ticks late, at 64, which is outside the clean window -- so the
+capture is of a run that is `prandom` and the port is of one that is
+not, and the two part at tick 131. `recording_to_script.mjs` sends a
+cheat at the same `(t - 1) / 12` as every control edge, so this is
+the harness's ordinary tick of slop landing on the one tick where
+slop is fatal.
+
+**So a probe whose cheat has to land inside a few ticks cannot be
+captured.** Design the next one so that the cheat's tick does not
+matter: `shadow5`, `killguard6`, `invert2` and `potion8` are all
+exact because their cheats only have to happen *somewhere* before
+the thing being measured.
+
 ## `level13b`, and the two ticks `--anchor-text` has been hiding
 
 `level13` is 327 of 374 and `jaffar` 253 of 298, and both are short

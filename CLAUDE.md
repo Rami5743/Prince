@@ -156,7 +156,60 @@ measured what widening it buys (range 32: 1648 of 2227; range 64:
 1650). The honest reading is that the ending is one long scene and
 the capture's clock is not the port's over eighteen hundred frames.
 
-### 2. The page, walked and listened to: `tools/dev/page-walk.ts`
+### 2. The retired 1884, and why `gate2c` is not it
+
+Taken in order, the three retired runs:
+
+* **`exitdoor` has nothing to recover.** Its 811 ticks are `gate1`'s
+  own route with longer presses, and `gate1` is measured at **809 of
+  810**. The ground is already counted.
+* **`gate2` and `gate2b` are the same run of level 2** -- 1307 and
+  1653 ticks, rooms 5, 4 and 6 -- and the guard of room 4 is on the
+  screen from **tick 29**. There is no prefix to keep.
+* So the move is to **kill the guard**. `k` is `kill_guard`, which is
+  `guardhp_delta = -guardhp_curr` and nothing random at all, and a
+  recording has carried cheats since `killguard6`.
+
+`gate2c` is `gate2b` with `k` on tick 58, and **headless it is
+perfect**: the Prince survives all 1653 ticks instead of dying at
+180, the tour grows to rooms 5, 4, 6 and 1, and two seeds 77776
+apart draw **every one of the 1653 ticks the same**. That is
+`tools/dev/probe-seeds.ts`, which is new -- `probe-check.ts` takes a
+bare timeline and a probe's cheats are now the thing that decides
+whether it can be adjudicated at all.
+
+**And the window is six ticks wide, which the oracle cannot hit.**
+
+    k at 50-55   the Prince dies at tick 180 -- the keys are a fight
+                 and without a guard to fight he runs into it
+    k at 56-61   1653 ticks, four rooms, two seeds nought apart
+    k at 62      two seeds part on 56 ticks
+    k at 65      ... on 750: the guard has already acted
+
+Four captures scored **38, 40, 40 and 169** of 1617. Sweeping the
+port's own kill tick against the best of them says where the
+emulator read the key:
+
+    port k@56   98 of 1617      port k@61  167
+    port k@58  169              port k@62  163
+    port k@59  168              port k@64  855
+    port k@60  168              port k@66   97
+
+The emulator took the `k` about **six ticks late**, at 64, where the
+guard has already made a choice -- so the capture is of a run that
+is `prandom` and the port is of one that is not, and they part at
+tick 131. `recording_to_script.mjs` sends a cheat at the same
+`(t - 1) / 12` every control edge goes out at, so this is the
+harness's ordinary tick of slop landing on the one tick in the run
+where slop is fatal.
+
+So **a probe whose cheat has to land inside a few ticks cannot be
+captured**, and that is the thing to know before designing the next
+one. `gate2c`'s recording is kept, with its note, because the design
+is right and only the window is too narrow; its digest is not, and
+nothing was added to the measured set. `gate2b` stays retired.
+
+### 3. The page, walked and listened to: `tools/dev/page-walk.ts`
 
     npx tsx tools/dev/page-walk.ts [--levels 1,2,3] [--ticks 500]
 
@@ -197,7 +250,7 @@ the tool so that nobody has to learn them again:
   Continue` holds the screen, and levels 5, 6 and 11 kill anyone who
   runs right off the start.
 
-### 3. Two new instruments inside the page, and why
+### 4. Two new instruments inside the page, and why
 
 * **`SoundPlayer.failed`**, and `__princeSoundFailures()` on the
   page. `read` catches whatever the decoding throws and writes the
