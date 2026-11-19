@@ -62,7 +62,7 @@ const DIGESTS = join(import.meta.dirname, '..', '..', 'tools', 'oracle', 'digest
  * princess-room fades; see the note above.
  */
 const EXPECTED: Record<string, number> = {
-  title: 426,
+  title: 473,
   /**
    * `end_sequence`, captured for the first time, and 1 of 564.
    *
@@ -141,7 +141,7 @@ const EXPECTED: Record<string, number> = {
    * Its eight rows under the room are **drawn**, where the scene
    * before level 2 has them black -- see `clip_room`.
    */
-  expired: 108,
+  expired: 158,
   /**
    * The other five scenes between the levels, captured the same way
    * and all of them short for the same two reasons: the fades, and
@@ -161,11 +161,11 @@ const EXPECTED: Record<string, number> = {
    * `scene-frames.ts` and the capture side by side.
    */
   cutscene2: 72,
-  cutscene4: 36,
-  cutscene6: 37,
-  cutscene8: 74,
-  cutscene9: 8,
-  cutscene12: 33,
+  cutscene4: 130,
+  cutscene6: 70,
+  cutscene8: 122,
+  cutscene9: 129,
+  cutscene12: 70,
 };
 
 describe('the scenes, against a capture of the original', () => {
