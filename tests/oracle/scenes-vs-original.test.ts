@@ -126,7 +126,6 @@ const EXPECTED: Record<string, number> = {
    * its own clock, cannot express it. The two fades are 109 of this
    * capture's 137 changes.
    */
-  cutscene2: 34,
   /**
    * `expired` -- 108 of 177, the hourglass the player gets when the
    * hour runs out.

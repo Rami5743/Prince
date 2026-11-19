@@ -35,7 +35,7 @@ for (const name of names) {
   const digest = JSON.parse(readFileSync(join(DIGESTS, `${name}.json`), 'utf8')) as Digest;
   const rec = parseRecording(readFileSync(join(RECORDINGS, `${name}.json`), 'utf8'));
   const ticks = decodeTimeline(rec.timeline);
-  const port = await runOf(() => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes }), (g) => g.restart(assets, exe), ticks, digest, cheatsByTick(rec.cheats));
+  const port = await runOf(() => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes, seed: rec.seed }), (g) => g.restart(assets, exe), ticks, digest, cheatsByTick(rec.cheats));
   const { agreed, ticks: n, drift } = exactAgreement(digest, port, inputChanges(ticks));
   const dos = digest.hash ?? [];
   const bad: string[] = [];

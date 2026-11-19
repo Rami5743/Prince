@@ -60,7 +60,7 @@ if (atArg !== undefined) {
 }
 
 const port = await runOf(
-  () => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes }),
+  () => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes, seed: rec.seed }),
   (g) => g.restart(assets, exe),
   ticks,
   digest,

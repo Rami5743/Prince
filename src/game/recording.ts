@@ -96,6 +96,19 @@ export interface Recording {
   states: RecordedState[];
   /** The cheats a probe asks for; see `RecordedCheat`. */
   cheats?: RecordedCheat[];
+  /**
+   * `prandom`'s seed, for the one recording that needs one written
+   * down.
+   *
+   * `PopGame.start` seeds from 1 for every level but the demo, which
+   * is the C's own `random_seed = (dword)time(NULL)` -- the attract
+   * mode's fight comes out differently every time the player watches
+   * it, in the original as in the port. A *replay* cannot have that:
+   * the `demo` probe is the same 220 ticks every time or it measures
+   * nothing. So a recording may carry the seed its run is to be
+   * replayed at, and only the demo does.
+   */
+  seed?: number;
 }
 
 /**
@@ -170,5 +183,6 @@ export function parseRecording(text: string): Recording {
     events: r.events ?? [],
     states: r.states ?? [],
     ...(r.cheats?.length ? { cheats: r.cheats } : {}),
+    ...(typeof r.seed === 'number' ? { seed: r.seed } : {}),
   };
 }

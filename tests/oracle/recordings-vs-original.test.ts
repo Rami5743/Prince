@@ -762,6 +762,34 @@ const EXPECTED: Record<string, number> = {
   'potion8': 246,
   'shadow5': 300,
   'shadow6': 279,
+  /**
+   * **The demo**, 219 of 221 and the last of the three parts of the
+   * game that had never been put beside anything.
+   *
+   * It is reached by doing nothing at all: boot the original, press
+   * no key, and after a hundred and eight seconds the title has run
+   * its story and the demo level comes up. There is no Ctrl+A --
+   * a key during the attract mode starts a real game -- so the
+   * numbering is the fade to black before the level, which
+   * `--after-blank` finds, and the anchor is not used because the
+   * demo draws no level title.
+   *
+   * Its two missing ticks are **219 and 220, the last two**, and
+   * that is exactly where it stops being adjudicable: the demo's
+   * fight is driven by `autocontrol_opponent`, which reads
+   * `prandom`, and the original seeds `prandom` from its own clock.
+   * Rendered twice at seeds 1 and 77777 the port's own demo is the
+   * same picture for 218 ticks and differs on 372 of the 381 after
+   * that. So the probe is as long as the demo can be measured and
+   * one tick more.
+   *
+   * The recording carries `seed: 1` for the same reason. The demo is
+   * the one level `PopGame.start` seeds from the clock, which is the
+   * C's own `random_seed = (dword)time(NULL)` and is right in the
+   * browser -- the attract mode's fight comes out differently every
+   * time -- and wrong for a replay.
+   */
+  'demo': 219,
   // Probes: the same machinery, with a timeline written here rather
   // than played by the player. `probeE` is `f6874819`'s own opening,
   // `probeC` is that followed by the climb at the left of room 2, and

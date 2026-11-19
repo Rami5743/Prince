@@ -133,3 +133,19 @@ level10b 0
 # all, which is an event neither side can fake. `--start` makes no
 # difference: 209, 210, 211, 212 and 213 all give the same.
 level13b 0  (no --anchor-text; 125, 0, 324 over three captures)
+
+# `demo` -- the attract mode, and the one capture in the suite taken
+# with no key pressed at all. Boot the original and wait: the title
+# runs its story and at about 108.5 seconds the screen goes black and
+# the demo level is drawn. There is no Ctrl+A, because a key during
+# the attract mode starts a real game, so `--after-blank` from
+# `--start 106` is the whole of the numbering and `--anchor-text` is
+# not used (the demo draws no level title).
+#
+#   split --start 106 --hybrid   219 of 221
+#   split --start 106 clock      208 of 221
+#   split --start 105            the same two numbers
+#
+# Its two missing ticks are the last two, which is where `prandom`
+# takes the demo over.
+demo 0  (no --anchor-text, --after-blank from 106; 219 of 221)

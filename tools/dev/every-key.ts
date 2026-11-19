@@ -98,7 +98,7 @@ for (const name of names) {
       ...base[Math.max(0, Math.min(base.length - 1, t - off))],
     }));
     const port = await runOf(
-      () => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes }),
+      () => PopGame.start(assets, exe, rec.level, { minutesLeft: rec.startMinutes, seed: rec.seed }),
       (g) => g.restart(assets, exe),
       ticks,
       digest,
