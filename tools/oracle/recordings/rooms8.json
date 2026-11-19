@@ -1,0 +1,173 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-19T16:35:58.365Z",
+ "level": 8,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "1012.",
+ "events": [],
+ "states": [],
+ "cheats": [
+  {
+   "tick": 28,
+   "key": "h"
+  },
+  {
+   "tick": 52,
+   "key": "h"
+  },
+  {
+   "tick": 76,
+   "key": "n"
+  },
+  {
+   "tick": 100,
+   "key": "j"
+  },
+  {
+   "tick": 124,
+   "key": "j"
+  },
+  {
+   "tick": 148,
+   "key": "j"
+  },
+  {
+   "tick": 172,
+   "key": "j"
+  },
+  {
+   "tick": 196,
+   "key": "j"
+  },
+  {
+   "tick": 220,
+   "key": "j"
+  },
+  {
+   "tick": 244,
+   "key": "j"
+  },
+  {
+   "tick": 268,
+   "key": "j"
+  },
+  {
+   "tick": 292,
+   "key": "j"
+  },
+  {
+   "tick": 316,
+   "key": "j"
+  },
+  {
+   "tick": 340,
+   "key": "u"
+  },
+  {
+   "tick": 364,
+   "key": "n"
+  },
+  {
+   "tick": 388,
+   "key": "n"
+  },
+  {
+   "tick": 412,
+   "key": "n"
+  },
+  {
+   "tick": 436,
+   "key": "u"
+  },
+  {
+   "tick": 460,
+   "key": "u"
+  },
+  {
+   "tick": 484,
+   "key": "h"
+  },
+  {
+   "tick": 508,
+   "key": "h"
+  },
+  {
+   "tick": 532,
+   "key": "u"
+  },
+  {
+   "tick": 556,
+   "key": "h"
+  },
+  {
+   "tick": 580,
+   "key": "h"
+  },
+  {
+   "tick": 604,
+   "key": "j"
+  },
+  {
+   "tick": 628,
+   "key": "j"
+  },
+  {
+   "tick": 652,
+   "key": "n"
+  },
+  {
+   "tick": 676,
+   "key": "h"
+  },
+  {
+   "tick": 700,
+   "key": "h"
+  },
+  {
+   "tick": 724,
+   "key": "h"
+  },
+  {
+   "tick": 748,
+   "key": "h"
+  },
+  {
+   "tick": 772,
+   "key": "h"
+  },
+  {
+   "tick": 796,
+   "key": "u"
+  },
+  {
+   "tick": 820,
+   "key": "n"
+  },
+  {
+   "tick": 844,
+   "key": "h"
+  },
+  {
+   "tick": 868,
+   "key": "h"
+  },
+  {
+   "tick": 892,
+   "key": "h"
+  },
+  {
+   "tick": 916,
+   "key": "u"
+  },
+  {
+   "tick": 940,
+   "key": "j"
+  },
+  {
+   "tick": 964,
+   "key": "j"
+  }
+ ]
+}

@@ -1,0 +1,109 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-19T16:35:58.277Z",
+ "level": 6,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "628.",
+ "events": [],
+ "states": [],
+ "cheats": [
+  {
+   "tick": 28,
+   "key": "h"
+  },
+  {
+   "tick": 52,
+   "key": "h"
+  },
+  {
+   "tick": 76,
+   "key": "h"
+  },
+  {
+   "tick": 100,
+   "key": "h"
+  },
+  {
+   "tick": 124,
+   "key": "h"
+  },
+  {
+   "tick": 148,
+   "key": "h"
+  },
+  {
+   "tick": 172,
+   "key": "j"
+  },
+  {
+   "tick": 196,
+   "key": "n"
+  },
+  {
+   "tick": 220,
+   "key": "j"
+  },
+  {
+   "tick": 244,
+   "key": "j"
+  },
+  {
+   "tick": 268,
+   "key": "j"
+  },
+  {
+   "tick": 292,
+   "key": "h"
+  },
+  {
+   "tick": 316,
+   "key": "n"
+  },
+  {
+   "tick": 340,
+   "key": "u"
+  },
+  {
+   "tick": 364,
+   "key": "h"
+  },
+  {
+   "tick": 388,
+   "key": "h"
+  },
+  {
+   "tick": 412,
+   "key": "u"
+  },
+  {
+   "tick": 436,
+   "key": "j"
+  },
+  {
+   "tick": 460,
+   "key": "j"
+  },
+  {
+   "tick": 484,
+   "key": "j"
+  },
+  {
+   "tick": 508,
+   "key": "j"
+  },
+  {
+   "tick": 532,
+   "key": "j"
+  },
+  {
+   "tick": 556,
+   "key": "j"
+  },
+  {
+   "tick": 580,
+   "key": "n"
+  }
+ ]
+}

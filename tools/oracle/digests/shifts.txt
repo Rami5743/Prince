@@ -149,3 +149,4 @@ level13b 0  (no --anchor-text; 125, 0, 324 over three captures)
 # Its two missing ticks are the last two, which is where `prandom`
 # takes the demo over.
 demo 0  (no --anchor-text, --after-blank from 106; 219 of 221)
+rooms2 0  (one capture; try 1 scored 781, try 2 1153 on all four splits)

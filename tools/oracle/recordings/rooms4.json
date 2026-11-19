@@ -1,0 +1,197 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-19T16:35:58.118Z",
+ "level": 4,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "1156.",
+ "events": [],
+ "states": [],
+ "cheats": [
+  {
+   "tick": 28,
+   "key": "h"
+  },
+  {
+   "tick": 52,
+   "key": "h"
+  },
+  {
+   "tick": 76,
+   "key": "h"
+  },
+  {
+   "tick": 100,
+   "key": "h"
+  },
+  {
+   "tick": 124,
+   "key": "j"
+  },
+  {
+   "tick": 148,
+   "key": "n"
+  },
+  {
+   "tick": 172,
+   "key": "j"
+  },
+  {
+   "tick": 196,
+   "key": "j"
+  },
+  {
+   "tick": 220,
+   "key": "j"
+  },
+  {
+   "tick": 244,
+   "key": "j"
+  },
+  {
+   "tick": 268,
+   "key": "j"
+  },
+  {
+   "tick": 292,
+   "key": "u"
+  },
+  {
+   "tick": 316,
+   "key": "h"
+  },
+  {
+   "tick": 340,
+   "key": "j"
+  },
+  {
+   "tick": 364,
+   "key": "j"
+  },
+  {
+   "tick": 388,
+   "key": "j"
+  },
+  {
+   "tick": 412,
+   "key": "j"
+  },
+  {
+   "tick": 436,
+   "key": "j"
+  },
+  {
+   "tick": 460,
+   "key": "j"
+  },
+  {
+   "tick": 484,
+   "key": "n"
+  },
+  {
+   "tick": 508,
+   "key": "h"
+  },
+  {
+   "tick": 532,
+   "key": "h"
+  },
+  {
+   "tick": 556,
+   "key": "h"
+  },
+  {
+   "tick": 580,
+   "key": "j"
+  },
+  {
+   "tick": 604,
+   "key": "j"
+  },
+  {
+   "tick": 628,
+   "key": "j"
+  },
+  {
+   "tick": 652,
+   "key": "n"
+  },
+  {
+   "tick": 676,
+   "key": "u"
+  },
+  {
+   "tick": 700,
+   "key": "u"
+  },
+  {
+   "tick": 724,
+   "key": "h"
+  },
+  {
+   "tick": 748,
+   "key": "h"
+  },
+  {
+   "tick": 772,
+   "key": "h"
+  },
+  {
+   "tick": 796,
+   "key": "h"
+  },
+  {
+   "tick": 820,
+   "key": "h"
+  },
+  {
+   "tick": 844,
+   "key": "n"
+  },
+  {
+   "tick": 868,
+   "key": "h"
+  },
+  {
+   "tick": 892,
+   "key": "h"
+  },
+  {
+   "tick": 916,
+   "key": "h"
+  },
+  {
+   "tick": 940,
+   "key": "h"
+  },
+  {
+   "tick": 964,
+   "key": "h"
+  },
+  {
+   "tick": 988,
+   "key": "n"
+  },
+  {
+   "tick": 1012,
+   "key": "u"
+  },
+  {
+   "tick": 1036,
+   "key": "u"
+  },
+  {
+   "tick": 1060,
+   "key": "j"
+  },
+  {
+   "tick": 1084,
+   "key": "j"
+  },
+  {
+   "tick": 1108,
+   "key": "j"
+  }
+ ]
+}

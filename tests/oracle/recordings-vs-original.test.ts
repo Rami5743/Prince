@@ -162,7 +162,53 @@ const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
  * way of hiding one.
  */
 const EXPECTED: Record<string, number> = {
+  /**
+   * The room tours: every room of a level drawn by the `h`, `j`, `u`
+   * and `n` cheats with the Prince left standing where he started.
+   *
+   * Before them the suite had drawn **59 of the game's 266 rooms**,
+   * and ten levels had two or three rooms apiece: `level12` two of
+   * twenty-four, `level7` two of twenty-four, `level9` three. A
+   * recording that plays a level reaches the rooms a player walks
+   * through; nothing reached the rest, so nothing had ever put the
+   * original's picture of them beside the port's.
+   *
+   * `h`, `j`, `u` and `n` are `next_room = room_L/R/A/B`, and
+   * `check_the_end` then does `loadkid`, `anim_tile_modif`,
+   * `start_chompers`, `check_fall_flo` and `check_shadow` -- so
+   * drawing a room raises everything that room raises. A tour is a
+   * depth-first walk of the level's `roomlinks`, twenty-four ticks
+   * on each room, and the Prince never moves.
+   *
+   * Three things make them adjudicable where `gate2c` was not:
+   * **nothing is pressed**, so there is no key-edge lottery and no
+   * shift to choose; **nobody fights**, so the only `prandom` left
+   * is the flames the digest masks; and a cheat here has no window
+   * to hit -- the room is still for two seconds either side of it,
+   * so the six ticks the emulator takes to read the key cost the
+   * ticks they fall in and nothing else. `tools/dev/probe-seeds.ts`
+   * says so before a capture is spent: two seeds 77776 apart draw
+   * **every one of the 1156 ticks the same** on levels 1, 2, 3, 4,
+   * 5, 6, 7, 8, 9, 10, 11, 12 and 14, and differ on 41 of level
+   * 13's, which is `check_fall_flo` on room 23 -- the same six
+   * floors that are the whole of what `level13` and `jaffar` are
+   * short.
+   */
   '0fbffa60': 642,
+  /**
+   * **1153 of 1153 -- every tick of all twenty-four rooms of level
+   * 2.** Two tries: the first read 781 of 1146 and 170 of 1137
+   * depending on where the restart flash was looked for, the second
+   * read 1153 of 1153 under both numberings and both `--start`
+   * values, which is the capture lottery this file describes and
+   * not the port.
+   *
+   * Level 2 had three rooms drawn before this -- 4, 5 and 6, by
+   * `level2`, `invert2`, `addlife2`, `gate2` and `gate2b` between
+   * them. This draws 1, 2, 3, 7 to 24 as well, and the port draws
+   * every one of them to the pixel.
+   */
+  rooms2: 1153,
   /**
    * 572 against the capture this file was written for, **574**
    * against a fresh one split with `--numbering clock`.
