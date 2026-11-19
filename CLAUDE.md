@@ -195,6 +195,26 @@ gone on it and this one says why they all lost: the rate is already
 absorbed, and what is left is a tear inside the original's own
 palette write.
 
+### 5. The gameplay's 754, re-measured against this round's port
+
+Every measured shortfall already had an account written beside it.
+This round changed the port in three places that could have moved
+them -- the true DAC expansion, `blitXor`, `set_sound_interruptible`
+-- so the two biggest were taken again with `which-key.ts --by 1,2,3`
+and both still come out exactly where they were:
+
+    level6      x at 290 three ticks later    417 of 417, exact
+    13ab6867    y at 416 two ticks later      726 of 728
+
+That is 237 of the 754, still one control of one key edge apiece.
+The rest is what it was: `level10`'s guard at tick 315, `level5`'s
+skill-3 guard and the floors `check_fall_flo` drops on level 13's
+room 23 (`level13`, `level13b`, `jaffar`) are `prandom`;
+`addlife2`'s last two are the flash the splitter cannot see;
+`demo`'s last two are `autocontrol_opponent`; `probeF`'s seventeen
+are one block its capture holds and `f6874819`'s does not.
+**Nothing in the measured set is known to be the port's.**
+
 ## FIVE MORE THE PLAYER FOUND BY PLAYING, AND FOUR WERE IN THE PORT
 
 Same round as the two instruments below. The scores before and
