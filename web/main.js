@@ -549,8 +549,27 @@ var Surface = class {
       if (v !== 0) this.pixels[dp] = color;
     });
   }
+  /**
+   * `blitters_3_xor`: the VGA write-mode that XORs the sprite's byte
+   * into the one on the screen.
+   *
+   * **A pixel the sprite leaves at nought changes nothing**, because
+   * `d ^ 0 == d`. The port XORed `base + v` instead of `v`, so every
+   * transparent pixel of the sprite's box had the bank's palette base
+   * XORed into it -- 112 for the Kid's bank -- and the only thing in
+   * the game drawn this way is the **shadow**, who is an
+   * `blitters_2_or` and a `blitters_3_xor` of the same frame a pixel
+   * apart. That is the box the player sees behind the shadow of
+   * level 12, where he carries a sword and is drawn from a bank
+   * whose base is not nought.
+   *
+   * Measured: `shadow6` 279 of 280 to **280, exact**, and nothing
+   * else in the suite moves. `shadow5` was already 300 of 300 and
+   * stays there.
+   */
   blitXor(src, x, y, base = 0) {
     this.each(src, x, y, (dp, v) => {
+      if (v === 0) return;
       this.pixels[dp] ^= base + v;
     });
   }

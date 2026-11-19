@@ -652,11 +652,13 @@ const EXPECTED: Record<string, number> = {
    *   still a potion. **Exact in all four captures**: 300 of 300,
    *   then 299 of 299 three times.
    * * `shadow6` -- level 6, 24 -> 2 -> 15 -> 6 -> 18 -> 1, with the
-   *   guard of room 6 drawn on the way. 279 of 280, and 279 in all
-   *   four captures. The one is tick 281 at a drift of -16, which is
-   *   the comparison running off the end of a capture that holds 280
-   *   ticks of a 420-tick run -- the same thing as `9b60bf3a`'s last
-   *   three.
+   *   guard of room 6 drawn on the way. **280 of 280, exact.** It
+   *   read 279 in all four captures until `blitters_3_xor` stopped
+   *   XORing the bank's palette base into the sprite's *transparent*
+   *   pixels -- `d ^ 0 == d`, and the shadow is the one thing in the
+   *   game drawn with that write-mode. The tick that was blamed on
+   *   "the comparison running off the end of the capture" was the
+   *   port's after all.
    * * `jaffar` -- level 13, 23 -> 17 -> 1, the one way to his room
    *   that does not pass through room 16, whose own `check_fall_flo`
    *   would start six floors falling at `-(prandom(0xff) & 0x0f)`
@@ -761,7 +763,7 @@ const EXPECTED: Record<string, number> = {
   'jaffar': 253,
   'potion8': 246,
   'shadow5': 300,
-  'shadow6': 279,
+  'shadow6': 280,
   /**
    * **The demo**, 219 of 221 and the last of the three parts of the
    * game that had never been put beside anything.
