@@ -41,6 +41,139 @@
 ## ============================================================
 
 
+## THE EXIT DOOR WAS 2750 HZ, AND THE THREE BAD CUTSCENES ARE ONE PALETTE ROW
+
+    measured   19478 of 20232     scenes   1610 of 2222
+    sounds       417 of   419     (was 415; `gate1snd` 92 -> 94)
+
+### 1. The player could not hear the exit door, and it was never the port
+
+The round before this one found a real fault two lines from it --
+`sound_interruptible` is a table the game **writes** -- and measured
+that the rising door was already right. It was. The door was never
+`src/pop`'s.
+
+**`sound_15_leveldoor_sliding` is recorded at 2750 Hz.** Every other
+recording in `DIGISND*.DAT` is at 8200, 11000 or 14000. The Web Audio
+spec only obliges a browser to take 8000 and up, and **Chromium's
+`createBuffer` throws `NotSupportedError` under 3000** (measured:
+2000, 2750 and 2999 throw, 3000 and up do not). So the door threw
+where it was read, `SoundPlayer.read`'s `catch` wrote index 15 down
+as "neither a recording nor a tune", and every `play(15)` for the
+rest of the session returned on that one line.
+
+In a real browser, `gate1`'s own eight hundred ticks of level 1
+replayed through the page with every `AudioContext.start()` written
+down, over the forty-two ticks the exit door rises:
+
+    before   nought plays
+    after    three plays of the 1.613 s recording, ticks 697, 717, 737
+
+`MIN_BUFFER_RATE` is 8000 and a sample is held for an integer number
+of the new rate's -- 2750 x 3 = 8250 Hz -- which is not a resampling
+but the zero-order hold the DAC it was recorded for did anyway.
+`tests/browser/exit-door.test.ts` plays to the door and counts;
+`tests/render/every-sound.test.ts` pins that 15 is the only recording
+in the game under 8000 Hz.
+
+**No measurement against the original could see it**, and that is the
+lesson again: the capture of `PRINCE.EXE` has one unbroken noise of
+3.498 seconds there and the port sounds for 3.500, so the ear reads
+the door as exact -- because neither side of that comparison goes
+through a browser. Same blind spot as the opening that played to
+nobody.
+
+### 2. The ear was splitting tunes the port's side did not split
+
+`gate1snd` 92 of 96 -> **94**, with no change to the port.
+
+`sound_notes.py` breaks a noise at a rest of over fifty milliseconds
+(`ACTIVE_GAP`); `occupancy` gave one interval per `play_sound`. So a
+tune with rests in it arrived as three capture noises against one
+port interval and two of the three read as "the original alone".
+
+Both of `gate1snd`'s were `sound_41_end_level_music`, the one
+`play_sound` of the Prince climbing into the exit door. The game's
+own tune has stretches of 0.688, 1.063 and 9.375 seconds; the capture
+of the original measures **0.683, 1.062 and 6.791** (the last cut off
+by the end of the recording), the third starting at 94.281 against
+the tune's own 94.285. Four milliseconds over eight seconds.
+`noises()` splits the port's side by the same rule; `--whole` keeps
+the old model.
+
+Two are left and neither is a sound: clicks of nought and eight
+milliseconds at 30.65 s and 33.81 s, where the seven blips around
+them all sit a steady 0.216 s off whatever origin is chosen.
+
+### 3. Level 12's shadow, looked at
+
+No probe can reach him (`check_shadow` returns on the sword still
+lying in room 15), but a test can: drop the tile, draw room 15, and
+he falls in on `seq_7_fall`. Rendered on the eighth tick of the fall,
+old blitter beside new, the stone ledge behind him at x 42..49,
+y 62..65:
+
+    before   29 of the 32 pure black
+    after     0 of the 32, the wall's own 48,69,89
+
+That is the box: 150 pixels of a 16 by 32 rectangle, the ledge and
+the pillar edge swallowed. `tests/pop/shadow12.test.ts`.
+
+### 4. The three bad cutscenes are **one palette row**, and it is the grab
+
+`cutscene4` 131 of 136 against `cutscene2` 73, `cutscene6` 75 and
+`cutscene12` 70 -- all four the same scene, two of them the same
+generator. `cutscene_4` differs from `cutscene_2_6` by a single
+line: `princess_lying()` where the other has `init_princess_right()`.
+Same sound, same hourglass, same twenty-six cutscene frames, same two
+fades.
+
+**It is not a bad capture.** Three fresh captures of `cutscene2`
+scored 72, 68 and 71 of 136; two of `cutscene4` scored 133 and 131;
+three of `cutscene12` scored 67, 1 and 67 (so its digest stays at 70
+and its rgb565 capture is not the reason -- the fresh ones are
+`svga_s3` and score lower).
+
+**It is not the fade rate either**, which three rounds have now
+tried. Both captures run the fade at **7 shades per 6 video frames**
+where the port runs 6 per 6 -- the 54-against-64 that FADE_UNITS
+1.6875 was meant to fix -- and `exactAgreement`'s drift absorbs it:
+`cutscene4` is **diff 0 on every frame of the fade** with that drift
+walking -8 to -5 exactly as `cutscene2`'s does.
+
+Put the frames side by side and the whole of `cutscene2`'s
+difference is **252 to 359 pixels of 64000**, every one inside the
+princess's own 17-by-43 box, every one exactly **one DAC unit
+brighter in the capture**, on three frames of every six. The other
+57000 pixels are the port's picture to the byte on the same frame.
+
+The one thing that differs is which palette bank she is drawn out of:
+
+    cutscene2/6/12   standing, seq 94    359 px, all palette row 9
+    cutscene4        lying,    seq 103   402 px, all palette row 10
+
+`make_pal_buffer_fadein` is given `FADE_CUTSCENE_ROWS` = 0x6689 --
+rows 0, 3, 7, 9, 10, 13, 14 -- and `fade_in_frame` walks them in that
+order writing sixteen DAC entries apiece. A thirty frames a second
+grab and a two-sixtieth fade step beat together exactly, which
+`cutscene.ts` has said since the title was captured; this says
+**where in the write the grab lands: after row 9 and before row 10.**
+A princess in row 9 is on the near side of the tear and is caught one
+shade on; one in row 10 is on the far side and is not. Rows 0 and 3
+are on the near side too and show nothing, because what is visible of
+row 0 is index 0, whose target is black and never moves.
+
+So the port's scene pictures are right and the remaining 612 of the
+scenes is, for these three, the instrument.
+`tests/pop/cutscene-fade-rows.test.ts` pins the one fact the
+explanation rests on -- row 9 standing, row 10 lying -- so that if it
+ever stops being true the scores are looked at again.
+
+**Do not spend another round on the scene fade rate.** Three have
+gone on it and this one says why they all lost: the rate is already
+absorbed, and what is left is a tear inside the original's own
+palette write.
+
 ## FIVE MORE THE PLAYER FOUND BY PLAYING, AND FOUR WERE IN THE PORT
 
 Same round as the two instruments below. The scores before and
@@ -718,7 +851,7 @@ gameplay, by `tools/dev/scene-report.ts`:
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:
 
-    title         212 of 212 notes    gate1snd      92 of  96 noises
+    title         212 of 212 notes    gate1snd      94 of  96 noises
     cutscene2snd   21 of  21 notes    level10bsnd   90 of  90 noises
 
 **Most of what used to be short was the encoder, not the clock** --
