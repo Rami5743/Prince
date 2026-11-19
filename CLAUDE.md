@@ -41,6 +41,42 @@
 ## ============================================================
 
 
+## EVERY SCENE TAKEN FOUR TIMES AGAIN: ONE MOVED
+
+    scenes      2440 of  2636   93%   (was 2437)
+    cutscene12   119 of   135  ->  122 of 135
+
+With `mid_draw` in the instrument and the cutscene fade's rate in
+the port, all eight scenes with a chain were captured four more
+times. **A rejection is a measurement, so every try is written
+down:**
+
+    title       558  556  538  518   against 586 -- kept
+    expired     187  185  187  186   against 190 -- kept
+    cutscene12  117  122  116    1   against 119 -> **122**
+    cutscene8   161    1  159  161   against 168 -- kept
+    cutscene9   181  179    1    1   against 181 -- tied, kept
+    cutscene2   115  122  118  119   against 129 -- kept
+    cutscene4   130  130  130  130   against 131 -- kept
+    cutscene6   123  116  122  114   against 128 -- kept
+
+Two things worth keeping out of that table:
+
+* **`cutscene4` is the control and it has no lottery at all**: 130,
+  130, 130, 130. It is the one scene of the six with no figure in a
+  palette row on the near side of the tear. Every other scene's four
+  span seven to twenty frames, which is what the lottery is worth.
+* **`expired` reads 185 to 187 four times out of four** against the
+  190 that is pinned, so the 190 is a good capture rather than a
+  lucky one, and the twenty-seven frames it is short of are not the
+  grab.
+
+`mid_draw` takes the title's denominator from 633 to 611-621 and
+leaves the cutscenes' at 135, which says what the torn screen is:
+it happens where a figure is moving across the princess room in a
+scene long enough for the emulator to fall behind, and the
+thirty-second cutscenes never do it.
+
 ## THE PAGE'S SCENES, AGAINST THE PORT'S, PICTURE FOR PICTURE
 
 `tools/dev/page-port.ts` required the page and the headless port to
@@ -1574,10 +1610,10 @@ gameplay, by `tools/dev/scene-report.ts`:
     expired            190 of   229   the hourglass
     cutscene2          129 of   136   cutscene8    168 of 192
     cutscene4          131 of   135   cutscene9    181 of 205
-    cutscene6          128 of   135   cutscene12   119 of 135
+    cutscene6          128 of   135   cutscene12   122 of 135
     ending             805 of   836   from 1
 
-    scenes            2437 of  2636
+    scenes            2440 of  2636
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:

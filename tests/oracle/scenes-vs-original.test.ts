@@ -338,13 +338,33 @@ const EXPECTED: Record<string, number> = {
    * `title` span 506 to 544 against the 560 that is pinned -- so
    * four tries is the floor, not a guarantee, and a scene that does
    * not improve after four has been measured, not given up on.
+   *
+   * And four more of **every** scene, after `scene_frames.py` learnt
+   * to drop a torn screen as well as a torn palette (`mid_draw`) and
+   * after the cutscene fade's rate went in. One of the eight moved:
+   *
+   *     title       558  556  538  518   against 586 -- kept
+   *     expired     187  185  187  186   against 190 -- kept
+   *     cutscene12  117  122  116    1   against 119 -> **122**
+   *     cutscene8   161    1  159  161   against 168 -- kept
+   *     cutscene9   181  179    1    1   against 181 -- tied, kept
+   *     cutscene2   115  122  118  119   against 129 -- kept
+   *     cutscene4   130  130  130  130   against 131 -- kept
+   *     cutscene6   123  116  122  114   against 128 -- kept
+   *
+   * `cutscene4` is the control and it reads 130 four times out of
+   * four: it is the one scene of the six with no figure in a palette
+   * row on the near side of the tear, and it has no lottery. Every
+   * other scene's four span seven to twenty frames, which is what
+   * the lottery is worth and why a capture that does not beat the
+   * pinned one is thrown away rather than installed.
    */
   cutscene2: 129,
   cutscene4: 131,
   cutscene6: 128,
   cutscene8: 168,
   cutscene9: 181,
-  cutscene12: 119,
+  cutscene12: 122,
 };
 
 describe('the scenes, against a capture of the original', () => {
