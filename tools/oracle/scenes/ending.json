@@ -1,11 +1,11 @@
 {
-  "what": "end_sequence: the Prince reaches the princess, the ending music, and the hall of fame -- reached by thirteen shift+l and then four `h`, because `check_the_end` runs end_sequence when the DRAWN room of level 14 is 5 and `h` is what sets next_room. The hourglass the scene draws comes from hourglass_frame() inside end_sequence_anim, not from the spec: load_intro calls reset_cutscene, which zeroes hourglass_state",
+  "what": "end_sequence: the Prince reaches the princess, the ending music, and the hall of fame -- reached by thirteen shift+l and then four `h`, because `check_the_end` runs end_sequence when the DRAWN room of level 14 is 5 and `h` is what sets next_room. The hourglass the scene draws comes from hourglass_frame() inside end_sequence_anim, not from the spec: load_intro calls reset_cutscene, which zeroes hourglass_state. The four h are sent three times over, twelve seconds apart: the chain drifts, two captures in a row put the last level up eighteen seconds after the script expected it and the taps were spent on a level that was not there yet. A group of four reaches room 5 from any of 4, 3, 2 and 1, and once end_sequence_anim is running it sets disable_keys, so the groups that follow are ignored",
   "scene": {
     "kind": "ending"
   },
   "frames": 1600,
   "start": 231.0,
-  "range": 900,
+  "range": 1800,
   "writes": true,
   "script": [
     "wait 25",
@@ -37,7 +37,7 @@
     "wait 10",
     "xdo keydown --window @W shift sleep 0.15 keydown --window @W l sleep 0.08 keyup --window @W l sleep 0.15 keyup --window @W shift",
     "wait 10",
-    "wait 1",
+    "wait 10",
     "key h",
     "wait 0.5",
     "key h",
@@ -46,7 +46,25 @@
     "wait 0.5",
     "key h",
     "wait 0.5",
-    "wait 60"
+    "wait 12",
+    "key h",
+    "wait 0.5",
+    "key h",
+    "wait 0.5",
+    "key h",
+    "wait 0.5",
+    "key h",
+    "wait 0.5",
+    "wait 12",
+    "key h",
+    "wait 0.5",
+    "key h",
+    "wait 0.5",
+    "key h",
+    "wait 0.5",
+    "key h",
+    "wait 0.5",
+    "wait 80"
   ],
   "remMin": 58,
   "remTick": 684

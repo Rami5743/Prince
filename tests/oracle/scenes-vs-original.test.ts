@@ -127,6 +127,28 @@ const EXPECTED: Record<string, number> = {
    *   else in those frames differs;
    * * the Prince **running in**, capture 187 to 236.
    */
+  /**
+   * And the ending is the one scene the untear did not reach.
+   *
+   * Its thirteen-`shift+l` chain drifts: two captures in a row put
+   * the last level up about eighteen seconds after the script
+   * expected it and the four `h` were spent on a level that was not
+   * there yet, so both scored 0 of 282. The spec now sends the four
+   * `h` three times over, twelve seconds apart -- a group of four
+   * reaches room 5 from any of 4, 3, 2 and 1, and
+   * `end_sequence_anim` sets `disable_keys`, so the groups after the
+   * one that works are ignored -- and three tries then gave three
+   * captures that reached it: 281, 303 and 285 of about 555.
+   *
+   * None of them beats the 325 of 480 pinned here, so the old
+   * capture stays. What they say is where the remainder is: the
+   * first eight hundred frames are all but exact, and then the two
+   * part company altogether -- port frame 787 against capture 1091
+   * differs on 25855 pixels and 788 against 1092 on 40949 of 64000,
+   * which is two different pictures and not a shade. Over eight
+   * hundred frames the emulator's clock has wandered past
+   * `exactAgreement`'s sixteen.
+   */
   ending: 325,
   /**
    * `cutscene2` -- **72 of 137** on a capture taken with a lossless

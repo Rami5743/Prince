@@ -117,13 +117,44 @@ pinned 167 of 188 -- the same agreed count on more frames -- so its
 old capture is kept. Its figures are the hourglass, which the mask
 covers, so there was nothing there for the tear to take.
 
-**The ending could not be recaptured.** Both tries scored 0: the
-thirteen-`shift+l` chain lost a skip and the game was still standing
-in a level room at 290 seconds, where a capture that reaches the end
-has the princess's room. It keeps its 325 of 480 and its thirty
-frames a second capture. That chain is the most fragile thing in
-the suite and it is the one place the tear is still being counted
-against the port.
+**The ending's chain is fixed, and it still keeps its old capture.**
+
+The first two tries scored 0 of 282: the game was still standing in
+a level room at 290 seconds where a capture that reaches the end has
+the princess's room. The cause is measurable and is not a lost
+`shift+l` -- the chain simply **drifts**. At 214 seconds the Prince
+is walking into a palace level's exit door and at 232 a fresh level
+is starting with `59 MINUTES LEFT` under it, so the last skip landed
+about eighteen seconds after the script expected it and the four `h`
+were spent on a level that was not up yet.
+
+So the four `h` are now sent **three times over, twelve seconds
+apart**. A group of four reaches room 5 from any of 4, 3, 2 and 1,
+and once `end_sequence_anim` is running it sets `disable_keys`, so
+the groups that follow are ignored. Three tries, three captures that
+reached the ending: **281, 303 and 285 of about 555**.
+
+And the best of them is still **not** as good as the 325 of 480 that
+is pinned, so the old capture stays. What the new ones say is where
+the ending's remainder now lives:
+
+* the first eight hundred frames are all but exact -- five misses in
+  the whole of the fade, the room, the embrace and the running in;
+* and then the two sides part company altogether. Port frame 787
+  against capture 1091 differs on **25855 pixels** and 788 against
+  1092 on **40949** of 64000, which is not a cursor and not a shade:
+  it is two different pictures. Over eight hundred frames the
+  emulator's clock has wandered past `exactAgreement`'s sixteen and
+  everything after it is lost.
+* `remMin` was swept 53 to 58 against the new capture in case the
+  longer chain had spent more of the hour: 58 still wins, 303
+  against 228 for every other value.
+
+`exactAgreement`'s window **stays at sixteen**. It is the one thing
+that decides whether a picture counts, and the round before this one
+measured what widening it buys (range 32: 1648 of 2227; range 64:
+1650). The honest reading is that the ending is one long scene and
+the capture's clock is not the port's over eighteen hundred frames.
 
 ### 2. The page, walked and listened to: `tools/dev/page-walk.ts`
 
