@@ -2307,14 +2307,27 @@ So `scenecapture.sh` takes **four** tries by default rather than
 two, for the same reason `recapture.sh` does. Three more tries
 apiece, keeping the best:
 
-    cutscene2    122 -> 129 of 136
-    cutscene6    110 -> 128 of 135
-    cutscene12   110 -> 112 of 136
-    cutscene8    168 -> kept (three tries gave 1, 166 and 1)
-    cutscene9    181 -> kept (174, 180, 177)
+    cutscene2    122 -> 129 of 136   (129, 121, 122)
+    cutscene6    110 -> 128 of 135   (128, 116, 118)
+    cutscene8    168 -> kept         (1, 166, 1)
+    cutscene9    181 -> kept         (174, 180, 177)
 
-`cutscene8`'s and `cutscene12`'s chains still lose a `shift+l` about
-one try in three, which reads as 1 of 35 and is unmistakable.
+And four more tries of everything still short, with **every try
+written down, because a rejection is a measurement too**:
+
+    title        560 -> kept         (506, 525, 517, 544)
+    expired      167 -> kept         (157, 166, 167, 163)
+    cutscene12   112 -> 119 of 135   (1, 118, 119, 109)
+    cutscene9    181 -> kept         (169, 1, 176, 1)
+
+Seven captures of `cutscene12` now span **109 to 119**, and four of
+`title` span 506 to 544 against the 560 it keeps. So four tries is
+the floor and not a guarantee, and a scene that has not improved
+after four has been *measured*, not given up on.
+
+`cutscene8`'s, `cutscene9`'s and `cutscene12`'s chains still lose a
+`shift+l` about one try in three, which reads as 1 of 48 and is
+unmistakable.
 
 ## The page, against the port, tick for tick
 

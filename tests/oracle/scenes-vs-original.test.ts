@@ -291,17 +291,32 @@ const EXPECTED: Record<string, number> = {
    *
    * `scenecapture.sh` takes four tries by default now rather than
    * two, as `recapture.sh` has since `9b60bf3a` read 314, 315, 456
-   * and 529. Three more tries apiece moved `cutscene2` to **129**,
-   * `cutscene6` to **128** and `cutscene12` to **112**; `cutscene8`
-   * came back 166 against its 168 and `cutscene9` 180 against 181,
-   * so those two keep the captures they had.
+   * and 529. Three more tries apiece moved `cutscene2` to **129**
+   * and `cutscene6` to **128**; `cutscene8` came back 166 against
+   * its 168 and `cutscene9` 180 against 181, so those two kept the
+   * captures they had.
+   *
+   * Four more tries of the four scenes still short, with every try
+   * written down because a rejection is a measurement too:
+   *
+   *     title        506  525  517  544   against 560 -- kept
+   *     expired      157  166  167  163   against 167 -- kept
+   *     cutscene12     1  118  119  109   against 112 -> **119**
+   *     cutscene9    169    1  176    1   against 181 -- kept
+   *
+   * `cutscene12` and `cutscene9` lose a `shift+l` about one try in
+   * three, which reads as 1 of 48 and is unmistakable. Seven
+   * captures of `cutscene12` now span **109 to 119**, and four of
+   * `title` span 506 to 544 against the 560 that is pinned -- so
+   * four tries is the floor, not a guarantee, and a scene that does
+   * not improve after four has been measured, not given up on.
    */
   cutscene2: 129,
   cutscene4: 131,
   cutscene6: 128,
   cutscene8: 168,
   cutscene9: 181,
-  cutscene12: 112,
+  cutscene12: 119,
 };
 
 describe('the scenes, against a capture of the original', () => {

@@ -41,16 +41,16 @@
 ## ============================================================
 
 
-## THE ENDING'S CAPTURE WAS PRESSING ITS OWN KEYS: SCENES 1874 -> 2022
+## THE ENDING'S CAPTURE WAS PRESSING ITS OWN KEYS: SCENES 1874 -> 2029
 
     measured   19478 of 20232   (unmoved, to the tick)
-    scenes      2022 of  2237   (was 1874 of 2238)   84% -> 90%
+    scenes      2029 of  2236   (was 1874 of 2238)   84% -> 91%
     sounds       417 of   419   (unmoved)
 
     ending       325 of   480  ->  446 of 477   68% -> 94%
     cutscene2    122 of   135  ->  129 of 136
     cutscene6    110 of   135  ->  128 of 135
-    cutscene12   110 of   135  ->  112 of 136
+    cutscene12   110 of   135  ->  119 of 135
 
 ### 1. `do_wait` takes any key, and the spec was sending three
 
@@ -171,6 +171,23 @@ used to say a scene had no capture lottery because no key is pressed
 in one. It has one, it is the grab, and `scenecapture.sh` takes
 **four** tries by default now rather than two, as `recapture.sh` has
 since the round that measured 314, 315, 456 and 529 for `9b60bf3a`.
+
+Every scene still short was then taken four more times, and **every
+try is written down, because a rejection is a measurement too**:
+
+    cutscene2    129  121  122         against 122  ->  **129**
+    cutscene6    128  116  118         against 110  ->  **128**
+    cutscene12     1  118  119  109    against 112  ->  **119**
+    cutscene8      1  166    1         against 168  --  kept
+    cutscene9    169    1  176    1    against 181  --  kept
+    title        506  525  517  544    against 560  --  kept
+    expired      157  166  167  163    against 167  --  kept
+
+Seven captures of `cutscene12` now span **109 to 119** and four of
+`title` span 506 to 544 against a pinned 560, so four tries is the
+floor and not a guarantee. `cutscene8`, `cutscene9` and `cutscene12`
+lose a `shift+l` about one try in three, which reads as 1 of 48 and
+is unmistakable.
 
 ### 5. The page, against the port, tick for tick
 
@@ -1304,10 +1321,10 @@ gameplay, by `tools/dev/scene-report.ts`:
     expired            167 of   188   the hourglass
     cutscene2          129 of   136   cutscene8    168 of 192
     cutscene4          131 of   135   cutscene9    181 of 205
-    cutscene6          128 of   135   cutscene12   112 of 136
+    cutscene6          128 of   135   cutscene12   119 of 135
     ending             446 of   477   from 1
 
-    scenes            2022 of  2237
+    scenes            2029 of  2236
 
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:
