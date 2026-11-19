@@ -164,6 +164,84 @@ describe('a cutscene on the page', () => {
     }, 60000);
 
   /**
+   * **How long the transition takes, which the player has complained
+   * about twice.**
+   *
+   * The whole of it, from the `shift+l` that ends level 1 to the
+   * first frame of level 2, measured off a fresh capture of
+   * `PRINCE.EXE`: level 1 goes black at 29.0 seconds (a hard cut,
+   * not a fade), the princess's room fades in over 54 video frames
+   * from 29.567 to 31.333, the scene holds to 35.0, the screen is
+   * **black from 36.0 to 39.5** -- which is `play_level`'s
+   * `while (check_sound_playing() && !do_paused()) idle();` -- and
+   * level 2 is up at 40.0. Eleven point seven seconds, of which
+   * about four are the wait.
+   *
+   * The port was **7.1** before the wait went in and is 11.1 now, in
+   * three runs out of three on this page: the scene ends at 7.0 and
+   * the level is up at 11.1, so the black wait is 4.0. The bands
+   * below are wide enough for a loaded machine and narrow enough to
+   * catch either fault -- the wait gone, or the scene not playing at
+   * all.
+   *
+   * It is pinned here and not as a scene digest because what is
+   * being measured is the **shell**: `nextLevel`, the wait and
+   * `select` are `web/main.ts`'s, and no capture of a cutscene
+   * reaches past the cutscene.
+   */
+  it('takes the original\'s eleven and a bit seconds, and four of them are black',
+    async () => {
+      consoleErrors.length = 0;
+      await page.evaluate(() => (window as unknown as {
+        __princePause(on: boolean): void;
+      }).__princePause(false));
+      await page.evaluate(() => (window as unknown as {
+        __princeShow(level: number, room: number): Promise<void>;
+      }).__princeShow(1, 1));
+      await page.waitForTimeout(1200);
+      const marks = await page.evaluate(async () => {
+        const w = window as unknown as {
+          __princeSceneState(): { running: boolean } | null;
+          __princeState(): { level: number } | null;
+          dispatchEvent(e: Event): boolean;
+        };
+        const t0 = performance.now();
+        const out: Record<string, number> = {};
+        w.dispatchEvent(new KeyboardEvent('keydown',
+          { code: 'KeyL', key: 'L', shiftKey: true, bubbles: true }));
+        w.dispatchEvent(new KeyboardEvent('keyup',
+          { code: 'KeyL', key: 'L', shiftKey: true, bubbles: true }));
+        let started = false;
+        let ended = false;
+        for (let i = 0; i < 3000; i++) {
+          const scene = w.__princeSceneState();
+          const game = w.__princeState();
+          if (scene?.running && !started) { started = true; out.sceneStarts = performance.now() - t0; }
+          if (started && scene && !scene.running && !ended) {
+            ended = true; out.sceneEnds = performance.now() - t0;
+          }
+          if (game?.level === 2) { out.levelUp = performance.now() - t0; break; }
+          await new Promise((r) => { setTimeout(r, 20); });
+        }
+        return out;
+      });
+      // The scene itself: `cutscene_2_6`, a fade in, twenty-six
+      // cutscene frames and a fade out.
+      expect(marks.sceneEnds, `the scene ran ${marks.sceneEnds}ms`)
+        .toBeGreaterThan(5500);
+      expect(marks.sceneEnds).toBeLessThan(9500);
+      // `while (check_sound_playing() && !do_paused()) idle();`
+      const black = marks.levelUp - marks.sceneEnds;
+      expect(black, `the black wait was ${black}ms`).toBeGreaterThan(2500);
+      expect(black).toBeLessThan(6000);
+      // And the whole of it, against the capture's 11.7 seconds.
+      expect(marks.levelUp, `the whole transition took ${marks.levelUp}ms`)
+        .toBeGreaterThan(9500);
+      expect(marks.levelUp).toBeLessThan(14000);
+      expect(consoleErrors).toEqual([]);
+    }, 90000);
+
+  /**
    * `proc_cutscene_frame`:
    *
    *     if (!disable_keys && do_paused()) {
