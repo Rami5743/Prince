@@ -347,8 +347,30 @@ export function init_princess_right(): void {
 }
 
 // seg001:02B8
+/**
+ * The princess at the ending, facing **right**.
+ *
+ * It called `init_princess`, which leaves her facing left, and the
+ * first capture of `end_sequence` says she does not: she stands to
+ * the left of the hourglass looking right, towards the Prince, who
+ * `init_ending_kid` starts at x 198 running left. Put beside the
+ * capture's own frame the port's princess was mirrored, and the
+ * whole-frame difference over the frames after the fade is about
+ * 700 pixels facing left against 575 facing right. `init_princess_right`
+ * is the same call `princess_stand` and `cutscene_2_6` make.
+ *
+ * Her **x** is still wrong and is not fitted here. The capture puts
+ * her centred on 134 where `x = 136` draws her centred on 173, and
+ * rendering the scene at every x from 92 to 136 the best is **118**
+ * at 247 pixels -- against 639 at 136 -- with what is left sitting
+ * on her right edge at x 128 to 143, which is not a position but a
+ * mirror. 118 is no constant the C would have, and the port draws a
+ * right-facing princess correctly everywhere else: `cutscene9` has
+ * one from `princess_stand` and 129 of its 206 frames are exact,
+ * which could not happen if the placement were eighteen out.
+ */
 export function init_ending_princess(): void {
-  init_princess();
+  init_princess_right();
   g.Char.x = 136;
   g.Char.y = 164;
   seqtbl_offset_char(seqids.seq_109_princess_stand_PV2);

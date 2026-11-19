@@ -11446,7 +11446,7 @@ function init_princess_right() {
   g.Char.direction = directions.dir_0_right;
 }
 function init_ending_princess() {
-  init_princess();
+  init_princess_right();
   g.Char.x = 136;
   g.Char.y = 164;
   seqtbl_offset_char(seqids.seq_109_princess_stand_PV2);
