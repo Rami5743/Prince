@@ -30,15 +30,19 @@ mkdir -p "$work"
 # stopped being the same for every level: the game plays a cutscene
 # before levels 2, 4, 6, 8, 9 and 12, and the generator now waits for
 # it. Asking the generator is the only way to keep the two in step.
+# `SETTLE_L1`: the seconds between Return and Ctrl+A. The default of
+# three is right for every level the chain reaches with a `shift+l`,
+# and wrong for level 1 -- see `recording_to_script.mjs`, where the
+# measurement is. `SETTLE_L1=9 tools/oracle/firstcapture.sh rooms1 0 4`.
 where=$(node "$repo/tools/oracle/recording_to_script.mjs" "$rec" "$work/$name-$shift_.txt" \
-  --settle 0.04 --shift "$shift_" 2>&1 >/dev/null)
+  --settle 0.04 --shift "$shift_" ${SETTLE_L1:+--settle-l1 "$SETTLE_L1"} 2>&1 >/dev/null)
 start=$(sed -n 's/^search from //p' <<<"$where")
 late=$(( $(sed -n 's/^restart at //p' <<<"$where") - 1 ))
 [ -n "$start" ] || { echo "$name: the generator did not say where to search"; exit 2; }
 had=0; [ -f "$digest" ] && { had=1; cp "$digest" "$work/$name.json.was"; }
 restore(){ if [ "$had" = 1 ]; then cp "$work/$name.json.was" "$digest"; else rm -f "$digest"; fi; }
 trap restore EXIT
-best=; bestscore=-1
+best=; bestscore=-1; besttotal=0
 for i in $(seq 1 "$tries"); do
   d="$work/$name-s$shift_-$i"
   rm -rf "${d:?}"; mkdir -p "$d"
@@ -73,25 +77,62 @@ for i in $(seq 1 "$tries"); do
   # edge worth ten ticks, and against the clock numbering it found a
   # different one worth twenty-eight. So both are tried and the
   # better kept, as with the two `--start` values.
-  for numbering in gaps clock; do
-  for st in "$start" "$late"; do
+  split_try() { # <start> <numbering> <anchor> <blank flag or empty>
+    local st=$1 numbering=$2 anchor=$3 blank=${4:-} tag
+    tag="$st-$numbering-a$anchor${blank:+-blank}"
     rm -rf "$d/dos"
     nice -n 19 python3 "$repo/tools/oracle/split_ticks.py" "$d/run.mkv" "$d/dos" \
-      --crop 640:400:0:0 --scale 320:200 --start "$st" --after-blank \
+      --crop 640:400:0:0 --scale 320:200 --start "$st" $blank \
       --fps 30 --rate 12 --hybrid --numbering "$numbering" \
-      --anchor-text 25 >/dev/null 2>&1 || true
-    [ -d "$d/dos" ] || { echo "  $name shift $shift_ try $i $numbering start $st: no ticks"; continue; }
-    python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$st-$numbering.json" >/dev/null 2>&1 || continue
-    cp "$d/$name-$st-$numbering.json" "$digest"
+      --anchor-text "$anchor" >/dev/null 2>&1 || true
+    [ -d "$d/dos" ] || { echo "  $name shift $shift_ try $i $tag: no ticks"; return 0; }
+    python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$tag.json" >/dev/null 2>&1 || return 0
+    cp "$d/$name-$tag.json" "$digest"
     out=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null || true)
     line=${out%%$'\n'*}
     score=$(awk '{print $2}' <<<"$line")
-    echo "  $name shift $shift_ try $i $numbering start $st: $line"
+    total=$(awk '{print $4}' <<<"$line")
+    echo "  $name shift $shift_ try $i $tag: $line"
     if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then
-      bestscore=$score; best="$d"; cp "$d/$name-$st-$numbering.json" "$d/$name.json"
+      bestscore=$score; besttotal=${total:-0}; best="$d"
+      cp "$d/$name-$tag.json" "$d/$name.json"
     fi
+    return 0
+  }
+  for numbering in gaps clock; do
+  for st in "$start" "$late"; do
+    split_try "$st" "$numbering" 25 --after-blank
   done
   done
+  # ### Two dark ticks, and the anchor can land on either
+  #
+  # `show_level` puts `LEVEL n` under the room for 24 ticks and sets
+  # `is_show_time`, so `N MINUTES LEFT` follows it for 24 more, with
+  # **one** dark tick between them and a longer gap after the second.
+  # The port's own strip goes dark on tick 25 and again on tick 49
+  # (measured: `#########################.#######################...`
+  # over its first sixty ticks, on levels 1, 2 and 9 alike).
+  # `--anchor-text` takes the first dark tick it finds after a lit
+  # one -- and the one-tick gap is a single video frame at 30fps, so
+  # the splitter's "the frame just before the next change" loses it
+  # about as often as it keeps it. When it is lost the anchor lands
+  # on 49 and the whole run is numbered 24 ticks out.
+  #
+  # A wrong anchor is unmistakable in the score -- `rooms1` read 684
+  # of 996 against 994 of 994 -- so both are tried, and only when the
+  # ordinary four have agreed on less than half the run, which costs
+  # nothing on a capture that worked. `--after-blank` is dropped in
+  # the same pass: a restart that the grab never catches black (level
+  # 1's, whose redraw is quicker than a video frame) sends the blank
+  # search off to the first room change instead.
+  if [ "$bestscore" -lt "$(( besttotal / 2 ))" ]; then
+    for numbering in gaps clock; do
+    for st in "$start" "$late"; do
+      split_try "$st" "$numbering" 49
+      split_try "$st" "$numbering" 25
+    done
+    done
+  fi
 done
 restore; trap - EXIT
 [ -n "$best" ] || { echo "$name: no usable capture at shift $shift_"; exit 1; }

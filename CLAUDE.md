@@ -41,6 +41,80 @@
 ## ============================================================
 
 
+## LEVEL 1'S TWENTY-ONE ROOMS: 1011 OF 1011, AND THE ANCHOR HAS TWO DARK TICKS
+
+    measured   32093 of 33067   97%   (was 31082 of 32056)
+    rooms drawn by a capture   262 of 266   (was 250)
+
+    rooms1   1011 of 1011   exact, first capture
+
+`rooms1` was the one room tour with no digest. The round that built
+the tours wrote it up as "two captures read 97 and 100 of about 995
+-- and at an offset of +52 the same capture agrees with the port on
+929 of its 997, so the run is right and the capture's tick nought is
+not", re-split it eight ways, and kept the probe without the digest.
+**It is the numbering, and the numbering has two separate faults.**
+
+### 1. Level 1's Ctrl+A lands inside the first level's own title
+
+`show_level` (`seg008:1831`) writes `LEVEL n` under the room for 24
+ticks **and sets `is_show_time`**, so `N MINUTES LEFT` follows it for
+24 more. That is four seconds of lit strip at the top of every
+level, with one dark tick in the middle of it. Measured off the port
+itself, the bottom strip's columns 100 to 220 over its first sixty
+ticks, the same on levels 1, 2 and 9:
+
+    #########################.#######################...........
+    ticks 0..24 lit, 25 dark, 26..48 lit, dark from 49
+
+Level 1 is the one level a chain reaches with **no `shift+l` in
+front of it**: the script is `wait 25; key Return; wait 3;
+key ctrl+a`, so Ctrl+A goes out three seconds after Return and the
+restart happens while that four-second block is still on the screen.
+`split_ticks.py --anchor-text 25` lines the run up on the first tick
+the strip goes dark after being lit, and from the generator's own
+`search from 27` that dark tick belongs to the level the game
+started **before** the restart. The anchor read tick 14 and the
+probe read 268 of 1000.
+
+`recording_to_script.mjs` takes `--settle-l1` now; the default is
+still 3, because every level-1 digest in the suite was taken with it
+and the wait is spent out of the hour. `SETTLE_L1=9` on
+`firstcapture.sh` or `recapture.sh` passes 9, which puts the restart
+five seconds clear of the first level's words.
+
+### 2. The one-tick gap is one video frame, and the splitter loses it
+
+The dark tick between `LEVEL 1` and `60 MINUTES LEFT` lasts one tick
+-- two and a half video frames at 30fps -- and `--hybrid` keeps for
+each tick "the frame just before the next change", which drops a
+one-frame dark altogether. When it is lost the anchor takes the
+**next** dark tick, which is the port's 49, and the whole run is
+numbered 24 ticks out.
+
+So both anchors are tried, and `--after-blank` is dropped in the
+same pass, because a restart whose redraw is quicker than a video
+frame gives the blank search nothing and it walks off to the first
+room change instead. Only when the ordinary four splits have agreed
+on **less than half the run**, which costs nothing on a capture that
+worked. Three tries of `rooms1`, six splits apiece:
+
+    try 1  --after-blank  a25    93 of 992      98 of 997
+           no blank       a49   703 of 1010    632 of 1011
+           no blank       a25  1010 of 1011   **1011 of 1011**
+    try 2  --after-blank  a25  1010 of 1010   1010 of 1010
+    try 3  --after-blank  a25    96 of 993      96 of 993
+
+-- so the blank search is the lottery (1010 on try 2, 93 to 98 on
+tries 1 and 3) and the anchor with no blank search is not. **1011 of
+1011**: 1012 ticks, forty room changes, all twenty-one rooms of
+level 1, every one to the pixel.
+
+**Twenty-one more rooms: 262 of the game's 266 are now drawn by the
+original and by the port and the two pictures are the same picture.**
+What is left is three of level 7's and room 5 of level 14, and both
+have their account above.
+
 ## THE TWO POTIONS NOTHING HAD EVER DRUNK
 
     measured   31082 of 32056   97%   (unmoved, to the tick)
@@ -347,7 +421,7 @@ second.)
     scenes      2442 of  2601   94%   (was 2440 of 2636)
     sounds       417 of   419         (unmoved)
 
-    rooms drawn by a capture   250 of 266   (was 59 of 266)
+    rooms drawn by a capture   262 of 266   (was 59 of 266)
 
     rooms2    1153 of 1153   rooms9    1104 of 1104
     rooms3    1060 of 1060   rooms10    749 of  750
@@ -367,7 +441,8 @@ of levels 2, 3, 4, 5, 6*, 8, 9, 10*, 11*, 12, 13* and 14 is now
 drawn by the original and by the port and the two pictures are the
 same picture (* one tick, or the account below). Only level 1's
 twelve rooms, three of level 7's and room 5 of level 14 are left,
-and each has a reason written down.
+and each has a reason written down. (Level 1's twelve are drawn too
+now -- `rooms1` 1011 of 1011, at the top of this file.)
 
 ### 1. `measured` had not moved in five rounds because it was not measuring the rooms
 
@@ -470,7 +545,9 @@ minutes of DOSBox at two tries.
   back **nought at every offset from -600 to +600**, which is a
   lost skip; four tries found one.
 
-**`rooms1` has no digest and that is a measurement.** Two captures
+**`rooms1` had no digest and that was a measurement.** (It has one
+now, 1011 of 1011: see the top of this file. What follows is how it
+read before the cause was found.) Two captures
 read 97 and 100 of about 995 -- and at an offset of **+52** the
 same capture agrees with the port on **929 of its 997**, so the run
 is right and the capture's tick nought is not. Level 1 is the one
@@ -2255,12 +2332,12 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         31082 of 32056   97%
+    measured         32093 of 33067   97%
     retired           1883 of  3767   50%
-    all              32965 of 35823   92%
+    all              33976 of 36834   92%
 
-(The jump is the twelve room tours: see the top of this file. The
-suite had drawn 59 of the game's 266 rooms and now draws 250.)
+(The jump is the thirteen room tours: see the top of this file. The
+suite had drawn 59 of the game's 266 rooms and now draws 262.)
 
 (`demo` is the new one: 219 of 221, and its two missing ticks are
 the last two, which is where `prandom` takes the attract mode over.)

@@ -204,7 +204,29 @@ const BOOT = 25;
  * that the game runs its own story and then the demo level, and
  * Return no longer means "start".
  */
-const SETTLE_L1 = 3;
+/**
+ * ...except on a level-1 recording, where three seconds is not
+ * enough for a different reason: the **numbering**.
+ *
+ * `show_level` puts `LEVEL 1` under the room for 24 ticks and sets
+ * `is_show_time`, so `60 MINUTES LEFT` follows it for 24 more --
+ * 48 ticks, four seconds, with one dark tick between them.
+ * `split_ticks.py --anchor-text` lines the run up on the first tick
+ * the strip goes dark after being lit, and with Ctrl+A three seconds
+ * after Return that dark tick belongs to the level the game started
+ * **before** the restart, not to the restarted one. Measured on a
+ * capture of `rooms1`: from the generator's own `search from 27` the
+ * anchor lands on tick 14 and the probe reads 268 of 1000, where the
+ * same capture split from 29.05 -- past the first level's title
+ * block -- reads **994 of 994**, exact.
+ *
+ * So a level-1 capture wants the restart clear of the first level's
+ * own four seconds of words. `--settle-l1 9` does it; the default
+ * stays 3 because every level-1 digest in the suite was taken with
+ * it and because the wait is spent out of the hour -- nine seconds
+ * is 108 ticks of the first minute instead of 36.
+ */
+const SETTLE_L1 = Number(arg('settle-l1', 3));
 const lines = [
   `# generated from ${basename(src)} -- the player's own key events, replayed`,
   `wait ${BOOT}`,

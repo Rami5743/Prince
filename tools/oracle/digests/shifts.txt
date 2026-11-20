@@ -154,3 +154,13 @@ rooms2 0  (one capture; try 1 scored 781, try 2 1153 on all four splits)
 rooms3 0   rooms4 0   rooms5 0   rooms6 0   rooms8 0
 rooms9 0   rooms10 0  rooms11 0  rooms12 0  rooms13 0
 rooms7 0   rooms14 0
+# `rooms1` is the one tour the chain reaches with no `shift+l` in
+# front of it, so its Ctrl+A lands while the first level is still
+# showing its own LEVEL 1 / 60 MINUTES LEFT and the anchor numbers
+# the run from the wrong dark tick. Captured with
+# `SETTLE_L1=9 tools/oracle/firstcapture.sh rooms1 0 3`, which puts
+# nine seconds between Return and the restart. Three tries, six
+# splits apiece: 93, 98 (--after-blank, try 1), 703, 632 (anchor 49),
+# **1010, 1011** (anchor 25, no blank search), 1010 twice on try 2
+# with --after-blank, 96 twice on try 3.
+rooms1 0

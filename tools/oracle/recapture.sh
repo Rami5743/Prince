@@ -53,9 +53,14 @@ mkdir -p "$work"
 # that one. It used to be `27 + 10 * (level - 1)` here, which stopped
 # being right when the skip wait grew for the levels the game plays a
 # cutscene before.
+# `SETTLE_L1`: the seconds between Return and Ctrl+A, three by
+# default and nine for a level-1 recording whose numbering needs the
+# restart clear of the first level's own title block. The
+# measurement is in `recording_to_script.mjs`.
 where=$(node "$repo/tools/oracle/recording_to_script.mjs" \
   "$repo/tools/oracle/recordings/$name.json" "$work/$name.txt" \
-  --settle 0.04 --shift "$shift_" --rate "$rate" 2>&1 >/dev/null)
+  --settle 0.04 --shift "$shift_" --rate "$rate" \
+  ${SETTLE_L1:+--settle-l1 "$SETTLE_L1"} 2>&1 >/dev/null)
 start=$(sed -n 's/^search from //p' <<<"$where")
 late=$(( $(sed -n 's/^restart at //p' <<<"$where") - 1 ))
 [ -n "$start" ] || { echo "$name: the generator did not say where to search"; exit 2; }
@@ -65,7 +70,7 @@ late=$(( $(sed -n 's/^restart at //p' <<<"$where") - 1 ))
 keep="$work/$name.json.was"
 cp "$digest" "$keep"
 trap 'cp "$keep" "$digest"; rm -f "$keep"' EXIT
-best=; bestscore=-1
+best=; bestscore=-1; besttotal=0
 for i in $(seq 1 "$tries"); do
   d="$work/$name-$i"
   rm -rf "${d:?}"; mkdir -p "$d"
@@ -91,31 +96,56 @@ for i in $(seq 1 "$tries"); do
   # edge worth ten ticks, and against the clock numbering it found a
   # different one worth twenty-eight. So both are tried and the
   # better kept, as with the two `--start` values.
+  split_try() { # <start> <numbering> <anchor> <blank flag or empty>
+    local st=$1 numbering=$2 anchor=$3 blank=${4:-} tag
+    tag="$st-$numbering-a$anchor${blank:+-blank}"
+    rm -rf "$d/dos"
+    nice -n 19 python3 "$repo/tools/oracle/split_ticks.py" "$d/run.mkv" "$d/dos" \
+      --crop 640:400:0:0 --scale 320:200 --start "$st" $blank \
+      --fps 30 --rate 12 --hybrid --numbering "$numbering" \
+      --anchor-text "$anchor" >/dev/null 2>&1 || true
+    [ -d "$d/dos" ] || { echo "  try $i $tag: no ticks"; return 0; }
+    python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$tag.json" >/dev/null 2>&1 || return 0
+    cp "$d/$name-$tag.json" "$digest"
+    # The whole of the report and then its first line, not `| head -1`.
+    # `set -o pipefail` is on, and `head` closing the pipe after one
+    # line kills `tsx` with SIGPIPE often enough to matter: the
+    # substitution comes back non-zero, `set -e` takes the script out
+    # through its own trap, and the run ends after one try with no
+    # winner and no error. It cost a whole capture of `f6874819`.
+    out=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null || true)
+    line=${out%%$'\n'*}
+    score=$(awk '{print $2}' <<<"$line")
+    total=$(awk '{print $4}' <<<"$line")
+    echo "  try $i $tag: $line"
+    if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then
+      bestscore=$score; besttotal=${total:-0}; best=$i
+      cp "$d/$name-$tag.json" "$d/$name.json"
+    fi
+    return 0
+  }
   for numbering in gaps clock; do
   for st in "$start" "$late"; do
-  rm -rf "$d/dos"
-  nice -n 19 python3 "$repo/tools/oracle/split_ticks.py" "$d/run.mkv" "$d/dos" \
-    --crop 640:400:0:0 --scale 320:200 --start "$st" --after-blank \
-    --fps 30 --rate 12 --hybrid --numbering "$numbering" \
-      --anchor-text 25 >/dev/null 2>&1 || true
-  [ -d "$d/dos" ] || { echo "  try $i $numbering start $st: no ticks"; continue; }
-  python3 "$repo/tools/oracle/digest.py" "$d/dos" "$d/$name-$st-$numbering.json" >/dev/null 2>&1 || continue
-  cp "$d/$name-$st-$numbering.json" "$digest"
-  # The whole of the report and then its first line, not `| head -1`.
-  # `set -o pipefail` is on, and `head` closing the pipe after one line
-  # kills `tsx` with SIGPIPE often enough to matter: the substitution
-  # comes back non-zero, `set -e` takes the script out through its own
-  # trap, and the run ends after one try with no winner and no error.
-  # It cost a whole capture of `f6874819`.
-  out=$(cd "$repo" && npx tsx tools/dev/pop-report.ts "$name" 2>/dev/null || true)
-  line=${out%%$'\n'*}
-  score=$(awk '{print $2}' <<<"$line")
-  echo "  try $i $numbering start $st: $line"
-  if [ -n "${score:-}" ] && [ "$score" -gt "$bestscore" ]; then
-    bestscore=$score; best=$i; cp "$d/$name-$st-$numbering.json" "$d/$name.json"
+    split_try "$st" "$numbering" 25 --after-blank
+  done
+  done
+  # Two dark ticks under the room, and the anchor can land on either:
+  # `show_level` writes `LEVEL n` for 24 ticks and then
+  # `N MINUTES LEFT` for 24 more, with a one-tick gap between them
+  # that the splitter loses about half the time. When it is lost the
+  # anchor lands on the port's tick 49 instead of 25 and the run is
+  # numbered 24 ticks out -- `rooms1` read 684 of 996 that way
+  # against 994 of 994. A wrong anchor is unmistakable, so the other
+  # anchor and a split with no blank search are tried only when the
+  # ordinary four have agreed on less than half the run.
+  if [ "$bestscore" -lt "$(( besttotal / 2 ))" ]; then
+    for numbering in gaps clock; do
+    for st in "$start" "$late"; do
+      split_try "$st" "$numbering" 49
+      split_try "$st" "$numbering" 25
+    done
+    done
   fi
-  done
-  done
 done
 cp "$keep" "$digest"
 [ -n "$best" ] || { echo "$name: no usable capture"; exit 1; }
