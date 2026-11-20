@@ -154,6 +154,42 @@ export interface PopEffects {
    * nowhere, so a sample ran on past the thing that made it.
    */
   stopSounds?(): void;
+  /**
+   * `sound_pointers[which]`: has the machine this sound at all?
+   *
+   * `play_sound` is four lines and the port had one:
+   *
+   *     if (next_sound < 0 || sound_prio_table[sound_id] <= sound_prio_table[next_sound]) {
+   *         if (NULL == sound_pointers[sound_id]) return;
+   *         if (sound_pcspeaker_exists[sound_id] != 0 ||
+   *             sound_pointers[sound_id]->type != sound_speaker) {
+   *             next_sound = sound_id;
+   *         }
+   *     }
+   *
+   * The two inner lines are about **the machine the game is being
+   * played on**, which is why they are a question for the shell and
+   * not a constant here. `sound_pointers[]` is what `load_sounds`
+   * put in for the sound card that was chosen, and six sounds --
+   * 1 falling, 11 sword moving, 19 drawing a sword and the three
+   * loose-floor shakes -- have no PC speaker version at all. On a
+   * speaker machine those six are refused *before* `next_sound` is
+   * written, so whatever the tick had chosen before them stands.
+   *
+   * It matters because the refusal is inside the priority test: a
+   * loose floor shaking is `sound_20_loose_shake_1` at 0x91 and a
+   * footstep is 0x9A, so the shake wins the tick and the footstep is
+   * lost -- and on the speaker the shake is then thrown away too and
+   * the player hears **nothing**, where the original plays the
+   * footstep.
+   *
+   * The capture runs a speaker machine, and with this measured
+   * against it `feather1snd` goes 49 of 50 to **50 of 50** and
+   * `gate1snd` 94 of 96 to **95**: sounds 491 of 494 -> **493**.
+   * The page does not answer it at all, because a browser has a
+   * recording or a tune for every one of the fifty-eight.
+   */
+  hasSound?(which: number): boolean;
 }
 
 /** Which sprite bank each `chtab` id is. */
@@ -476,6 +512,9 @@ export class PopGame {
      */
     outSlots.play_sound = (which: number) => {
       if (this.nextSound < 0 || soundPriority(which) <= soundPriority(this.nextSound)) {
+        // `if (NULL == sound_pointers[sound_id]) return;` and the
+        // `sound_pcspeaker_exists` line after it: see `hasSound`.
+        if (this.effects?.hasSound && !this.effects.hasSound(which)) return;
         this.nextSound = which;
       }
     };

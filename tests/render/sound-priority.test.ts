@@ -88,3 +88,67 @@ describe('the sound priority tables', () => {
     });
   }
 });
+
+/**
+ * **`sound_pcspeaker_exists`, and the two lines of `play_sound` the
+ * port did not have.**
+ *
+ *     if (next_sound < 0 || sound_prio_table[id] <= sound_prio_table[next_sound]) {
+ *         if (NULL == sound_pointers[id]) return;
+ *         if (sound_pcspeaker_exists[id] != 0 ||
+ *             sound_pointers[id]->type != sound_speaker) {
+ *             next_sound = id;
+ *         }
+ *     }
+ *
+ * Six of the fifty-eight have no PC speaker version -- 1 falling, 11
+ * sword moving, 19 drawing a sword, and the three loose-floor shakes
+ * -- so on a speaker machine `play_sound` throws them away *before*
+ * `next_sound` is written and whatever the tick had chosen before
+ * them stands. The refusal being inside the priority test is what
+ * makes it worth noises: a shake is 0x91 and a footstep 0x9A, so
+ * without it the shake takes the tick and the footstep is lost.
+ *
+ * The capture runs a speaker machine -- that is how `show_title`'s
+ * first wait was settled at 24.77 seconds against `IBM_SND1.DAT`'s
+ * own 24.74 -- so with the lines in, `feather1snd` goes 49 of 50 to
+ * **50** and `gate1snd` 94 of 96 to **95**: sounds 491 of 494 ->
+ * **493**.
+ *
+ * The port does not hold the table; it asks the machine, through
+ * `PopEffects.hasSound`, because that is what `sound_pointers[]` is.
+ * The browser answers yes to all fifty-eight.
+ */
+describe('the sounds a PC speaker cannot make', () => {
+  it('are the six, and IBM_SND1.DAT says so itself', async () => {
+    const { SpeakerChannel } = await import('../../tools/dev/sound-common.ts');
+    const { Assets } = await import('../../src/render/assets.ts');
+    const assets = new Assets(
+      async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+    const channel = await SpeakerChannel.load(assets);
+    const missing: number[] = [];
+    for (let i = 0; i < 58; i++) if (!channel.has(i)) missing.push(i);
+    // The six with no speaker version, and the four indices with no
+    // sound at all behind them -- 31, 34, 42 and 57, none of which is
+    // a `soundids` value.
+    expect(missing).toEqual([1, 11, 19, 20, 21, 22, 31, 34, 42, 57]);
+  });
+
+  it('match the bytes the release has left of sound_pcspeaker_exists', () => {
+    const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+    const prio = find(exe, PRIO_HEAD);
+    // `sound_prio_table` is 58 bytes and the release writes two of
+    // them away, so the next table starts 56 on.
+    const at = prio + 56;
+    // 0 and 1 are readable; 2 to 11 are eight bytes of pointer table.
+    expect(exe[at]).toBe(1); // sound_0_fell_to_death
+    expect(exe[at + 1]).toBe(0); // sound_1_falling, the first of the six
+    expect(Array.from(exe.subarray(at + 2, at + 10)))
+      .toEqual([0x15, 0x00, 0xb2, 0x01, 0x09, 0x00, 0xb0, 0x00]);
+    // And after it, read two early again: twelve to eighteen are
+    // there and nineteen to twenty-two are the other five of the six
+    // but for 11, which the pointer table ate.
+    expect(Array.from(exe.subarray(at + 10, at + 17))).toEqual([1, 1, 1, 1, 1, 1, 1]);
+    expect(Array.from(exe.subarray(at + 17, at + 21))).toEqual([0, 0, 0, 0]);
+  });
+});

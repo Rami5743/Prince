@@ -473,6 +473,15 @@ export class SpeakerChannel {
   /** The run's clock has gone on by `seconds`. */
   tick(seconds: number): void { this.at += seconds; }
 
+  /**
+   * `sound_pointers[index] != NULL` on a speaker machine.
+   *
+   * `tunesOf` reads `IBM_SND1.DAT`, so a sound with no entry here is
+   * one the oracle's machine cannot make at all: the six with no
+   * speaker version and the four indices with no sound behind them.
+   */
+  has(index: number): boolean { return this.length.has(index); }
+
   private mayTake(index: number): boolean {
     if (!this.playing) return true;
     return soundInterruptible(this.which)
@@ -544,6 +553,24 @@ export async function recordingSounds(
       sound: (which: number) => channel.play(which),
       stopSounds: () => channel.stop(),
       soundPlaying: () => (deaf ? false : channel.playing),
+      /**
+       * `sound_pointers[which]`, on the machine the oracle runs.
+       *
+       * The capture is of a game playing the **PC speaker** -- that
+       * is how `show_title`'s first wait was settled at 24.77
+       * seconds against `IBM_SND1.DAT`'s own 24.74 -- and six of the
+       * fifty-eight have no speaker version: 1 falling, 11 sword
+       * moving, 19 drawing a sword and the three loose-floor shakes.
+       * `play_sound` refuses those six before `next_sound` is
+       * written, so whatever the tick had chosen before them stands.
+       *
+       * It is inside the priority test, which is why it is worth
+       * noises rather than nothing: a loose floor shaking is 0x91
+       * and a footstep 0x9A, so without this the shake took the tick
+       * and the footstep was lost. `feather1snd` 49 of 50 -> **50**,
+       * `gate1snd` 94 of 96 -> **95**: sounds 491 -> **493 of 494**.
+       */
+      hasSound: (which: number) => channel.has(which),
     },
   });
   for (let t = 0; t < ticks; t++) {

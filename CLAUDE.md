@@ -45,8 +45,11 @@
 
     measured   32260 of 33047   98%   (unmoved, run for run)
     scenes      2442 of  2601   94%   (unmoved)
-    sounds       491 of   494         (unmoved)
-    npm test     797 -> 822
+    sounds       491 of   494  ->  **493 of 494**
+    npm test     797 -> 824
+
+    feather1snd   49 of 50  ->  **50 of 50**, exact
+    gate1snd      94 of 96  ->  95 of 96
 
 A round spent entirely in the vein the last one opened: divergences
 **no score can see**, found by reading `sdlpop/src` beside
@@ -334,7 +337,90 @@ reads both tables out of both executables and checks the port
 against every byte the release has not written over -- and names
 the ten it has.
 
-### 9. Two paths the page had never been compared on, and both are exact
+### 9. Six sounds a PC speaker cannot make, and the two lines that refuse them
+
+**The one number that moved this round.** `play_sound` is four lines
+and the port had one:
+
+    if (next_sound < 0 || sound_prio_table[id] <= sound_prio_table[next_sound]) {
+        if (NULL == sound_pointers[id]) return;
+        if (sound_pcspeaker_exists[id] != 0 ||
+            sound_pointers[id]->type != sound_speaker) {
+            next_sound = id;
+        }
+    }
+
+The two inner lines are about **the machine the game is played on**:
+`sound_pointers[]` is what `load_sounds` put in for the sound card
+that was chosen, and six of the fifty-eight have no PC speaker
+version at all --
+
+    1  falling        11  sword moving     19  draw sword
+    20, 21, 22  the three loose-floor shakes
+
+-- so on a speaker machine those six are thrown away *before*
+`next_sound` is written and whatever the tick had chosen before them
+stands.
+
+**The refusal being inside the priority test is what makes it worth
+noises.** A loose floor shaking is `sound_20_loose_shake_1` at 0x91
+and a footstep is 0x9A, so without these lines the shake wins the
+tick and the footstep is lost -- and then the shake is thrown away
+by the device too and the player hears **nothing**, where the
+original plays the footstep.
+
+The capture runs a speaker machine (that is how `show_title`'s first
+wait was settled at 24.77 seconds against `IBM_SND1.DAT`'s own
+24.74), so measured against it:
+
+    feather1snd   49 of 50  ->  **50 of 50**, exact
+    gate1snd      94 of 96  ->  95 of 96
+    sounds       491 of 494 ->  **493 of 494**
+
+and the pictures and the scenes do not move by a tick or a frame.
+
+The port does **not** hold `sound_pcspeaker_exists`; it asks the
+machine, through a new `PopEffects.hasSound`, because that is what
+`sound_pointers[]` is. `sound-common.ts` answers it out of
+`IBM_SND1.DAT` itself -- `SpeakerChannel.has`, which is true for the
+forty-eight tunes the file holds -- and the browser does not answer
+it at all, because it has a recording or a tune for every one.
+`tests/render/sound-priority.test.ts` pins the ten indices the
+speaker cannot reach (the six, and 31, 34, 42 and 57, which have no
+sound behind them at all) and checks them against the bytes of
+`sound_pcspeaker_exists` the release has left readable.
+
+### 10. Every unguarded SDLPoP fix, checked one by one
+
+`FIX_SOUND_PRIORITIES` was found by reading, so the rest were swept
+for. Most `FIX_*` in `sdlpop/src` are gated at run time by
+`fixes->fix_xxx` and are off, but a handful are plain `#ifdef` with
+no runtime flag, and those are SDLPoP's behaviour unconditionally.
+In the gameplay segments there are eight, and the port takes the
+vanilla side of **every one but the one above**:
+
+    FIX_CORNER_GRAB            `find_room_of_tile` checks the row
+                               before the column -- port has the
+                               `#ifndef` order
+    FIX_ENTERING_GLITCHED_ROOMS  `goto_other_room`'s
+                               `if (Char.room == 0) other_room = 0`
+                               -- port reads `roomlinks[-1]` as the
+                               C does
+    FIX_SPRITE_XPOS            `x_to_xh_and_xl` as a shift and a
+                               mask -- port has the signed form
+    FIX_LOOSE_NEXT_TO_POTION   `redraw_at_trob()` for
+                               `animate_potion` and `animate_sword`
+                               -- port has `set_redraw_anim_curr`
+    FIX_ABOVE_GATE             two more draws in `redraw_needed`
+    FIX_BIGPILLAR_JUMP_UP      a tile test in `redraw_needed_above`
+    FIX_BLACK_RECT             a third `draw_wipes` in `draw_tables`
+    FIX_LEVEL_14_RESTARTING    clearing the bottom text in
+                               `show_level`
+
+(`FIX_COLL_FLAGS`, `FIX_DISAPPEARING_GUARD_A` and `_B` are commented
+out in `config.h` and are not SDLPoP's behaviour either.)
+
+### 11. Two paths the page had never been compared on, and both are exact
 
 `tools/dev/page-port.ts` covered fourteen levels, nine scenes, the
 eleven cheats and all thirteen transitions. It now also covers the

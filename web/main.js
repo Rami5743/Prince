@@ -10572,6 +10572,7 @@ var PopGame = class _PopGame {
     out.set_sound_interruptible = setSoundInterruptible;
     out.play_sound = (which) => {
       if (this.nextSound < 0 || soundPriority(which) <= soundPriority(this.nextSound)) {
+        if (this.effects?.hasSound && !this.effects.hasSound(which)) return;
         this.nextSound = which;
       }
     };
