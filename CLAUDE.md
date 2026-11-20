@@ -41,6 +41,128 @@
 ## ============================================================
 
 
+## THE POTION ROOM: A SECOND PAGE, AND `PRINCE.EXE` PLAYS IT TOO
+
+    https://rami5743.github.io/Prince/potion.html
+
+    npm test   774 -> 784
+
+One extra `LEVELS.DAT` record and all six potions are a step apart in
+one corridor. **And the original reads it**: a copy of
+`original/prince1` with that record written into it, mounted as C: by
+`dosbox_oracle.py --game`, has `PRINCE.EXE` itself drawing the potion
+corridor. The potions are capturable for the first time.
+
+### 1. Why there had to be a level
+
+`potion8` drinks level 8's blue one and it is the only potion in the
+whole suite. The game has **one** feather -- level 7 room 1 row 2
+column 8, with five tiles of open shaft between it and where the
+falling entry drops the Prince -- and **two** inversion potions, in
+level 9 rooms 7 and 10, where the level starts in room 11. So four of
+the six kinds had never been drunk by anything, and when they were
+finally read against the C both the feather and the inversion turned
+out to have a line missing.
+
+### 2. The level: `src/dat/potion-level.ts`
+
+2305 bytes, hand-written, with a note on every tile. It stands in for
+**level 2** and not level 1, which is measured and not a preference:
+`control_crouched` holds the Prince down at the start of level 1 until
+`sound_25_presentation` has finished (`need_level1_music` is
+`current_level == 1`), so a potion page on level 1 opens with a Prince
+who will not move for two seconds and looks broken. Level 2 is a
+dungeon like level 7 (`levelType` is 0 for both), so the corridor is
+built of the tiles the feather really stands on, and it is one
+`shift+l` from the start for a capture.
+
+    room 1                        room 2  (to its right)
+    row 0  wall x 10              row 0  wall x 10
+    row 1  . _ U _ H _ L _ _ _    row 1  _ F _ I _ O _ _ _ .
+    row 2  wall x 10              row 2  wall x 10
+
+The hurt one is **first** so that the heal behind it has a flask to
+fill: case 1 is `if (hitp_curr != hitp_max)` and does nothing at all
+when he is full, which is the C and not a fault.
+
+**Three things cost a round each and are worth knowing before anyone
+writes another level record:**
+
+* **A blank door-link table hangs the game.** `get_doorlink_next(i)`
+  is `doorlinks1[i] & 0x80 ? 0 : 1` -- bit 7 is "this is the last
+  entry" -- and `do_trigger_list` is a `for (;;)` that walks `index++`
+  until it finds one. A table of nought bytes never ends, and the
+  level would not even load: `PopGame.start` never returned. The
+  game's own levels pad the unused tail with `255, 0, 255, 0, ...`,
+  so **0xFF is what an empty entry looks like**, and that is what the
+  record is filled with.
+* **`start_dir` is the direction he ends up facing**, not the one he
+  starts in: `do_startpos` is `Char.direction = ~level.start_dir` and
+  the start sequence turns him. 0 is right. It was wrong for a while
+  and did not show, because the level was on slot 1 at the time and
+  the level-1 music held him crouched through the turn.
+* **A potion is drunk by standing in front of it and pressing
+  Shift**, not by walking over it. `control_standing` (`seg005:0358`)
+  is `if (control_shift2 == CONTROL_HELD && control_shift ==
+  CONTROL_HELD && check_get_item()) return;`, `control_shift2` is a
+  **latch** so the key has to go down again rather than be held, and
+  `get_item` crouches him first -- the pickup happens on the *second*
+  press, when `Char.frame` is already `frame_109_crouch`. A walk
+  straight over six potions drinks none of them.
+
+### 3. What each potion does, measured
+
+`tests/pop/potion-level.test.ts` walks onto each one in turn and reads
+the flash **between the tick and the frame**, because `render()` is
+where `flash_if_hurt` counts it down:
+
+    hurt       3/3 -> 2/3   sounds 18, 13        no flash
+    heal       2/3 -> 3/3   sounds 18, 33        flash 4 x 2
+    life       3/3 -> 4/4   sounds 18, 30        flash 4 x 4
+    feather    is_feather_fall set, sounds 18, 39   flash 2 x 3
+    inversion  upside_down set, sound 18 only    no flash
+    open       nothing seen, sound 18 only       no flash
+
+-- the C's own numbers, every one. `sound_18_drink` is the swallow in
+`seq_78_drink` and every one of the six plays it; the inversion and
+the open one play nothing else at all.
+
+### 4. The page
+
+`potion.html` is **the same bundle** as `index.html`. It sets
+`window.__princePotionLevel` before `game.js` runs and `web/main.ts`
+does two things with it: fetches `LEVELS.DAT` through
+`levelsDatWithPotionLevel`, and opens on that level instead of on the
+title. Nothing in `src/pop` knows about it -- the engine, the
+renderer and the sound are the ones the real game uses, and
+`original/prince1/LEVELS.DAT` is never written to. The page carries a
+readout of hit points, the feather and the inversion, because the
+green potion is the one effect in the game with nothing to see.
+
+### 5. **The original plays it**, which is the part that matters
+
+    npx tsx tools/dev/potion-game-dir.ts /tmp/potiongame
+    python3 tools/oracle/dosbox_oracle.py --script <s> --out <o> \
+        --cycles 20000 --game /tmp/potiongame --record run.mkv --fps 10
+
+Thirty-two files copied and `LEVELS.DAT` written with the record in
+place of level 2; the script is `wait 25; key Return; wait 4;
+shift+l; wait 25`. At 45 seconds the emulator's screen is **the
+potion corridor**: the Prince facing right at the left-hand wall,
+three flasks a tile apart, `60 MINUTES LEFT` under the room -- the
+same picture the port draws. `PRINCE.EXE` checks nothing about the
+record beyond what it reads out of it, and the resource's checksum
+(`(checksum + sum(payload)) mod 256 == 0xFF`) is worked out again
+when the record is written.
+
+**So the potions can be adjudicated against the authority.** What is
+left to do it is a probe: a recording whose timeline walks and
+presses Shift on each one, and a way to tell `firstcapture.sh`,
+`soundcapture.sh` and `digest-common.ts` which game directory to use.
+Neither is written yet, and the first capture of a potion's **sound**
+-- `sound_39_low_weight` out of the flask instead of out of
+`shift+w` -- is the thing it would buy.
+
 ## THE FEATHER SOUND: THE ORIGINAL GOES SILENT FOR EIGHTEEN AND A HALF SECONDS, AND A TUNE ENDS WHEN ITS SEQUENCE DOES
 
     measured   32093 of 33067   97%   (unmoved, to the tick)

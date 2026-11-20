@@ -27,10 +27,27 @@ import { SOUND } from '../src/game/traps.ts';
 import { SEQUENCE_SOUND, SOUND_SILENCE } from '../src/game/sequence.ts';
 import type { Controls } from '../src/game/kid.ts';
 import { readExeConstants } from '../src/game/exe-constants.ts';
+import {
+  levelsDatWithPotionLevel, POTION_LEVEL_NUMBER,
+} from '../src/dat/potion-level.ts';
 
 const DATA_URL =
   (window as unknown as { __princeDataUrl?: string }).__princeDataUrl
   ?? '../original/prince1';
+/**
+ * `potion.html`: the same game, with one level record swapped.
+ *
+ * The page sets this before the bundle runs and two things follow:
+ * `LEVELS.DAT` comes back with `src/dat/potion-level.ts`'s corridor
+ * in place of level 1, and the page opens on that level instead of
+ * on the title. **Nothing in `src/pop` knows about it** -- the
+ * engine, the renderer and the sound are the ones the real game
+ * uses, and the only difference is 2305 bytes of level data. The
+ * original's own `original/prince1/LEVELS.DAT` is never written to:
+ * the swap is in the copy this page fetched.
+ */
+const POTION_PAGE =
+  (window as unknown as { __princePotionLevel?: boolean }).__princePotionLevel === true;
 /** The original ran its game loop at this rate. */
 const FRAMES_PER_SECOND = 12;
 
@@ -45,7 +62,12 @@ async function boot(): Promise<void> {
   const custom = (window as unknown as {
     __princeFetcher?: (name: string) => Promise<Uint8Array>;
   }).__princeFetcher;
-  const fetchFile = custom ?? browserFetcher(DATA_URL);
+  const fromDisc = custom ?? browserFetcher(DATA_URL);
+  const fetchFile = POTION_PAGE
+    ? async (name: string): Promise<Uint8Array> => (name === 'LEVELS.DAT'
+      ? levelsDatWithPotionLevel(await fromDisc(name))
+      : fromDisc(name))
+    : fromDisc;
   const assets = new Assets(fetchFile);
   const exe = await fetchFile('UNCRKD.EXE');
   /** `custom->first_level`, which is what a key during the demo starts. */
@@ -1336,6 +1358,9 @@ async function boot(): Promise<void> {
     paused: game.paused,
     /** The colour `do_flash` is owed after this tick's picture. */
     flashColour: game.flashColour,
+    /** `is_feather_fall`, which `potion.html` shows while it lasts. */
+    featherFall: game.isFeatherFall,
+    upsideDown: game.upsideDown,
     maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_GUARD ? null : {
@@ -1403,7 +1428,8 @@ async function boot(): Promise<void> {
    * gesture watches `__princeWaitingForSound` instead.
    */
   await waitUntilThePageCanSound();
-  await restartGame();
+  if (POTION_PAGE) await select(levelView(POTION_LEVEL_NUMBER));
+  else await restartGame();
   w.__princeReady = true;
 }
 

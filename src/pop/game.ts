@@ -1477,6 +1477,17 @@ export class PopGame {
     this.needFullRedraw = true;
   }
 
+  /**
+   * `is_feather_fall`, for a shell that wants to show it.
+   *
+   * The potion page puts it on the screen beside the hit points,
+   * because the green potion is the one effect in the game with
+   * nothing to see: `fall_accel` gathers one to the fall instead of
+   * three and that is all, so without a readout there is no way to
+   * tell whether it took.
+   */
+  get isFeatherFall(): boolean { return g.is_feather_fall !== 0; }
+
   /** Shift+I: the screen turns over. The shell does the turning. */
   toggleUpsideDown(): void { toggle_upside(); }
   get upsideDown() { return g.upside_down !== 0; }

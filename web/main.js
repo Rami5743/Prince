@@ -11308,6 +11308,18 @@ var PopGame = class _PopGame {
     g.is_blind_mode = g.is_blind_mode ? 0 : 1;
     this.needFullRedraw = true;
   }
+  /**
+   * `is_feather_fall`, for a shell that wants to show it.
+   *
+   * The potion page puts it on the screen beside the hit points,
+   * because the green potion is the one effect in the game with
+   * nothing to see: `fall_accel` gathers one to the fall instead of
+   * three and that is all, so without a readout there is no way to
+   * tell whether it took.
+   */
+  get isFeatherFall() {
+    return g.is_feather_fall !== 0;
+  }
   /** Shift+I: the screen turns over. The shell does the turning. */
   toggleUpsideDown() {
     toggle_upside();
@@ -13041,8 +13053,184 @@ var SOUND = {
   spikes: 49
 };
 
+// src/dat/potion-level.ts
+var POTION_LEVEL_NUMBER = 2;
+var POTION_KIND = {
+  heal: 1,
+  life: 2,
+  feather: 3,
+  inversion: 4,
+  hurt: 5,
+  open: 6
+};
+var W = 20;
+var F = 1;
+var P = 10;
+var ROOMS = [
+  // Room 1: the wall at column 0 stops him walking out of the left of
+  // the level, and columns 7, 8 and 9 are the run into room 2.
+  {
+    fg: [
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      F,
+      P,
+      F,
+      P,
+      F,
+      P,
+      F,
+      F,
+      F,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W
+    ],
+    bg: {
+      12: POTION_KIND.hurt,
+      // row 1 column 2
+      14: POTION_KIND.heal,
+      // row 1 column 4
+      16: POTION_KIND.life
+      // row 1 column 6
+    }
+  },
+  // Room 2: the corridor carries on from room 1's column 9 into this
+  // room's column 0, and the wall at column 9 is the far end.
+  {
+    fg: [
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      F,
+      P,
+      F,
+      P,
+      F,
+      P,
+      F,
+      F,
+      F,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W,
+      W
+    ],
+    bg: {
+      11: POTION_KIND.feather,
+      // row 1 column 1
+      13: POTION_KIND.inversion,
+      // row 1 column 3
+      15: POTION_KIND.open
+      // row 1 column 5
+    }
+  }
+];
+var POTION_PLACES = ROOMS.flatMap((spec, i) => Object.entries(spec.bg).map(([pos, kind]) => ({
+  name: Object.keys(POTION_KIND).find((k) => POTION_KIND[k] === kind),
+  kind,
+  room: i + 1,
+  row: Math.floor(Number(pos) / 10),
+  column: Number(pos) % 10
+})));
+var START_ROOM = 1;
+var START_POS = 11;
+var START_DIR = 0;
+var NO_GUARD_TILE = 30;
+var OFF_FG2 = 0;
+var OFF_BG2 = 720;
+var OFF_DOORLINKS12 = 1440;
+var OFF_DOORLINKS22 = 1696;
+var OFF_ROOMLINKS2 = 1952;
+var OFF_USED_ROOMS2 = 2048;
+var OFF_ROOM_XS2 = 2049;
+var OFF_ROOM_YS2 = 2073;
+var OFF_START_ROOM2 = 2112;
+var OFF_START_POS2 = 2113;
+var OFF_START_DIR2 = 2114;
+var OFF_GUARDS2 = 2119;
+function potionLevelPayload() {
+  const d = new Uint8Array(LEVEL_PAYLOAD_SIZE);
+  for (let room = 0; room < ROOMS.length; room++) {
+    const spec = ROOMS[room];
+    for (let pos = 0; pos < TILES_PER_ROOM; pos++) {
+      const i = room * TILES_PER_ROOM + pos;
+      d[OFF_FG2 + i] = spec.fg[pos];
+      d[OFF_BG2 + i] = spec.bg[pos] ?? 0;
+    }
+  }
+  for (let i = ROOMS.length * TILES_PER_ROOM; i < LEVEL_TILE_COUNT; i++) {
+    d[OFF_FG2 + i] = 0;
+    d[OFF_BG2 + i] = 0;
+  }
+  d[OFF_ROOMLINKS2 + 0 * 4 + 1] = 2;
+  d[OFF_ROOMLINKS2 + 1 * 4 + 0] = 1;
+  d.fill(255, OFF_DOORLINKS12, OFF_DOORLINKS12 + 256);
+  d.fill(0, OFF_DOORLINKS22, OFF_DOORLINKS22 + 256);
+  d[OFF_USED_ROOMS2] = ROOMS.length;
+  d[OFF_ROOM_XS2 + 0] = 1;
+  d[OFF_ROOM_YS2 + 0] = 1;
+  d[OFF_ROOM_XS2 + 1] = 2;
+  d[OFF_ROOM_YS2 + 1] = 1;
+  d[OFF_START_ROOM2] = START_ROOM;
+  d[OFF_START_POS2] = START_POS;
+  d[OFF_START_DIR2] = START_DIR & 255;
+  for (let i = 0; i < ROOM_COUNT; i++) d[OFF_GUARDS2 + i] = NO_GUARD_TILE;
+  return d;
+}
+function levelsDatWithPotionLevel(bytes) {
+  const out2 = bytes.slice();
+  const dv = new DataView(out2.buffer, out2.byteOffset, out2.byteLength);
+  const indexOffset = dv.getUint32(0, true);
+  const count = dv.getUint16(indexOffset, true);
+  const want = resourceIdOfLevel(POTION_LEVEL_NUMBER);
+  for (let i = 0, p = indexOffset + 2; i < count; i++, p += 8) {
+    if (dv.getUint16(p, true) !== want) continue;
+    const offset = dv.getUint32(p + 2, true);
+    const size = dv.getUint16(p + 6, true);
+    const payload = potionLevelPayload().subarray(0, size);
+    out2.set(payload, offset + 1);
+    let sum = 0;
+    for (const b of payload) sum = sum + b & 255;
+    out2[offset] = 255 - sum & 255;
+    return out2;
+  }
+  throw new Error(`LEVELS.DAT has no resource ${want}`);
+}
+
 // web/main.ts
 var DATA_URL = window.__princeDataUrl ?? "../original/prince1";
+var POTION_PAGE = window.__princePotionLevel === true;
 var FRAMES_PER_SECOND = 12;
 async function boot() {
   const canvas = document.getElementById("screen");
@@ -13050,7 +13238,8 @@ async function boot() {
   const status = document.getElementById("status");
   const display = new Display(canvas);
   const custom = window.__princeFetcher;
-  const fetchFile = custom ?? browserFetcher(DATA_URL);
+  const fromDisc = custom ?? browserFetcher(DATA_URL);
+  const fetchFile = POTION_PAGE ? async (name) => name === "LEVELS.DAT" ? levelsDatWithPotionLevel(await fromDisc(name)) : fromDisc(name) : fromDisc;
   const assets = new Assets(fetchFile);
   const exe = await fetchFile("UNCRKD.EXE");
   const firstLevel = readExeConstants(exe).firstLevel;
@@ -13829,6 +14018,9 @@ async function boot() {
     paused: game.paused,
     /** The colour `do_flash` is owed after this tick's picture. */
     flashColour: game.flashColour,
+    /** `is_feather_fall`, which `potion.html` shows while it lasts. */
+    featherFall: game.isFeatherFall,
+    upsideDown: game.upsideDown,
     maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_DIRECTION ? null : {
@@ -13859,7 +14051,8 @@ async function boot() {
   };
   void RoomRenderer;
   await waitUntilThePageCanSound();
-  await restartGame();
+  if (POTION_PAGE) await select(levelView(POTION_LEVEL_NUMBER));
+  else await restartGame();
   w.__princeReady = true;
 }
 boot().catch((err) => {
