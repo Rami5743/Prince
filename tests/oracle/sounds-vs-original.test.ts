@@ -92,6 +92,28 @@ const assets = new Assets(
  *
  * The one it is short of is a four-millisecond click at 43.97.
  *
+ * `potionsnd` is the **potions**, and it is exact: 25 of 25 noises on
+ * each of three captures. The level is `src/dat/potion-level.ts`,
+ * written into a copy of `LEVELS.DAT` in place of level 2 and mounted
+ * as C: by `dosbox_oracle.py --game`, so this is `PRINCE.EXE` itself
+ * drinking all six -- the first capture of a potion this project has
+ * ever had, and the first time `sound_39_low_weight` has been heard
+ * out of a flask rather than out of the `shift+w` cheat. What the
+ * capture holds, with `origin` 50.0:
+ *
+ *     53.3 .. 54.2   four blips      the blue one, sound 13
+ *     59.3 .. 61.8   2.548 s         the small red one, sound 33
+ *     64.4 .. 66.8   2.404 s         the big red one, sound 30
+ *     81.2 .. 99.9   **18.710 s**    the green one, sound 39
+ *     101.1 ..       blips only      the upside-down one and the
+ *                                    one that opens the gates, which
+ *                                    play nothing but the swallow
+ *
+ * -- against the tunes' own 2.484, 2.333 and 18.612, and against the
+ * 18.598 that `feather1snd` measures for the same sound out of the
+ * cheat. The two ways of reaching the feather agree with each other
+ * and with `IBM_SND1.DAT` to about a tenth of a second.
+ *
  * `level10bsnd` is **exact, 90 of 90**, and it is the run the gate
  * stutter was found on: `animate_door` asks for `sound_5_gate_opening`
  * four times in one tick there, which before the queue in front of
@@ -102,6 +124,7 @@ const EXPECTED: Record<string, number> = {
   title: 212,
   cutscene2snd: 21,
   feather1snd: 49,
+  potionsnd: 25,
   gate1snd: 94,
   level10bsnd: 90,
 };

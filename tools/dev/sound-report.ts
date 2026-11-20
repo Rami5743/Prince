@@ -27,6 +27,7 @@ import {
 } from './sound-common.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
 import { cheatsByTick } from './digest-common.ts';
+import { levelsDatWithPotionLevel } from '../../src/dat/potion-level.ts';
 import { SOUND_NAME } from './sound-trace.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -49,12 +50,31 @@ export interface SoundSpec {
   recording?: string;
   /** Which `--shift` the capture is taken at. */
   shift?: number;
+  /**
+   * `"potion"`: the capture was taken with `src/dat/potion-level.ts`
+   * in place of level 2, so the port has to be given the same.
+   *
+   * `tools/dev/potion-game-dir.ts` writes the copy of the game
+   * directory the emulator is pointed at with
+   * `dosbox_oracle.py --game`; this is the other half of it. Nothing
+   * else about the run differs -- the executable, the tile sets, the
+   * sounds and the engine are the game's own.
+   */
+  levels?: 'potion';
   /** The second of the capture the Ctrl+A restart falls on. */
   origin?: number;
 }
 
 export const assets = new Assets(
   async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+/** The same game with the potion level in it; see `SoundSpec.levels`. */
+export const potionAssets = new Assets(async (n: string) => {
+  const bytes = new Uint8Array(readFileSync(join(GAME_DIR, n)));
+  return n === 'LEVELS.DAT' ? levelsDatWithPotionLevel(bytes) : bytes;
+});
+/** Which set of data files a spec is measured against. */
+export const assetsFor = (spec: SoundSpec): Assets =>
+  (spec.levels === 'potion' ? potionAssets : assets);
 export const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
 export function soundNames(): string[] {
@@ -80,8 +100,8 @@ export async function sceneSounds(spec: SoundSpec, deaf = true): Promise<SoundEv
     // A probe's cheats, which the picture side has replayed since the
     // cheats went in and this had never passed on. See
     // `recordingSounds`.
-    return recordingSounds(assets, exe, rec, timeline, timeline.length, deaf,
-                           cheatsByTick(rec.cheats));
+    return recordingSounds(assetsFor(spec), exe, rec, timeline, timeline.length,
+                           deaf, cheatsByTick(rec.cheats));
   }
   const clock = await RecordingClock.load(assets) as RecordingClock;
   await playScene(assets, exe, spec.scene!, spec.frames ?? 0, () => {}, undefined,

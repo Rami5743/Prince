@@ -45,7 +45,8 @@
 
     https://rami5743.github.io/Prince/potion.html
 
-    npm test   774 -> 784
+    sounds     491 of 494   (was 466, and 417 at the top of the round)
+    npm test   774 -> 786
 
 One extra `LEVELS.DAT` record and all six potions are a step apart in
 one corridor. **And the original reads it**: a copy of
@@ -155,13 +156,53 @@ record beyond what it reads out of it, and the resource's checksum
 (`(checksum + sum(payload)) mod 256 == 0xFF`) is worked out again
 when the record is written.
 
-**So the potions can be adjudicated against the authority.** What is
-left to do it is a probe: a recording whose timeline walks and
-presses Shift on each one, and a way to tell `firstcapture.sh`,
-`soundcapture.sh` and `digest-common.ts` which game directory to use.
-Neither is written yet, and the first capture of a potion's **sound**
--- `sound_39_low_weight` out of the flask instead of out of
-`shift+w` -- is the thing it would buy.
+### 6. And the capture: `potionsnd`, **25 of 25 noises, three times**
+
+    sounds   491 of 494   (was 417 of 419 at the top of the round)
+
+`potion1` is the probe: 1012 ticks of the potion level, sixteen
+**careful steps** -- Shift+Right, which moves exactly one tile -- with
+four taps of Shift after each. A careful step is tile-quantised, so it
+does not care how late the emulator takes the key, and that is what
+makes a potion capturable where `gate2c`'s six-tick window was not.
+Swept for the harness's own slop, every combination of the two keys
+going down and coming up a tick or two apart:
+
+    shift down first, by 0, 1 or 2 ticks    all six drunk, every time
+    right down first, by 1 or 2 ticks       the first potion lost,
+                                            the other five drunk
+    either key up first, by a tick          all six drunk
+    the whole walk started 1..7 ticks late  all six drunk
+
+-- so **Shift goes down two ticks before Right** and nothing else
+needs care.
+
+`soundcapture.sh` reads `"levels": "potion"` out of the spec, builds
+the game directory with `tools/dev/potion-game-dir.ts` and passes
+`--game`; `sound-report.ts` gives the port the same `LEVELS.DAT`
+through `assetsFor(spec)`. Three captures scored **25, 24 and 25 of
+their own total** -- exact every time. What the best one holds, with
+`origin` 50.0:
+
+    53.3 .. 54.2   four blips     the blue one, sound 13
+    59.3 .. 61.8   2.548 s        the small red one, sound 33
+    64.4 .. 66.8   2.404 s        the big red one, sound 30
+    81.2 .. 99.9   **18.710 s**   the green one, sound 39
+    101.1 ..       blips only     the upside-down one and the one
+                                  that opens the gates, which play
+                                  nothing but the swallow
+
+against the tunes' own 2.484, 2.333 and 18.612. **The feather out of
+the flask (18.710 s) and the feather out of `shift+w` (18.598 s)
+agree with each other and with `IBM_SND1.DAT` to about a tenth of a
+second**, which is the two halves of this round's work meeting in the
+middle: `FEATHER_SOUND_TICKS` 223 is now measured twice, by two
+different routes, against the original.
+
+What is still not done is a **picture** digest of the potion level:
+`digest-common.ts` builds its `Assets` from `GAME_DIR` with no way to
+say otherwise, and the rule is not to weaken it. A `levels` field
+there, matching the sound side's, is the whole of what it needs.
 
 ## THE FEATHER SOUND: THE ORIGINAL GOES SILENT FOR EIGHTEEN AND A HALF SECONDS, AND A TUNE ENDS WHEN ITS SEQUENCE DOES
 
@@ -2610,8 +2651,9 @@ and what the player *hears*, for the first time, by
 
     title         212 of 212 notes    gate1snd      94 of  96 noises
     cutscene2snd   21 of  21 notes    level10bsnd   90 of  90 noises
-    feather1snd    49 of  50 noises   the feather, and the first
-                                      capture of a potion
+    feather1snd    49 of  50 noises   the feather, by `shift+w`
+    potionsnd      25 of  25 noises   all six potions, drunk out of
+                                      the flask on a level of our own
 
 **Most of what used to be short was the encoder, not the clock** --
 see the top of this file: the same eight scenes went from 756 to 1224

@@ -1,0 +1,6 @@
+{
+  "what": "potion1: the six potions drunk, one after another, on the level `src/dat/potion-level.ts` writes into a copy of LEVELS.DAT -- the first capture of a potion in this project, and the first time `sound_39_low_weight` has ever been heard out of a flask rather than out of the `shift+w` cheat. The walk is sixteen careful steps (Shift+Right, which moves exactly one tile and so does not care how late the emulator takes the key) with four taps of Shift after each, and it drinks all six: measured, the only slop that loses one is Right arriving BEFORE Shift, which costs the first potion and nothing else, so Shift goes down two ticks early.",
+  "recording": "potion1",
+  "shift": 0,
+  "levels": "potion"
+}

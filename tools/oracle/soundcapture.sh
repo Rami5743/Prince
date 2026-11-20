@@ -28,6 +28,20 @@ spec="$repo/tools/oracle/sounds/$name.json"
 digest="$repo/tools/oracle/digests/$name.sound.json"
 [ -f "$spec" ] || { echo "$name: no sound spec"; exit 2; }
 mkdir -p "$work"
+# A spec with `"levels": "potion"` is measured against a copy of the
+# game directory with `src/dat/potion-level.ts` written into
+# LEVELS.DAT -- the only way the six potions can be reached at all,
+# since the game's own feather is at the bottom of a shaft in level 7
+# and its two inversion potions are thirteen levels in.
+# `original/prince1` is never written to; the copy is made here.
+levels=$(python3 -I -c "import json,sys; print(json.load(open(sys.argv[1])).get('levels',''))" "$spec")
+gameopt=()
+if [ "$levels" = potion ]; then
+  gamedir="$work/$name.gamedir"
+  rm -rf "${gamedir:?}"
+  (cd "$repo" && npx tsx tools/dev/potion-game-dir.ts "$gamedir") >/dev/null
+  gameopt=(--game "$gamedir")
+fi
 rec=$(python3 -I -c "import json,sys; print(json.load(open(sys.argv[1])).get('recording',''))" "$spec")
 if [ -n "$rec" ]; then
   # A recording is reached the way every picture capture reaches one,
@@ -60,7 +74,7 @@ for i in $(seq 1 "$tries"); do
   d="$work/$name-$i"
   rm -rf "${d:?}"; mkdir -p "$d"
   nice -n 19 python3 "$repo/tools/oracle/dosbox_oracle.py" --script "$work/$name.txt" \
-    --out "$d/rep" --cycles 20000 --speaker >/dev/null 2>&1 || true
+    --out "$d/rep" --cycles 20000 --speaker "${gameopt[@]}" >/dev/null 2>&1 || true
   wav=$(find "$d/rep" -name '*.wav' | head -1)
   [ -n "$wav" ] || { echo "  $name try $i: no wave"; continue; }
   python3 -I "$repo/tools/oracle/sound_notes.py" "$wav" "$d/$name.sound.json" \
