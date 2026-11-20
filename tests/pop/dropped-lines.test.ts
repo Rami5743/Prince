@@ -10,7 +10,7 @@
  * back out.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR, REPO } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
@@ -23,7 +23,8 @@ import { play_kid_frame, play_guard_frame } from '../../src/pop/seg000.ts';
 import * as seg006 from '../../src/pop/seg006.ts';
 import { setPainter, type Peel } from '../../src/pop/seg008.ts';
 import { jump_through_mirror } from '../../src/pop/seg003.ts';
-import { hud } from '../../src/pop/link.ts';
+import { hud, l2, l5, l6, l7, l8 } from '../../src/pop/link.ts';
+import { link as wireLink } from '../../src/pop/wire.ts';
 import { tiles, charids, directions, seqids } from '../../src/pop/types.ts';
 import { seqtbl_offset_char } from '../../src/pop/seg005.ts';
 
@@ -413,6 +414,126 @@ describe('the lines the translation dropped', () => {
     expect(blits.every((b) => b.blit === 9 && b.y === 194)).toBe(true);
     // And the real painter back, for whatever runs next.
     await PopGame.start(assets, exe, 1);
+  });
+
+  /**
+   * **A seam wired to the wrong function, and a seam that drops an
+   * argument.**
+   *
+   * `slot()` makes an unwired seam throw and the test above forbids
+   * one wired to nothing. Neither catches `l7.trigger_button.fn =
+   * make_loose_fall` -- both are functions, both take numbers, and
+   * TypeScript is happy because a `(n: number) => void` is
+   * assignable to a `(a: number, b: number, c: number) => void`.
+   * That last line is the second hole: **a function with fewer
+   * parameters is assignable to one with more**, so a seam can
+   * silently drop its arguments.
+   *
+   * So the name each seam is wired to has to be the seam's own, and
+   * the function's `length` has to be the arity the slot declares.
+   * A wrapper is allowed and has to be named here, which is one
+   * line to add and a decision to make.
+   */
+  it('wires every seam to the function of that name, with its arguments', () => {
+    const wire = readFileSync(join(REPO, 'src', 'pop', 'wire.ts'), 'utf8');
+    const link = readFileSync(join(REPO, 'src', 'pop', 'link.ts'), 'utf8');
+
+    // `l2.do_demo_moves` is `do_auto_moves(custom->demo_moves)`, which
+    // is two halves of seg002 behind one call in seg006.
+    const wrappers = new Set(['do_demo_moves']);
+
+    // Every `x.key.fn = name;` in `wire.ts`.
+    const wrong: string[] = [];
+    for (const m of wire.matchAll(/^\s*(\w+)\.(\w+)\.fn = (\w+);$/gm)) {
+      if (m[2] !== m[3]) wrong.push(`${m[1]}.${m[2]}.fn = ${m[3]}`);
+    }
+    expect(wrong, 'seams wired to a function of another name').toEqual([]);
+
+    // Every `key: slot<(a, b) => r>('name')` in `link.ts`: the string
+    // it throws with has to be the key, and the arity it declares has
+    // to be the arity of the function wired in.
+    const groups: Record<string, Record<string, { fn: (...a: never[]) => unknown }>> = {
+      l2, l5, l6, l7, l8, hud,
+    };
+    const mismatched: string[] = [];
+    let checked = 0;
+    // The slots are filled in by `link()`, which `PopGame.start`
+    // calls; this test starts no game, so it says so itself.
+    wireLink();
+    for (const m of link.matchAll(/^\s*(\w+): slot<\(([^)]*)\) => [^>]*>\('(\w+)'\),$/gm)) {
+      const [, key, params, named] = m;
+      checked += 1;
+      if (named !== key) mismatched.push(`${key} throws as ${named}`);
+      const arity = params.trim() === '' ? 0 : params.split(',').length;
+      const found = Object.values(groups)
+        .map((group) => group[key]).filter((slot) => slot !== undefined);
+      expect(found.length, `${key} is in exactly one group`).toBe(1);
+      const fn = found[0]!.fn;
+      if (fn.length !== arity) {
+        mismatched.push(`${key} takes ${arity} and is wired to one of ${fn.length}`);
+      }
+      if (!wrappers.has(key) && fn.name !== key) {
+        mismatched.push(`${key} is wired to a function called ${JSON.stringify(fn.name)}`);
+      }
+    }
+    expect(checked, 'slots were found to check').toBeGreaterThan(20);
+    expect(mismatched, 'seams that do not match their slot').toEqual([]);
+  });
+
+  /**
+   * **A global written in `src` that nothing reads.**
+   *
+   * That is the `need_full_redraw` shape: a line of the C
+   * translated into a write to a field, and the read it feeds never
+   * translated at all, so the line looks present and does nothing.
+   * It cost a round to find the first one, and ten more were found
+   * by counting reads against writes over every field of `Globals`.
+   *
+   * `loaded_room` is the one that stays, and why is written beside
+   * it: the C writes it in `get_room_address` and only the copy
+   * protection and the coloured torches read it, neither of which
+   * this port has.
+   */
+  it('reads every global it writes', () => {
+    const state = readFileSync(join(REPO, 'src', 'pop', 'state.ts'), 'utf8');
+    const body = /class Globals \{([\s\S]*?)\n\}\n/.exec(state)?.[1];
+    expect(body, 'the Globals class').toBeTruthy();
+    const fields = [...new Set([...body!.matchAll(/^ {2}(?:readonly )?(\w+)\s*[!:=]/gm)]
+      .map((m) => m[1]))];
+    expect(fields.length).toBeGreaterThan(100);
+
+    const sources: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.ts')) sources.push(readFileSync(full, 'utf8'));
+      }
+    };
+    walk(join(REPO, 'src'));
+    const text = sources.join('\n');
+
+    /** Written only: `g.x =`, `g.x +=`, `++g.x` and the rest. */
+    /**
+     * The one that stays: the C writes `loaded_room` in
+     * `get_room_address` and only the copy protection and the
+     * coloured torches read it, neither of which this port has.
+     */
+    const allowed = new Set(['loaded_room']);
+    const writeOnly = fields.filter((field) => {
+      if (allowed.has(field)) return false;
+      let reads = 0;
+      let writes = 0;
+      for (const m of text.matchAll(new RegExp(`\\bg\\.${field}\\b`, 'g'))) {
+        const after = text.slice(m.index! + m[0].length, m.index! + m[0].length + 4);
+        const before = text.slice(Math.max(0, m.index! - 3), m.index!);
+        if (/^\s*(=[^=]|\+=|-=|\|=|&=|\^=|\+\+|--)/.test(after)
+          || /(\+\+|--)\s*$/.test(before)) writes += 1;
+        else reads += 1;
+      }
+      return writes > 0 && reads === 0;
+    });
+    expect(writeOnly, 'globals written in src and read nowhere').toEqual([]);
   });
 
   it('the diagonal rooms are found sideways when there is none above', async () => {

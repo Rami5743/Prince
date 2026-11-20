@@ -46,7 +46,7 @@
     measured   32260 of 33047   98%   (unmoved, run for run)
     scenes      2442 of  2601   94%   (unmoved)
     sounds       491 of   494         (unmoved)
-    npm test     797 -> 818
+    npm test     797 -> 820
 
 A round spent entirely in the vein the last one opened: divergences
 **no score can see**, found by reading `sdlpop/src` beside
@@ -115,6 +115,21 @@ gone from the port rather than merely forbidden in one file.
 (`rooms.goto_other_room` also had its return type as `void` where
 the C's is `int`.)
 
+**And the two holes the stub test does not cover are pinned.** A
+seam wired to the *wrong* function is two functions and TypeScript
+is happy with either; a seam wired to one that **drops an
+argument** is happy too, because a `(n: number) => void` is
+assignable to a `(a: number, b: number, c: number) => void`.
+`tests/pop/dropped-lines.test.ts` reads both files now: every
+`x.key.fn = name;` in `wire.ts` must have `name === key`, and every
+`key: slot<(a, b) => r>('name')` in `link.ts` must throw under its
+own key and be wired to a function whose `.name` is that key and
+whose `.length` is the arity the slot declares. One wrapper is
+allowed and is named in the test. Both holes were checked by making
+them: `l7.is_spike_harmful.fn = start_chompers` and
+`l7.trigger_button.fn = function trigger_button(_a: number) {}`
+each fail it.
+
 ### 3. Ten globals were written and never read, which is the `need_full_redraw` shape
 
 Walked every field of `Globals` and counted reads against writes
@@ -132,9 +147,15 @@ across `src`:
     wipetable_count      and of `g.wipetable.length`: four places
                          wrote them and nobody read them
 
-All ten are gone. **`loaded_room` stays**: the C writes it in
+All ten are gone, and the count is a **test** now:
+`tests/pop/dropped-lines.test.ts` walks every field of `Globals`,
+counts `g.field` reads against writes over the whole of `src`, and
+fails on any field that is written and never read. **`loaded_room`
+is the one exception and is named in the test**: the C writes it in
 `get_room_address` and the only things that read it are the copy
-protection and the coloured torches, neither of which this port has.
+protection and the coloured torches, neither of which this port
+has. Checked by putting `need_full_redraw` back -- one declaration
+and one write -- and watching it fail.
 
 ### 4. `get_tile_div_mod` reads off the ends of its tables, and `& 0xff` is not what the original gets
 
