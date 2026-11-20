@@ -99,15 +99,49 @@ export async function loadSound(
  * uninterruptible, so in the original the first ask starts it and the
  * other forty-one are refused.
  *
- * Both tables are the original's, including the two values
- * `fix_sound_priorities` moves to match version 1.3.
+ * **Both tables are the release's own, and three entries are not
+ * SDLPoP's.** SDLPoP defines `FIX_SOUND_PRIORITIES` by default and
+ * runs `fix_sound_priorities()` before anything else, whose own
+ * comment is "Change values to match those in PoP 1.3": it moves
+ * `sound_48_spiked` from 0x19 to 0x15, `sound_10_sword_vs_sword`
+ * from 0x0A to 0x0D, and marks `sound_49_spikes` interruptible. The
+ * port had all three of the 1.3 values, and the executable this
+ * whole project is measured against is **1.0**.
+ *
+ * Read straight out of `PRINCE.EXE` and `UNCRKD.EXE`, which both
+ * hold the two tables back to back at 0x1CCFA and 0x1CD27:
+ *
+ *     index  0..23   14 1e 23 66 32 37 30 30 4b 50 0a 12
+ *                    0c 0b 69 6e 73 78 7d 82 91 96 9b a0
+ *     index 24..29   01 01 01 01 01 13
+ *     index 30..39   written over by eight bytes of a far-pointer
+ *                    table, `1e 00 b2 01 09 00 b0 00`, two bytes
+ *                    shorter than the ten they replace -- the same
+ *                    thing the release does to the `_` glyph of the
+ *                    font, and the reason everything after it reads
+ *                    two bytes early
+ *     index 40..57   01 01 01 01 87 8c 0f 10 19 16 01 00
+ *                    01 01 01 01 01 00
+ *
+ * So the release has **0x0A at 10 and 0x19 at 48**, and the port has
+ * them. The ten entries the release writes over are SDLPoP's --
+ * all 0x01 but `sound_39_low_weight`, which is **0**, and the
+ * capture agrees with that from the other side: the original goes
+ * silent for the feather's whole eighteen and a half seconds.
+ *
+ * What the three change, in the game: with 10 at 0x0A the sword
+ * clash is worth more than either hurt sound, so a hit that lands
+ * on the same tick as a parry is refused -- which is the behaviour
+ * SDLPoP's fix exists to undo. With 48 at 0x19 against 49's 0x16
+ * and 49 uninterruptible, the sound of someone being spiked never
+ * cuts the spikes off.
  */
 const PRIORITY: readonly number[] = [
   0x14, 0x1e, 0x23, 0x66, 0x32, 0x37, 0x30, 0x30, 0x4b, 0x50,
-  0x0d, 0x12, 0x0c, 0x0b, 0x69, 0x6e, 0x73, 0x78, 0x7d, 0x82,
+  0x0a, 0x12, 0x0c, 0x0b, 0x69, 0x6e, 0x73, 0x78, 0x7d, 0x82,
   0x91, 0x96, 0x9b, 0xa0, 0x01, 0x01, 0x01, 0x01, 0x01, 0x13,
   0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00,
-  0x01, 0x01, 0x01, 0x01, 0x87, 0x8c, 0x0f, 0x10, 0x15, 0x16,
+  0x01, 0x01, 0x01, 0x01, 0x87, 0x8c, 0x0f, 0x10, 0x19, 0x16,
   0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00,
 ];
 const INTERRUPTIBLE: readonly number[] = [
@@ -115,7 +149,7 @@ const INTERRUPTIBLE: readonly number[] = [
   1, 1, 1, 1, 0, 0, 1, 1, 0, 1,
   1, 1, 1, 1, 0, 0, 0, 0, 0, 1,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 1, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0,
 ];
 /** An index the tables do not reach is as unimportant as a footstep. */

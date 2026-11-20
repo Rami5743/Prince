@@ -46,7 +46,7 @@
     measured   32260 of 33047   98%   (unmoved, run for run)
     scenes      2442 of  2601   94%   (unmoved)
     sounds       491 of   494         (unmoved)
-    npm test     797 -> 820
+    npm test     797 -> 822
 
 A round spent entirely in the vein the last one opened: divergences
 **no score can see**, found by reading `sdlpop/src` beside
@@ -285,7 +285,56 @@ walked rooms 1 to 24 of every level and so found four more
 bytes in rooms the game never alters and nothing can reach. The walk
 is `1 .. used_rooms` now, and the reachability is pinned beside it.
 
-### 8. Two paths the page had never been compared on, and both are exact
+### 8. The port carried three of SDLPoP's 1.3 sound priorities
+
+`play_sound` keeps the most important sound of a tick in
+`next_sound`, and `play_next_sound` starts it only if the channel is
+free or if
+
+    sound_interruptible[current] != 0 &&
+    sound_prio_table[next_sound] <= sound_prio_table[current]
+
+-- so the two tables decide what the player hears whenever two
+things happen at once. SDLPoP defines `FIX_SOUND_PRIORITIES` by
+default and runs `fix_sound_priorities()` before anything else,
+whose own comment is **"Change values to match those in PoP 1.3"**:
+`sound_48_spiked` 0x19 -> 0x15, `sound_10_sword_vs_sword` 0x0A ->
+0x0D, and `sound_49_spikes` marked interruptible. The port had all
+three of the 1.3 values, and **the executable this project is
+measured against is 1.0**.
+
+Read straight out of `PRINCE.EXE` and `UNCRKD.EXE`, which both hold
+the two tables back to back at 0x1CCFA and 0x1CD27:
+
+    index  0..23   14 1e 23 66 32 37 30 30 4b 50 0a 12
+                   0c 0b 69 6e 73 78 7d 82 91 96 9b a0
+    index 24..29   01 01 01 01 01 13
+    index 30..39   written over by eight bytes of a far-pointer
+                   table, `1e 00 b2 01 09 00 b0 00`, two bytes
+                   shorter than the ten they replace -- the same
+                   thing the release does to the `_` glyph of the
+                   font, and the reason everything after it reads
+                   two bytes early
+    index 40..57   01 01 01 01 87 8c 0f 10 19 16 01 00
+                   01 01 01 01 01 00
+
+So the release has **0x0A at 10 and 0x19 at 48**, and the port has
+them now. What they change in play: with 10 at 0x0A the sword clash
+is worth more than either hurt sound, so a hit that lands on the
+same tick as a parry is refused -- which is the behaviour SDLPoP's
+fix exists to undo; with 48 at 0x19 against 49's 0x16 and 49
+uninterruptible, the sound of someone being spiked never cuts the
+spikes off.
+
+**Nothing in the suite could have caught it**: none of the six sound
+probes fights with a sword or steps on a spike, and no picture
+digest can hear. Measured either way: pictures 32260 of 33047 run
+for run, sounds 491 of 494. `tests/render/sound-priority.test.ts`
+reads both tables out of both executables and checks the port
+against every byte the release has not written over -- and names
+the ten it has.
+
+### 9. Two paths the page had never been compared on, and both are exact
 
 `tools/dev/page-port.ts` covered fourteen levels, nine scenes, the
 eleven cheats and all thirteen transitions. It now also covers the
