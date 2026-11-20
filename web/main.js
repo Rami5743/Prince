@@ -3518,7 +3518,17 @@ var Globals = class {
   wipe_heights = new Uint8Array(30);
   tile_object_redraw = new Uint8Array(30);
   redraw_height = 0;
-  need_full_redraw = 0;
+  /**
+   * `need_redraw_because_flipped`, which `draw_game_frame` reads.
+   *
+   * `toggle_upside` and `play_kid_frame`'s un-flip set it, and the
+   * middle branch of `draw_game_frame` turns it into a
+   * `redraw_screen(0)`. Without it the tick the screen turns over
+   * takes the cheap path -- `draw_moving(); draw_tables()` onto a
+   * buffer composed the other way up -- and only the moving parts
+   * are right.
+   */
+  need_redraw_because_flipped = 0;
   // -------------------------------------------------------- tiles that move
   trobs = [];
   trobs_count = 0;
@@ -3621,9 +3631,8 @@ var g = new Globals();
 function resetGlobals() {
   const fresh = new Globals();
   const live = g;
-  const keep = { upside_down: g.upside_down, is_blind_mode: g.is_blind_mode };
+  const keep = { is_blind_mode: g.is_blind_mode };
   for (const key of Object.keys(fresh)) live[key] = fresh[key];
-  g.upside_down = keep.upside_down;
   g.is_blind_mode = keep.is_blind_mode;
 }
 function roomLinksOf(room) {
@@ -4321,6 +4330,10 @@ var l2 = {
   inc_curr_row: slot("inc_curr_row"),
   /** `add_life`, which lives in seg000 and the potions in seg006 want. */
   add_life: slot("add_life"),
+  /** `feather_fall`, the same: seg000's, and the green potion's. */
+  feather_fall: slot("feather_fall"),
+  /** `toggle_upside`, seg000's, and the inversion potion's. */
+  toggle_upside: slot("toggle_upside"),
   /** `do_auto_moves(custom->demo_moves)`, which `do_demo` calls. */
   do_demo_moves: slot("do_demo_moves")
 };
@@ -5211,14 +5224,10 @@ function proc_get_object() {
         l2.add_life.fn();
         break;
       case 3:
-        g.is_feather_fall = 1;
-        g.flash_color = 2;
-        g.flash_time = 3;
-        out.stop_sounds();
-        out.play_sound(soundids.sound_39_low_weight);
+        l2.feather_fall.fn();
         break;
       case 4:
-        g.upside_down = ~g.upside_down;
+        l2.toggle_upside.fn();
         break;
       case 6:
         get_tile(8, 0, 0);
@@ -10041,7 +10050,7 @@ function play_kid_frame() {
   play_kid();
   if (g.upside_down && g.Char.alive >= 0) {
     g.upside_down = 0;
-    g.need_full_redraw = 1;
+    g.need_redraw_because_flipped = 1;
   }
   if (g.is_restart_level) return 1;
   if (g.Char.room !== 0) {
@@ -10091,6 +10100,17 @@ function play_guard_frame() {
     }
     saveshad();
   }
+}
+function toggle_upside() {
+  g.upside_down = ~g.upside_down;
+  g.need_redraw_because_flipped = 1;
+}
+function feather_fall() {
+  g.is_feather_fall = 1;
+  g.flash_color = 2;
+  g.flash_time = 3;
+  out.stop_sounds();
+  out.play_sound(soundids.sound_39_low_weight);
 }
 function gen_palace_wall_colors() {
   const old_randseed = g.random_seed;
@@ -10227,6 +10247,8 @@ function link() {
   hp.draw_guard_hp = draw_guard_hp;
   hp.add_life = add_life;
   l2.add_life.fn = add_life;
+  l2.feather_fall.fn = feather_fall;
+  l2.toggle_upside.fn = toggle_upside;
   l2.do_demo_moves.fn = () => do_auto_moves(demo2.moves);
   hud.draw_kid_hp.fn = draw_kid_hp;
   hud.draw_guard_hp.fn = draw_guard_hp;
@@ -10247,6 +10269,7 @@ var CHTAB_NAME = [
   null
 ];
 var DEATH_MUSIC_TICKS = 36;
+var FEATHER_SOUND_TICKS = 223;
 var TEXT_RECT = { top: 193, left: 70, bottom: 202, right: 250 };
 var TEXT_WHITE = 15;
 var PopGame = class _PopGame {
@@ -10310,6 +10333,13 @@ var PopGame = class _PopGame {
    * 756b259c 47, 9b60bf3a 49, 13ab6867 52.
    */
   deathMusic = 0;
+  /**
+   * The ticks `sound_39_low_weight` has left, for `check_sound_playing`.
+   *
+   * See `FEATHER_SOUND_TICKS`. It is the feather's own clock: the C
+   * has no other.
+   */
+  featherSound = 0;
   clipRect = null;
   /**
    * Renders that do not count against the words under the room.
@@ -10438,9 +10468,11 @@ var PopGame = class _PopGame {
       }
     };
     out.stop_sounds = () => {
+      this.deathMusic = 0;
+      this.featherSound = 0;
       this.effects?.stopSounds?.();
     };
-    out.check_sound_playing = () => this.deathMusic > 0 || this.effects?.soundPlaying?.() ? 1 : 0;
+    out.check_sound_playing = () => this.deathMusic > 0 || this.featherSound > 0 || this.effects?.soundPlaying?.() ? 1 : 0;
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
       blit: (chtab, id, x, y, blit) => this.blit(chtab, id, x, y, blit),
@@ -10651,12 +10683,13 @@ var PopGame = class _PopGame {
     }
     g.guardhp_delta = 0;
     g.hitp_delta = 0;
+    if (this.deathMusic > 0) --this.deathMusic;
+    if (this.featherSound > 0) --this.featherSound;
+    timers();
     if (this.pendingCheats.length) {
       for (const key of this.pendingCheats) this.applyCheat(key);
       this.pendingCheats.length = 0;
     }
-    if (this.deathMusic > 0) --this.deathMusic;
-    timers();
     play_frame();
     if (g.is_restart_level) {
       g.is_restart_level = 0;
@@ -10721,6 +10754,9 @@ var PopGame = class _PopGame {
       g.drawn_room = g.next_room;
       if (levelType2.of(g.current_level)) gen_palace_wall_colors();
       this.redrawScreen(true);
+    } else if (g.need_redraw_because_flipped) {
+      g.need_redraw_because_flipped = 0;
+      this.redrawScreen(false);
     } else {
       reset_tables();
       draw_moving();
@@ -10948,6 +10984,9 @@ var PopGame = class _PopGame {
   playNextSound() {
     if (this.nextSound >= 0) {
       g.current_sound = this.nextSound;
+      if (this.nextSound === soundids.sound_39_low_weight) {
+        this.featherSound = FEATHER_SOUND_TICKS;
+      }
       this.effects?.sound?.(this.nextSound);
     }
     this.nextSound = -1;
@@ -11239,13 +11278,9 @@ var PopGame = class _PopGame {
     g.flash_time = 4;
     add_life();
   }
-  /** Shift+W: the feather, with the green flash and the low note. */
+  /** Shift+W: `feather_fall()`, the same call the green potion makes. */
   featherFall() {
-    g.is_feather_fall = 1;
-    g.flash_color = 2;
-    g.flash_time = 3;
-    out.stop_sounds();
-    out.play_sound(39);
+    feather_fall();
   }
   /** Shift+B: the room goes dark and the Prince plays on without it. */
   toggleBlind() {
@@ -11254,7 +11289,7 @@ var PopGame = class _PopGame {
   }
   /** Shift+I: the screen turns over. The shell does the turning. */
   toggleUpsideDown() {
-    g.upside_down = g.upside_down ? 0 : -1;
+    toggle_upside();
   }
   get upsideDown() {
     return g.upside_down !== 0;

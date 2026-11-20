@@ -183,7 +183,7 @@ export function play_kid_frame(): number {
    */
   if (g.upside_down && g.Char.alive >= 0) {
     g.upside_down = 0;
-    g.need_full_redraw = 1;
+    g.need_redraw_because_flipped = 1;
   }
   if (g.is_restart_level) return 1;
   if (g.Char.room !== 0) {
@@ -278,6 +278,62 @@ export function play_guard_frame(): void {
  * room, so the wall is the same every time the room is drawn and
  * different from room to room.
  */
+/**
+ * `toggle_upside`, the whole of the inversion potion.
+ *
+ *     upside_down = ~upside_down;
+ *     need_redraw_because_flipped = 1;
+ *
+ * `proc_get_object` case 4 is `toggle_upside();` and nothing else --
+ * no sound, no flash, no `stop_sounds` -- and `process_key`'s
+ * Shift+I is the same call.
+ *
+ * **The second line is the one that was missing.** `draw_game_frame`
+ * reads the flag in the middle of its three-way branch and turns it
+ * into a `redraw_screen(0)`, so the tick the screen turns over is
+ * composed whole. Without it the port took the cheap path --
+ * `draw_moving()` and `draw_tables()` onto a buffer that was put
+ * together the other way up -- and drew a picture the original never
+ * shows: the room one way up and whatever moved the other. Nothing
+ * saw it because `invert2`, the one capture of the inversion, uses
+ * the cheat and then draws a room *whole*, which goes down the
+ * full-redraw branch anyway.
+ */
+// seg000:15E9
+export function toggle_upside(): void {
+  g.upside_down = ~g.upside_down;
+  g.need_redraw_because_flipped = 1;
+}
+
+/**
+ * `feather_fall`, the green potion's whole effect.
+ *
+ *     is_feather_fall = 1;
+ *     flash_color = 2; // green
+ *     flash_time = 3;
+ *     stop_sounds();
+ *     play_sound(sound_39_low_weight);
+ *
+ * Vanilla's `is_feather_fall` is a **flag, not a countdown**:
+ * `timers` counts it up and clears it the moment
+ * `check_sound_playing()` goes quiet or it passes 225, so the potion
+ * lasts exactly as long as sound 39 is in the channel -- 18.612
+ * seconds of `IBM_SND1.DAT`, 223 ticks, a couple short of the cap.
+ * SDLPoP's `fix_quicksave_during_feather` turns it into a timer of
+ * its own and that is its fix, not the game.
+ *
+ * `proc_get_object` case 3 and `process_key`'s Shift+W both call
+ * this, which is why it is one function and not two copies.
+ */
+// seg000:15F8
+export function feather_fall(): void {
+  g.is_feather_fall = 1;
+  g.flash_color = 2; // green
+  g.flash_time = 3;
+  out.stop_sounds();
+  out.play_sound(soundids.sound_39_low_weight);
+}
+
 // seg000:1587
 export function gen_palace_wall_colors(): void {
   const old_randseed = g.random_seed;

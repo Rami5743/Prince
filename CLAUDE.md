@@ -41,6 +41,154 @@
 ## ============================================================
 
 
+## THE TWO POTIONS NOTHING HAD EVER DRUNK
+
+    measured   31082 of 32056   97%   (unmoved, to the tick)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       417 of   419         (unmoved)
+    npm test     769 of   769         (was 760)
+
+    page-port.ts --cheats   14 levels, 400 ticks, every picture, every sound
+
+`potion8` drinks level 8's, which is the one that **hurts**, and it
+is the only potion in the suite. The green one and the upside-down
+one were written out of the C with unit tests only, and both had a
+line missing.
+
+**Where they are**, measured off `LEVELS.DAT` -- `tiles_10_potion`
+with `curr_room_modif >> 3` for the kind, every tile of every room
+of all fourteen levels:
+
+    feather     level 7  room  1 row 2 col 8  modifier 27   the ONLY one
+    inversion   level 9  room  7 row 1 col 7  modifier 32
+                level 9  room 10 row 0 col 4  modifier 32   the ONLY two
+
+Level 9's two are the **inversion** potions; the game's one feather
+is level 7's, in room 1 -- the shaft the Prince falls into when the
+level opens. `tests/pop/potions.test.ts` pins both lists.
+
+### 1. The feather lasted one tick, because the port cannot hear
+
+Vanilla's `is_feather_fall` is a flag, not a countdown. `timers`
+(`seg003:0735`) is
+
+    if (is_feather_fall) is_feather_fall++;
+    if (is_feather_fall && (!check_sound_playing() ||
+                            is_feather_fall > 225)) is_feather_fall = 0;
+
+-- so the potion lasts **exactly as long as sound 39 is in the
+channel**, capped at 225 ticks. The port has that line for line, and
+headless `check_sound_playing()` is deaf, so the flag was cleared on
+the tick after the potion was drunk. The potion did nothing at all.
+Measured on level 7: hold Shift, grab the ledge of room 1, take
+`shift+w`, let go --
+
+    before   fall_y 3, 6, 9, ... dead on the floor of room 3, 0 hit points
+    after    fall_y 1, 2, 3, 4 and no more; lands in room 3 with all three
+
+`FEATHER_SOUND_TICKS` is **223**, the game's own tune measured out of
+`IBM_SND1.DAT`: 18.612 seconds at twelve ticks a second, against
+18.000 and 216 for `MIDISND1.DAT`'s arrangement. The capture plays
+the speaker tunes -- that is how `show_title`'s first wait was
+settled at 24.77 seconds -- and `DEATH_MUSIC_TICKS` 36 is sound 24's
+speaker length (2.967s) by the same reckoning. So the feather runs
+out on its sound, two ticks short of the C's cap.
+
+**The rest of the port stays deaf and that is measured, not
+assumed**: telling the game what is in the one channel took `gate1`'s
+sound score from 90 of 96 to 26. The death music and the feather are
+the two exceptions because the game reads their length back as a
+timer; nothing else does.
+
+### 2. A cheat was drained before `timers()`, one call too early
+
+`play_level_2` is `guardhp_delta = 0; hitp_delta = 0; timers();
+play_frame();` and `process_key` is four calls **inside**
+`play_frame`, in `do_paused`. The port drained its queued cheats
+before `timers()`, so a cheat that starts a timer had that timer
+counted down in the tick it was asked for: `r` lost one of
+`resurrect_time`'s twenty, and `shift+w` lost the feather
+altogether -- `timers` ran `is_feather_fall++` and then cleared it,
+because `play_next_sound` had not yet put sound 39 in the channel
+for `check_sound_playing` to find. **Moved after `timers()`: every
+run of the suite identical, 31082 of 32056 either way.**
+
+`feather_fall` and `toggle_upside` are one function each now
+(`seg000:15F8` and `seg000:15E9`), called by both `proc_get_object`
+and the cheat, where the port had two copies of each body.
+
+### 3. `need_redraw_because_flipped` was a line that was not there
+
+`toggle_upside` is two lines and the port had one:
+
+    upside_down = ~upside_down;
+    need_redraw_because_flipped = 1;
+
+and `draw_game_frame` (`seg000:920`) is a **three-way** branch where
+the port had two:
+
+    if (different_room) { ... redraw_screen(1); }
+    else if (need_redraw_because_flipped) { need_redraw_because_flipped = 0;
+                                            redraw_screen(0); }
+    else { draw_moving(); draw_tables(); ... }
+
+`play_kid_frame` (`seg000:1197`) sets the same flag when the Prince
+dies while the screen is over, and the port wrote
+`g.need_full_redraw = 1` there -- **a global nothing in `src/` ever
+read**. Both are right now and `need_full_redraw` is gone from `g`,
+so nothing can write to it again.
+
+**And it changes no picture in this port, which is worth writing
+down.** The C updates the *screen* by rectangles --
+`copy_screen_rect` inside two `flip_screen` calls -- so a tick that
+turns the screen over leaves everything outside those rectangles
+the old way up. The port composes the whole offscreen and flips it
+on the way out, so it never had that picture to draw. Measured
+directly: levels 1 and 9, forty ticks apiece with `shift+i` on tick
+20, the full-redraw branch against the cheap one -- **no tick
+differs, not one pixel**. The branch goes in because it is the C and
+because the flag was a write-only global; it is not what the player
+saw.
+
+Also measured, and the comment in `resetGlobals` was wrong:
+`set_start_pos` (`seg003:028A`) is `upside_down =
+custom->start_upside_down`, which is nought, and `play_level` runs
+`do_startpos` -> `set_start_pos` at the top of **every** level and
+every restart. **The original never carries the inversion past a
+level door.** Keeping `upside_down` across `resetGlobals` changed
+nothing either way, because `startLevel` cleared it a moment later;
+only `is_blind_mode` is kept now.
+
+### 4. What case 4 does and does not do
+
+`proc_get_object` case 4 is `toggle_upside();` and nothing else: no
+`stop_sounds`, no `play_sound`, no flash. It is the only potion of
+the six that makes no noise, and the port now has exactly that,
+pinned. SDLPoP's `enable_super_high_jump`,
+`fix_feather_fall_affects_guards`, `fix_quicksave_during_feather`
+and `fix_feather_interrupted_by_leveldoor` are its own fixes and
+stay out: vanilla's `fall_accel` slows **guards** too, and
+`animate_leveldoor`'s `stop_sounds()` when the door finishes rising
+really does cut a feather short.
+
+### 5. No probe can drink either of them, and the line that blocks it
+
+No cheat drinks a potion -- `do_pickup` is reached only from
+`proc_get_object`, which `play_kid_frame` calls on a tile the Prince
+is standing on. Level 7's feather is in room 1 at row 2 column 8,
+and the Prince's falling entry grabs the ledge at **row 1 column 1**:
+row 2 of that room reads wall, empty, empty, empty, empty, empty,
+pillar, torch, **potion**, pillar, so the five tiles between him and
+it are the shaft. He has to come back from room 2. Level 9's two are
+rooms 7 and 10, neither of them the start room (11).
+
+So the probe that would settle them is real play past a guard, and
+`shift+w` is the next best thing: `process_key`'s Shift+W is
+`feather_fall()`, the same call case 3 makes, so a capture of it
+would measure everything but the tile. The inversion already has
+one -- `invert2`, 260 of 260 -- and it is the cheat, which draws a
+room whole and so never took the branch above.
+
 ## A GAMEPLAY FLASH IS A BLINK TRAIN, AND ESCAPE IS A FRAME ADVANCE
 
     measured   31082 of 32056   97%   (was 31080 of 32056)

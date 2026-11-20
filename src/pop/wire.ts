@@ -22,7 +22,9 @@ import {
   do_auto_moves, demo as demoMoves,
 } from './seg002.ts';
 import { dist as seg003dist, rooms as seg003rooms } from './seg003.ts';
-import { draw_hp, draw_kid_hp, draw_guard_hp, add_life } from './seg000.ts';
+import {
+  draw_hp, draw_kid_hp, draw_guard_hp, add_life, feather_fall, toggle_upside,
+} from './seg000.ts';
 import { l2, l5, l6, l7, l8, hud } from './link.ts';
 
 let linked = false;
@@ -64,6 +66,8 @@ export function link(): void {
   guardHp.draw_guard_hp = draw_guard_hp;
   guardHp.add_life = add_life;
   l2.add_life.fn = add_life;
+  l2.feather_fall.fn = feather_fall;
+  l2.toggle_upside.fn = toggle_upside;
   // `do_auto_moves(custom->demo_moves)`: `do_demo` is in seg006 and
   // both halves of this are in seg002.
   l2.do_demo_moves.fn = () => do_auto_moves(demoMoves.moves);

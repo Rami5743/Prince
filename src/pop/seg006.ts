@@ -1158,18 +1158,10 @@ export function proc_get_object(): void {
         l2.add_life.fn();
         break;
       case 3: // feather
-        // `feather_fall`, in its vanilla form: SDLPoP's timer is one
-        // of its own fixes.
-        g.is_feather_fall = 1;
-        g.flash_color = 2; // green
-        g.flash_time = 3;
-        out.stop_sounds();
-        out.play_sound(soundids.sound_39_low_weight);
+        l2.feather_fall.fn();
         break;
       case 4: // invert
-        // `toggle_upside`. The shell turns the picture over when it
-        // presents it, so there is nothing else to do.
-        g.upside_down = ~g.upside_down;
+        l2.toggle_upside.fn();
         break;
       case 6: // open
         // The potion that throws every gate of the level open.

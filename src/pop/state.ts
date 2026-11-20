@@ -266,7 +266,17 @@ class Globals {
   wipe_heights = new Uint8Array(30);
   tile_object_redraw = new Uint8Array(30);
   redraw_height = 0;
-  need_full_redraw = 0;
+  /**
+   * `need_redraw_because_flipped`, which `draw_game_frame` reads.
+   *
+   * `toggle_upside` and `play_kid_frame`'s un-flip set it, and the
+   * middle branch of `draw_game_frame` turns it into a
+   * `redraw_screen(0)`. Without it the tick the screen turns over
+   * takes the cheap path -- `draw_moving(); draw_tables()` onto a
+   * buffer composed the other way up -- and only the moving parts
+   * are right.
+   */
+  need_redraw_because_flipped = 0;
 
   // -------------------------------------------------------- tiles that move
   trobs: TrobType[] = [];
@@ -396,14 +406,21 @@ export const g = new Globals();
 export function resetGlobals(): void {
   const fresh = new Globals() as unknown as Record<string, unknown>;
   const live = g as unknown as Record<string, unknown>;
-  // Two of them belong to the run of the program and not to the game:
-  // the cheats the player turned on. `upside_down` and `is_blind_mode`
-  // are set from the keyboard in the C and nothing in `start_level`
-  // puts them back, so turning the screen over and then walking
-  // through the level door has to leave it over.
-  const keep = { upside_down: g.upside_down, is_blind_mode: g.is_blind_mode };
+  // `is_blind_mode` belongs to the run of the program and not to the
+  // game: Shift+B is a cheat the player turned on, and nothing in
+  // `start_level` puts it back, so walking through the level door
+  // has to leave the room dark.
+  //
+  // **`upside_down` is not one of them**, and the comment here used
+  // to say it was. `set_start_pos` (`seg003:028A`) is
+  // `upside_down = custom->start_upside_down`, which is nought, and
+  // `play_level` runs `do_startpos` -> `set_start_pos` at the top of
+  // **every** level and every restart. So the original never carries
+  // the inversion potion past a level door, and keeping it here
+  // changed nothing either way, because `startLevel` clears it a
+  // moment later.
+  const keep = { is_blind_mode: g.is_blind_mode };
   for (const key of Object.keys(fresh)) live[key] = fresh[key];
-  g.upside_down = keep.upside_down;
   g.is_blind_mode = keep.is_blind_mode;
 }
 

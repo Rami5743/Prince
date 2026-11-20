@@ -22,7 +22,7 @@ import { flipHorizontally } from '../render/room.ts';
 import { readFont, drawTextCentred, type Font } from '../render/font.ts';
 
 import { g, newChar, resetGlobals, type RectType } from './state.ts';
-import { chtabs, blitters, directions } from './types.ts';
+import { chtabs, blitters, directions, soundids } from './types.ts';
 import { setFrameTables, loadkid, savekid, loadshad, saveshad } from './seg006.ts';
 import {
   setPainter, levelType as drawLevelType, mirror as drawMirror,
@@ -52,6 +52,7 @@ import {
 import {
   play_frame, check_the_end, screen, redraw_screen, anim_tile_modif, draw_hp,
   draw_kid_hp, draw_guard_hp, add_life, gen_palace_wall_colors, check_fall_flo,
+  feather_fall, toggle_upside,
 } from './seg000.ts';
 import { add_objtable, mark_obj_tile_redraw, resetSeg008 } from './seg008.ts';
 import { l2, l5, l6, l7, l8, out, hud } from './link.ts';
@@ -165,6 +166,42 @@ const CHTAB_NAME = [
 const DEATH_MUSIC_TICKS = 36;
 
 /**
+ * How long `sound_39_low_weight` sounds, in ticks.
+ *
+ * The feather is the one effect in the game whose **length is a
+ * sound's length**. `timers` (`seg003:0735`) is
+ *
+ *     if (is_feather_fall) is_feather_fall++;
+ *     if (is_feather_fall && (!check_sound_playing() ||
+ *                             is_feather_fall > 225)) is_feather_fall = 0;
+ *
+ * -- so the potion lasts exactly as long as sound 39 is in the
+ * channel, capped at 225 ticks. A headless port that hears nothing
+ * clears the flag on the **tick after** the potion is drunk, which
+ * is the feather doing nothing at all: measured on level 7, the
+ * Prince takes `shift+w` while hanging in room 1, lets go, gathers
+ * 3, 6, 9, ... to the fall and is dead on the floor of room 3 with
+ * nought hit points, where a feather gathers one a tick, stops at
+ * four and lands him alive.
+ *
+ * 223 is the game's own tune, measured out of `IBM_SND1.DAT`:
+ * **18.612 seconds**, which is 223 ticks at twelve a second, against
+ * 18.000 and 216 for `MIDISND1.DAT`'s arrangement of it. The
+ * capture plays the speaker tunes -- that is how `show_title`'s
+ * first wait was settled at 24.77 seconds -- and `DEATH_MUSIC_TICKS`
+ * 36 is sound 24's speaker length by the same reckoning (2.967s).
+ * So the feather runs out on its sound, a couple of ticks before
+ * the 225 the C would cut it off at.
+ *
+ * **The rest of the port stays deaf**, and that is measured, not
+ * assumed: telling the game what is in the one channel took
+ * `gate1`'s sound score from 90 of 96 to 26. These two sounds are
+ * the exception because the game reads their length back as a
+ * timer; nothing else does.
+ */
+const FEATHER_SOUND_TICKS = 223;
+
+/**
  * The strip of words under the room.
  *
  * `rect_bottom_text` is {193, 70, 202, 250} and `show_text` centres in
@@ -235,6 +272,13 @@ export class PopGame {
    * 756b259c 47, 9b60bf3a 49, 13ab6867 52.
    */
   private deathMusic = 0;
+  /**
+   * The ticks `sound_39_low_weight` has left, for `check_sound_playing`.
+   *
+   * See `FEATHER_SOUND_TICKS`. It is the feather's own clock: the C
+   * has no other.
+   */
+  private featherSound = 0;
   private clipRect: RectType | null = null;
   /**
    * Renders that do not count against the words under the room.
@@ -435,7 +479,15 @@ export class PopGame {
         this.nextSound = which;
       }
     };
-    outSlots.stop_sounds = () => { this.effects?.stopSounds?.(); };
+    outSlots.stop_sounds = () => {
+      // `stop_sounds` empties the channel, so the two sounds the
+      // headless side keeps a clock for stop with it. The level door
+      // finishing its rise is `stop_sounds()` in `animate_leveldoor`
+      // and in vanilla that really does cut the feather short.
+      this.deathMusic = 0;
+      this.featherSound = 0;
+      this.effects?.stopSounds?.();
+    };
     /**
      * `check_sound_playing`.
      *
@@ -448,7 +500,8 @@ export class PopGame {
      * shell, and so no sound, nothing changes.
      */
     outSlots.check_sound_playing = () => (
-      this.deathMusic > 0 || this.effects?.soundPlaying?.() ? 1 : 0
+      this.deathMusic > 0 || this.featherSound > 0
+        || this.effects?.soundPlaying?.() ? 1 : 0
     );
     setPainter({
       image: (chtab, id) => this.imageOf(chtab, id),
@@ -770,13 +823,26 @@ export class PopGame {
     }
     g.guardhp_delta = 0;
     g.hitp_delta = 0;
-    // `process_key` runs inside the tick, after these are cleared.
+    if (this.deathMusic > 0) --this.deathMusic;
+    if (this.featherSound > 0) --this.featherSound;
+    timers();
+    /**
+     * `process_key` runs inside the tick, after the deltas are
+     * cleared -- and **after `timers()`**.
+     *
+     * `play_level_2` is `guardhp_delta = 0; hitp_delta = 0; timers();
+     * play_frame();` and `process_key` is four calls inside
+     * `play_frame`, in `do_paused`. A cheat drained before `timers`
+     * has its own timer counted down in the tick it was asked for:
+     * `r` lost one of `resurrect_time`'s twenty, and `shift+w` lost
+     * the feather altogether -- `timers` ran `is_feather_fall++` and
+     * then cleared it, because `play_next_sound` had not yet put
+     * sound 39 in the channel for `check_sound_playing` to find.
+     */
     if (this.pendingCheats.length) {
       for (const key of this.pendingCheats) this.applyCheat(key);
       this.pendingCheats.length = 0;
     }
-    if (this.deathMusic > 0) --this.deathMusic;
-    timers();
     play_frame();
     if (g.is_restart_level) {
       g.is_restart_level = 0;
@@ -850,6 +916,31 @@ export class PopGame {
       g.drawn_room = g.next_room;
       if (drawLevelType.of(g.current_level)) gen_palace_wall_colors();
       this.redrawScreen(true);
+    } else if (g.need_redraw_because_flipped) {
+      /**
+       * The middle branch of `draw_game_frame`, which the port did
+       * not have.
+       *
+       *     if (need_redraw_because_flipped) {
+       *         need_redraw_because_flipped = 0;
+       *         redraw_screen(0);
+       *     }
+       *
+       * `toggle_upside` sets the flag -- the inversion potion and
+       * Shift+I -- and so does `play_kid_frame` when the Prince dies
+       * while the screen is over. Without it the tick the screen
+       * turns over took the cheap path below, which draws what moved
+       * onto a buffer composed the other way up: the room one way up
+       * and the Prince the other, a picture the original never
+       * shows.
+       *
+       * It is *below* `different_room` in the C and above the cheap
+       * path, and the two redraws are not the same call:
+       * `redraw_screen(1)` fills the room with black first and
+       * `redraw_screen(0)` does not.
+       */
+      g.need_redraw_because_flipped = 0;
+      this.redrawScreen(false);
     } else {
       reset_tables();
       draw_moving();
@@ -1085,6 +1176,12 @@ export class PopGame {
   private playNextSound(): void {
     if (this.nextSound >= 0) {
       g.current_sound = this.nextSound;
+      // The feather's own clock: `timers` reads the length of this
+      // sound back as the length of the potion. See
+      // `FEATHER_SOUND_TICKS`.
+      if (this.nextSound === soundids.sound_39_low_weight) {
+        this.featherSound = FEATHER_SOUND_TICKS;
+      }
       this.effects?.sound?.(this.nextSound);
     }
     this.nextSound = -1;
@@ -1371,14 +1468,8 @@ export class PopGame {
     add_life();
   }
 
-  /** Shift+W: the feather, with the green flash and the low note. */
-  featherFall(): void {
-    g.is_feather_fall = 1;
-    g.flash_color = 2;
-    g.flash_time = 3;
-    out.stop_sounds();
-    out.play_sound(39); // sound_39_low_weight
-  }
+  /** Shift+W: `feather_fall()`, the same call the green potion makes. */
+  featherFall(): void { feather_fall(); }
 
   /** Shift+B: the room goes dark and the Prince plays on without it. */
   toggleBlind(): void {
@@ -1387,7 +1478,7 @@ export class PopGame {
   }
 
   /** Shift+I: the screen turns over. The shell does the turning. */
-  toggleUpsideDown(): void { g.upside_down = g.upside_down ? 0 : -1; }
+  toggleUpsideDown(): void { toggle_upside(); }
   get upsideDown() { return g.upside_down !== 0; }
 
   /**

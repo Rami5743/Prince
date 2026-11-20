@@ -70,6 +70,10 @@ export const l2 = {
   inc_curr_row: slot<() => void>('inc_curr_row'),
   /** `add_life`, which lives in seg000 and the potions in seg006 want. */
   add_life: slot<() => void>('add_life'),
+  /** `feather_fall`, the same: seg000's, and the green potion's. */
+  feather_fall: slot<() => void>('feather_fall'),
+  /** `toggle_upside`, seg000's, and the inversion potion's. */
+  toggle_upside: slot<() => void>('toggle_upside'),
   /** `do_auto_moves(custom->demo_moves)`, which `do_demo` calls. */
   do_demo_moves: slot<() => void>('do_demo_moves'),
 };
