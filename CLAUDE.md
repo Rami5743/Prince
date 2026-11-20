@@ -249,10 +249,13 @@ Two things about writing it, both of which cost a run:
 
 ### 8. What is left
 
-* **The status line under the canvas** (`press any key to begin`,
-  `paused — press any key`) is still English in both languages. It is
-  page chrome rather than a word the game draws, and `web/strings.ts`
-  is where it belongs.
+* **The status line under the canvas** is in both languages now. It
+  was the one piece of chrome written from `web/main.ts` rather than
+  from `web/strings.ts`, and a Hebrew game with
+  `level 2, room 1 — looking around` under it reads as half done; the
+  words moved into `strings.ts` where the rest of the page's are, and
+  `web/main.ts` keeps the line as a thunk so that a language change
+  says it again.
 * **A story screen switched mid-`transition_ltr`** pops rather than
   wiping: the wipe is two video frames of picture copying and the
   overlay has no part in it.

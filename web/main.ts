@@ -34,6 +34,7 @@ import { GameText } from '../src/render/text.ts';
 import { readFont } from '../src/render/font.ts';
 import { SettingsStore } from './settings.ts';
 import { Chrome } from './chrome.ts';
+import { stringsFor } from './strings.ts';
 import {
   snapshot, restore, readSlot, writeSlot, type SaveGame,
 } from './savegame.ts';
@@ -71,6 +72,20 @@ async function boot(): Promise<void> {
    */
   const settings = new SettingsStore();
   display.setAspect(settings.get('aspect'));
+  /**
+   * The page's own words, kept here as well as in the chrome.
+   *
+   * The line under the game is the one piece of chrome that is
+   * written from this file: it says what the page is doing, and it is
+   * said again whenever the language moves, because most of the
+   * places that set it set it once and then leave it there.
+   */
+  let words = stringsFor(settings.get('language'));
+  let sayStatus: () => string = () => words.loading;
+  const setStatus = (line: () => string): void => {
+    sayStatus = line;
+    status.textContent = line();
+  };
   // A host that cannot serve the game's own file types can supply the files
   // another way; the page provides a fetcher and this uses it.
   const custom = (window as unknown as {
@@ -191,9 +206,7 @@ async function boot(): Promise<void> {
     sceneCount += 1;
     cutscene.begin(scene);
     display.present(cutscene.render(), cutscene.palette.toRgba());
-    status.textContent = scene.kind === 'title'
-      ? 'press any key to begin'
-      : 'press Escape to skip';
+    setStatus(() => (scene.kind === 'title' ? words.pressAnyKey : words.skipScene));
   }
 
   /**
@@ -291,8 +304,8 @@ async function boot(): Promise<void> {
   // `init_game(0)`: the attract-mode level the title falls into.
   views.push({ kind: 'level', level: 0 });
   const label = (v: View): string => (v.kind !== 'level'
-    ? `${v.kind} screen`
-    : v.level === 0 ? 'the demo' : `level ${v.level}`);
+    ? words.titleScreen
+    : v.level === 0 ? words.theDemo : words.levelN.replace('{n}', String(v.level)));
 
   let current = 0;
   let game: Game | null = null;
@@ -330,9 +343,7 @@ async function boot(): Promise<void> {
    * the Prince lets go the moment he grabs one -- so a player who does not
    * know about it cannot climb at all.
    */
-  const CONTROLS = 'arrow keys or the numeric keypad to move, up to jump; '
-    + 'hold shift to step carefully and to keep hold of a ledge, '
-    + 'then up again to climb it';
+  // `strings.ts` has them, in both languages.
 
   /**
    * Which directions a key stands for, against `read_keyb_control`.
@@ -399,9 +410,7 @@ async function boot(): Promise<void> {
       current = index;
       game = null;
       drawTitle(v.kind === 'title' ? title : opening);
-      status.textContent = v.kind === 'title'
-        ? 'press any key to begin'
-        : 'the hour is up — press any key';
+      setStatus(() => (v.kind === 'title' ? words.pressAnyKey : words.hourUp));
       return;
     }
     /**
@@ -626,7 +635,7 @@ async function boot(): Promise<void> {
        * the bottom text down and spending the flash.
        */
       if (!pauseShown) { pauseShown = true; present(game); }
-      status.textContent = 'paused — press any key';
+      setStatus(() => words.pausedLine);
       return;
     }
     /**
@@ -700,15 +709,18 @@ async function boot(): Promise<void> {
     }
     present(game);
     const v = views[current];
-    status.textContent = game.isDemo
+    const g2 = game;
+    const room = watchRoom;
+    setStatus(() => (g2.isDemo
       // The demo plays itself and any key begins the real game, which
       // is what `control_kid`'s own `key_test_quit()` does.
-      ? 'the demo — press any key to play'
-      : game.awaitingButton
-        ? `${label(v)} — press any key to begin the level again`
-        : watchRoom === null
-          ? `${label(v)} — ${CONTROLS}`
-          : `${label(v)}, room ${watchRoom} — looking around; press a key to play`;
+      ? words.demoLine
+      : g2.awaitingButton
+        ? `${label(v)} — ${words.againLine}`
+        : room === null
+          ? `${label(v)} — ${words.controls}`
+          : `${label(v)}, ${words.roomN.replace('{n}', String(room))}`
+            + ` — ${words.lookingLine}`));
   }
 
 
@@ -1263,7 +1275,7 @@ async function boot(): Promise<void> {
     wakeSound();
     if (!sound || sound.awake) return;
     display.present(titleSurface, titlePalette.toRgba());
-    status.textContent = 'press any key to begin';
+    setStatus(() => words.pressAnyKey);
     (window as unknown as Record<string, unknown>).__princeWaitingForSound = true;
     await new Promise<void>((resolve) => {
       const go = (e: Event): void => {
@@ -1619,6 +1631,8 @@ async function boot(): Promise<void> {
     aspect: (value) => display.setAspect(value),
     language: (value) => {
       gameText.language = value;
+      words = stringsFor(value);
+      status.textContent = sayStatus();
       relabelTheGame();
     },
     quality: (value) => {

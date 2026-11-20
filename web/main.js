@@ -14616,6 +14616,18 @@ var EN = {
   loaded: "Game loaded",
   noSave: "Nothing saved there",
   deleteSlot: "Erase",
+  pressAnyKey: "press any key to begin",
+  skipScene: "press Escape to skip",
+  hourUp: "the hour is up \u2014 press any key",
+  pausedLine: "paused \u2014 press any key",
+  demoLine: "the demo \u2014 press any key to play",
+  againLine: "press any key to begin the level again",
+  lookingLine: "looking around; press a key to play",
+  controls: "arrow keys or the numeric keypad to move, up to jump; hold shift to step carefully and to keep hold of a ledge, then up again to climb it",
+  levelN: "level {n}",
+  theDemo: "the demo",
+  roomN: "room {n}",
+  titleScreen: "title screen",
   potionRoom: "the potion room",
   loading: "loading the game\u2019s data files\u2026",
   pressToBegin: "press any key to begin",
@@ -14673,6 +14685,18 @@ var HE = {
   loaded: "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05E0\u05D8\u05E2\u05DF",
   noSave: "\u05D0\u05D9\u05DF \u05E9\u05DD \u05E9\u05DE\u05D9\u05E8\u05D4",
   deleteSlot: "\u05DE\u05D7\u05D9\u05E7\u05D4",
+  pressAnyKey: "\u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC",
+  skipScene: "\u05D4\u05E7\u05D9\u05E9\u05D5 Esc \u05DB\u05D3\u05D9 \u05DC\u05D3\u05DC\u05D2",
+  hourUp: "\u05D4\u05E9\u05E2\u05D4 \u05EA\u05DE\u05D4 \u2014 \u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5",
+  pausedLine: "\u05DE\u05D5\u05E9\u05D4\u05D4 \u2014 \u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5",
+  demoLine: "\u05D4\u05D4\u05D3\u05D2\u05DE\u05D4 \u2014 \u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05E9\u05D7\u05E7",
+  againLine: "\u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC \u05D0\u05EA \u05D4\u05E9\u05DC\u05D1 \u05DE\u05D7\u05D3\u05E9",
+  lookingLine: "\u05DE\u05D1\u05D9\u05D8\u05D9\u05DD \u05E1\u05D1\u05D9\u05D1; \u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05D3\u05D9 \u05DC\u05D7\u05D6\u05D5\u05E8 \u05DC\u05E9\u05D7\u05E7",
+  controls: "\u05D7\u05D9\u05E6\u05D9\u05DD \u05D0\u05D5 \u05D4\u05DE\u05E7\u05DC\u05D3\u05EA \u05D4\u05E1\u05E4\u05E8\u05EA\u05D9\u05EA \u05DC\u05EA\u05E0\u05D5\u05E2\u05D4, \u05DC\u05DE\u05E2\u05DC\u05D4 \u05DC\u05E7\u05E4\u05D9\u05E6\u05D4; \u05D4\u05D7\u05D6\u05D9\u05E7\u05D5 Shift \u05DC\u05E6\u05E2\u05D9\u05D3\u05D4 \u05D6\u05D4\u05D9\u05E8\u05D4 \u05D5\u05DC\u05D0\u05D7\u05D9\u05D6\u05D4 \u05D1\u05E7\u05E6\u05D4, \u05D5\u05D0\u05D6 \u05E9\u05D5\u05D1 \u05DC\u05DE\u05E2\u05DC\u05D4 \u05DB\u05D3\u05D9 \u05DC\u05D8\u05E4\u05E1",
+  levelN: "\u05E9\u05DC\u05D1 {n}",
+  theDemo: "\u05D4\u05D4\u05D3\u05D2\u05DE\u05D4",
+  roomN: "\u05D7\u05D3\u05E8 {n}",
+  titleScreen: "\u05DE\u05E1\u05DA \u05D4\u05E4\u05EA\u05D9\u05D7\u05D4",
   potionRoom: "\u05D7\u05D3\u05E8 \u05D4\u05E9\u05D9\u05E7\u05D5\u05D9\u05D9\u05DD",
   loading: "\u05D8\u05D5\u05E2\u05DF \u05D0\u05EA \u05E7\u05D5\u05D1\u05E6\u05D9 \u05D4\u05DE\u05E9\u05D7\u05E7\u2026",
   pressToBegin: "\u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC",
@@ -15105,6 +15129,12 @@ async function boot() {
   const display = new Display(canvas);
   const settings = new SettingsStore();
   display.setAspect(settings.get("aspect"));
+  let words = stringsFor(settings.get("language"));
+  let sayStatus = () => words.loading;
+  const setStatus = (line) => {
+    sayStatus = line;
+    status.textContent = line();
+  };
   const custom = window.__princeFetcher;
   const fromDisc = custom ?? browserFetcher(DATA_URL);
   const fetchFile = POTION_PAGE ? async (name) => name === "LEVELS.DAT" ? levelsDatWithPotionLevel(await fromDisc(name)) : fromDisc(name) : fromDisc;
@@ -15162,7 +15192,7 @@ async function boot() {
     sceneCount += 1;
     cutscene.begin(scene);
     display.present(cutscene.render(), cutscene.palette.toRgba());
-    status.textContent = scene.kind === "title" ? "press any key to begin" : "press Escape to skip";
+    setStatus(() => scene.kind === "title" ? words.pressAnyKey : words.skipScene);
   }
   let sceneCount = 0;
   function sceneFrame(ms) {
@@ -15203,7 +15233,7 @@ async function boot() {
   let ticksPlayed = 0;
   for (let n = 1; n <= 14; n++) views.push({ kind: "level", level: n });
   views.push({ kind: "level", level: 0 });
-  const label = (v) => v.kind !== "level" ? `${v.kind} screen` : v.level === 0 ? "the demo" : `level ${v.level}`;
+  const label = (v) => v.kind !== "level" ? words.titleScreen : v.level === 0 ? words.theDemo : words.levelN.replace("{n}", String(v.level));
   let current = 0;
   let game = null;
   let watchRoom = null;
@@ -15217,7 +15247,6 @@ async function boot() {
       shift: down("shift")
     };
   };
-  const CONTROLS = "arrow keys or the numeric keypad to move, up to jump; hold shift to step carefully and to keep hold of a ledge, then up again to climb it";
   function directionsOf(e) {
     switch (e.code) {
       case "Numpad7":
@@ -15270,7 +15299,7 @@ async function boot() {
       current = index;
       game = null;
       drawTitle(v.kind === "title" ? title : opening);
-      status.textContent = v.kind === "title" ? "press any key to begin" : "the hour is up \u2014 press any key";
+      setStatus(() => v.kind === "title" ? words.pressAnyKey : words.hourUp);
       return;
     }
     effects.stopSounds();
@@ -15384,7 +15413,7 @@ async function boot() {
         pauseShown = true;
         present(game);
       }
-      status.textContent = "paused \u2014 press any key";
+      setStatus(() => words.pausedLine);
       return;
     }
     stepOnce = false;
@@ -15420,7 +15449,9 @@ async function boot() {
     }
     present(game);
     const v = views[current];
-    status.textContent = game.isDemo ? "the demo \u2014 press any key to play" : game.awaitingButton ? `${label(v)} \u2014 press any key to begin the level again` : watchRoom === null ? `${label(v)} \u2014 ${CONTROLS}` : `${label(v)}, room ${watchRoom} \u2014 looking around; press a key to play`;
+    const g2 = game;
+    const room = watchRoom;
+    setStatus(() => g2.isDemo ? words.demoLine : g2.awaitingButton ? `${label(v)} \u2014 ${words.againLine}` : room === null ? `${label(v)} \u2014 ${words.controls}` : `${label(v)}, ${words.roomN.replace("{n}", String(room))} \u2014 ${words.lookingLine}`);
   }
   const cheats = true;
   function keyName(e) {
@@ -15781,7 +15812,7 @@ async function boot() {
     wakeSound();
     if (!sound || sound.awake) return;
     display.present(titleSurface, titlePalette.toRgba());
-    status.textContent = "press any key to begin";
+    setStatus(() => words.pressAnyKey);
     window.__princeWaitingForSound = true;
     await new Promise((resolve) => {
       const go = (e) => {
@@ -15993,6 +16024,8 @@ async function boot() {
     aspect: (value) => display.setAspect(value),
     language: (value) => {
       gameText.language = value;
+      words = stringsFor(value);
+      status.textContent = sayStatus();
       relabelTheGame();
     },
     quality: (value) => {

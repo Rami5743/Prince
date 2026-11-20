@@ -45,6 +45,27 @@ export interface Strings {
   readonly noSave: string;
   readonly deleteSlot: string;
 
+  /**
+   * The line under the game, which says what the page is doing.
+   *
+   * It is the one piece of chrome that sits against the game's own
+   * screen rather than in a margin, so it is the one a player reads
+   * while he plays -- and a Hebrew game with an English caption under
+   * it reads as half done. `{n}` is filled in by `web/main.ts`.
+   */
+  readonly pressAnyKey: string;
+  readonly skipScene: string;
+  readonly hourUp: string;
+  readonly pausedLine: string;
+  readonly demoLine: string;
+  readonly againLine: string;
+  readonly lookingLine: string;
+  readonly controls: string;
+  readonly levelN: string;
+  readonly theDemo: string;
+  readonly roomN: string;
+  readonly titleScreen: string;
+
   readonly potionRoom: string;
   readonly loading: string;
   readonly pressToBegin: string;
@@ -89,6 +110,21 @@ const EN: Strings = {
   loaded: 'Game loaded',
   noSave: 'Nothing saved there',
   deleteSlot: 'Erase',
+
+  pressAnyKey: 'press any key to begin',
+  skipScene: 'press Escape to skip',
+  hourUp: 'the hour is up — press any key',
+  pausedLine: 'paused — press any key',
+  demoLine: 'the demo — press any key to play',
+  againLine: 'press any key to begin the level again',
+  lookingLine: 'looking around; press a key to play',
+  controls: 'arrow keys or the numeric keypad to move, up to jump; '
+    + 'hold shift to step carefully and to keep hold of a ledge, '
+    + 'then up again to climb it',
+  levelN: 'level {n}',
+  theDemo: 'the demo',
+  roomN: 'room {n}',
+  titleScreen: 'title screen',
 
   potionRoom: 'the potion room',
   loading: 'loading the game’s data files…',
@@ -153,6 +189,21 @@ const HE: Strings = {
   loaded: 'המשחק נטען',
   noSave: 'אין שם שמירה',
   deleteSlot: 'מחיקה',
+
+  pressAnyKey: 'הקישו מקש כלשהו כדי להתחיל',
+  skipScene: 'הקישו Esc כדי לדלג',
+  hourUp: 'השעה תמה — הקישו מקש כלשהו',
+  pausedLine: 'מושהה — הקישו מקש כלשהו',
+  demoLine: 'ההדגמה — הקישו מקש כלשהו כדי לשחק',
+  againLine: 'הקישו מקש כלשהו כדי להתחיל את השלב מחדש',
+  lookingLine: 'מביטים סביב; הקישו מקש כדי לחזור לשחק',
+  controls: 'חיצים או המקלדת הספרתית לתנועה, למעלה לקפיצה; '
+    + 'החזיקו Shift לצעידה זהירה ולאחיזה בקצה, '
+    + 'ואז שוב למעלה כדי לטפס',
+  levelN: 'שלב {n}',
+  theDemo: 'ההדגמה',
+  roomN: 'חדר {n}',
+  titleScreen: 'מסך הפתיחה',
 
   potionRoom: 'חדר השיקויים',
   loading: 'טוען את קובצי המשחק…',
