@@ -30,6 +30,11 @@ import { readExeConstants } from '../src/game/exe-constants.ts';
 import {
   levelsDatWithPotionLevel, POTION_LEVEL_NUMBER,
 } from '../src/dat/potion-level.ts';
+import { SettingsStore } from './settings.ts';
+import { Chrome } from './chrome.ts';
+import {
+  snapshot, restore, readSlot, writeSlot, type SaveGame,
+} from './savegame.ts';
 
 const DATA_URL =
   (window as unknown as { __princeDataUrl?: string }).__princeDataUrl
@@ -53,10 +58,17 @@ const FRAMES_PER_SECOND = 12;
 
 async function boot(): Promise<void> {
   const canvas = document.getElementById('screen') as HTMLCanvasElement;
-  const aspectSel = document.getElementById('aspect') as HTMLSelectElement | null;
   const status = document.getElementById('status') as HTMLElement;
 
   const display = new Display(canvas);
+  /**
+   * What the player has chosen. Nothing in `src/pop` reads it: the
+   * engine plays the same ticks whatever is set here, and
+   * `tools/dev/page-port.ts` goes on requiring the page to draw the
+   * headless port's own picture.
+   */
+  const settings = new SettingsStore();
+  display.setAspect(settings.get('aspect'));
   // A host that cannot serve the game's own file types can supply the files
   // another way; the page provides a fetcher and this uses it.
   const custom = (window as unknown as {
@@ -429,10 +441,6 @@ async function boot(): Promise<void> {
    * alongside so a replay can be checked against what the player saw, and
    * the raw key events so that a press acted on late can be found.
    */
-  // Both pages have these, but a page without them should still run.
-  const recordBtn = document.getElementById('record') as HTMLButtonElement | null;
-  const saveBtn = document.getElementById('save') as HTMLButtonElement | null;
-
   const recorder = {
     on: false,
     started: 0,
@@ -686,10 +694,6 @@ async function boot(): Promise<void> {
           : `${label(v)}, room ${watchRoom} — looking around; press a key to play`;
   }
 
-  aspectSel?.addEventListener('change', () => {
-    aspectSel.blur();
-    display.setAspect(aspectSel.value as 'original-4-3' | 'square-pixels');
-  });
 
   /**
    * The cheats, which the original turns on from the command line.
@@ -1118,34 +1122,12 @@ async function boot(): Promise<void> {
     watchRoom = null;
   }
 
-  // Recording: the level is started again first, so that a recording always
-  // begins where the level does and a replay of it lines up exactly.
-  recordBtn?.addEventListener('click', () => {
-    void (async (): Promise<void> => {
-      recordBtn.blur();
-      if (recorder.on) {
-        recorder.stop();
-        recordBtn.textContent = 'record keys';
-        if (saveBtn) saveBtn.disabled = recorder.ticks.length === 0;
-        return;
-      }
-      if (!game) return;
-      await changeScene(restart);
-      recorder.start();
-      recordBtn.textContent = 'stop recording';
-      if (saveBtn) saveBtn.disabled = true;
-    })();
-  });
-
-  saveBtn?.addEventListener('click', () => {
-    saveBtn.blur();
-    if (!recorder.ticks.length) return;
-    const blob = new Blob([recorder.toJson()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+  /** Hand the player a file, without leaving the page. */
+  function download(name: string, text: string, type: string): void {
+    const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement('a');
-    const when = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     a.href = url;
-    a.download = `prince-keys-level${recorder.level}-${when}.json`;
+    a.download = name;
     // In the document, and the url let go of only afterwards: revoking it
     // in the same breath as the click cancels the download in some
     // browsers before it has begun.
@@ -1153,7 +1135,75 @@ async function boot(): Promise<void> {
     document.body.append(a);
     a.click();
     setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 10000);
-  });
+  }
+
+  /**
+   * Recording: one button.
+   *
+   * Starting it begins the level again, so that a recording always starts
+   * where the level does and a replay of it lines up exactly. **Stopping
+   * it writes the file**, which is why there is no save button beside it:
+   * a recording that has been stopped and not saved is a recording that
+   * has been lost, and the player had to know to press a second button.
+   */
+  function toggleRecording(): boolean {
+    if (recorder.on) {
+      recorder.stop();
+      if (recorder.ticks.length) {
+        const when = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        download(`prince-keys-level${recorder.level}-${when}.json`,
+                 recorder.toJson(), 'application/json');
+      }
+      return false;
+    }
+    if (!game) return false;
+    void (async (): Promise<void> => {
+      await changeScene(restart);
+      recorder.start();
+    })();
+    return true;
+  }
+
+  /**
+   * Saving a game, and loading one back.
+   *
+   * The snapshot is SDLPoP's `quick_save` field for field (see
+   * `web/savegame.ts`). Loading starts the saved level afresh -- which
+   * runs the whole loader, as `restore_room_after_quick_load`'s
+   * `load_lev_spr` does -- and then writes the saved state over it.
+   */
+  function saveGame(slot: number): boolean {
+    if (!game) return false;
+    return writeSlot(slot, snapshot());
+  }
+
+  async function loadGame(slot: number): Promise<boolean> {
+    const save: SaveGame | null = readSlot(slot);
+    if (!save) return false;
+    await changeScene(async () => {
+      const index = views.findIndex(
+        (v) => v.kind === 'level' && v.level === save.level,
+      );
+      if (index < 0) return;
+      await select(index);
+      restore(save);
+      held.clear();
+      pressedSinceStep.clear();
+      /**
+       * `different_room = 1; draw_game_frame();` -- the room drawn
+       * whole, which is the last thing
+       * `restore_room_after_quick_load` does.
+       *
+       * `drawRoomNow`'s own `check_the_end` is a no-op here and that
+       * matters: the C's `if (next_room != 0 && next_room !=
+       * drawn_room)` is false because `restore` has just made them
+       * equal, so the guard that was loaded out of the save is not
+       * thrown away and entered again.
+       */
+      game?.drawRoomNow(game.kid.room);
+    });
+    return true;
+  }
 
   /**
    * **The opening does not begin until the page can make a noise.**
@@ -1178,6 +1228,15 @@ async function boot(): Promise<void> {
    * not, the first key or tap wakes it and is **spent** on that; the
    * original's "any key begins the game" starts from the frame after.
    */
+  /**
+   * Resolved by the Begin button of the opening settings page, which
+   * is a gesture like any other and lets the page sound.
+   */
+  let beganFromOpening: (() => void) | null = null;
+  const openingGesture = new Promise<void>((resolve) => {
+    beganFromOpening = resolve;
+  });
+
   async function waitUntilThePageCanSound(): Promise<void> {
     // `wakeSound` builds the context and starts a `resume()`, which
     // is **not** waited for: a blocked `AudioContext.resume()` leaves
@@ -1193,13 +1252,26 @@ async function boot(): Promise<void> {
       const go = (e: Event): void => {
         e.preventDefault();
         e.stopPropagation();
-        window.removeEventListener('keydown', go, true);
-        window.removeEventListener('pointerdown', go, true);
+        off();
         wakeSound();
         void sound?.wake().then(resolve, resolve);
       };
+      const off = (): void => {
+        window.removeEventListener('keydown', go, true);
+        window.removeEventListener('pointerdown', go, true);
+      };
       window.addEventListener('keydown', go, true);
       window.addEventListener('pointerdown', go, true);
+      /**
+       * The Begin button of the opening settings page is the gesture
+       * the player actually makes, and the overlay is over everything,
+       * so a key or a tap is the fallback and not the usual way in.
+       * Its own handler calls `wakeSound` before this resolves.
+       */
+      void openingGesture.then(() => {
+        off();
+        void sound?.wake().then(resolve, resolve);
+      });
     });
     (window as unknown as Record<string, unknown>).__princeWaitingForSound = false;
   }
@@ -1480,6 +1552,46 @@ async function boot(): Promise<void> {
     sound?.play(which);
   };
   void RoomRenderer;
+
+  /**
+   * The page around the game: the opening settings page, the title in
+   * one margin and the two panels in the other.
+   *
+   * The opening page does **not** hold the game up. It is an overlay
+   * over a title screen that is already running, and Begin takes it
+   * away -- which also counts as the gesture a browser wants before a
+   * page may sound, so the player's first click does two things at
+   * once instead of asking them to press a key as well.
+   */
+  const chrome = new Chrome(settings, {
+    begin: () => {
+      wakeSound();
+      beganFromOpening?.();
+    },
+    aspect: (value) => display.setAspect(value),
+    language: () => {
+      // The page's own words are the chrome's own business and it has
+      // already changed them. The words the *game* draws go through
+      // the original's bitmap font and are the next piece of work.
+    },
+    quality: () => { /* the pictures are chosen when they are loaded */ },
+    toggleRecording,
+    save: (slot) => {
+      const ok = saveGame(slot);
+      chrome.buildSlots();
+      chrome.note(ok ? chrome.strings.saved : chrome.strings.noSave);
+    },
+    load: (slot) => {
+      void loadGame(slot).then((ok) => {
+        chrome.note(ok ? chrome.strings.loaded : chrome.strings.noSave);
+      });
+    },
+  });
+  // The potion room is reached by its own link and is not a game to be
+  // set up, so it opens straight onto the corridor.
+  if (POTION_PAGE) chrome.dismissOpening();
+  w.__princeDismissOpening = (): void => chrome.dismissOpening();
+  w.__princeSettings = (): Record<string, string> => ({ ...settings.all });
 
   /**
    * The hooks are in place, and the opening is the last thing.

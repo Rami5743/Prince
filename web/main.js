@@ -653,15 +653,46 @@ var Display = class {
     this.ctx = ctx;
     this.imageData = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
     this.applyAspect();
+    this.watch();
   }
   setAspect(mode) {
     this.aspect = mode;
     this.applyAspect();
   }
+  /** The width of one screen height, in the shape of pixel chosen. */
+  get ratio() {
+    return this.aspect === "original-4-3" ? 4 / 3 : SCREEN_WIDTH / SCREEN_HEIGHT;
+  }
+  /**
+   * The biggest the picture can be inside the box it is given.
+   *
+   * This is worked out here rather than left to CSS, and that is not a
+   * preference. The page gives the game the whole height of the window,
+   * so the width has to follow from the height -- and a rule that asks
+   * for the height of the element's own container is circular, because
+   * the container is sized by what is in it. Measured, in a window 760
+   * pixels wide: the container-query form drew the game **two pixels
+   * square**. Reading the box and setting the two lengths cannot go
+   * wrong that way.
+   */
   applyAspect() {
     const s = this.canvas.style;
     s.imageRendering = "pixelated";
-    s.aspectRatio = this.aspect === "original-4-3" ? "4 / 3" : "320 / 200";
+    const box = this.canvas.parentElement?.getBoundingClientRect();
+    if (!box || box.width < 1 || box.height < 1) {
+      s.aspectRatio = this.aspect === "original-4-3" ? "4 / 3" : "320 / 200";
+      return;
+    }
+    const width = Math.min(box.width, box.height * this.ratio);
+    s.width = `${Math.floor(width)}px`;
+    s.height = `${Math.floor(width / this.ratio)}px`;
+    s.aspectRatio = "";
+  }
+  /** Follow the box the page gives the game, which a resize changes. */
+  watch() {
+    const parent = this.canvas.parentElement;
+    if (!parent || typeof ResizeObserver === "undefined") return;
+    new ResizeObserver(() => this.applyAspect()).observe(parent);
   }
   present(surface, paletteRgba) {
     surface.toRgba(paletteRgba, this.imageData.data);
@@ -3000,9 +3031,9 @@ var SoundPlayer = class {
     if (this.buffers.has(index)) return;
     const already = this.pending.get(index);
     if (already) return already;
-    const read = this.read(index);
-    this.pending.set(index, read);
-    return read;
+    const read2 = this.read(index);
+    this.pending.set(index, read2);
+    return read2;
   }
   async read(index) {
     try {
@@ -3303,10 +3334,10 @@ function glyphOf(font, code) {
   if (code < font.firstChar || code > font.lastChar) return null;
   return font.glyphs[code - font.firstChar] ?? null;
 }
-function textWidth(font, text) {
+function textWidth(font, text2) {
   let width = 0;
   let drawn = 0;
-  for (const ch of text) {
+  for (const ch of text2) {
     const g2 = glyphOf(font, ch.charCodeAt(0));
     if (!g2) continue;
     width += g2.width;
@@ -3314,9 +3345,9 @@ function textWidth(font, text) {
   }
   return width + Math.max(0, drawn - 1) * font.charSpacing;
 }
-function drawText(surface, font, text, x, top, color) {
+function drawText(surface, font, text2, x, top, color) {
   let at = x;
-  for (const ch of text) {
+  for (const ch of text2) {
     const g2 = glyphOf(font, ch.charCodeAt(0));
     if (!g2) continue;
     surface.blitMono(g2.sprite, at, top, color);
@@ -3324,9 +3355,9 @@ function drawText(surface, font, text, x, top, color) {
   }
   return at - font.charSpacing;
 }
-function drawTextCentred(surface, font, text, left, right, top, color) {
-  const width = textWidth(font, text);
-  drawText(surface, font, text, left + (right - left + 1 - width >> 1), top, color);
+function drawTextCentred(surface, font, text2, left, right, top, color) {
+  const width = textWidth(font, text2);
+  drawText(surface, font, text2, left + (right - left + 1 - width >> 1), top, color);
 }
 function charWidth(font, code) {
   const g2 = glyphOf(font, code);
@@ -3337,9 +3368,9 @@ function charWidth(font, code) {
   }
   return width;
 }
-function lineWidth(font, text) {
+function lineWidth(font, text2) {
   let width = 0;
-  for (const ch of text) width += charWidth(font, ch.charCodeAt(0));
+  for (const ch of text2) width += charWidth(font, ch.charCodeAt(0));
   return width;
 }
 function textCenterY(font, top, bottom) {
@@ -3352,7 +3383,7 @@ function drawTextCharacter(surface, font, code, x, y, color) {
   surface.blitMono(g2.sprite, x, y - font.heightAbove, color);
   return font.charSpacing + g2.width;
 }
-function drawTextInRect(surface, font, text, left, top, right, bottom, xAlign, yAlign, color) {
+function drawTextInRect(surface, font, text2, left, top, right, bottom, xAlign, yAlign, color) {
   const rectWidth = right - left;
   const rectHeight = bottom - top;
   const fontLineDistance = font.heightAbove + font.heightBelow + font.lineSpacing;
@@ -3366,7 +3397,7 @@ function drawTextInRect(surface, font, text, left, top, right, bottom, xAlign, y
     }
   }
   const currentY = textTop + font.heightAbove;
-  const width = lineWidth(font, text);
+  const width = lineWidth(font, text2);
   let textLeft = left;
   if (xAlign >= 0) {
     if (xAlign <= 0) textLeft += (rectWidth / 2 | 0) - (width / 2 | 0);
@@ -3381,7 +3412,7 @@ function drawTextInRect(surface, font, text, left, top, right, bottom, xAlign, y
   surface.clipTop = Math.max(savedTop, top);
   surface.clipBottom = Math.min(savedBottom, bottom);
   let at = textLeft;
-  for (const ch of text) {
+  for (const ch of text2) {
     at += drawTextCharacter(surface, font, ch.charCodeAt(0), at, currentY, color);
   }
   surface.clipLeft = savedLeft;
@@ -6510,6 +6541,12 @@ var MOBS_MAX = 14;
 var last_loose_sound = 0;
 var curmob_index = 0;
 var curr_tile_temp = 0;
+var looseSound = {
+  get: () => last_loose_sound,
+  set: (v) => {
+    last_loose_sound = v;
+  }
+};
 var levelType = { of: (_level) => 0 };
 function process_trobs() {
   let need_delete = false;
@@ -7596,6 +7633,10 @@ var demo2 = {
 };
 var curr_guard_color = 0;
 var guardColor = { value: 0 };
+function setGuardColor(v) {
+  curr_guard_color = v;
+  guardColor.value = v;
+}
 function char_opp_dist() {
   if (g.Char.room !== g.Opp.room) return 999;
   let distance = g.Opp.x - g.Char.x;
@@ -10007,8 +10048,8 @@ function draw_right_mark(decal_variant, arg1) {
     0
   );
 }
-function display_text_bottom(text) {
-  paint.text(text);
+function display_text_bottom(text2) {
+  paint.text(text2);
 }
 function erase_bottom_text(arg_0) {
   paint.text(null);
@@ -10592,7 +10633,7 @@ var PopGame = class _PopGame {
         if (low > top) this.surface.fillRect(left, top, right - left, low - top, color);
       },
       clip: (rect) => this.setClip(rect),
-      text: (text) => this.drawBottomText(text),
+      text: (text2) => this.drawBottomText(text2),
       readPeel: (left, top, right, bottom) => this.readPeel(left, top, right, bottom),
       restorePeel: (peel) => this.restorePeel(peel),
       target: (room) => {
@@ -10661,7 +10702,7 @@ var PopGame = class _PopGame {
    * `show_text(&rect_bottom_text, halign_center, valign_bottom, ...)`,
    * and `draw_rect(&rect_bottom_text, color_0_black)` before it.
    */
-  drawBottomText(text) {
+  drawBottomText(text2) {
     this.surface.fillRect(
       TEXT_RECT.left,
       TEXT_RECT.top,
@@ -10669,11 +10710,11 @@ var PopGame = class _PopGame {
       TEXT_RECT.bottom - TEXT_RECT.top,
       0
     );
-    if (text === null || !this.font) return;
+    if (text2 === null || !this.font) return;
     drawTextCentred(
       this.surface,
       this.font,
-      text,
+      text2,
       TEXT_RECT.left,
       TEXT_RECT.right - 1,
       TEXT_RECT.top,
@@ -11352,8 +11393,8 @@ var PopGame = class _PopGame {
    * `process_key` gives an answer. `ticks` of nought leaves it up
    * until something takes it away, which is what the pause wants.
    */
-  say(text, ticks = 24) {
-    display_text_bottom(text);
+  say(text2, ticks = 24) {
+    display_text_bottom(text2);
     g.text_time_total = ticks;
     g.text_time_remaining = ticks;
   }
@@ -11660,7 +11701,7 @@ var hof_rects = [
   { top: 140, left: 72, bottom: 152, right: 248 },
   { top: 154, left: 72, bottom: 166, right: 248 }
 ];
-function show_hof_text(rect, x_align, y_align, text) {
+function show_hof_text(rect, x_align, y_align, text2) {
   const text_color = 183;
   const shadow_color = 0;
   scr.show_text(
@@ -11670,7 +11711,7 @@ function show_hof_text(rect, x_align, y_align, text) {
     rect.bottom + 1,
     x_align,
     y_align,
-    text,
+    text2,
     shadow_color
   );
   scr.show_text(
@@ -11680,7 +11721,7 @@ function show_hof_text(rect, x_align, y_align, text) {
     rect.bottom,
     x_align,
     y_align,
-    text,
+    text2,
     text_color
   );
 }
@@ -12908,13 +12949,13 @@ var CutscenePlayer = class _CutscenePlayer {
         this.target = offscreen ? this.offscreen : this.onscreen;
         this.setClip(this.clipRect);
       },
-      show_text: (l, t, r, b, xa, ya, text, color) => {
+      show_text: (l, t, r, b, xa, ya, text2, color) => {
         if (!this.font) return;
-        drawTextInRect(this.target, this.font, text, l, t, r, b, xa, ya, color);
+        drawTextInRect(this.target, this.font, text2, l, t, r, b, xa, ya, color);
       },
       text_center_y: (t, b) => this.font ? textCenterY(this.font, t, b) : 0,
       char_width: (ch) => this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0,
-      cstring_width: (text) => this.font ? lineWidth(this.font, text) : 0,
+      cstring_width: (text2) => this.font ? lineWidth(this.font, text2) : 0,
       draw_text_character: (x, y, ch, color) => this.font ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color) : 0,
       read_peel: (l, t, r, b) => this.readTargetPeel(l, t, r, b),
       restore_peel: (peel) => this.restoreTargetPeel(peel),
@@ -13376,15 +13417,602 @@ function levelsDatWithPotionLevel(bytes) {
   throw new Error(`LEVELS.DAT has no resource ${want}`);
 }
 
+// web/settings.ts
+var DEFAULTS = {
+  language: "en",
+  quality: "original",
+  graphics: "original",
+  music: "original",
+  map: "original",
+  aspect: "original-4-3"
+};
+var CHOICES = {
+  language: ["en", "he"],
+  quality: ["original", "high"],
+  graphics: ["original"],
+  music: ["original"],
+  map: ["original"],
+  aspect: ["original-4-3", "square-pixels"]
+};
+var KEY = "prince.settings.v1";
+function clean(raw) {
+  const out2 = { ...DEFAULTS };
+  if (typeof raw !== "object" || raw === null) return out2;
+  const given = raw;
+  for (const key of Object.keys(DEFAULTS)) {
+    const allowed = CHOICES[key];
+    const value = given[key];
+    if (typeof value === "string" && allowed.includes(value)) {
+      out2[key] = value;
+    }
+  }
+  return out2;
+}
+var SettingsStore = class {
+  value;
+  listeners = /* @__PURE__ */ new Set();
+  constructor(initial) {
+    this.value = clean({ ...read(), ...initial });
+  }
+  get all() {
+    return this.value;
+  }
+  get(key) {
+    return this.value[key];
+  }
+  /** Returns true when the value really moved. */
+  set(key, value) {
+    const allowed = CHOICES[key];
+    if (!allowed.includes(value)) return false;
+    if (this.value[key] === value) return false;
+    this.value = { ...this.value, [key]: value };
+    write(this.value);
+    for (const listener of this.listeners) listener(this.value, key);
+    return true;
+  }
+  /** Called with the whole settings object and the key that moved. */
+  onChange(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+};
+function read() {
+  try {
+    const text2 = window.localStorage.getItem(KEY);
+    return text2 === null ? {} : JSON.parse(text2);
+  } catch {
+    return {};
+  }
+}
+function write(value) {
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(value));
+  } catch {
+  }
+}
+
+// web/strings.ts
+var EN = {
+  dir: "ltr",
+  title: "Prince of Persia",
+  subtitle: "The 1990 DOS game, rebuilt to run here \u2014 reading the original\u2019s own data files and the tables inside its executable.",
+  start: "Begin",
+  settings: "Settings",
+  tools: "Tools",
+  close: "Close",
+  language: "Language",
+  quality: "Quality",
+  graphics: "Graphics",
+  music: "Music",
+  map: "Map",
+  aspect: "Pixels",
+  languageEn: "English",
+  languageHe: "\u05E2\u05D1\u05E8\u05D9\u05EA",
+  qualityOriginal: "Original",
+  qualityHigh: "High",
+  original: "Original",
+  aspectCrt: "4:3, as on a CRT",
+  aspectSquare: "Square",
+  record: "Record keys",
+  recordStop: "Stop and save",
+  recordSaved: "Recording saved",
+  saveGame: "Save game",
+  loadGame: "Load game",
+  slot: "Slot",
+  empty: "empty",
+  saved: "Game saved",
+  loaded: "Game loaded",
+  noSave: "Nothing saved there",
+  deleteSlot: "Erase",
+  potionRoom: "the potion room",
+  loading: "loading the game\u2019s data files\u2026",
+  pressToBegin: "press any key to begin",
+  keysTitle: "Keys",
+  keys: [
+    ["Arrows / keypad", "move; a corner jumps that way"],
+    ["Shift", "step carefully, take hold of a ledge"],
+    ["Up while running", "a running jump"],
+    ["Space", "the time left"],
+    ["Esc", "pause, and again for one tick"],
+    ["Ctrl+A", "begin the level again"],
+    ["Ctrl+R", "back to the title"],
+    ["Ctrl+S", "sound off and on"],
+    ["Shift+L", "skip a level"],
+    ["R", "raise a fallen Prince"],
+    ["K", "fell the guard"],
+    ["Shift+T / Shift+S", "a flask / a hit point"],
+    ["Shift+W", "the feather"],
+    ["Shift+I", "turn the screen over"],
+    ["Shift+B", "put the lights out"],
+    ["+ / \u2212", "move the clock"],
+    ["H J U N", "look at the rooms around"],
+    ["Ctrl+B", "come back"]
+  ]
+};
+var HE = {
+  dir: "rtl",
+  title: "\u05E0\u05E1\u05D9\u05DA \u05E4\u05E8\u05E1",
+  subtitle: "\u05DE\u05E9\u05D7\u05E7 \u05D4\u05D3\u05D5\u05E1 \u05DE\u05E9\u05E0\u05EA 1990, \u05D1\u05E0\u05D5\u05D9 \u05DE\u05D7\u05D3\u05E9 \u05DB\u05D3\u05D9 \u05DC\u05E8\u05D5\u05E5 \u05DB\u05D0\u05DF \u2014 \u05E7\u05D5\u05E8\u05D0 \u05D0\u05EA \u05E7\u05D5\u05D1\u05E6\u05D9 \u05D4\u05E0\u05EA\u05D5\u05E0\u05D9\u05DD \u05D4\u05DE\u05E7\u05D5\u05E8\u05D9\u05D9\u05DD \u05D5\u05D0\u05EA \u05D4\u05D8\u05D1\u05DC\u05D0\u05D5\u05EA \u05E9\u05D1\u05EA\u05D5\u05DA \u05E7\u05D5\u05D1\u05E5 \u05D4\u05D4\u05E8\u05E6\u05D4 \u05E9\u05DC\u05D5.",
+  start: "\u05D4\u05EA\u05D7\u05DC\u05D4",
+  settings: "\u05D4\u05D2\u05D3\u05E8\u05D5\u05EA",
+  tools: "\u05DB\u05DC\u05D9\u05DD",
+  close: "\u05E1\u05D2\u05D9\u05E8\u05D4",
+  language: "\u05E9\u05E4\u05D4",
+  quality: "\u05D0\u05D9\u05DB\u05D5\u05EA",
+  graphics: "\u05D2\u05E8\u05E4\u05D9\u05E7\u05D4",
+  music: "\u05DE\u05D5\u05D6\u05D9\u05E7\u05D4",
+  map: "\u05DE\u05E4\u05D4",
+  aspect: "\u05E4\u05D9\u05E7\u05E1\u05DC\u05D9\u05DD",
+  languageEn: "English",
+  languageHe: "\u05E2\u05D1\u05E8\u05D9\u05EA",
+  qualityOriginal: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
+  qualityHigh: "\u05D2\u05D1\u05D5\u05D4\u05D4",
+  original: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
+  aspectCrt: "4:3, \u05DB\u05DE\u05D5 \u05D1\u05DE\u05E1\u05DA \u05E7\u05EA\u05D5\u05D3\u05D9",
+  aspectSquare: "\u05DE\u05E8\u05D5\u05D1\u05E2\u05D9\u05DD",
+  record: "\u05D4\u05E7\u05DC\u05D8\u05EA \u05DE\u05E7\u05E9\u05D9\u05DD",
+  recordStop: "\u05E2\u05E6\u05D9\u05E8\u05D4 \u05D5\u05E9\u05DE\u05D9\u05E8\u05D4",
+  recordSaved: "\u05D4\u05D4\u05E7\u05DC\u05D8\u05D4 \u05E0\u05E9\u05DE\u05E8\u05D4",
+  saveGame: "\u05E9\u05DE\u05D9\u05E8\u05EA \u05DE\u05E9\u05D7\u05E7",
+  loadGame: "\u05D8\u05E2\u05D9\u05E0\u05EA \u05DE\u05E9\u05D7\u05E7",
+  slot: "\u05DE\u05E9\u05D1\u05E6\u05EA",
+  empty: "\u05E8\u05D9\u05E7\u05D4",
+  saved: "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05E0\u05E9\u05DE\u05E8",
+  loaded: "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05E0\u05D8\u05E2\u05DF",
+  noSave: "\u05D0\u05D9\u05DF \u05E9\u05DD \u05E9\u05DE\u05D9\u05E8\u05D4",
+  deleteSlot: "\u05DE\u05D7\u05D9\u05E7\u05D4",
+  potionRoom: "\u05D7\u05D3\u05E8 \u05D4\u05E9\u05D9\u05E7\u05D5\u05D9\u05D9\u05DD",
+  loading: "\u05D8\u05D5\u05E2\u05DF \u05D0\u05EA \u05E7\u05D5\u05D1\u05E6\u05D9 \u05D4\u05DE\u05E9\u05D7\u05E7\u2026",
+  pressToBegin: "\u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC",
+  keysTitle: "\u05DE\u05E7\u05E9\u05D9\u05DD",
+  keys: [
+    ["\u05D7\u05D9\u05E6\u05D9\u05DD / \u05DE\u05E7\u05DC\u05D3\u05EA \u05E1\u05E4\u05E8\u05EA\u05D9\u05EA", "\u05EA\u05E0\u05D5\u05E2\u05D4; \u05DE\u05E7\u05E9 \u05E4\u05D9\u05E0\u05EA\u05D9 \u05E7\u05D5\u05E4\u05E5 \u05DC\u05D0\u05D5\u05EA\u05D5 \u05DB\u05D9\u05D5\u05D5\u05DF"],
+    ["Shift", "\u05E6\u05E2\u05D9\u05D3\u05D4 \u05D6\u05D4\u05D9\u05E8\u05D4 \u05D5\u05D0\u05D7\u05D9\u05D6\u05D4 \u05D1\u05E7\u05E6\u05D4"],
+    ["\u05D7\u05E5 \u05DC\u05DE\u05E2\u05DC\u05D4 \u05D1\u05E8\u05D9\u05E6\u05D4", "\u05E7\u05E4\u05D9\u05E6\u05EA \u05E8\u05D9\u05E6\u05D4"],
+    ["\u05E8\u05D5\u05D5\u05D7", "\u05D4\u05D6\u05DE\u05DF \u05E9\u05E0\u05D5\u05EA\u05E8"],
+    ["Esc", "\u05D4\u05E9\u05D4\u05D9\u05D4, \u05D5\u05E9\u05D5\u05D1 \u05DC\u05E6\u05E2\u05D3 \u05D0\u05D7\u05D3"],
+    ["Ctrl+A", "\u05D4\u05EA\u05D7\u05DC\u05EA \u05D4\u05E9\u05DC\u05D1 \u05DE\u05D7\u05D3\u05E9"],
+    ["Ctrl+R", "\u05D7\u05D6\u05E8\u05D4 \u05DC\u05DE\u05E1\u05DA \u05D4\u05E4\u05EA\u05D9\u05D7\u05D4"],
+    ["Ctrl+S", "\u05DB\u05D9\u05D1\u05D5\u05D9 \u05D5\u05D4\u05D3\u05DC\u05E7\u05EA \u05D4\u05E7\u05D5\u05DC"],
+    ["Shift+L", "\u05D3\u05D9\u05DC\u05D5\u05D2 \u05E2\u05DC \u05E9\u05DC\u05D1"],
+    ["R", "\u05D4\u05D7\u05D9\u05D9\u05D0\u05EA \u05D4\u05E0\u05E1\u05D9\u05DA"],
+    ["K", "\u05D4\u05E4\u05DC\u05EA \u05D4\u05E9\u05D5\u05DE\u05E8"],
+    ["Shift+T / Shift+S", "\u05DB\u05D3 / \u05E0\u05E7\u05D5\u05D3\u05EA \u05D7\u05D9\u05D9\u05DD"],
+    ["Shift+W", "\u05D4\u05E0\u05D5\u05E6\u05D4"],
+    ["Shift+I", "\u05D4\u05D9\u05E4\u05D5\u05DA \u05D4\u05DE\u05E1\u05DA"],
+    ["Shift+B", "\u05DB\u05D9\u05D1\u05D5\u05D9 \u05D4\u05D0\u05D5\u05E8\u05D5\u05EA"],
+    ["+ / \u2212", "\u05D4\u05D6\u05D6\u05EA \u05D4\u05E9\u05E2\u05D5\u05DF"],
+    ["H J U N", "\u05D4\u05E6\u05E6\u05D4 \u05DC\u05D7\u05D3\u05E8\u05D9\u05DD \u05D4\u05E1\u05DE\u05D5\u05DB\u05D9\u05DD"],
+    ["Ctrl+B", "\u05D7\u05D6\u05E8\u05D4"]
+  ]
+};
+function stringsFor(language) {
+  return language === "he" ? HE : EN;
+}
+
+// web/savegame.ts
+var SAVE_FORMAT = "prince-save";
+var SAVE_VERSION = 1;
+var FIELDS = [
+  // the level
+  "level",
+  "checkpoint",
+  "upside_down",
+  "drawn_room",
+  "current_level",
+  "next_level",
+  "mobs_count",
+  "mobs",
+  "trobs_count",
+  "trobs",
+  "leveldoor_open",
+  // the Prince
+  "Kid",
+  "hitp_curr",
+  "hitp_max",
+  "hitp_beg_lev",
+  "grab_timer",
+  "holding_sword",
+  "united_with_shadow",
+  "have_sword",
+  "kid_sword_strike",
+  "pickup_obj_type",
+  "offguard",
+  // the guard
+  "Guard",
+  "Char",
+  "Opp",
+  "guardhp_curr",
+  "guardhp_max",
+  "demo_index",
+  "demo_time",
+  "guard_notice_timer",
+  "guard_skill",
+  "shadow_initialized",
+  "guard_refrac",
+  "justblocked",
+  // collision
+  "curr_row_coll_room",
+  "curr_row_coll_flags",
+  "below_row_coll_room",
+  "below_row_coll_flags",
+  "above_row_coll_room",
+  "above_row_coll_flags",
+  "prev_collision_row",
+  // the flash
+  "flash_color",
+  "flash_time",
+  // sounds
+  "need_level1_music",
+  "is_screaming",
+  "is_feather_fall",
+  // random
+  "random_seed",
+  // the hour
+  "rem_min",
+  "rem_tick",
+  // the controls, saved and restored around a sword fight
+  "control_x",
+  "control_y",
+  "control_shift",
+  "control_forward",
+  "control_backward",
+  "control_up",
+  "control_down",
+  "control_shift2",
+  "ctrl1_forward",
+  "ctrl1_backward",
+  "ctrl1_up",
+  "ctrl1_down",
+  "ctrl1_shift2",
+  // what the guard has noticed
+  "is_guard_notice",
+  "can_guard_see_kid"
+];
+var STATICS = {
+  curr_guard_color: { get: () => curr_guard_color, set: setGuardColor },
+  droppedout: { get: () => droppedout, set: setDroppedout },
+  last_loose_sound: { get: looseSound.get, set: looseSound.set }
+};
+function pack(value) {
+  if (value instanceof Uint8Array) return { $: "u8", v: [...value] };
+  if (value instanceof Int8Array) return { $: "i8", v: [...value] };
+  if (value instanceof Int16Array) return { $: "i16", v: [...value] };
+  if (Array.isArray(value)) return value.map(pack);
+  if (typeof value === "object" && value !== null) {
+    const out2 = {};
+    for (const [k, v] of Object.entries(value)) out2[k] = pack(v);
+    return out2;
+  }
+  return value;
+}
+function unpack(value) {
+  if (Array.isArray(value)) return value.map(unpack);
+  if (typeof value === "object" && value !== null) {
+    const tagged = value;
+    if (tagged.$ === "u8" && Array.isArray(tagged.v)) return Uint8Array.from(tagged.v);
+    if (tagged.$ === "i8" && Array.isArray(tagged.v)) return Int8Array.from(tagged.v);
+    if (tagged.$ === "i16" && Array.isArray(tagged.v)) return Int16Array.from(tagged.v);
+    const out2 = {};
+    for (const [k, v] of Object.entries(value)) out2[k] = unpack(v);
+    return out2;
+  }
+  return value;
+}
+function snapshot() {
+  const state = {};
+  const live = g;
+  for (const field of FIELDS) state[field] = pack(live[field]);
+  for (const [name, slot2] of Object.entries(STATICS)) state[name] = slot2.get();
+  return {
+    format: SAVE_FORMAT,
+    version: SAVE_VERSION,
+    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    level: g.current_level,
+    minutesLeft: g.rem_min,
+    hitPoints: g.hitp_curr,
+    state
+  };
+}
+function readable(save) {
+  if (typeof save !== "object" || save === null) return false;
+  const s = save;
+  return s.format === SAVE_FORMAT && s.version === SAVE_VERSION && typeof s.state === "object" && s.state !== null;
+}
+function restore(save) {
+  const live = g;
+  for (const field of FIELDS) {
+    if (!(field in save.state)) continue;
+    live[field] = unpack(save.state[field]);
+  }
+  for (const [name, slot2] of Object.entries(STATICS)) {
+    const value = save.state[name];
+    if (typeof value === "number") slot2.set(value);
+  }
+  g.next_room = g.Kid.room;
+  g.drawn_room = g.Kid.room;
+  load_room_links();
+  g.hitp_delta = 1;
+  g.guardhp_delta = 1;
+  if (g.Guard.room !== g.drawn_room) {
+    g.Guard.direction = directions.dir_56_none;
+    g.guardhp_curr = 0;
+  }
+  loadkid_and_opp();
+  g.text_time_total = 0;
+  g.text_time_remaining = 0;
+  g.exit_room_timer = 0;
+}
+var SLOT_KEY = (n) => `prince.save.${n}`;
+var SLOTS = [1, 2, 3];
+function readSlot(n) {
+  try {
+    const text2 = window.localStorage.getItem(SLOT_KEY(n));
+    if (text2 === null) return null;
+    const parsed = JSON.parse(text2);
+    return readable(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function writeSlot(n, save) {
+  try {
+    window.localStorage.setItem(SLOT_KEY(n), JSON.stringify(save));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// web/chrome.ts
+var OPENING_FIELDS = ["language", "quality", "graphics", "music", "map"];
+var PANEL_FIELDS = ["language", "quality", "graphics", "music", "aspect"];
+var Chrome = class {
+  settings;
+  hooks;
+  s;
+  recording = false;
+  noteTimer = 0;
+  constructor(settings, hooks) {
+    this.settings = settings;
+    this.hooks = hooks;
+    this.s = stringsFor(settings.get("language"));
+    this.applyDirection();
+    this.build();
+    settings.onChange((_all, key) => {
+      if (key === "language") {
+        this.s = stringsFor(this.settings.get("language"));
+        this.applyDirection();
+        this.build();
+      }
+      if (key === "aspect") this.applyAspect();
+    });
+    this.applyAspect();
+  }
+  /** Hebrew turns the page over: the title goes to the right-hand margin. */
+  applyDirection() {
+    const root = document.documentElement;
+    root.lang = this.settings.get("language");
+    root.dir = this.s.dir;
+  }
+  /** The shape of a pixel, which the canvas's width is worked out from. */
+  applyAspect() {
+    const square = this.settings.get("aspect") === "square-pixels";
+    const root = document.documentElement;
+    root.style.setProperty("--ar", square ? "320 / 200" : "4 / 3");
+    root.style.setProperty("--ar-num", square ? "1.6" : "1.3333");
+  }
+  // ------------------------------------------------------------- building
+  build() {
+    this.buildMargin();
+    this.buildOpening();
+    this.buildPanels();
+  }
+  /** `potion.html` is the same page with one level record swapped. */
+  get isPotionPage() {
+    return window.__princePotionLevel === true;
+  }
+  get pageTitle() {
+    return this.isPotionPage ? `${this.s.title} \u2014 ${this.s.potionRoom}` : this.s.title;
+  }
+  buildMargin() {
+    text("page-title", this.pageTitle);
+    text("page-subtitle", this.s.subtitle);
+    const keys = document.getElementById("keys");
+    if (!keys) return;
+    keys.replaceChildren();
+    for (const [key, what] of this.s.keys) {
+      const dt = document.createElement("dt");
+      dt.textContent = key;
+      const dd = document.createElement("dd");
+      dd.textContent = what;
+      keys.append(dt, dd);
+    }
+  }
+  buildOpening() {
+    text("opening-title", this.pageTitle);
+    text("opening-subtitle", this.s.subtitle);
+    const fields = document.getElementById("opening-fields");
+    if (fields) {
+      fields.replaceChildren();
+      for (const key of OPENING_FIELDS) fields.append(this.field(key));
+    }
+    const begin = document.getElementById("begin");
+    if (begin) {
+      begin.textContent = this.s.start;
+      begin.onclick = () => {
+        this.dismissOpening();
+        this.hooks.begin();
+      };
+    }
+  }
+  /** The opening page is gone for this visit; the panels carry on from here. */
+  dismissOpening() {
+    const opening = document.getElementById("opening");
+    if (opening) opening.hidden = true;
+  }
+  buildPanels() {
+    text("settings-label", this.s.settings);
+    text("tools-label", this.s.tools);
+    const fields = document.getElementById("settings-fields");
+    if (fields) {
+      fields.replaceChildren();
+      for (const key of PANEL_FIELDS) fields.append(this.field(key));
+    }
+    const record = document.getElementById("record");
+    if (record) {
+      record.textContent = this.recording ? this.s.recordStop : this.s.record;
+      record.classList.toggle("on", this.recording);
+      record.onclick = () => {
+        record.blur();
+        this.recording = this.hooks.toggleRecording();
+        record.textContent = this.recording ? this.s.recordStop : this.s.record;
+        record.classList.toggle("on", this.recording);
+        if (!this.recording) this.note(this.s.recordSaved);
+      };
+    }
+    this.buildSlots();
+    text("tool-note", "");
+  }
+  /** Three slots, each with what is in it, a save and a load. */
+  buildSlots() {
+    const host = document.getElementById("save-slots");
+    if (!host) return;
+    host.replaceChildren();
+    for (const n of SLOTS) {
+      const row = document.createElement("div");
+      row.className = "slot-row";
+      const label = document.createElement("span");
+      label.textContent = `${this.s.slot} ${n} \u2014 ${describe(readSlot(n), this.s)}`;
+      label.title = label.textContent;
+      const save = document.createElement("button");
+      save.textContent = this.s.saveGame;
+      save.title = `${this.s.saveGame} \u2014 ${this.s.slot} ${n}`;
+      save.onclick = () => {
+        save.blur();
+        this.hooks.save(n);
+      };
+      const load = document.createElement("button");
+      load.textContent = this.s.loadGame;
+      load.title = `${this.s.loadGame} \u2014 ${this.s.slot} ${n}`;
+      load.disabled = readSlot(n) === null;
+      load.onclick = () => {
+        load.blur();
+        this.hooks.load(n);
+      };
+      row.append(label, save, load);
+      host.append(row);
+    }
+  }
+  /** A line under the tools that says what just happened, then clears. */
+  note(message) {
+    text("tool-note", message);
+    window.clearTimeout(this.noteTimer);
+    this.noteTimer = window.setTimeout(() => text("tool-note", ""), 2500);
+  }
+  get strings() {
+    return this.s;
+  }
+  /** True while the Tools panel is recording. */
+  get isRecording() {
+    return this.recording;
+  }
+  // -------------------------------------------------------------- a field
+  field(key) {
+    const label = document.createElement("label");
+    label.className = "field";
+    const name = document.createElement("span");
+    name.textContent = this.labelOf(key);
+    const select = document.createElement("select");
+    select.id = `setting-${key}`;
+    const choices = CHOICES[key];
+    for (const value of choices) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = this.optionOf(key, value);
+      select.append(option);
+    }
+    select.value = this.settings.get(key);
+    select.disabled = choices.length < 2;
+    select.onchange = () => {
+      const value = select.value;
+      if (!this.settings.set(key, value)) return;
+      if (key === "aspect") this.hooks.aspect(value);
+      if (key === "language") this.hooks.language(value);
+      if (key === "quality") this.hooks.quality(value);
+    };
+    label.append(name, select);
+    return label;
+  }
+  labelOf(key) {
+    switch (key) {
+      case "language":
+        return this.s.language;
+      case "quality":
+        return this.s.quality;
+      case "graphics":
+        return this.s.graphics;
+      case "music":
+        return this.s.music;
+      case "map":
+        return this.s.map;
+      case "aspect":
+        return this.s.aspect;
+    }
+  }
+  optionOf(key, value) {
+    if (key === "language") return value === "he" ? this.s.languageHe : this.s.languageEn;
+    if (key === "quality") {
+      return value === "high" ? this.s.qualityHigh : this.s.qualityOriginal;
+    }
+    if (key === "aspect") {
+      return value === "square-pixels" ? this.s.aspectSquare : this.s.aspectCrt;
+    }
+    return this.s.original;
+  }
+};
+function text(id, value) {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== value) el.textContent = value;
+}
+function describe(save, s) {
+  if (!save) return s.empty;
+  const when = new Date(save.savedAt);
+  const stamp = Number.isNaN(when.getTime()) ? "" : ` \xB7 ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  const level = save.level === 0 ? "\u2014" : String(save.level);
+  return `${level} \xB7 ${save.minutesLeft}\u2032${stamp}`;
+}
+
 // web/main.ts
 var DATA_URL = window.__princeDataUrl ?? "../original/prince1";
 var POTION_PAGE = window.__princePotionLevel === true;
 var FRAMES_PER_SECOND = 12;
 async function boot() {
   const canvas = document.getElementById("screen");
-  const aspectSel = document.getElementById("aspect");
   const status = document.getElementById("status");
   const display = new Display(canvas);
+  const settings = new SettingsStore();
+  display.setAspect(settings.get("aspect"));
   const custom = window.__princeFetcher;
   const fromDisc = custom ?? browserFetcher(DATA_URL);
   const fetchFile = POTION_PAGE ? async (name) => name === "LEVELS.DAT" ? levelsDatWithPotionLevel(await fromDisc(name)) : fromDisc(name) : fromDisc;
@@ -13558,8 +14186,6 @@ async function boot() {
     }
     watchRoom = null;
   }
-  const recordBtn = document.getElementById("record");
-  const saveBtn = document.getElementById("save");
   const recorder = {
     on: false,
     started: 0,
@@ -13694,10 +14320,6 @@ async function boot() {
     const v = views[current];
     status.textContent = game.isDemo ? "the demo \u2014 press any key to play" : game.awaitingButton ? `${label(v)} \u2014 press any key to begin the level again` : watchRoom === null ? `${label(v)} \u2014 ${CONTROLS}` : `${label(v)}, room ${watchRoom} \u2014 looking around; press a key to play`;
   }
-  aspectSel?.addEventListener("change", () => {
-    aspectSel.blur();
-    display.setAspect(aspectSel.value);
-  });
   const cheats = true;
   function keyName(e) {
     const mod = (e.ctrlKey || e.metaKey ? "ctrl+" : "") + (e.shiftKey ? "shift+" : "");
@@ -13996,31 +14618,11 @@ async function boot() {
     game = await game.restart(assets, exe);
     watchRoom = null;
   }
-  recordBtn?.addEventListener("click", () => {
-    void (async () => {
-      recordBtn.blur();
-      if (recorder.on) {
-        recorder.stop();
-        recordBtn.textContent = "record keys";
-        if (saveBtn) saveBtn.disabled = recorder.ticks.length === 0;
-        return;
-      }
-      if (!game) return;
-      await changeScene(restart);
-      recorder.start();
-      recordBtn.textContent = "stop recording";
-      if (saveBtn) saveBtn.disabled = true;
-    })();
-  });
-  saveBtn?.addEventListener("click", () => {
-    saveBtn.blur();
-    if (!recorder.ticks.length) return;
-    const blob = new Blob([recorder.toJson()], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+  function download(name, text2, type) {
+    const url = URL.createObjectURL(new Blob([text2], { type }));
     const a = document.createElement("a");
-    const when = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
     a.href = url;
-    a.download = `prince-keys-level${recorder.level}-${when}.json`;
+    a.download = name;
     a.style.display = "none";
     document.body.append(a);
     a.click();
@@ -14028,6 +14630,50 @@ async function boot() {
       a.remove();
       URL.revokeObjectURL(url);
     }, 1e4);
+  }
+  function toggleRecording() {
+    if (recorder.on) {
+      recorder.stop();
+      if (recorder.ticks.length) {
+        const when = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        download(
+          `prince-keys-level${recorder.level}-${when}.json`,
+          recorder.toJson(),
+          "application/json"
+        );
+      }
+      return false;
+    }
+    if (!game) return false;
+    void (async () => {
+      await changeScene(restart);
+      recorder.start();
+    })();
+    return true;
+  }
+  function saveGame(slot2) {
+    if (!game) return false;
+    return writeSlot(slot2, snapshot());
+  }
+  async function loadGame(slot2) {
+    const save = readSlot(slot2);
+    if (!save) return false;
+    await changeScene(async () => {
+      const index = views.findIndex(
+        (v) => v.kind === "level" && v.level === save.level
+      );
+      if (index < 0) return;
+      await select(index);
+      restore(save);
+      held.clear();
+      pressedSinceStep.clear();
+      game?.drawRoomNow(game.kid.room);
+    });
+    return true;
+  }
+  let beganFromOpening = null;
+  const openingGesture = new Promise((resolve) => {
+    beganFromOpening = resolve;
   });
   async function waitUntilThePageCanSound() {
     wakeSound();
@@ -14039,13 +14685,20 @@ async function boot() {
       const go = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.removeEventListener("keydown", go, true);
-        window.removeEventListener("pointerdown", go, true);
+        off();
         wakeSound();
         void sound?.wake().then(resolve, resolve);
       };
+      const off = () => {
+        window.removeEventListener("keydown", go, true);
+        window.removeEventListener("pointerdown", go, true);
+      };
       window.addEventListener("keydown", go, true);
       window.addEventListener("pointerdown", go, true);
+      void openingGesture.then(() => {
+        off();
+        void sound?.wake().then(resolve, resolve);
+      });
     });
     window.__princeWaitingForSound = false;
   }
@@ -14218,6 +14871,31 @@ async function boot() {
     sound?.play(which);
   };
   void RoomRenderer;
+  const chrome = new Chrome(settings, {
+    begin: () => {
+      wakeSound();
+      beganFromOpening?.();
+    },
+    aspect: (value) => display.setAspect(value),
+    language: () => {
+    },
+    quality: () => {
+    },
+    toggleRecording,
+    save: (slot2) => {
+      const ok = saveGame(slot2);
+      chrome.buildSlots();
+      chrome.note(ok ? chrome.strings.saved : chrome.strings.noSave);
+    },
+    load: (slot2) => {
+      void loadGame(slot2).then((ok) => {
+        chrome.note(ok ? chrome.strings.loaded : chrome.strings.noSave);
+      });
+    }
+  });
+  if (POTION_PAGE) chrome.dismissOpening();
+  w.__princeDismissOpening = () => chrome.dismissOpening();
+  w.__princeSettings = () => ({ ...settings.all });
   await waitUntilThePageCanSound();
   if (POTION_PAGE) await select(levelView(POTION_LEVEL_NUMBER));
   else await restartGame();

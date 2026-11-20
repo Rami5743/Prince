@@ -123,14 +123,14 @@ describe('the keyboard, in a real browser', () => {
   it('keeps the keys away from the page, which would swallow them', async () => {
     await playLevel(3);
     const before = await page.evaluate(() =>
-      (document.getElementById('aspect') as HTMLSelectElement).value);
-    await page.focus('#aspect');
+      (document.getElementById('setting-aspect') as HTMLSelectElement).value);
+    await page.focus('#setting-aspect');
     await page.keyboard.down('Numpad9');
     await page.keyboard.up('Numpad9');
     await page.keyboard.down('ArrowDown');
     await page.keyboard.up('ArrowDown');
     const after = await page.evaluate(() =>
-      (document.getElementById('aspect') as HTMLSelectElement).value);
+      (document.getElementById('setting-aspect') as HTMLSelectElement).value);
     expect(after).toBe(before);
   });
 

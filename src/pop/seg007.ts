@@ -31,6 +31,19 @@ let last_loose_sound = 0;
 let curmob_index = 0;
 let curr_tile_temp = 0;
 
+/**
+ * `last_loose_sound`, for a saved game.
+ *
+ * It is which of the three loose-floor shakes was heard last, so that
+ * `play_sound` does not pick the same one twice running, and SDLPoP's
+ * `quick_process` carries it. Nothing in the game calls either of
+ * these: they are the shell's, through `web/savegame.ts`.
+ */
+export const looseSound = {
+  get: (): number => last_loose_sound,
+  set: (v: number): void => { last_loose_sound = v; },
+};
+
 /** `tbl_level_type`: 0 dungeon, 1 palace. Set when a level is built. */
 export const levelType = { of: (_level: number): number => 0 };
 

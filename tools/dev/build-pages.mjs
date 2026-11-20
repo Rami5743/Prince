@@ -22,7 +22,8 @@ const shell = readFileSync('web/artifact.html', 'utf8');
 const wrap = (body) => body
   .replace(/^/, '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
     + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n')
-  .replace('<header>', '</head>\n<body>\n<header>')
+  .replace('<aside class="margin" id="margin-title">',
+           '</head>\n<body>\n<aside class="margin" id="margin-title">')
   + '\n</body>\n</html>\n';
 
 writeFileSync('index.html', wrap(shell.replace('<!--DATA-SOURCE-->', dataSource)));
@@ -43,56 +44,20 @@ const potionSource = `<script type="module">
   window.__princePotionLevel = true;
 <\/script>`;
 
-const potionHeader = `<header>
-  <h1>Prince of Persia — the potion room</h1>
-  <p>The same engine, the same renderer and the same sound as the game next
-     door. The only difference is one level record: a corridor with all six of
-     the game's potions a step apart, because the real game has
-     <strong>one</strong> feather potion, at the bottom of a shaft in level 7,
-     and <strong>two</strong> upside-down ones, thirteen levels in.</p>
-</header>`;
-
-const potionPanel = `<div class="bar" id="potion-readout" style="font-variant-numeric: tabular-nums">
-  <span>hit points <strong id="pl-hp">-</strong></span>
-  <span>feather <strong id="pl-feather">no</strong></span>
-  <span>upside down <strong id="pl-upside">no</strong></span>
-  <span>room <strong id="pl-room">-</strong></span>
-</div>
-
-<footer>
-  <p><strong>Walk up to a flask and press Shift to drink it.</strong> That is
-     the original's own way in: <code>control_standing</code> is
-     <code>if (control_shift2 == CONTROL_HELD &amp;&amp; control_shift ==
-     CONTROL_HELD &amp;&amp; check_get_item()) return;</code>, and
-     <code>control_shift2</code> is a latch, so the key has to go down again
-     rather than be held. <strong>Ctrl+A</strong> lays them all out afresh.</p>
-  <p>The corridor runs left to right, two rooms, a floor tile between each:</p>
-  <ol>
-    <li><strong>blue — hurt.</strong> One hit point, <code>sound_13</code>, no
-        flash. It is first so that the one behind it has a flask to fill.</li>
-    <li><strong>small red — heal.</strong> One hit point back,
-        <code>sound_33</code>, and the screen blinks red <strong>twice</strong>.
-        With a full flask it does nothing at all, which is the C and not a
-        fault.</li>
-    <li><strong>big red — life.</strong> <code>add_life</code>: a new flask,
-        <code>sound_30</code>, red <strong>four</strong> times.</li>
-    <li><strong>green — feather.</strong> <code>feather_fall()</code>: green
-        <strong>three</strong> times, <code>sound_39</code>, and he falls at a
-        pixel a tick instead of three for as long as that tune is in the one
-        channel — eighteen and a half seconds, measured off a capture of
-        <code>PRINCE.EXE</code>. Nothing else sounds while it lasts, which is
-        the game: 39 is marked uninterruptible at priority nought.</li>
-    <li><strong>upside-down.</strong> <code>toggle_upside()</code> and nothing
-        else: no flash, no noise. Press it again to come back.</li>
-    <li><strong>the one that opens the gates.</strong>
-        <code>trigger_button(0, 0, -1)</code>, no flash and no noise. There are
-        no gates in this corridor, so it is here to be heard not to be
-        seen.</li>
-  </ol>
-  <p>Everything else the game does works here as well — the cheats, the clock,
-     the pause. <strong>Shift+W</strong> is the feather without the flask, and
-     <strong>Shift+I</strong> turns the screen over without one.</p>
-</footer>
+const potionPanel = `<details class="panel" id="panel-potion" open>
+  <summary>Potions</summary>
+  <div class="panel-body" style="font-variant-numeric: tabular-nums">
+    <div>hit points <strong id="pl-hp">-</strong></div>
+    <div>feather <strong id="pl-feather">no</strong></div>
+    <div>upside down <strong id="pl-upside">no</strong></div>
+    <div>room <strong id="pl-room">-</strong></div>
+    <div style="color: var(--dim); font-size: 11px; line-height: 1.4">
+      Walk up to a flask and press Shift to drink it. The corridor runs
+      hurt, heal, life, feather, upside-down, and the one that opens the
+      gates. <strong>Ctrl+A</strong> lays them all out afresh.
+    </div>
+  </div>
+</details>
 
 <script type="module">
   const set = (id, text) => {
@@ -111,12 +76,27 @@ const potionPanel = `<div class="bar" id="potion-readout" style="font-variant-nu
 
 const potionBody = shell
   .replace('<!--DATA-SOURCE-->', potionSource)
-  .replace(/<header>[\s\S]*?<\/header>/, potionHeader)
-  .replace(/<footer>[\s\S]*?<\/footer>/, potionPanel)
+  .replace('<!--EXTRA-PANEL-->', potionPanel)
   .replace('<title>Prince of Persia, Reconstructed</title>',
            '<title>Prince of Persia — the potion room</title>');
 if (potionBody === shell) throw new Error('potion.html: nothing was replaced');
 writeFileSync('potion.html', wrap(potionBody));
+
+/**
+ * `web/index.html`: the same page, for development and for the tests.
+ *
+ * It is **generated from the same shell** rather than written by hand,
+ * which it used to be. Two pages drift: the hand-written one still had
+ * the aspect menu and the two recording buttons months after the real
+ * page had moved on, and every browser test in the suite was driving
+ * that page and not the one the player opens. It loads the unminified
+ * `main.js` beside it and reads the game's files from `../original`,
+ * which is `main.ts`'s own default, so no data source is written in.
+ */
+writeFileSync('web/index.html', wrap(shell
+  .replace('<!--DATA-SOURCE-->', '')
+  .replace('<script type="module" src="./game.js"></script>',
+           '<script type="module" src="./main.js"></script>')));
 
 writeFileSync('.nojekyll', '');
 console.log('wrote index.html, potion.html and game.js for GitHub Pages');

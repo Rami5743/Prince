@@ -68,6 +68,18 @@ export const demo = {
 export let curr_guard_color = 0;
 /** `curr_guard_color`, where the shell can read it. */
 export const guardColor = { value: 0 };
+/**
+ * `curr_guard_color`, put back by a saved game.
+ *
+ * SDLPoP's `quick_process` carries it, and `restore_room_after_quick_load`
+ * is careful to keep it across `reset_level_unused_fields`, so a guard
+ * loaded out of a save is the colour he was. Nothing in the game calls
+ * this: it is the shell's, through `web/savegame.ts`.
+ */
+export function setGuardColor(v: number): void {
+  curr_guard_color = v;
+  guardColor.value = v;
+}
 
 // seg006:17D7
 export function char_opp_dist(): number {

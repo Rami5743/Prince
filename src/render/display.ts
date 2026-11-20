@@ -26,6 +26,7 @@ export class Display {
     this.ctx = ctx;
     this.imageData = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
     this.applyAspect();
+    this.watch();
   }
 
   setAspect(mode: AspectMode): void {
@@ -33,10 +34,43 @@ export class Display {
     this.applyAspect();
   }
 
+  /** The width of one screen height, in the shape of pixel chosen. */
+  private get ratio(): number {
+    return this.aspect === 'original-4-3' ? 4 / 3 : SCREEN_WIDTH / SCREEN_HEIGHT;
+  }
+
+  /**
+   * The biggest the picture can be inside the box it is given.
+   *
+   * This is worked out here rather than left to CSS, and that is not a
+   * preference. The page gives the game the whole height of the window,
+   * so the width has to follow from the height -- and a rule that asks
+   * for the height of the element's own container is circular, because
+   * the container is sized by what is in it. Measured, in a window 760
+   * pixels wide: the container-query form drew the game **two pixels
+   * square**. Reading the box and setting the two lengths cannot go
+   * wrong that way.
+   */
   private applyAspect(): void {
     const s = this.canvas.style;
     s.imageRendering = 'pixelated';
-    s.aspectRatio = this.aspect === 'original-4-3' ? '4 / 3' : '320 / 200';
+    const box = this.canvas.parentElement?.getBoundingClientRect();
+    if (!box || box.width < 1 || box.height < 1) {
+      // Not laid out yet -- the observer below will come back to it.
+      s.aspectRatio = this.aspect === 'original-4-3' ? '4 / 3' : '320 / 200';
+      return;
+    }
+    const width = Math.min(box.width, box.height * this.ratio);
+    s.width = `${Math.floor(width)}px`;
+    s.height = `${Math.floor(width / this.ratio)}px`;
+    s.aspectRatio = '';
+  }
+
+  /** Follow the box the page gives the game, which a resize changes. */
+  private watch(): void {
+    const parent = this.canvas.parentElement;
+    if (!parent || typeof ResizeObserver === 'undefined') return;
+    new ResizeObserver(() => this.applyAspect()).observe(parent);
   }
 
   present(surface: Surface, paletteRgba: Uint8Array): void {
