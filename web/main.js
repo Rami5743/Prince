@@ -10746,13 +10746,21 @@ var PopGame = class _PopGame {
     this.scene.screenPalette.loadBlock(set.paletteBase, colours);
   }
   redrawScreen(differentRoom) {
-    this.applyGuardColour();
     if (differentRoom) {
       this.surface.fillRect(0, 0, 320, 192, 0);
     }
     screen.different_room = 0;
+    if (g.is_blind_mode) {
+      this.surface.fillRect(0, 0, 320, 192, 0);
+      redraw_screen();
+      return;
+    }
+    this.applyGuardColour();
     redraw_room();
+    const blind = g.is_blind_mode;
+    g.is_blind_mode = 1;
     draw_tables();
+    g.is_blind_mode = blind;
     reset_tables();
     draw_moving();
     draw_tables();

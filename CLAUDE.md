@@ -41,6 +41,156 @@
 ## ============================================================
 
 
+## THE GHOST OF THE PRINCE DRINKING: `redraw_screen` NEVER BLACKED THE ROOM
+
+    measured   32093 of 33067   97%   (unmoved, to the tick)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       491 of   494         (unmoved)
+    npm test     786 -> 795
+
+The player drank the upside-down potion on `potion.html` and **a copy
+of him in the drinking pose stayed on the screen for the rest of the
+level**. It is one line of `redraw_screen`, it was never the potion
+level's and never the flip's, and the round before this one wrote
+down that it could not happen.
+
+### 1. The line: `is_blind_mode = 1; draw_tables(); is_blind_mode = 0;`
+
+`redraw_screen` (`seg003:037B`) is
+
+    redraw_room();
+    is_blind_mode = 1;
+    draw_tables();
+    is_blind_mode = 0;
+    memset(table_counts, 0, sizeof(table_counts));
+    draw_moving();
+    draw_tables();
+
+and the port had the two `draw_tables` and **not the flag**.
+`draw_tables` opens with
+`if (is_blind_mode) draw_rect(&rect_top, color_0_black)`, so that one
+line held up for one call is the whole of how `redraw_screen` blacks
+the room. `redraw_room` only fills the tables, and **`tiles_0_empty`
+draws nothing at all**, so the open air of a room is never painted
+over by drawing the room again.
+
+It cost nothing on `redraw_screen(1)`, which fills the room with
+black above it anyway. On **`redraw_screen(0)`** -- which is reached
+from exactly one place in play, `need_redraw_because_flipped` -- it
+redrew the room *around* the Prince already standing in it.
+
+### 2. Why a leftover sprite becomes permanent: the peel
+
+`redraw_room` opens with `free_peels()`. So, logged tick by tick on
+the potion level (`add_peel`/`restore_peels` instrumented):
+
+    tick 225  restore_peels n=1 99,77 21x42   add_peel 99..120 77+42
+    tick 226  free_peels n=1                  <- the flip
+              restore_peels n=0 (twice)       add_peel 99..120 77+42
+    tick 227  restore_peels n=1 99,77 21x42   add_peel 99..120 77+42
+    tick 228  restore_peels n=1 99,77 21x42   add_peel 105..122 74+45
+
+At 226 the peel that held the background under him is thrown away,
+the room is drawn without being blacked, his pixels survive it, and
+the new `add_peel` reads **his own sprite as if it were the
+background**. 227 looks right because the contaminated peel is put
+back over the very pixels it came from. At 228 he moves, the peel is
+painted back at 99,77, and the drinking Prince is there for good --
+nothing ever paints over the black air of a room again.
+
+### 3. Measured against the original, which can now be asked
+
+`potion1` replayed under `dosbox_oracle.py --game` with the potion
+`LEVELS.DAT`, recorded at 30fps and scaled back to 320x200. Count the
+pixels brighter than 60 in the box **x 90..140, y 68..118** -- the
+black air of the corridor, where nothing but the Prince can ever be
+-- and line the capture's video frames up with the port's ticks
+(2.5 frames to a tick, f0125 against t0489):
+
+    tick        489   491   493   495 .. 515
+    PRINCE.EXE  572   872   855   803
+    the port    572   872   855   803    with the fix
+    the port    572   872  1007   972    without it
+
+`toggle_upside` fires on tick 490 of `potion1`. **The ghost is 169
+pixels the original never draws, from the third tick after the flip
+and for ever after**, and with the line in the port agrees with the
+capture exactly, tick for tick, on every one of them.
+
+Drinking all six and comparing the picture at rest with the room
+drawn whole (`redraw_screen(1)`), pixels left behind:
+
+    hurt heal life feather   inversion   open
+       0    0    0       0         169    322
+
+-- the open one's 322 is the inversion's ghost still there plus its
+own, because it is drunk after it.
+
+### 4. The correction: "it changes no picture in this port" was wrong
+
+The round that put `need_redraw_because_flipped` in wrote:
+
+> **And it changes no picture in this port, which is worth writing
+> down.** [...] Measured directly: levels 1 and 9, forty ticks apiece
+> with `shift+i` on tick 20, the full-redraw branch against the cheap
+> one -- **no tick differs, not one pixel**.
+
+**That measurement held the Prince still, which is the one case the
+fault cannot show**: a peel contaminated with his own pixels is
+restored over the very pixels it came from until he moves. The flag
+and the branch were right; what was missing was the black fill
+*inside* the branch, and a still Prince never pays for it.
+
+Measured again with him **walking** -- `shift+i` on tick 60, Right
+held throughout, the picture at rest against the room drawn whole:
+
+    level      1    2    9   13
+    walking   45   92   39   92     pixels left behind
+    standing   0    0    0    0
+
+### 5. "It was not there on level 9", settled
+
+It is there on level 9. The table above is `shift+i` on the real
+levels and level 9 -- a palace -- leaves 39 pixels behind where the
+dungeons leave 45 and 92. It is not dungeon-only, it is not
+`gen_palace_wall_colors`, and it is not the potion level's own
+record. What makes the potion level show it so plainly is that the
+Prince goes from the wide drinking pose straight to standing still,
+so the whole of the old sprite is left uncovered; a walking Prince
+leaves only the sliver his next frame does not cover.
+
+The player had simply never drunk an inversion potion anywhere else:
+level 9's two are in rooms 7 and 10 and the level starts in room 11.
+
+### 6. What could not have caught it, and what does now
+
+* **No digest could.** `invert2`, the one capture of the inversion,
+  is `shift+i` with the Prince standing -- 260 of 260 before and
+  after this fix. Every score in the project is unmoved to the tick.
+* **The page against the port could not.** The bug was in `src/pop`,
+  so `tests/browser/page-vs-port.test.ts`-style comparison passes
+  either way: measured, the new page-vs-port test over the seventy
+  ticks around the flip passes with the ghost in.
+* **What catches it** is the room drawn whole as ground truth, and
+  the original's own pixel count:
+  `tests/pop/potion-level.test.ts` (all six potions, 0 pixels left
+  behind; reads 169 and 322 without the fix),
+  `tests/pop/potions.test.ts` (`shift+i` while walking on levels 1,
+  2, 9 and 13; reads 45 without it) and
+  `tests/browser/potion-page.test.ts` (the page replaying `potion1`,
+  required to draw the capture's own 572/872/855/803; reads 972 with
+  the ghost).
+
+### 7. And the blind cheat, which was the other half of the same line
+
+`redraw_screen` is `if (is_blind_mode) { draw_rect(&rect_top,
+color_0_black); } else { ... }` -- in blind mode the whole body is
+skipped and the room is simply painted out. The port drew the room.
+Both halves are in now, and `g.is_blind_mode` is saved and put back
+around the forced `1` rather than written to nought, because the C
+only reaches that line with it already nought.
+
+
 ## THE POTION ROOM: A SECOND PAGE, AND `PRINCE.EXE` PLAYS IT TOO
 
     https://rami5743.github.io/Prince/potion.html
@@ -525,7 +675,15 @@ read**. Both are right now and `need_full_redraw` is gone from `g`,
 so nothing can write to it again.
 
 **And it changes no picture in this port, which is worth writing
-down.** The C updates the *screen* by rectangles --
+down.** -- **THIS IS WRONG; see "THE GHOST OF THE PRINCE DRINKING"
+at the top of this file.** The branch is right and the measurement
+below is right as far as it goes, but it was taken with the Prince
+**standing still**, which is the one case in which the missing black
+fill inside `redraw_screen(0)` cannot show. With him walking the same
+`shift+i` leaves 45, 92, 39 and 92 pixels of him behind on levels 1,
+2, 9 and 13. What follows is kept as it was written.
+
+The C updates the *screen* by rectangles --
 `copy_screen_rect` inside two `flip_screen` calls -- so a tick that
 turns the screen over leaves everything outside those rectangles
 the old way up. The port composes the whole offscreen and flips it

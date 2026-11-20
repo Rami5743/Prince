@@ -123,6 +123,114 @@ async function drinkAll(): Promise<Drink[]> {
   return got;
 }
 
+/**
+ * The room drawn whole -- `redraw_screen(1)`, which fills the room
+ * with black before it draws it again.
+ *
+ * It is the ground truth for "is anything left behind": the picture
+ * the game would have if nothing had ever been drawn on top of it.
+ * An incremental tick that has rubbed out everything it owed draws
+ * exactly this.
+ */
+function wholeRoom(game: PopGame): Uint8Array {
+  const priv = game as unknown as { needFullRedraw: boolean; fullRedrawClears: boolean };
+  priv.needFullRedraw = true;
+  priv.fullRedrawClears = true;
+  return new Uint8Array(game.render().toRgb(game.scene.screenPalette.toRgba()));
+}
+
+/**
+ * Walk to one potion, drink it, stand still for twenty ticks, and
+ * count the pixels of the room that the incremental picture has and
+ * the room drawn whole has not.
+ */
+async function leftBehind(which: string): Promise<number> {
+  const game = await PopGame.start(assets, exe, POTION_LEVEL_NUMBER);
+  let last = new Uint8Array(320 * 200 * 3);
+  const step = (x = 0, shift = false): void => {
+    game.step({ x, y: 0, shift });
+    last = new Uint8Array(game.render().toRgb(game.scene.screenPalette.toRgba()));
+  };
+  const stand = (): void => { for (let i = 0; i < 40 && g.Char.frame !== 15; i++) step(); };
+  for (const potion of POTION_PLACES) {
+    for (let i = 0; i < 40; i++) {
+      const here = g.Char.room === potion.room && g.Char.curr_row === potion.row;
+      if (here && (g.Char.curr_col === potion.column - 1
+        || g.Char.curr_col === potion.column)) break;
+      step(1);
+      stand();
+    }
+    for (let t = 0; t < 90; t++) {
+      step(0, t % 4 === 1 || t % 4 === 2);
+      if (game.scene.state.typeAt(potion.room, potion.column, potion.row) !== 10
+        && g.Char.frame === 15) break;
+    }
+    if (potion.name === which) {
+      for (let i = 0; i < 20; i++) step();
+      break;
+    }
+    stand();
+  }
+  const whole = wholeRoom(game);
+  let n = 0;
+  // The room, not the strip of words and hit points under it.
+  for (let i = 0; i < 320 * 192; i++) {
+    if (last[i * 3] !== whole[i * 3] || last[i * 3 + 1] !== whole[i * 3 + 1]
+      || last[i * 3 + 2] !== whole[i * 3 + 2]) n++;
+  }
+  return n;
+}
+
+/**
+ * **The ghost of the Prince drinking, which the player found.**
+ *
+ * Drink the upside-down potion and a copy of him in the drinking
+ * pose was left standing in the corridor for the rest of the level.
+ *
+ * `toggle_upside` sets `need_redraw_because_flipped` and
+ * `draw_game_frame` turns it into `redraw_screen(0)`, whose middle is
+ *
+ *     redraw_room();
+ *     is_blind_mode = 1;
+ *     draw_tables();
+ *     is_blind_mode = 0;
+ *     memset(table_counts, 0, sizeof(table_counts));
+ *     draw_moving();
+ *     draw_tables();
+ *
+ * and the port had the two `draw_tables` and not the flag.
+ * `draw_tables` opens with
+ * `if (is_blind_mode) draw_rect(&rect_top, color_0_black)`, so that
+ * one line is how `redraw_screen` **blacks the room**: `redraw_room`
+ * only fills the tables, and `tiles_0_empty` draws nothing at all, so
+ * the open air of a room is never painted over. Without it the flip
+ * tick redrew the room *around* the Prince already standing in it,
+ * `redraw_room`'s `free_peels()` threw away the rectangle that would
+ * have rubbed him out, and the next `add_peel` read his own pixels as
+ * if they were the background -- so the moment he moved, two ticks
+ * later, they were painted back and stayed.
+ *
+ * Measured against the original. `potion1` drunk under
+ * `dosbox_oracle.py --game`, grabbed at 30fps, counting the pixels
+ * brighter than 60 in the box x 90..140 y 68..118 -- the black air
+ * the Prince stands in -- the capture beside the port, tick for tick:
+ *
+ *     tick       489   491   493   495 .. 515
+ *     PRINCE.EXE 572   872   855   803
+ *     the port   572   872   855   803    with this fix
+ *     the port   572   872  1007   972    without it
+ *
+ * The flip is tick 490 and the ghost is **169 pixels** the original
+ * never draws, from the third tick after it and for ever.
+ */
+describe('what the screen turning over leaves behind', () => {
+  for (const potion of POTION_PLACES) {
+    it(`leaves no copy of him behind after the ${potion.name} one`, async () => {
+      expect(await leftBehind(potion.name)).toBe(0);
+    }, 120000);
+  }
+});
+
 describe('the potion level', () => {
   let drunk: Drink[];
   let by: Record<string, Drink>;

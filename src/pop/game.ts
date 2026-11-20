@@ -880,15 +880,47 @@ export class PopGame {
   }
 
   private redrawScreen(differentRoom: boolean): void {
-    this.applyGuardColour();
     if (differentRoom) {
       // `draw_rect(&rect_top, color_0_black)`: the room, not the strip
       // of words and hit points under it.
       this.surface.fillRect(0, 0, 320, 192, 0);
     }
     screen.different_room = 0;
+    if (g.is_blind_mode) {
+      // `if (is_blind_mode) { draw_rect(&rect_top, color_0_black); }`:
+      // the whole of `redraw_screen` while the blind cheat is on. The
+      // room is painted out and nothing is drawn over it.
+      this.surface.fillRect(0, 0, 320, 192, 0);
+      redraw_screen();
+      return;
+    }
+    this.applyGuardColour();
     redraw_room();
+    /**
+     * **`is_blind_mode = 1; draw_tables(); is_blind_mode = 0;`**, and
+     * the one is the whole of this round's bug.
+     *
+     * `draw_tables` opens with
+     * `if (is_blind_mode) draw_rect(&rect_top, color_0_black)`, so the
+     * flag held up for this one call is how `redraw_screen` **blacks
+     * the room**: `redraw_room` only fills the tables, and a tile that
+     * is `tiles_0_empty` draws nothing at all, so without the black
+     * fill whatever was standing in the open air of a room is still
+     * there when the room has been drawn again.
+     *
+     * The port had the two `draw_tables` and not the flag, which cost
+     * nothing on `redraw_screen(1)` -- the room is filled with black
+     * above either way -- and left `redraw_screen(0)` redrawing a room
+     * **over** the character already in it. `redraw_room` frees the
+     * peels first, so the next `add_peel` then read the old sprite's
+     * own pixels as if they were the background and put them back the
+     * moment he moved. That is the inversion potion's ghost: see
+     * `tests/pop/potion-level.test.ts`.
+     */
+    const blind = g.is_blind_mode;
+    g.is_blind_mode = 1;
     draw_tables();
+    g.is_blind_mode = blind;
     reset_tables();
     draw_moving();
     draw_tables();
