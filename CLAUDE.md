@@ -3460,11 +3460,13 @@ gameplay, by `tools/dev/scene-report.ts`:
 and what the player *hears*, for the first time, by
 `tools/dev/sound-report.ts`:
 
-    title         212 of 212 notes    gate1snd      94 of  96 noises
+    title         212 of 212 notes    gate1snd      95 of  96 noises
     cutscene2snd   21 of  21 notes    level10bsnd   90 of  90 noises
-    feather1snd    49 of  50 noises   the feather, by `shift+w`
+    feather1snd    50 of  50 noises   the feather, by `shift+w`, exact
     potionsnd      25 of  25 noises   all six potions, drunk out of
                                       the flask on a level of our own
+
+    sounds        493 of 494
 
 **Most of what used to be short was the encoder, not the clock** --
 see the top of this file: the same eight scenes went from 756 to 1224
