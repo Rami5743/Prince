@@ -249,10 +249,70 @@ export interface OverlayItem {
   readonly color: number;
   /** How tall a capital is, in game pixels. */
   readonly capHeight: number;
+  /**
+   * The rows the ink must stay inside, where there is a limit.
+   *
+   * A bitmap glyph is exactly as tall as its cell, so the original
+   * never had to think about this. A vector face is not, and
+   * `fitLine` below is what is done about it. A line with no band
+   * is drawn at the size and on the baseline it asks for.
+   */
+  readonly top?: number;
+  readonly bottom?: number;
 }
 
 /** The strip under the room, and the rows of the hall of fame. */
 export const TEXT_CAP_HEIGHT = 7;
+
+/** What a canvas says about the ink of one line at one size. */
+export interface LineInk {
+  /** How far the ink reaches above the baseline. */
+  readonly ascent: number;
+  /** How far below. */
+  readonly descent: number;
+}
+
+/**
+ * Fit a vector line into the rows the original gave it.
+ *
+ * A bitmap glyph is exactly as tall as its cell, so the original
+ * never had to think about this: `rect_bottom_text` is eight rows and
+ * its seven strings have no ascender past the capital and no
+ * descender at all. A vector face has both, and in Hebrew it has them
+ * in the same line -- `נותרו 60 דקות` ends in a qof whose tail, left
+ * where it fell, went **off the bottom of the screen**, and `שלב 3`
+ * put the top of its lamed a quarter of a row over the floor of the
+ * room.
+ *
+ * So: move the baseline if moving is enough, and only make the line
+ * smaller when the ink is taller than the band however it is placed.
+ * `measure` is the canvas, which is the only thing that knows what
+ * this string is in this face; it is called again after a resize
+ * because the ink of a face is not quite proportional to its size.
+ *
+ * This is here rather than in `display.ts` because it is arithmetic
+ * and can be tested as arithmetic: a browser test cannot tell a tail
+ * that fits from a tail the canvas has cut off at its own edge.
+ */
+export function fitLine(
+  baseline: number, size: number, top: number, bottom: number,
+  measure: (size: number) => LineInk,
+): { size: number; baseline: number } {
+  const band = bottom - top;
+  if (!(band > 0)) return { size, baseline };
+  const { ascent, descent } = measure(size);
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent)) return { size, baseline };
+  const ink = ascent + descent;
+  if (ink > band) {
+    const smaller = size * (band / ink);
+    const fitted = measure(smaller);
+    const drop = Number.isFinite(fitted.descent) ? fitted.descent : 0;
+    return { size: smaller, baseline: bottom - drop };
+  }
+  if (baseline + descent > bottom) return { size, baseline: bottom - descent };
+  if (baseline - ascent < top) return { size, baseline: top + ascent };
+  return { size, baseline };
+}
 
 /** The gap between the two columns of the credits. */
 const GUTTER = 8;
@@ -292,6 +352,8 @@ export class GameText {
   private typed = '';
   /** Whether `draw_text_cursor` last drew the cursor or erased it. */
   private cursorUp = false;
+  /** Whether the last strip drawn put ink in the row above its rectangle. */
+  private liftedRow = false;
   /** `arg_4`: how far inside the box `input_str` starts. */
   private static readonly BOX_INSET = 4;
 
@@ -412,6 +474,26 @@ export class GameText {
     left: number, top: number, right: number, color: number,
   ): void {
     this.lines.delete('bottom');
+    /**
+     * Rub out the row above the rectangle, if the last line used it.
+     *
+     * The caller blacks `rect_bottom_text`, which is rows 193 to 201,
+     * because that is the rectangle the C blacks. A Hebrew line is
+     * drawn one row higher than that, so its top row is **outside**
+     * what the caller rubs out -- and it stayed on the screen when
+     * the strip went empty, when the line changed to a short one, and
+     * when the quality moved to `high`, which draws nothing into the
+     * surface at all. Measured on the page: the tops of `שלב 1` were
+     * left standing in white over the floor of the room.
+     *
+     * Row 192 is the first row under the 192-row gameplay buffer and
+     * the hit points are to the left of `left`, so there is nothing
+     * else in it to rub out.
+     */
+    if (this.liftedRow) {
+      surface.fillRect(left, top - 1, right - left + 1, 1, 0);
+      this.liftedRow = false;
+    }
     if (text === null) return;
     const words = this.translate(text);
     const rtl = hasRtl(words);
@@ -436,15 +518,23 @@ export class GameText {
      */
     const lift = rtl ? 1 : 0;
     if (this.vector) {
+      // The band is row 192 -- the first row under the 192-row room
+      // -- to the bottom of the screen, which is every row the strip
+      // can have. The baseline is the original's own; the fit only
+      // moves it when the ink would leave the band.
       this.remember({
-        key: 'bottom', left, right, baseline: top + TEXT_CAP_HEIGHT - lift,
+        key: 'bottom', left, right, baseline: top + TEXT_CAP_HEIGHT,
         xAlign: 0, text: words, rtl, color, capHeight: TEXT_CAP_HEIGHT,
+        top: top - 1, bottom: top + TEXT_CAP_HEIGHT,
       });
       return;
     }
     const visual = rtl ? toVisual(words) : words;
     const width = this.shellWidth(visual);
-    if (lift) surface.fillRect(left, top - lift, right - left + 1, lift, 0);
+    if (lift) {
+      surface.fillRect(left, top - lift, right - left + 1, lift, 0);
+      this.liftedRow = true;
+    }
     this.blitLine(
       surface, visual, left + ((right - left + 1 - width) >> 1), top - lift, color,
     );
@@ -467,6 +557,7 @@ export class GameText {
       this.remember({
         key, left, right, baseline, xAlign,
         text: words, rtl, color, capHeight: TEXT_CAP_HEIGHT,
+        top, bottom,
       });
       return;
     }

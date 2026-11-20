@@ -46,19 +46,33 @@ afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
 });
 
-/** The strip under the room, off the very canvas the player looks at. */
+/**
+ * The strip under the room, off the very canvas the player looks at.
+ *
+ * The canvas is 320 wide at `quality: original` and three or six
+ * times that at `high` -- `Display` gives the picture more pixels of
+ * its own art there -- so the rectangle is asked for in the game's
+ * coordinates and multiplied by whatever the canvas turns out to be.
+ * A column is reported back in the game's coordinates too, so the two
+ * qualities can be compared.
+ */
 const strip = (): Promise<{ lit: number; ink: number[] }> => page.evaluate(() => {
   const canvas = document.getElementById('screen') as HTMLCanvasElement;
   const ctx = canvas.getContext('2d')!;
+  const n = canvas.width / 320;
   // `rect_bottom_text` is x 70 to 250. The hit points live in the
   // same seven rows, to the left of it, and are not words.
-  const d = ctx.getImageData(70, 193, 180, 7).data;
+  const w = 180 * n;
+  const d = ctx.getImageData(70 * n, 193 * n, w, 7 * n).data;
   const ink: number[] = [];
   let lit = 0;
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i]! + d[i + 1]! + d[i + 2]! > 60) { lit++; ink.push(70 + ((i / 4) % 180)); }
+    if (d[i]! + d[i + 1]! + d[i + 2]! > 60) {
+      lit++;
+      ink.push(70 + Math.floor(((i / 4) % w) / n));
+    }
   }
-  return { lit, ink };
+  return { lit: Math.round(lit / (n * n)), ink };
 });
 
 const ticks = (): Promise<number> => page.evaluate(() => (window as unknown as {
@@ -168,6 +182,62 @@ describe('the game text, in the page', () => {
       return n;
     });
     expect(ink).toBeGreaterThan(50);
+  });
+
+  it('keeps the crisp Hebrew inside the strip, top and bottom', async () => {
+    /**
+     * A vector face is not the height of its cell. At the size that
+     * gives a seven-pixel capital a Hebrew lamed climbs above it and
+     * a qof hangs below, and the strip has eight rows in all -- row
+     * 192, the first under the 192-row room, to the bottom of the
+     * screen. Without a fit the one goes in white over the floor of
+     * the room and the other goes off the bottom of the screen.
+     *
+     * The line this reads is `שלב 3`, because the **lamed** is what
+     * reaches over the room: measured with the fit taken out, its
+     * top row is 191.74. The other half of the fit -- a qof's tail
+     * going off the bottom of the screen -- is pinned in
+     * `tests/render/game-text.test.ts`, because a canvas cuts ink
+     * off at its own edge and nothing read back from one can tell a
+     * tail that fits from a tail that was cut.
+     */
+    await page.evaluate(() => (window as unknown as {
+      __princePause(on: boolean): void;
+    }).__princePause(false));
+    await page.evaluate(() => (window as unknown as {
+      __princeShow(level: number, room: number): Promise<void>;
+    }).__princeShow(3, 1));
+    // `show_level` holds `LEVEL n` for twenty-four ticks, so this
+    // stops the clock well inside the two seconds it is up.
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as unknown as {
+      __princePause(on: boolean): void;
+    }).__princePause(true));
+    await page.waitForTimeout(150);
+
+    const ink = await page.evaluate(() => {
+      const canvas = document.getElementById('screen-text') as HTMLCanvasElement;
+      const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+      const rows = canvas.height / 200;
+      let top = 200; let bottom = 0; let n = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          if (d[(y * canvas.width + x) * 4 + 3]! > 40) {
+            n++;
+            if (y / rows < top) top = y / rows;
+            if (y / rows > bottom) bottom = y / rows;
+          }
+        }
+      }
+      return { top, bottom, n };
+    });
+    expect(ink.n, 'a Hebrew line is up').toBeGreaterThan(50);
+    // Row 192 is the first row under the 192-row room. Measured with
+    // the fit taken out, this reads **191.74** -- the top of a lamed
+    // a quarter of a row over the floor -- so the tenth of a row of
+    // slack here is for antialiasing and not for the bug.
+    expect(ink.top, 'nothing over the room').toBeGreaterThan(191.9);
+    expect(ink.bottom, 'and nothing past the last row').toBeLessThan(200);
   });
 
   it('puts the bitmap words back when the quality goes back', async () => {

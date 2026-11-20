@@ -72,6 +72,10 @@ async function boot(): Promise<void> {
    */
   const settings = new SettingsStore();
   display.setAspect(settings.get('aspect'));
+  // The picture's own quality, which the player may have chosen on a
+  // previous visit: the canvas is given more pixels before the first
+  // frame is drawn rather than after it.
+  display.setQuality(settings.get('quality'));
   /**
    * The page's own words, kept here as well as in the chrome.
    *
@@ -131,6 +135,9 @@ async function boot(): Promise<void> {
       const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
+      // The sound's own half of `quality`, which the player may have
+      // chosen before ever touching the page.
+      sound.quality = settings.get('quality');
       /**
        * Every index the game ever raises, read in behind the play.
        *
@@ -1637,6 +1644,12 @@ async function boot(): Promise<void> {
     },
     quality: (value) => {
       gameText.quality = value;
+      // The words, the picture and the sound are three answers to
+      // the same setting: the words get a vector face on a second
+      // canvas, the picture gets more pixels of its own art, and the
+      // tunes get the shape the hardware's voice had.
+      display.setQuality(value);
+      if (sound) sound.quality = value;
       relabelTheGame();
     },
     toggleRecording,

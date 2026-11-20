@@ -255,8 +255,34 @@ export interface MusicSink {
   readonly currentTime: number;
   createOscillator(): OscillatorNode;
   createGain(): GainNode;
+  /** Only `quality: high` asks for one, and only if the sink has it. */
+  createBiquadFilter?(): BiquadFilterNode;
   readonly destination: AudioNode;
 }
+
+/**
+ * How a note is made, which is the `quality` setting and nothing else.
+ *
+ * * **plain** is one oscillator a note with a short rise and fall --
+ *   what the page has always played, and what every headless tool and
+ *   every test gets, because none of them passes a voice.
+ * * **rich** is the same notes, at the same instants, for the same
+ *   lengths. What it adds is the shape the hardware had and a bare
+ *   oscillator has not: the AdLib's voice is **two** operators, so a
+ *   quiet octave above the fundamental goes with it; a real envelope
+ *   decays to a sustain instead of sitting flat and then stopping;
+ *   and the whole tune goes through one gentle low pass, which is
+ *   what takes the edge off a square wave. The melody is untouched --
+ *   `tests/render/audio.test.ts` requires both voices to hold the
+ *   same pitches for the same time, to the millisecond.
+ */
+export type TuneVoice = 'plain' | 'rich';
+
+/** The quiet partial a two-operator voice adds, and how loud it is. */
+const RICH_PARTIAL = 2;
+const RICH_PARTIAL_LEVEL = 0.28;
+/** Where the low pass sits. Above the game's highest note, well below its hiss. */
+const RICH_CUTOFF_HZ = 3800;
 
 /**
  * A tune in the channel: every note scheduled at once, and a handle to
@@ -274,6 +300,10 @@ export const TUNE_NOTE_CAP = 2048;
 export class Tune {
   private readonly nodes: { osc: OscillatorNode; gain: GainNode }[] = [];
   private readonly sink: MusicSink;
+  /** The one low pass of a rich tune, or nothing at `plain`. */
+  private filter: BiquadFilterNode | null = null;
+  /** The node that carries `onended`, kept so a stop cannot drop it. */
+  private silent: OscillatorNode | null = null;
   /** When the last note ends, in the sink's own clock. */
   readonly endsAt: number;
   onended: (() => void) | null = null;
@@ -285,10 +315,35 @@ export class Tune {
    * at 18.000 s and its sequence ends at 18.667, and the whole of
    * `is_feather_fall` is `while (check_sound_playing())`.
    */
-  constructor(sink: MusicSink, notes: readonly Note[], wave: OscillatorType, length = 0) {
+  constructor(
+    sink: MusicSink, notes: readonly Note[], wave: OscillatorType, length = 0,
+    voice: TuneVoice = 'plain',
+  ) {
     this.sink = sink;
     const t0 = sink.currentTime + 0.03;
     let end = t0 + length;
+    /**
+     * One low pass for the whole tune, where the sink has one.
+     *
+     * It is made once rather than per note: a tune is up to eighteen
+     * hundred notes and a filter apiece would be eighteen hundred
+     * filters for one sound.
+     */
+    // `notes.length` is in the test because an empty tune is thrown
+    // away by its caller without being stopped, and a filter made for
+    // one would be left connected to the destination for ever.
+    const rich = voice === 'rich' && notes.length > 0
+      && typeof sink.createBiquadFilter === 'function';
+    let out: AudioNode = sink.destination;
+    if (rich) {
+      const filter = sink.createBiquadFilter!();
+      filter.type = 'lowpass';
+      filter.frequency.value = RICH_CUTOFF_HZ;
+      filter.Q.value = 0.7;
+      filter.connect(sink.destination);
+      this.filter = filter;
+      out = filter;
+    }
     /**
      * A tune with hundreds of notes is hundreds of oscillators at
      * once, and the cap is here so a malformed file cannot wedge the
@@ -301,23 +356,20 @@ export class Tune {
      * 52 at 202 notes.
      */
     for (const n of notes.slice(0, TUNE_NOTE_CAP)) {
-      const osc = sink.createOscillator();
-      const gain = sink.createGain();
-      osc.type = wave;
-      osc.frequency.value = n.hz;
       const start = t0 + n.at;
       const stop = start + n.dur;
-      // A short rise and fall, or every note begins with a click.
       const peak = 0.11 * n.level;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(peak, start + 0.008);
-      gain.gain.setValueAtTime(peak, Math.max(start + 0.009, stop - 0.02));
-      gain.gain.linearRampToValueAtTime(0, stop);
-      osc.connect(gain);
-      gain.connect(sink.destination);
-      osc.start(start);
-      osc.stop(stop + 0.01);
-      this.nodes.push({ osc, gain });
+      this.voiceNote(sink, out, wave, n.hz, peak, start, stop, rich);
+      if (rich) {
+        // The second operator: an octave up, quiet. This is what
+        // makes an AdLib's note an AdLib's note rather than a test
+        // tone, and it is the same note -- a harmonic of it, at the
+        // same instant and for the same time.
+        this.voiceNote(
+          sink, out, 'sine', n.hz * RICH_PARTIAL,
+          peak * RICH_PARTIAL_LEVEL, start, stop, rich,
+        );
+      }
       if (stop > end) end = stop;
     }
     this.endsAt = end;
@@ -341,11 +393,54 @@ export class Tune {
       gain.gain.value = 0;
       osc.connect(gain);
       gain.connect(sink.destination);
+      this.silent = osc;
       osc.onended = (): void => { this.onended?.(); };
       osc.start(t0);
       osc.stop(end + 0.01);
       this.nodes.push({ osc, gain });
     }
+  }
+
+  /**
+   * One oscillator of one note, with its envelope.
+   *
+   * At `plain` the envelope is a rise, a flat hold and a fall, which
+   * is what the page has always played. At `rich` it decays to a
+   * sustain and releases, which is the shape every instrument of
+   * the period had and the reason the plain voice sounds like an
+   * organ: a note that holds dead level and then stops is the one
+   * thing no real voice does.
+   */
+  private voiceNote(
+    sink: MusicSink, out: AudioNode, wave: OscillatorType, hz: number,
+    peak: number, start: number, stop: number, rich: boolean,
+  ): void {
+    const osc = sink.createOscillator();
+    const gain = sink.createGain();
+    osc.type = wave;
+    osc.frequency.value = hz;
+    const g = gain.gain;
+    if (rich) {
+      const attack = Math.min(0.012, (stop - start) / 4);
+      const decay = Math.min(0.09, (stop - start) / 2);
+      const release = Math.min(0.045, (stop - start) / 3);
+      g.setValueAtTime(0, start);
+      g.linearRampToValueAtTime(peak, start + attack);
+      g.linearRampToValueAtTime(peak * 0.72, start + attack + decay);
+      g.setValueAtTime(peak * 0.72, Math.max(start + attack + decay, stop - release));
+      g.linearRampToValueAtTime(0, stop);
+    } else {
+      // A short rise and fall, or every note begins with a click.
+      g.setValueAtTime(0, start);
+      g.linearRampToValueAtTime(peak, start + 0.008);
+      g.setValueAtTime(peak, Math.max(start + 0.009, stop - 0.02));
+      g.linearRampToValueAtTime(0, stop);
+    }
+    osc.connect(gain);
+    gain.connect(out);
+    osc.start(start);
+    osc.stop(stop + 0.01);
+    this.nodes.push({ osc, gain });
   }
 
   get empty(): boolean { return this.nodes.length === 0; }
@@ -360,5 +455,8 @@ export class Tune {
       } catch { /* already finished */ }
     }
     this.nodes.length = 0;
+    this.silent = null;
+    try { this.filter?.disconnect(); } catch { /* already gone */ }
+    this.filter = null;
   }
 }

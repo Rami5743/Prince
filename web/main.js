@@ -637,7 +637,1115 @@ var Surface = class {
   }
 };
 
+// src/render/font.ts
+var FONT_OFFSET = 107020;
+function looksLikeGlyph(exe, o) {
+  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
+}
+var UNDERSCORE_ROWS = [0, 0, 0, 0, 0, 0, 0, 252];
+function readFont(exe, base = FONT_OFFSET) {
+  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  const firstChar = exe[base];
+  const lastChar = exe[base + 1];
+  const count = lastChar - firstChar + 1;
+  const glyphs = [];
+  for (let i = 0; i < count; i++) {
+    let o = base + dv.getUint16(base + 10 + i * 2, true);
+    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
+    if (!looksLikeGlyph(exe, o)) {
+      glyphs.push(null);
+      continue;
+    }
+    const height = exe[o];
+    const width = exe[o + 2];
+    const stride = Math.ceil(width / 8);
+    const broken = dv.getUint16(o + 4, true) !== 1;
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const byte = broken ? UNDERSCORE_ROWS[y] ?? 0 : exe[o + 6 + y * stride + (x >> 3)] ?? 0;
+        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
+      }
+    }
+    glyphs.push({ width, height, sprite: { width, height, pixels } });
+  }
+  return {
+    firstChar,
+    lastChar,
+    heightAbove: dv.getInt16(base + 2, true),
+    heightBelow: dv.getInt16(base + 4, true),
+    lineSpacing: dv.getInt16(base + 6, true),
+    charSpacing: dv.getInt16(base + 8, true),
+    glyphs
+  };
+}
+function glyphOf(font, code) {
+  if (code < font.firstChar || code > font.lastChar) return null;
+  return font.glyphs[code - font.firstChar] ?? null;
+}
+function textWidth(font, text2) {
+  let width = 0;
+  let drawn = 0;
+  for (const ch of text2) {
+    const g2 = glyphOf(font, ch.charCodeAt(0));
+    if (!g2) continue;
+    width += g2.width;
+    drawn += 1;
+  }
+  return width + Math.max(0, drawn - 1) * font.charSpacing;
+}
+function drawText(surface, font, text2, x, top, color) {
+  let at = x;
+  for (const ch of text2) {
+    const g2 = glyphOf(font, ch.charCodeAt(0));
+    if (!g2) continue;
+    surface.blitMono(g2.sprite, at, top, color);
+    at += g2.width + font.charSpacing;
+  }
+  return at - font.charSpacing;
+}
+function drawTextCentred(surface, font, text2, left, right, top, color) {
+  const width = textWidth(font, text2);
+  drawText(surface, font, text2, left + (right - left + 1 - width >> 1), top, color);
+}
+function charWidth(font, code) {
+  const g2 = glyphOf(font, code);
+  let width = 0;
+  if (g2) {
+    width += g2.width;
+    if (width) width += font.charSpacing;
+  }
+  return width;
+}
+function lineWidth(font, text2) {
+  let width = 0;
+  for (const ch of text2) width += charWidth(font, ch.charCodeAt(0));
+  return width;
+}
+function textCenterY(font, top, bottom) {
+  const empty = bottom - font.heightAbove - font.heightBelow - top;
+  return (empty - empty % 2 >> 1) + font.heightAbove + empty % 2 + top;
+}
+function drawTextCharacter(surface, font, code, x, y, color) {
+  const g2 = glyphOf(font, code);
+  if (!g2) return 0;
+  surface.blitMono(g2.sprite, x, y - font.heightAbove, color);
+  return font.charSpacing + g2.width;
+}
+function drawTextInRect(surface, font, text2, left, top, right, bottom, xAlign, yAlign, color) {
+  const rectWidth = right - left;
+  const rectHeight = bottom - top;
+  const fontLineDistance = font.heightAbove + font.heightBelow + font.lineSpacing;
+  const textHeight = fontLineDistance - font.lineSpacing;
+  let textTop = top;
+  if (yAlign >= 0) {
+    if (yAlign <= 0) {
+      textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
+    } else {
+      textTop += rectHeight - textHeight;
+    }
+  }
+  const currentY = textTop + font.heightAbove;
+  const width = lineWidth(font, text2);
+  let textLeft = left;
+  if (xAlign >= 0) {
+    if (xAlign <= 0) textLeft += (rectWidth / 2 | 0) - (width / 2 | 0);
+    else textLeft += rectWidth - width;
+  }
+  const savedLeft = surface.clipLeft;
+  const savedRight = surface.clipRight;
+  const savedTop = surface.clipTop;
+  const savedBottom = surface.clipBottom;
+  surface.clipLeft = Math.max(savedLeft, left);
+  surface.clipRight = Math.min(savedRight, right);
+  surface.clipTop = Math.max(savedTop, top);
+  surface.clipBottom = Math.min(savedBottom, bottom);
+  let at = textLeft;
+  for (const ch of text2) {
+    at += drawTextCharacter(surface, font, ch.charCodeAt(0), at, currentY, color);
+  }
+  surface.clipLeft = savedLeft;
+  surface.clipRight = savedRight;
+  surface.clipTop = savedTop;
+  surface.clipBottom = savedBottom;
+}
+
+// src/render/hebrew.ts
+var ROWS = {
+  // alef: the main stroke rises to the right, with an arm at each end.
+  "\u05D0": [
+    "....##",
+    "##.##.",
+    ".####.",
+    "..##..",
+    ".####.",
+    ".##.##",
+    "##...."
+  ],
+  // bet: the foot sticks out to the left, which is the whole of what
+  // tells it from a kaf.
+  "\u05D1": [
+    ".######",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".....##",
+    "#######"
+  ],
+  "\u05D2": [
+    ".####.",
+    "..##..",
+    "..##..",
+    "..##..",
+    "..##..",
+    ".###..",
+    "##..##"
+  ],
+  // dalet: a square corner, and the bar reaches the right edge.
+  "\u05D3": [
+    "#######",
+    "....##.",
+    "....##.",
+    "....##.",
+    "....##.",
+    "....##.",
+    "....##."
+  ],
+  // he: the left leg hangs free of the bar.
+  "\u05D4": [
+    "######",
+    "....##",
+    "....##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##"
+  ],
+  "\u05D5": [
+    "####",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##"
+  ],
+  "\u05D6": [
+    "#####",
+    ".##..",
+    ".##..",
+    ".##..",
+    ".##..",
+    ".##..",
+    ".##.."
+  ],
+  "\u05D7": [
+    "#######",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##"
+  ],
+  "\u05D8": [
+    "##.###",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    ".####."
+  ],
+  // yod: three rows, and so drawn at the top of the line.
+  "\u05D9": [
+    "###",
+    ".##",
+    ".##"
+  ],
+  "\u05DA": [
+    "######",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05DB": [
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    ".#####"
+  ],
+  // lamed: the one letter of the alphabet that climbs above the line,
+  // and the font has no room above the line -- `heightAbove` is the top
+  // of the cell. So the climb is inside the cell, which is what keeps
+  // it from reading as a kaf: measured on the story screen, a lamed
+  // whose body filled the cell left `של` looking like `שכ` on every
+  // line it appeared in.
+  "\u05DC": [
+    "##.....",
+    "###....",
+    ".######",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".######"
+  ],
+  "\u05DD": [
+    "######",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "######"
+  ],
+  // mem: the left stroke is angled and clear of the bar; a final mem's
+  // is neither.
+  "\u05DE": [
+    ".######",
+    ".....##",
+    ".....##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "#######"
+  ],
+  "\u05DF": [
+    "####",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##"
+  ],
+  "\u05E0": [
+    ".####",
+    "...##",
+    "...##",
+    "...##",
+    "...##",
+    "...##",
+    "#####"
+  ],
+  // samekh: rounded at all four corners, where a final mem is square.
+  "\u05E1": [
+    ".####.",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    ".####."
+  ],
+  "\u05E2": [
+    "##..##",
+    "##..##",
+    ".#..##",
+    ".##.##",
+    "..####",
+    "....##",
+    "..####"
+  ],
+  "\u05E3": [
+    "######",
+    "##..##",
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05E4": [
+    "######",
+    "##..##",
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "######"
+  ],
+  "\u05E5": [
+    "##..##",
+    ".#..##",
+    ".##.##",
+    "..####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05E6": [
+    "##..##",
+    ".#..##",
+    ".##.##",
+    "..####",
+    "....##",
+    "....##",
+    "######"
+  ],
+  // qof: the stem stops on the line and the left leg carries on under it.
+  "\u05E7": [
+    "######",
+    "....##",
+    "....##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##....",
+    "##...."
+  ],
+  // resh: rounded, where a dalet's corner is square.
+  "\u05E8": [
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05E9": [
+    "##.##.##",
+    "##.##.##",
+    "##.##.##",
+    "##.##.##",
+    "##.##.##",
+    ".######.",
+    "########"
+  ],
+  // tav: the left leg is inset and kicks left at the foot, which is what
+  // tells it from a het.
+  "\u05EA": [
+    "#######",
+    ".##..##",
+    ".##..##",
+    ".##..##",
+    ".##..##",
+    ".##..##",
+    "###..##"
+  ],
+  // The two Hebrew marks that stand in for a quote and an apostrophe.
+  "\u05F3": [
+    "##",
+    "##",
+    ".#"
+  ],
+  "\u05F4": [
+    "##.##",
+    "##.##",
+    ".#..#"
+  ]
+};
+function glyphFrom(rows) {
+  const height = rows.length;
+  const width = Math.max(...rows.map((r) => r.length));
+  const pixels = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const row = rows[y];
+    for (let x = 0; x < width; x++) pixels[y * width + x] = row[x] === "#" ? 1 : 0;
+  }
+  return { width, height, sprite: { width, height, pixels } };
+}
+var HEBREW_GLYPHS = new Map(
+  Object.entries(ROWS).map(([ch, rows]) => [ch, glyphFrom(rows)])
+);
+function isRtl(ch) {
+  const code = ch.codePointAt(0) ?? 0;
+  return code >= 1424 && code <= 1535;
+}
+
+// src/render/text.ts
+var HE_PATTERNS = [
+  [/^GAME PAUSED$/, "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05DE\u05D5\u05E9\u05D4\u05D4"],
+  [/^LEVEL (\d+)$/, "\u05E9\u05DC\u05D1 $1"],
+  [/^(\d+) MINUTES LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D5 $1 \u05D3\u05E7\u05D5\u05EA"],
+  [/^(\d+) SECONDS LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D5 $1 \u05E9\u05E0\u05D9\u05D5\u05EA"],
+  [/^1 SECOND LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D4 \u05E9\u05E0\u05D9\u05D9\u05D4 \u05D0\u05D7\u05EA"],
+  [/^TIME HAS EXPIRED!$/, "\u05EA\u05DD \u05D4\u05D6\u05DE\u05DF!"],
+  [/^Press Button to Continue$/, "\u05D4\u05E7\u05E9 \u05DE\u05E7\u05E9 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05DE\u05E9\u05D9\u05DA"]
+];
+var STORY_EN = {
+  7: {
+    lines: [
+      "In the Sultan\u2019s absence the",
+      "Grand Vizier JAFFAR rules with",
+      "the iron fist of tyranny. Only",
+      "one obstacle remains between",
+      "Jaffar and the throne: the",
+      "Sultan\u2019s beautiful young",
+      "daughter..."
+    ]
+  },
+  8: {
+    lines: [
+      "Marry Jaffar... or die within",
+      "the hour. All the Princess\u2019s",
+      "hopes now rest on the brave",
+      "youth she loves. Little does",
+      "she know that he is already a",
+      "prisoner in Jaffar\u2019s",
+      "dungeons...."
+    ]
+  },
+  9: {
+    lines: [
+      "The tyrant Jaffar lies dead,",
+      "his power shattered. Throughout",
+      "the land the people of Persia",
+      "hail their Princess... and the",
+      "brave youth who saved her from",
+      "the forces of darkness. No",
+      "longer a stranger, he shall",
+      "from this day forth be known",
+      "as... PRINCE OF PERSIA."
+    ]
+  },
+  10: {
+    credits: true,
+    lines: [
+      "Programmed by|Lance Groody",
+      "Graphics by|Leila Bronstein",
+      "|Avril Harrison",
+      "|James St. Louis",
+      "Sound design by|Tom Rettig",
+      "Music composed by|Francis Mechner",
+      "Produced by|Brian Eheler",
+      "Directed by|Jordan Mechner"
+    ]
+  }
+};
+var STORY_HE = {
+  7: {
+    lines: [
+      "\u05D1\u05D4\u05D9\u05E2\u05D3\u05E8\u05D5 \u05E9\u05DC \u05D4\u05E1\u05D5\u05DC\u05D8\u05D0\u05DF \u05E9\u05D5\u05DC\u05D8",
+      "\u05D4\u05D5\u05D6\u05D9\u05E8 \u05D4\u05D2\u05D3\u05D5\u05DC \u05D2\u05F3\u05D0\u05E4\u05E8 \u05D1\u05D9\u05D3 \u05D1\u05E8\u05D6\u05DC.",
+      "\u05DE\u05DB\u05E9\u05D5\u05DC \u05D0\u05D7\u05D3 \u05D1\u05DC\u05D1\u05D3 \u05E0\u05D5\u05EA\u05E8 \u05D1\u05D9\u05DF",
+      "\u05D2\u05F3\u05D0\u05E4\u05E8 \u05D5\u05D1\u05D9\u05DF \u05DB\u05E1 \u05D4\u05DE\u05DC\u05D5\u05DB\u05D4: \u05D1\u05EA\u05D5",
+      "\u05D4\u05D9\u05E4\u05D4 \u05D5\u05D4\u05E6\u05E2\u05D9\u05E8\u05D4 \u05E9\u05DC \u05D4\u05E1\u05D5\u05DC\u05D8\u05D0\u05DF..."
+    ]
+  },
+  8: {
+    lines: [
+      "\u05D4\u05D9\u05E0\u05E9\u05D0\u05D9 \u05DC\u05D2\u05F3\u05D0\u05E4\u05E8... \u05D0\u05D5 \u05DE\u05D5\u05EA\u05D9",
+      "\u05D1\u05EA\u05D5\u05DA \u05E9\u05E2\u05D4. \u05DB\u05DC \u05EA\u05E7\u05D5\u05D5\u05EA\u05D9\u05D4 \u05E9\u05DC",
+      "\u05D4\u05E0\u05E1\u05D9\u05DB\u05D4 \u05E0\u05EA\u05D5\u05E0\u05D5\u05EA \u05E2\u05EA\u05D4 \u05D1\u05E0\u05E2\u05E8",
+      "\u05D4\u05D0\u05DE\u05D9\u05E5 \u05E9\u05D4\u05D9\u05D0 \u05D0\u05D5\u05D4\u05D1\u05EA. \u05D4\u05D9\u05D0 \u05D0\u05D9\u05E0\u05D4",
+      "\u05D9\u05D5\u05D3\u05E2\u05EA \u05DB\u05D9 \u05D4\u05D5\u05D0 \u05DB\u05D1\u05E8 \u05D0\u05E1\u05D9\u05E8",
+      "\u05D1\u05E6\u05D9\u05E0\u05D5\u05E7\u05D9\u05D5 \u05E9\u05DC \u05D2\u05F3\u05D0\u05E4\u05E8..."
+    ]
+  },
+  9: {
+    lines: [
+      "\u05D4\u05E2\u05E8\u05D9\u05E5 \u05D2\u05F3\u05D0\u05E4\u05E8 \u05DE\u05D5\u05D8\u05DC \u05DE\u05EA, \u05D5\u05DB\u05D5\u05D7\u05D5",
+      "\u05E0\u05D5\u05E4\u05E5. \u05D1\u05DB\u05DC \u05E8\u05D7\u05D1\u05D9 \u05D4\u05D0\u05E8\u05E5 \u05DE\u05E8\u05D9\u05E2\u05D9\u05DD",
+      "\u05D1\u05E0\u05D9 \u05E4\u05E8\u05E1 \u05DC\u05E0\u05E1\u05D9\u05DB\u05EA\u05DD... \u05D5\u05DC\u05E0\u05E2\u05E8",
+      "\u05D4\u05D0\u05DE\u05D9\u05E5 \u05E9\u05D4\u05E6\u05D9\u05DC\u05D4 \u05DE\u05D9\u05D3\u05D9 \u05DB\u05D5\u05D7\u05D5\u05EA",
+      "\u05D4\u05D0\u05D5\u05E4\u05DC. \u05DC\u05D0 \u05E2\u05D5\u05D3 \u05D6\u05E8, \u05DE\u05D4\u05D9\u05D5\u05DD \u05D4\u05D6\u05D4",
+      "\u05D5\u05D0\u05D9\u05DC\u05DA \u05D9\u05D9\u05E7\u05E8\u05D0... \u05E0\u05E1\u05D9\u05DA \u05E4\u05E8\u05E1."
+    ]
+  },
+  10: {
+    credits: true,
+    lines: [
+      "\u05EA\u05DB\u05E0\u05D5\u05EA|\u05DC\u05D0\u05E0\u05E1 \u05D2\u05E8\u05D5\u05D3\u05D9",
+      "\u05D2\u05E8\u05E4\u05D9\u05E7\u05D4|\u05DC\u05D9\u05D9\u05DC\u05D4 \u05D1\u05E8\u05D5\u05E0\u05E9\u05D8\u05D9\u05D9\u05DF",
+      "|\u05D0\u05D1\u05E8\u05D9\u05DC \u05D4\u05E8\u05D9\u05E1\u05D5\u05DF",
+      "|\u05D2\u05F3\u05D9\u05D9\u05DE\u05E1 \u05E1\u05E0\u05D8 \u05DC\u05D5\u05D0\u05D9\u05E1",
+      "\u05E2\u05D9\u05E6\u05D5\u05D1 \u05E7\u05D5\u05DC|\u05D8\u05D5\u05DD \u05E8\u05D8\u05D9\u05D2",
+      "\u05DE\u05D5\u05D6\u05D9\u05E7\u05D4|\u05E4\u05E8\u05E0\u05E1\u05D9\u05E1 \u05DE\u05DB\u05E0\u05E8",
+      "\u05D4\u05E4\u05E7\u05D4|\u05D1\u05E8\u05D9\u05D0\u05DF \u05D0\u05D9\u05D9\u05DC\u05E8",
+      "\u05D1\u05D9\u05DE\u05D5\u05D9|\u05D2\u05F3\u05D5\u05E8\u05D3\u05DF \u05DE\u05DB\u05E0\u05E8"
+    ]
+  }
+};
+function toVisual(text2) {
+  const runs = [];
+  for (const ch of text2) {
+    const ltr = /[0-9A-Za-z]/.test(ch);
+    const last = runs[runs.length - 1];
+    if (last && last.ltr === ltr) last.text += ch;
+    else runs.push({ ltr, text: ch });
+  }
+  for (let i = 1; i < runs.length - 1; i++) {
+    const run = runs[i];
+    if (!run.ltr && /^[.:,’'-]+$/.test(run.text) && runs[i - 1].ltr && runs[i + 1].ltr) {
+      runs[i - 1].text += run.text + runs[i + 1].text;
+      runs.splice(i, 2);
+      i--;
+    }
+  }
+  let out2 = "";
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i];
+    out2 += run.ltr ? run.text : [...run.text].reverse().join("");
+  }
+  return out2;
+}
+function hasRtl(text2) {
+  for (const ch of text2) if (isRtl(ch)) return true;
+  return false;
+}
+var TEXT_CAP_HEIGHT = 7;
+function fitLine(baseline, size, top, bottom, measure) {
+  const band = bottom - top;
+  if (!(band > 0)) return { size, baseline };
+  const { ascent, descent } = measure(size);
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent)) return { size, baseline };
+  const ink = ascent + descent;
+  if (ink > band) {
+    const smaller = size * (band / ink);
+    const fitted = measure(smaller);
+    const drop = Number.isFinite(fitted.descent) ? fitted.descent : 0;
+    return { size: smaller, baseline: bottom - drop };
+  }
+  if (baseline + descent > bottom) return { size, baseline: bottom - descent };
+  if (baseline - ascent < top) return { size, baseline: top + ascent };
+  return { size, baseline };
+}
+var GUTTER = 8;
+var GameText = class _GameText {
+  font;
+  lang;
+  qual;
+  /** Keyed, so that a line drawn again in the same place replaces it. */
+  lines = /* @__PURE__ */ new Map();
+  /**
+   * The hall of fame's name box, while it is taking a name.
+   *
+   * `input_str` draws a name one glyph at a time at an advancing x,
+   * which is left to right and cannot be anything else: it is a loop
+   * over `draw_text_character`, and the C has no notion of a line
+   * that grows the other way. So for Hebrew the glyphs are not drawn
+   * one at a time at all. What is typed is **read off the calls** --
+   * the C's own protocol says which is which, and there are only
+   * three kinds -- and the whole box is drawn again from the right
+   * every time it changes, which is what typing Hebrew looks like.
+   *
+   * The box is `start_text_input`'s rectangle and the colour is the
+   * one `input_str` filled it with on the line after.
+   */
+  box = null;
+  /** What has been typed into it, in logical order. */
+  typed = "";
+  /** Whether `draw_text_cursor` last drew the cursor or erased it. */
+  cursorUp = false;
+  /** Whether the last strip drawn put ink in the row above its rectangle. */
+  liftedRow = false;
+  /** `arg_4`: how far inside the box `input_str` starts. */
+  static BOX_INSET = 4;
+  constructor(font, options = {}) {
+    this.font = font;
+    this.lang = options.language ?? "en";
+    this.qual = options.quality ?? "original";
+  }
+  get language() {
+    return this.lang;
+  }
+  set language(value) {
+    this.lang = value;
+  }
+  get quality() {
+    return this.qual;
+  }
+  set quality(value) {
+    this.qual = value;
+  }
+  /** `quality: high` keeps the surface clear and draws on the canvas. */
+  get vector() {
+    return this.qual === "high";
+  }
+  /** Everything the canvas pass has to draw, oldest first. */
+  get overlay() {
+    return [...this.lines.values()];
+  }
+  // --------------------------------------------------------------- words
+  /** The words the game asked for, in the player's language. */
+  translate(text2) {
+    if (this.lang !== "he") return text2;
+    for (const [pattern, into] of HE_PATTERNS) {
+      if (pattern.test(text2)) return text2.replace(pattern, into);
+    }
+    return text2;
+  }
+  /** The story screen behind a `full_image_id`, or null for the picture. */
+  story(id) {
+    const table = this.lang === "he" ? STORY_HE : STORY_EN;
+    const screen2 = table[id];
+    if (!screen2) return null;
+    if (this.lang === "en" && !this.vector) return null;
+    return screen2;
+  }
+  // ------------------------------------------------------------- measuring
+  glyph(ch) {
+    const hebrew = HEBREW_GLYPHS.get(ch);
+    if (hebrew) return hebrew;
+    const code = ch.charCodeAt(0);
+    if (code < this.font.firstChar || code > this.font.lastChar) return null;
+    return this.font.glyphs[code - this.font.firstChar] ?? null;
+  }
+  /** `get_char_width`: the glyph and the gap after it. */
+  charWidth(ch) {
+    const hebrew = HEBREW_GLYPHS.get(ch);
+    if (hebrew) return hebrew.width + this.font.charSpacing;
+    return charWidth(this.font, ch.charCodeAt(0));
+  }
+  /** `get_cstring_width`. */
+  cstringWidth(text2) {
+    let width = 0;
+    for (const ch of text2) width += this.charWidth(ch);
+    return width;
+  }
+  /** The shell's own measure: no gap after the last character. */
+  shellWidth(text2) {
+    let width = 0;
+    let drawn = 0;
+    for (const ch of text2) {
+      const g2 = this.glyph(ch);
+      if (!g2) continue;
+      width += g2.width;
+      drawn += 1;
+    }
+    return width + Math.max(0, drawn - 1) * this.font.charSpacing;
+  }
+  // -------------------------------------------------------------- drawing
+  blitLine(surface, text2, x, top, color) {
+    let at = x;
+    for (const ch of text2) {
+      const g2 = this.glyph(ch);
+      if (!g2) continue;
+      surface.blitMono(g2.sprite, at, top, color);
+      at += g2.width + this.font.charSpacing;
+    }
+  }
+  remember(item) {
+    this.lines.delete(item.key);
+    this.lines.set(item.key, item);
+  }
+  /** The whole list, for a screen that has just been painted over. */
+  clearOverlay() {
+    this.lines.clear();
+  }
+  /** Everything whose line sits inside this box. */
+  clearOverlayIn(left, top, right, bottom) {
+    for (const [key, item] of [...this.lines]) {
+      const itemTop = item.baseline - item.capHeight;
+      if (item.right > left && item.left < right && item.baseline + 2 > top && itemTop < bottom) this.lines.delete(key);
+    }
+  }
+  /**
+   * The strip under the room: `show_text(&rect_bottom_text,
+   * halign_center, valign_bottom, ...)` with the rectangle blacked
+   * first, which the caller has already done.
+   */
+  bottomText(surface, text2, left, top, right, color) {
+    this.lines.delete("bottom");
+    if (this.liftedRow) {
+      surface.fillRect(left, top - 1, right - left + 1, 1, 0);
+      this.liftedRow = false;
+    }
+    if (text2 === null) return;
+    const words = this.translate(text2);
+    const rtl = hasRtl(words);
+    const lift = rtl ? 1 : 0;
+    if (this.vector) {
+      this.remember({
+        key: "bottom",
+        left,
+        right,
+        baseline: top + TEXT_CAP_HEIGHT,
+        xAlign: 0,
+        text: words,
+        rtl,
+        color,
+        capHeight: TEXT_CAP_HEIGHT,
+        top: top - 1,
+        bottom: top + TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    const visual = rtl ? toVisual(words) : words;
+    const width = this.shellWidth(visual);
+    if (lift) {
+      surface.fillRect(left, top - lift, right - left + 1, lift, 0);
+      this.liftedRow = true;
+    }
+    this.blitLine(
+      surface,
+      visual,
+      left + (right - left + 1 - width >> 1),
+      top - lift,
+      color
+    );
+  }
+  /**
+   * `draw_text` for one line, which is how the hall of fame draws a
+   * name and a time. `xAlign`/`yAlign` are the C's.
+   */
+  showText(surface, text2, left, top, right, bottom, xAlign, yAlign, color) {
+    const words = this.translate(text2);
+    const rtl = hasRtl(words);
+    const baseline = this.baselineIn(top, bottom, yAlign);
+    const key = `t:${left},${top},${right},${bottom},${xAlign},${color}`;
+    if (this.vector) {
+      this.remember({
+        key,
+        left,
+        right,
+        baseline,
+        xAlign,
+        text: words,
+        rtl,
+        color,
+        capHeight: TEXT_CAP_HEIGHT,
+        top,
+        bottom
+      });
+      return;
+    }
+    const visual = rtl ? toVisual(words) : words;
+    const width = this.cstringWidth(visual);
+    let at = left;
+    if (xAlign === 0) at += ((right - left) / 2 | 0) - (width / 2 | 0);
+    else if (xAlign > 0) at += right - left - width;
+    const savedLeft = surface.clipLeft;
+    const savedRight = surface.clipRight;
+    const savedTop = surface.clipTop;
+    const savedBottom = surface.clipBottom;
+    surface.clipLeft = Math.max(savedLeft, left);
+    surface.clipRight = Math.min(savedRight, right);
+    surface.clipTop = Math.max(savedTop, top);
+    surface.clipBottom = Math.min(savedBottom, bottom);
+    this.blitLine(surface, visual, at, baseline - this.font.heightAbove, color);
+    surface.clipLeft = savedLeft;
+    surface.clipRight = savedRight;
+    surface.clipTop = savedTop;
+    surface.clipBottom = savedBottom;
+  }
+  /**
+   * Where `draw_text`'s own baseline falls, which is **not**
+   * `get_text_center_y`.
+   *
+   * `seg009:3F01` works the top of the line out with
+   * `((rect_height + 1) / 2) - ((text_height + 1) / 2)`, two
+   * truncating divisions that simulate SHR and ADC, and
+   * `get_text_center_y` works a different one out with a remainder
+   * added back. For an odd-height rectangle the two agree; for an
+   * even one they are a row apart. This is `draw_text`'s, because
+   * `draw_text` is what the hall of fame calls -- and it has to be
+   * exactly that, or the page and the headless port draw different
+   * pictures with the language at its default and
+   * `tools/dev/page-port.ts` says so.
+   */
+  baselineIn(top, bottom, yAlign) {
+    const rectHeight = bottom - top;
+    const textHeight = this.font.heightAbove + this.font.heightBelow;
+    let textTop = top;
+    if (yAlign >= 0) {
+      if (yAlign <= 0) {
+        textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
+      } else {
+        textTop += rectHeight - textHeight;
+      }
+    }
+    return textTop + this.font.heightAbove;
+  }
+  /**
+   * `SDL_StartTextInput()`, with the rectangle it is given.
+   *
+   * Nothing but the hall of fame's name box calls it, so this is the
+   * one place a right-to-left line is typed rather than drawn whole.
+   */
+  beginTextInput(left, top, right, bottom) {
+    this.box = { left, top, right, bottom, bg: 0 };
+    this.typed = "";
+    this.cursorUp = false;
+  }
+  /** `SDL_StopTextInput()`. */
+  endTextInput() {
+    this.box = null;
+    this.typed = "";
+  }
+  /** `draw_rect`: which colour the box was painted, and what it wipes. */
+  noteFill(left, top, right, bottom, color) {
+    const box = this.box;
+    if (box && box.left === left && box.top === top && box.right === right && box.bottom === bottom) {
+      box.bg = color;
+      this.typed = "";
+      this.cursorUp = false;
+    }
+    this.clearOverlayIn(left, top, right, bottom);
+  }
+  /** Is a Hebrew name being typed into the box at this baseline? */
+  typingRtl(y) {
+    const box = this.box;
+    return this.lang === "he" && box !== null && y > box.top && y <= box.bottom + 2;
+  }
+  /**
+   * One call of `draw_text_character` inside the name box, read as
+   * what it means rather than as a glyph at an x.
+   *
+   * `input_str` has exactly three kinds of call and the colour says
+   * which: the cursor is always `_`, and anything else drawn in the
+   * background colour is the erase half of a backspace.
+   */
+  typeInto(surface, ch, color) {
+    const box = this.box;
+    if (ch === "_") this.cursorUp = color !== box.bg;
+    else if (color === box.bg) this.typed = this.typed.slice(0, -1);
+    else this.typed += ch;
+    const line = (this.cursorUp ? "_" : "") + toVisual(this.typed);
+    const right = box.right - _GameText.BOX_INSET;
+    const baseline = this.baselineIn(box.top, box.bottom, 0);
+    if (this.vector) {
+      this.remember({
+        key: "name",
+        left: box.left + _GameText.BOX_INSET,
+        right,
+        baseline,
+        xAlign: 1,
+        text: this.typed + (this.cursorUp ? "_" : ""),
+        rtl: true,
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    surface.fillRect(
+      box.left,
+      box.top,
+      box.right - box.left,
+      box.bottom - box.top,
+      box.bg
+    );
+    this.blitLine(
+      surface,
+      line,
+      right - this.shellWidth(line),
+      baseline - this.font.heightAbove,
+      color === box.bg ? this.textColour : color
+    );
+  }
+  /** The colour the name is drawn in, kept from the last glyph that was. */
+  textColour = 15;
+  /**
+   * `draw_text_character`: one glyph with its baseline at `y`, which is
+   * how `input_str` draws a name as it is typed and blinks a cursor at
+   * the end of it.
+   *
+   * At `quality: high` the glyph is not blitted; it is remembered at
+   * the place it would have gone, keyed by that place, so that the
+   * cursor redrawn in the background colour **replaces** the one drawn
+   * in the text colour rather than piling up beside it. That is the C's
+   * own erase, and it is why nothing here has to know what a cursor is.
+   */
+  drawChar(surface, x, y, ch, color) {
+    const g2 = this.glyph(ch);
+    if (!g2) return 0;
+    if (this.typingRtl(y)) {
+      if (color !== this.box.bg) this.textColour = color;
+      this.typeInto(surface, ch, color);
+      return this.font.charSpacing + g2.width;
+    }
+    if (this.vector) {
+      this.remember({
+        key: `c:${x},${y}`,
+        left: x,
+        right: x + g2.width,
+        baseline: y,
+        xAlign: -1,
+        text: ch,
+        rtl: isRtl(ch),
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+    } else {
+      surface.blitMono(g2.sprite, x, y - this.font.heightAbove, color);
+    }
+    return this.font.charSpacing + g2.width;
+  }
+  // ---------------------------------------------------------- the story
+  /** Where a story screen's words go: the window inside `STORY_FRAME`. */
+  static STORY = {
+    left: 24,
+    right: 296,
+    top: 27,
+    lineHeight: 16,
+    /** The credits put the name beside the job rather than under it. */
+    creditsSplit: 150
+  };
+  /**
+   * Draw a story screen's words where the original blits its picture.
+   *
+   * The caller has already drawn `STORY_FRAME`, so this is the inside
+   * of the frame and nothing else.
+   */
+  drawStory(surface, id, color) {
+    const screen2 = this.story(id);
+    if (!screen2) return;
+    const { left, right, top, lineHeight, creditsSplit } = _GameText.STORY;
+    const rtl = this.lang === "he";
+    const split = left + creditsSplit;
+    for (const [index, line] of screen2.lines.entries()) {
+      const y = top + index * lineHeight;
+      const key = `s${id}:${index}`;
+      if (!screen2.credits) {
+        this.storyLine(surface, line, y, rtl ? 1 : -1, color, key, left, right);
+        continue;
+      }
+      const [job = "", name = ""] = line.split("|");
+      if (rtl) {
+        this.storyLine(surface, job, y, 1, color, `${key}:a`, split, right);
+        this.storyLine(surface, name, y, 1, color, `${key}:b`, left, split - GUTTER);
+      } else {
+        this.storyLine(surface, job, y, 1, color, `${key}:a`, left, split);
+        this.storyLine(surface, name, y, -1, color, `${key}:b`, split + GUTTER, right);
+      }
+    }
+  }
+  storyLine(surface, text2, top, xAlign, color, key, left, right) {
+    if (text2 === "") return;
+    if (this.vector) {
+      this.remember({
+        key,
+        left,
+        right,
+        baseline: top + TEXT_CAP_HEIGHT,
+        xAlign,
+        text: text2,
+        rtl: hasRtl(text2) || this.lang === "he",
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    const visual = hasRtl(text2) ? toVisual(text2) : text2;
+    const width = this.shellWidth(visual);
+    let at = left;
+    if (xAlign === 0) at = left + (right - left - width >> 1);
+    else if (xAlign > 0) at = right - width;
+    this.blitLine(surface, visual, at, top, color);
+  }
+  /** How wide a story line is drawn, for the test that pins they fit. */
+  storyLineWidth(text2) {
+    return this.shellWidth(hasRtl(text2) ? toVisual(text2) : text2);
+  }
+};
+
+// src/render/upscale.ts
+function scale2x(src, width, height, out2) {
+  const w2 = width * 2;
+  const dst = out2 ?? new Uint8Array(w2 * height * 2);
+  for (let y = 0; y < height; y++) {
+    const up = (y > 0 ? y - 1 : 0) * width;
+    const mid = y * width;
+    const down = (y + 1 < height ? y + 1 : height - 1) * width;
+    const row0 = y * 2 * w2;
+    const row1 = (y * 2 + 1) * w2;
+    for (let x = 0; x < width; x++) {
+      const left = x > 0 ? x - 1 : 0;
+      const right = x + 1 < width ? x + 1 : width - 1;
+      const e = src[mid + x];
+      const b = src[up + x];
+      const h = src[down + x];
+      const d = src[mid + left];
+      const f = src[mid + right];
+      let e0 = e;
+      let e1 = e;
+      let e2 = e;
+      let e3 = e;
+      if (b !== h && d !== f) {
+        if (d === b) e0 = d;
+        if (b === f) e1 = f;
+        if (d === h) e2 = d;
+        if (h === f) e3 = f;
+      }
+      dst[row0 + x * 2] = e0;
+      dst[row0 + x * 2 + 1] = e1;
+      dst[row1 + x * 2] = e2;
+      dst[row1 + x * 2 + 1] = e3;
+    }
+  }
+  return dst;
+}
+function scale3x(src, width, height, out2) {
+  const w3 = width * 3;
+  const dst = out2 ?? new Uint8Array(w3 * height * 3);
+  for (let y = 0; y < height; y++) {
+    const up = (y > 0 ? y - 1 : 0) * width;
+    const mid = y * width;
+    const down = (y + 1 < height ? y + 1 : height - 1) * width;
+    const row0 = y * 3 * w3;
+    const row1 = (y * 3 + 1) * w3;
+    const row2 = (y * 3 + 2) * w3;
+    for (let x = 0; x < width; x++) {
+      const left = x > 0 ? x - 1 : 0;
+      const right = x + 1 < width ? x + 1 : width - 1;
+      const a = src[up + left];
+      const b = src[up + x];
+      const c = src[up + right];
+      const d = src[mid + left];
+      const e = src[mid + x];
+      const f = src[mid + right];
+      const g2 = src[down + left];
+      const h = src[down + x];
+      const i = src[down + right];
+      let e0 = e;
+      let e1 = e;
+      let e2 = e;
+      let e3 = e;
+      let e5 = e;
+      let e6 = e;
+      let e7 = e;
+      let e8 = e;
+      if (b !== h && d !== f) {
+        if (d === b) e0 = d;
+        if (d === b && e !== c || b === f && e !== a) e1 = b;
+        if (b === f) e2 = f;
+        if (d === b && e !== g2 || d === h && e !== a) e3 = d;
+        if (b === f && e !== i || h === f && e !== c) e5 = f;
+        if (d === h) e6 = d;
+        if (d === h && e !== i || h === f && e !== g2) e7 = h;
+        if (h === f) e8 = f;
+      }
+      dst[row0 + x * 3] = e0;
+      dst[row0 + x * 3 + 1] = e1;
+      dst[row0 + x * 3 + 2] = e2;
+      dst[row1 + x * 3] = e3;
+      dst[row1 + x * 3 + 1] = e;
+      dst[row1 + x * 3 + 2] = e5;
+      dst[row2 + x * 3] = e6;
+      dst[row2 + x * 3 + 1] = e7;
+      dst[row2 + x * 3 + 2] = e8;
+    }
+  }
+  return dst;
+}
+function upscale(src, width, height, factor, out2) {
+  const into = out2?.length === width * height * factor * factor ? out2 : void 0;
+  if (factor === 1) return src;
+  if (factor === 2) return scale2x(src, width, height, into);
+  if (factor === 3) return scale3x(src, width, height, into);
+  return scale2x(scale3x(src, width, height), width * 3, height * 3, into);
+}
+
 // src/render/display.ts
+var MAX_FACTOR = 6;
 var VECTOR_FACE = '"Frank Ruehl CLM", "David Libre", David, "Noto Serif Hebrew", "Times New Roman", "Liberation Serif", "FreeSerif", "DejaVu Serif", serif';
 var CAP_RATIO = 0.7;
 var Display = class {
@@ -660,6 +1768,40 @@ var Display = class {
   overlay = null;
   overlayCtx = null;
   textSource = null;
+  /**
+   * `quality: high` for the **picture**, which is a bigger canvas.
+   *
+   * The words went onto a second canvas because a letter wants a
+   * vector face and the game has none; the picture cannot do that --
+   * there is nothing to draw it from but the art in the data files --
+   * so what it gets instead is `src/render/upscale.ts`, which rounds
+   * the corners of the art in palette indices and hands the canvas
+   * three or six times as many pixels. The browser then scales that
+   * down to the size the picture is shown at smoothly rather than
+   * with nearest neighbour, and the steps go out of the edges.
+   *
+   * At `original` none of this exists: the canvas is 320 by 200 and
+   * `image-rendering: pixelated`, exactly as it was.
+   */
+  quality = "original";
+  factor = 1;
+  /** The last surface upscaled, and what it came out as. */
+  hiFrom = null;
+  hiPixels = null;
+  hiImage = null;
+  /**
+   * The last thing presented, so a resize can put it back.
+   *
+   * Changing a canvas's backing store **clears it**, and the factor
+   * changes when the window crosses a size. The game presents every
+   * tick so it would not show for long -- but a paused game and a
+   * scene that has stopped present nothing at all, and those would
+   * be left looking at a blank canvas until something else moved.
+   * These are references and not copies: the surface is the game's
+   * own and goes on being drawn into, which is what should be put
+   * back.
+   */
+  last = null;
   constructor(canvas) {
     this.canvas = canvas;
     canvas.width = SCREEN_WIDTH;
@@ -675,6 +1817,61 @@ var Display = class {
   setAspect(mode) {
     this.aspect = mode;
     this.applyAspect();
+  }
+  /**
+   * The picture's quality, which the player may move at any moment.
+   *
+   * Only the canvas changes. Nothing is told about it: the next
+   * `present` reads the same 320x200 surface it would have read
+   * anyway, so a game in the middle of a tick does not notice, and a
+   * player who changes their mind gets the original's own pixels back
+   * on the very next frame.
+   */
+  setQuality(mode) {
+    if (mode === this.quality) return;
+    this.quality = mode;
+    this.hiFrom = null;
+    this.sizeCanvas();
+  }
+  /**
+   * How much to enlarge, from how big the picture is really shown.
+   *
+   * There is nothing to be had from more pixels than the screen has,
+   * so this asks for the first factor that covers the canvas's own
+   * displayed size times the device's pixel ratio -- the same number
+   * the crisp-text canvas uses -- and stops at six. On a 1000-pixel
+   * window at ratio 1 that is three; on the same window on a retina
+   * screen it is six.
+   */
+  chooseFactor() {
+    if (this.quality !== "high") return 1;
+    const dpr = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
+    const shown = (this.canvas.clientWidth || this.canvas.offsetWidth || SCREEN_WIDTH) * dpr;
+    const want = shown / SCREEN_WIDTH;
+    if (want <= 2) return 2;
+    if (want <= 3) return 3;
+    return MAX_FACTOR;
+  }
+  /** Give the canvas the backing store this quality asks for. */
+  sizeCanvas() {
+    const factor = this.chooseFactor();
+    if (factor !== this.factor) {
+      this.factor = factor;
+      this.hiFrom = null;
+      this.hiPixels = null;
+      this.hiImage = null;
+    }
+    const width = SCREEN_WIDTH * factor;
+    const height = SCREEN_HEIGHT * factor;
+    let cleared = false;
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.ctx.imageSmoothingEnabled = false;
+      cleared = true;
+    }
+    this.canvas.style.imageRendering = factor === 1 ? "pixelated" : "auto";
+    if (cleared && this.last) this.present(this.last.surface, this.last.palette);
   }
   /** The width of one screen height, in the shape of pixel chosen. */
   get ratio() {
@@ -694,16 +1891,17 @@ var Display = class {
    */
   applyAspect() {
     const s = this.canvas.style;
-    s.imageRendering = "pixelated";
     const box = this.canvas.parentElement?.getBoundingClientRect();
     if (!box || box.width < 1 || box.height < 1) {
       s.aspectRatio = this.aspect === "original-4-3" ? "4 / 3" : "320 / 200";
+      this.sizeCanvas();
       return;
     }
     const width = Math.min(box.width, box.height * this.ratio);
     s.width = `${Math.floor(width)}px`;
     s.height = `${Math.floor(width / this.ratio)}px`;
     s.aspectRatio = "";
+    this.sizeCanvas();
     this.placeOverlay();
   }
   /**
@@ -776,9 +1974,63 @@ var Display = class {
     new ResizeObserver(() => this.applyAspect()).observe(parent);
   }
   present(surface, paletteRgba) {
-    surface.toRgba(paletteRgba, this.imageData.data);
-    this.ctx.putImageData(this.imageData, 0, 0);
+    this.last = { surface, palette: paletteRgba };
+    if (this.factor > 1) this.presentHigh(surface, paletteRgba);
+    else {
+      surface.toRgba(paletteRgba, this.imageData.data);
+      this.ctx.putImageData(this.imageData, 0, 0);
+    }
     this.presentText(paletteRgba);
+  }
+  /**
+   * The same picture, enlarged, in the palette it was drawn with.
+   *
+   * The enlarging is done on the **indices** and only when the
+   * indices have moved, which is what makes this affordable: the
+   * flash puts the screen up twice inside one tick and a fade writes
+   * a new palette every other sixtieth, and neither of them changes a
+   * pixel of the surface. Only the expansion to RGBA runs again for
+   * those, which is the part that has to.
+   */
+  presentHigh(surface, paletteRgba) {
+    const factor = this.factor;
+    const width = surface.width * factor;
+    const height = surface.height * factor;
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.ctx.imageSmoothingEnabled = false;
+    }
+    const src = surface.pixels;
+    let moved = this.hiFrom === null || this.hiFrom.length !== src.length;
+    if (!moved) {
+      const was = this.hiFrom;
+      for (let i = 0; i < src.length; i++) {
+        if (was[i] !== src[i]) {
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (moved || !this.hiPixels) {
+      this.hiPixels = upscale(src, surface.width, surface.height, factor, this.hiPixels ?? void 0);
+      this.hiFrom = this.hiFrom?.length === src.length ? this.hiFrom : new Uint8Array(src.length);
+      this.hiFrom.set(src);
+    }
+    if (!this.hiImage || this.hiImage.width !== width || this.hiImage.height !== height) {
+      this.hiImage = this.ctx.createImageData(width, height);
+    }
+    const dst = this.hiImage.data;
+    const ix = this.hiPixels;
+    for (let i = 0; i < ix.length; i++) {
+      const c = ix[i] * 4;
+      const o = i * 4;
+      dst[o] = paletteRgba[c];
+      dst[o + 1] = paletteRgba[c + 1];
+      dst[o + 2] = paletteRgba[c + 2];
+      dst[o + 3] = 255;
+    }
+    this.ctx.putImageData(this.hiImage, 0, 0);
   }
   /**
    * The words, on the canvas over the picture, at the canvas's own
@@ -806,9 +2058,8 @@ var Display = class {
     ctx.setTransform(canvas.width / SCREEN_WIDTH, 0, 0, canvas.height / SCREEN_HEIGHT, 0, 0);
     ctx.textBaseline = "alphabetic";
     for (const item of items) {
-      const size = item.capHeight / CAP_RATIO;
-      ctx.font = `${size}px ${VECTOR_FACE}`;
       ctx.direction = item.rtl ? "rtl" : "ltr";
+      const baseline = this.fitToBand(ctx, item);
       const at = item.color * 4;
       const r = paletteRgba[at] ?? 255;
       const g2 = paletteRgba[at + 1] ?? 255;
@@ -822,9 +2073,33 @@ var Display = class {
         ctx.textAlign = "right";
         x = item.right;
       } else ctx.textAlign = "left";
-      ctx.fillText(item.text, x, item.baseline);
+      ctx.fillText(item.text, x, baseline);
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  /**
+   * Set the font for this line and say where its baseline goes.
+   *
+   * A line that declares no band keeps the size a seven-pixel capital
+   * asks for and the baseline the original drew on, which is every
+   * line of English in the game. A line that declares one is measured
+   * -- `actualBoundingBox` is the ink, not the em, so it is the real
+   * answer for this string in this face -- and made small enough to
+   * sit inside it, because the strip under the room has eight rows
+   * and a Hebrew lamed and qof together want twelve.
+   */
+  fitToBand(ctx, item) {
+    const size = item.capHeight / CAP_RATIO;
+    ctx.font = `${size}px ${VECTOR_FACE}`;
+    const { top, bottom } = item;
+    if (top === void 0 || bottom === void 0) return item.baseline;
+    const fitted = fitLine(item.baseline, size, top, bottom, (at) => {
+      ctx.font = `${at}px ${VECTOR_FACE}`;
+      const m = ctx.measureText(item.text);
+      return { ascent: m.actualBoundingBoxAscent, descent: m.actualBoundingBoxDescent };
+    });
+    ctx.font = `${fitted.size}px ${VECTOR_FACE}`;
+    return fitted.baseline;
   }
 };
 
@@ -2718,10 +3993,17 @@ function speakerTune(sound) {
   }
   return { notes, length: at };
 }
+var RICH_PARTIAL = 2;
+var RICH_PARTIAL_LEVEL = 0.28;
+var RICH_CUTOFF_HZ = 3800;
 var TUNE_NOTE_CAP = 2048;
 var Tune = class {
   nodes = [];
   sink;
+  /** The one low pass of a rich tune, or nothing at `plain`. */
+  filter = null;
+  /** The node that carries `onended`, kept so a stop cannot drop it. */
+  silent = null;
   /** When the last note ends, in the sink's own clock. */
   endsAt;
   onended = null;
@@ -2732,27 +4014,38 @@ var Tune = class {
    * at 18.000 s and its sequence ends at 18.667, and the whole of
    * `is_feather_fall` is `while (check_sound_playing())`.
    */
-  constructor(sink, notes, wave, length = 0) {
+  constructor(sink, notes, wave, length = 0, voice = "plain") {
     this.sink = sink;
     const t0 = sink.currentTime + 0.03;
     let end = t0 + length;
+    const rich = voice === "rich" && notes.length > 0 && typeof sink.createBiquadFilter === "function";
+    let out2 = sink.destination;
+    if (rich) {
+      const filter = sink.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = RICH_CUTOFF_HZ;
+      filter.Q.value = 0.7;
+      filter.connect(sink.destination);
+      this.filter = filter;
+      out2 = filter;
+    }
     for (const n of notes.slice(0, TUNE_NOTE_CAP)) {
-      const osc = sink.createOscillator();
-      const gain = sink.createGain();
-      osc.type = wave;
-      osc.frequency.value = n.hz;
       const start = t0 + n.at;
       const stop = start + n.dur;
       const peak = 0.11 * n.level;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(peak, start + 8e-3);
-      gain.gain.setValueAtTime(peak, Math.max(start + 9e-3, stop - 0.02));
-      gain.gain.linearRampToValueAtTime(0, stop);
-      osc.connect(gain);
-      gain.connect(sink.destination);
-      osc.start(start);
-      osc.stop(stop + 0.01);
-      this.nodes.push({ osc, gain });
+      this.voiceNote(sink, out2, wave, n.hz, peak, start, stop, rich);
+      if (rich) {
+        this.voiceNote(
+          sink,
+          out2,
+          "sine",
+          n.hz * RICH_PARTIAL,
+          peak * RICH_PARTIAL_LEVEL,
+          start,
+          stop,
+          rich
+        );
+      }
       if (stop > end) end = stop;
     }
     this.endsAt = end;
@@ -2762,6 +4055,7 @@ var Tune = class {
       gain.gain.value = 0;
       osc.connect(gain);
       gain.connect(sink.destination);
+      this.silent = osc;
       osc.onended = () => {
         this.onended?.();
       };
@@ -2769,6 +4063,43 @@ var Tune = class {
       osc.stop(end + 0.01);
       this.nodes.push({ osc, gain });
     }
+  }
+  /**
+   * One oscillator of one note, with its envelope.
+   *
+   * At `plain` the envelope is a rise, a flat hold and a fall, which
+   * is what the page has always played. At `rich` it decays to a
+   * sustain and releases, which is the shape every instrument of
+   * the period had and the reason the plain voice sounds like an
+   * organ: a note that holds dead level and then stops is the one
+   * thing no real voice does.
+   */
+  voiceNote(sink, out2, wave, hz, peak, start, stop, rich) {
+    const osc = sink.createOscillator();
+    const gain = sink.createGain();
+    osc.type = wave;
+    osc.frequency.value = hz;
+    const g2 = gain.gain;
+    if (rich) {
+      const attack = Math.min(0.012, (stop - start) / 4);
+      const decay = Math.min(0.09, (stop - start) / 2);
+      const release = Math.min(0.045, (stop - start) / 3);
+      g2.setValueAtTime(0, start);
+      g2.linearRampToValueAtTime(peak, start + attack);
+      g2.linearRampToValueAtTime(peak * 0.72, start + attack + decay);
+      g2.setValueAtTime(peak * 0.72, Math.max(start + attack + decay, stop - release));
+      g2.linearRampToValueAtTime(0, stop);
+    } else {
+      g2.setValueAtTime(0, start);
+      g2.linearRampToValueAtTime(peak, start + 8e-3);
+      g2.setValueAtTime(peak, Math.max(start + 9e-3, stop - 0.02));
+      g2.linearRampToValueAtTime(0, stop);
+    }
+    osc.connect(gain);
+    gain.connect(out2);
+    osc.start(start);
+    osc.stop(stop + 0.01);
+    this.nodes.push({ osc, gain });
   }
   get empty() {
     return this.nodes.length === 0;
@@ -2784,6 +4115,12 @@ var Tune = class {
       }
     }
     this.nodes.length = 0;
+    this.silent = null;
+    try {
+      this.filter?.disconnect();
+    } catch {
+    }
+    this.filter = null;
   }
 };
 
@@ -2951,6 +4288,16 @@ var SoundPlayer = class {
   /** Nothing is played until the player has touched the page. */
   woken = false;
   /**
+   * `quality: original` or `high`, for the **sound**.
+   *
+   * Nothing in `src/pop` knows this exists: the game asks for sound
+   * 15 and the question of how sound 15 is made is the shell's. It
+   * starts at `original`, so every headless tool and every test
+   * hears exactly what they heard before there was a setting, and
+   * `web/main.ts` is the only thing that ever moves it.
+   */
+  qual = "original";
+  /**
    * What is playing. The original had one channel: a new sound stopped
    * whatever was in it, which is why the byte-code can ask for silence by
    * name. Letting them pile up turns a run into a wall of noise.
@@ -3042,6 +4389,25 @@ var SoundPlayer = class {
     if (buffer === null) return;
     this.start(index, buffer);
   }
+  get quality() {
+    return this.qual;
+  }
+  /**
+   * Move the quality, and forget what was read at the old one.
+   *
+   * A recording is turned into an `AudioBuffer` once and kept, and
+   * the two qualities build that buffer differently -- so the cache
+   * has to go, or the player would go on hearing the staircase until
+   * the page was reloaded. A tune keeps nothing: it is built out of
+   * its notes every time it is played.
+   */
+  set quality(value) {
+    if (value === this.qual) return;
+    this.qual = value;
+    for (const [index, playable] of [...this.buffers]) {
+      if (playable && playable.kind === "digi") this.buffers.delete(index);
+    }
+  }
   /**
    * Whether `index` may have the channel, by the original's rule: it
    * may if nothing is sounding, or if what is sounding may be
@@ -3059,7 +4425,8 @@ var SoundPlayer = class {
     if (what.kind === "tune") {
       const sink = this.context;
       if (typeof this.context.createOscillator !== "function") return;
-      const tune = new Tune(sink, what.notes, what.wave, what.length);
+      const voice = this.quality === "high" ? "rich" : "plain";
+      const tune = new Tune(sink, what.notes, what.wave, what.length, voice);
       if (tune.empty) return;
       tune.onended = () => {
         if (this.playing === tune) {
@@ -3136,9 +4503,16 @@ var SoundPlayer = class {
         digi.rate * hold
       );
       const channel = buffer.getChannelData(0);
+      const value = (i) => ((digi.samples[i] ?? 128) - 128) / 128;
+      const smooth = this.quality === "high" && hold > 1;
       for (let i = 0; i < digi.samples.length; i++) {
-        const v = (digi.samples[i] - 128) / 128;
-        for (let k = 0; k < hold; k++) channel[i * hold + k] = v;
+        const v = value(i);
+        if (!smooth) {
+          for (let k = 0; k < hold; k++) channel[i * hold + k] = v;
+          continue;
+        }
+        const next = i + 1 < digi.samples.length ? value(i + 1) : v;
+        for (let k = 0; k < hold; k++) channel[i * hold + k] = v + (next - v) * (k / hold);
       }
       return { kind: "digi", buffer };
     }
@@ -3414,139 +4788,6 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
       startRoom: level.startRoom
     }
   };
-}
-
-// src/render/font.ts
-var FONT_OFFSET = 107020;
-function looksLikeGlyph(exe, o) {
-  return o > 0 && o + 6 <= exe.length && exe[o + 1] === 0 && exe[o + 3] === 0 && exe[o] <= 16 && exe[o + 2] >= 1 && exe[o + 2] <= 20;
-}
-var UNDERSCORE_ROWS = [0, 0, 0, 0, 0, 0, 0, 252];
-function readFont(exe, base = FONT_OFFSET) {
-  const dv = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
-  const firstChar = exe[base];
-  const lastChar = exe[base + 1];
-  const count = lastChar - firstChar + 1;
-  const glyphs = [];
-  for (let i = 0; i < count; i++) {
-    let o = base + dv.getUint16(base + 10 + i * 2, true);
-    if (!looksLikeGlyph(exe, o) && looksLikeGlyph(exe, o - 1)) o -= 1;
-    if (!looksLikeGlyph(exe, o)) {
-      glyphs.push(null);
-      continue;
-    }
-    const height = exe[o];
-    const width = exe[o + 2];
-    const stride = Math.ceil(width / 8);
-    const broken = dv.getUint16(o + 4, true) !== 1;
-    const pixels = new Uint8Array(width * height);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const byte = broken ? UNDERSCORE_ROWS[y] ?? 0 : exe[o + 6 + y * stride + (x >> 3)] ?? 0;
-        pixels[y * width + x] = byte >> 7 - (x & 7) & 1;
-      }
-    }
-    glyphs.push({ width, height, sprite: { width, height, pixels } });
-  }
-  return {
-    firstChar,
-    lastChar,
-    heightAbove: dv.getInt16(base + 2, true),
-    heightBelow: dv.getInt16(base + 4, true),
-    lineSpacing: dv.getInt16(base + 6, true),
-    charSpacing: dv.getInt16(base + 8, true),
-    glyphs
-  };
-}
-function glyphOf(font, code) {
-  if (code < font.firstChar || code > font.lastChar) return null;
-  return font.glyphs[code - font.firstChar] ?? null;
-}
-function textWidth(font, text2) {
-  let width = 0;
-  let drawn = 0;
-  for (const ch of text2) {
-    const g2 = glyphOf(font, ch.charCodeAt(0));
-    if (!g2) continue;
-    width += g2.width;
-    drawn += 1;
-  }
-  return width + Math.max(0, drawn - 1) * font.charSpacing;
-}
-function drawText(surface, font, text2, x, top, color) {
-  let at = x;
-  for (const ch of text2) {
-    const g2 = glyphOf(font, ch.charCodeAt(0));
-    if (!g2) continue;
-    surface.blitMono(g2.sprite, at, top, color);
-    at += g2.width + font.charSpacing;
-  }
-  return at - font.charSpacing;
-}
-function drawTextCentred(surface, font, text2, left, right, top, color) {
-  const width = textWidth(font, text2);
-  drawText(surface, font, text2, left + (right - left + 1 - width >> 1), top, color);
-}
-function charWidth(font, code) {
-  const g2 = glyphOf(font, code);
-  let width = 0;
-  if (g2) {
-    width += g2.width;
-    if (width) width += font.charSpacing;
-  }
-  return width;
-}
-function lineWidth(font, text2) {
-  let width = 0;
-  for (const ch of text2) width += charWidth(font, ch.charCodeAt(0));
-  return width;
-}
-function textCenterY(font, top, bottom) {
-  const empty = bottom - font.heightAbove - font.heightBelow - top;
-  return (empty - empty % 2 >> 1) + font.heightAbove + empty % 2 + top;
-}
-function drawTextCharacter(surface, font, code, x, y, color) {
-  const g2 = glyphOf(font, code);
-  if (!g2) return 0;
-  surface.blitMono(g2.sprite, x, y - font.heightAbove, color);
-  return font.charSpacing + g2.width;
-}
-function drawTextInRect(surface, font, text2, left, top, right, bottom, xAlign, yAlign, color) {
-  const rectWidth = right - left;
-  const rectHeight = bottom - top;
-  const fontLineDistance = font.heightAbove + font.heightBelow + font.lineSpacing;
-  const textHeight = fontLineDistance - font.lineSpacing;
-  let textTop = top;
-  if (yAlign >= 0) {
-    if (yAlign <= 0) {
-      textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
-    } else {
-      textTop += rectHeight - textHeight;
-    }
-  }
-  const currentY = textTop + font.heightAbove;
-  const width = lineWidth(font, text2);
-  let textLeft = left;
-  if (xAlign >= 0) {
-    if (xAlign <= 0) textLeft += (rectWidth / 2 | 0) - (width / 2 | 0);
-    else textLeft += rectWidth - width;
-  }
-  const savedLeft = surface.clipLeft;
-  const savedRight = surface.clipRight;
-  const savedTop = surface.clipTop;
-  const savedBottom = surface.clipBottom;
-  surface.clipLeft = Math.max(savedLeft, left);
-  surface.clipRight = Math.min(savedRight, right);
-  surface.clipTop = Math.max(savedTop, top);
-  surface.clipBottom = Math.min(savedBottom, bottom);
-  let at = textLeft;
-  for (const ch of text2) {
-    at += drawTextCharacter(surface, font, ch.charCodeAt(0), at, currentY, color);
-  }
-  surface.clipLeft = savedLeft;
-  surface.clipRight = savedRight;
-  surface.clipTop = savedTop;
-  surface.clipBottom = savedBottom;
 }
 
 // src/pop/state.ts
@@ -13661,854 +14902,6 @@ function levelsDatWithPotionLevel(bytes) {
   throw new Error(`LEVELS.DAT has no resource ${want}`);
 }
 
-// src/render/hebrew.ts
-var ROWS = {
-  // alef: the main stroke rises to the right, with an arm at each end.
-  "\u05D0": [
-    "....##",
-    "##.##.",
-    ".####.",
-    "..##..",
-    ".####.",
-    ".##.##",
-    "##...."
-  ],
-  // bet: the foot sticks out to the left, which is the whole of what
-  // tells it from a kaf.
-  "\u05D1": [
-    ".######",
-    ".....##",
-    ".....##",
-    ".....##",
-    ".....##",
-    ".....##",
-    "#######"
-  ],
-  "\u05D2": [
-    ".####.",
-    "..##..",
-    "..##..",
-    "..##..",
-    "..##..",
-    ".###..",
-    "##..##"
-  ],
-  // dalet: a square corner, and the bar reaches the right edge.
-  "\u05D3": [
-    "#######",
-    "....##.",
-    "....##.",
-    "....##.",
-    "....##.",
-    "....##.",
-    "....##."
-  ],
-  // he: the left leg hangs free of the bar.
-  "\u05D4": [
-    "######",
-    "....##",
-    "....##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##"
-  ],
-  "\u05D5": [
-    "####",
-    "..##",
-    "..##",
-    "..##",
-    "..##",
-    "..##",
-    "..##"
-  ],
-  "\u05D6": [
-    "#####",
-    ".##..",
-    ".##..",
-    ".##..",
-    ".##..",
-    ".##..",
-    ".##.."
-  ],
-  "\u05D7": [
-    "#######",
-    "##...##",
-    "##...##",
-    "##...##",
-    "##...##",
-    "##...##",
-    "##...##"
-  ],
-  "\u05D8": [
-    "##.###",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    ".####."
-  ],
-  // yod: three rows, and so drawn at the top of the line.
-  "\u05D9": [
-    "###",
-    ".##",
-    ".##"
-  ],
-  "\u05DA": [
-    "######",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##"
-  ],
-  "\u05DB": [
-    ".#####",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    ".#####"
-  ],
-  // lamed: the one letter of the alphabet that climbs above the line,
-  // and the font has no room above the line -- `heightAbove` is the top
-  // of the cell. So the climb is inside the cell, which is what keeps
-  // it from reading as a kaf: measured on the story screen, a lamed
-  // whose body filled the cell left `של` looking like `שכ` on every
-  // line it appeared in.
-  "\u05DC": [
-    "##.....",
-    "###....",
-    ".######",
-    ".....##",
-    ".....##",
-    ".....##",
-    ".######"
-  ],
-  "\u05DD": [
-    "######",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "######"
-  ],
-  // mem: the left stroke is angled and clear of the bar; a final mem's
-  // is neither.
-  "\u05DE": [
-    ".######",
-    ".....##",
-    ".....##",
-    "##...##",
-    "##...##",
-    "##...##",
-    "#######"
-  ],
-  "\u05DF": [
-    "####",
-    "..##",
-    "..##",
-    "..##",
-    "..##",
-    "..##",
-    "..##",
-    "..##",
-    "..##"
-  ],
-  "\u05E0": [
-    ".####",
-    "...##",
-    "...##",
-    "...##",
-    "...##",
-    "...##",
-    "#####"
-  ],
-  // samekh: rounded at all four corners, where a final mem is square.
-  "\u05E1": [
-    ".####.",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    ".####."
-  ],
-  "\u05E2": [
-    "##..##",
-    "##..##",
-    ".#..##",
-    ".##.##",
-    "..####",
-    "....##",
-    "..####"
-  ],
-  "\u05E3": [
-    "######",
-    "##..##",
-    ".#####",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##"
-  ],
-  "\u05E4": [
-    "######",
-    "##..##",
-    ".#####",
-    "....##",
-    "....##",
-    "....##",
-    "######"
-  ],
-  "\u05E5": [
-    "##..##",
-    ".#..##",
-    ".##.##",
-    "..####",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##"
-  ],
-  "\u05E6": [
-    "##..##",
-    ".#..##",
-    ".##.##",
-    "..####",
-    "....##",
-    "....##",
-    "######"
-  ],
-  // qof: the stem stops on the line and the left leg carries on under it.
-  "\u05E7": [
-    "######",
-    "....##",
-    "....##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##..##",
-    "##....",
-    "##...."
-  ],
-  // resh: rounded, where a dalet's corner is square.
-  "\u05E8": [
-    ".#####",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##"
-  ],
-  "\u05E9": [
-    "##.##.##",
-    "##.##.##",
-    "##.##.##",
-    "##.##.##",
-    "##.##.##",
-    ".######.",
-    "########"
-  ],
-  // tav: the left leg is inset and kicks left at the foot, which is what
-  // tells it from a het.
-  "\u05EA": [
-    "#######",
-    ".##..##",
-    ".##..##",
-    ".##..##",
-    ".##..##",
-    ".##..##",
-    "###..##"
-  ],
-  // The two Hebrew marks that stand in for a quote and an apostrophe.
-  "\u05F3": [
-    "##",
-    "##",
-    ".#"
-  ],
-  "\u05F4": [
-    "##.##",
-    "##.##",
-    ".#..#"
-  ]
-};
-function glyphFrom(rows) {
-  const height = rows.length;
-  const width = Math.max(...rows.map((r) => r.length));
-  const pixels = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const row = rows[y];
-    for (let x = 0; x < width; x++) pixels[y * width + x] = row[x] === "#" ? 1 : 0;
-  }
-  return { width, height, sprite: { width, height, pixels } };
-}
-var HEBREW_GLYPHS = new Map(
-  Object.entries(ROWS).map(([ch, rows]) => [ch, glyphFrom(rows)])
-);
-function isRtl(ch) {
-  const code = ch.codePointAt(0) ?? 0;
-  return code >= 1424 && code <= 1535;
-}
-
-// src/render/text.ts
-var HE_PATTERNS = [
-  [/^GAME PAUSED$/, "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05DE\u05D5\u05E9\u05D4\u05D4"],
-  [/^LEVEL (\d+)$/, "\u05E9\u05DC\u05D1 $1"],
-  [/^(\d+) MINUTES LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D5 $1 \u05D3\u05E7\u05D5\u05EA"],
-  [/^(\d+) SECONDS LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D5 $1 \u05E9\u05E0\u05D9\u05D5\u05EA"],
-  [/^1 SECOND LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D4 \u05E9\u05E0\u05D9\u05D9\u05D4 \u05D0\u05D7\u05EA"],
-  [/^TIME HAS EXPIRED!$/, "\u05EA\u05DD \u05D4\u05D6\u05DE\u05DF!"],
-  [/^Press Button to Continue$/, "\u05D4\u05E7\u05E9 \u05DE\u05E7\u05E9 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05DE\u05E9\u05D9\u05DA"]
-];
-var STORY_EN = {
-  7: {
-    lines: [
-      "In the Sultan\u2019s absence the",
-      "Grand Vizier JAFFAR rules with",
-      "the iron fist of tyranny. Only",
-      "one obstacle remains between",
-      "Jaffar and the throne: the",
-      "Sultan\u2019s beautiful young",
-      "daughter..."
-    ]
-  },
-  8: {
-    lines: [
-      "Marry Jaffar... or die within",
-      "the hour. All the Princess\u2019s",
-      "hopes now rest on the brave",
-      "youth she loves. Little does",
-      "she know that he is already a",
-      "prisoner in Jaffar\u2019s",
-      "dungeons...."
-    ]
-  },
-  9: {
-    lines: [
-      "The tyrant Jaffar lies dead,",
-      "his power shattered. Throughout",
-      "the land the people of Persia",
-      "hail their Princess... and the",
-      "brave youth who saved her from",
-      "the forces of darkness. No",
-      "longer a stranger, he shall",
-      "from this day forth be known",
-      "as... PRINCE OF PERSIA."
-    ]
-  },
-  10: {
-    credits: true,
-    lines: [
-      "Programmed by|Lance Groody",
-      "Graphics by|Leila Bronstein",
-      "|Avril Harrison",
-      "|James St. Louis",
-      "Sound design by|Tom Rettig",
-      "Music composed by|Francis Mechner",
-      "Produced by|Brian Eheler",
-      "Directed by|Jordan Mechner"
-    ]
-  }
-};
-var STORY_HE = {
-  7: {
-    lines: [
-      "\u05D1\u05D4\u05D9\u05E2\u05D3\u05E8\u05D5 \u05E9\u05DC \u05D4\u05E1\u05D5\u05DC\u05D8\u05D0\u05DF \u05E9\u05D5\u05DC\u05D8",
-      "\u05D4\u05D5\u05D6\u05D9\u05E8 \u05D4\u05D2\u05D3\u05D5\u05DC \u05D2\u05F3\u05D0\u05E4\u05E8 \u05D1\u05D9\u05D3 \u05D1\u05E8\u05D6\u05DC.",
-      "\u05DE\u05DB\u05E9\u05D5\u05DC \u05D0\u05D7\u05D3 \u05D1\u05DC\u05D1\u05D3 \u05E0\u05D5\u05EA\u05E8 \u05D1\u05D9\u05DF",
-      "\u05D2\u05F3\u05D0\u05E4\u05E8 \u05D5\u05D1\u05D9\u05DF \u05DB\u05E1 \u05D4\u05DE\u05DC\u05D5\u05DB\u05D4: \u05D1\u05EA\u05D5",
-      "\u05D4\u05D9\u05E4\u05D4 \u05D5\u05D4\u05E6\u05E2\u05D9\u05E8\u05D4 \u05E9\u05DC \u05D4\u05E1\u05D5\u05DC\u05D8\u05D0\u05DF..."
-    ]
-  },
-  8: {
-    lines: [
-      "\u05D4\u05D9\u05E0\u05E9\u05D0\u05D9 \u05DC\u05D2\u05F3\u05D0\u05E4\u05E8... \u05D0\u05D5 \u05DE\u05D5\u05EA\u05D9",
-      "\u05D1\u05EA\u05D5\u05DA \u05E9\u05E2\u05D4. \u05DB\u05DC \u05EA\u05E7\u05D5\u05D5\u05EA\u05D9\u05D4 \u05E9\u05DC",
-      "\u05D4\u05E0\u05E1\u05D9\u05DB\u05D4 \u05E0\u05EA\u05D5\u05E0\u05D5\u05EA \u05E2\u05EA\u05D4 \u05D1\u05E0\u05E2\u05E8",
-      "\u05D4\u05D0\u05DE\u05D9\u05E5 \u05E9\u05D4\u05D9\u05D0 \u05D0\u05D5\u05D4\u05D1\u05EA. \u05D4\u05D9\u05D0 \u05D0\u05D9\u05E0\u05D4",
-      "\u05D9\u05D5\u05D3\u05E2\u05EA \u05DB\u05D9 \u05D4\u05D5\u05D0 \u05DB\u05D1\u05E8 \u05D0\u05E1\u05D9\u05E8",
-      "\u05D1\u05E6\u05D9\u05E0\u05D5\u05E7\u05D9\u05D5 \u05E9\u05DC \u05D2\u05F3\u05D0\u05E4\u05E8..."
-    ]
-  },
-  9: {
-    lines: [
-      "\u05D4\u05E2\u05E8\u05D9\u05E5 \u05D2\u05F3\u05D0\u05E4\u05E8 \u05DE\u05D5\u05D8\u05DC \u05DE\u05EA, \u05D5\u05DB\u05D5\u05D7\u05D5",
-      "\u05E0\u05D5\u05E4\u05E5. \u05D1\u05DB\u05DC \u05E8\u05D7\u05D1\u05D9 \u05D4\u05D0\u05E8\u05E5 \u05DE\u05E8\u05D9\u05E2\u05D9\u05DD",
-      "\u05D1\u05E0\u05D9 \u05E4\u05E8\u05E1 \u05DC\u05E0\u05E1\u05D9\u05DB\u05EA\u05DD... \u05D5\u05DC\u05E0\u05E2\u05E8",
-      "\u05D4\u05D0\u05DE\u05D9\u05E5 \u05E9\u05D4\u05E6\u05D9\u05DC\u05D4 \u05DE\u05D9\u05D3\u05D9 \u05DB\u05D5\u05D7\u05D5\u05EA",
-      "\u05D4\u05D0\u05D5\u05E4\u05DC. \u05DC\u05D0 \u05E2\u05D5\u05D3 \u05D6\u05E8, \u05DE\u05D4\u05D9\u05D5\u05DD \u05D4\u05D6\u05D4",
-      "\u05D5\u05D0\u05D9\u05DC\u05DA \u05D9\u05D9\u05E7\u05E8\u05D0... \u05E0\u05E1\u05D9\u05DA \u05E4\u05E8\u05E1."
-    ]
-  },
-  10: {
-    credits: true,
-    lines: [
-      "\u05EA\u05DB\u05E0\u05D5\u05EA|\u05DC\u05D0\u05E0\u05E1 \u05D2\u05E8\u05D5\u05D3\u05D9",
-      "\u05D2\u05E8\u05E4\u05D9\u05E7\u05D4|\u05DC\u05D9\u05D9\u05DC\u05D4 \u05D1\u05E8\u05D5\u05E0\u05E9\u05D8\u05D9\u05D9\u05DF",
-      "|\u05D0\u05D1\u05E8\u05D9\u05DC \u05D4\u05E8\u05D9\u05E1\u05D5\u05DF",
-      "|\u05D2\u05F3\u05D9\u05D9\u05DE\u05E1 \u05E1\u05E0\u05D8 \u05DC\u05D5\u05D0\u05D9\u05E1",
-      "\u05E2\u05D9\u05E6\u05D5\u05D1 \u05E7\u05D5\u05DC|\u05D8\u05D5\u05DD \u05E8\u05D8\u05D9\u05D2",
-      "\u05DE\u05D5\u05D6\u05D9\u05E7\u05D4|\u05E4\u05E8\u05E0\u05E1\u05D9\u05E1 \u05DE\u05DB\u05E0\u05E8",
-      "\u05D4\u05E4\u05E7\u05D4|\u05D1\u05E8\u05D9\u05D0\u05DF \u05D0\u05D9\u05D9\u05DC\u05E8",
-      "\u05D1\u05D9\u05DE\u05D5\u05D9|\u05D2\u05F3\u05D5\u05E8\u05D3\u05DF \u05DE\u05DB\u05E0\u05E8"
-    ]
-  }
-};
-function toVisual(text2) {
-  const runs = [];
-  for (const ch of text2) {
-    const ltr = /[0-9A-Za-z]/.test(ch);
-    const last = runs[runs.length - 1];
-    if (last && last.ltr === ltr) last.text += ch;
-    else runs.push({ ltr, text: ch });
-  }
-  for (let i = 1; i < runs.length - 1; i++) {
-    const run = runs[i];
-    if (!run.ltr && /^[.:,’'-]+$/.test(run.text) && runs[i - 1].ltr && runs[i + 1].ltr) {
-      runs[i - 1].text += run.text + runs[i + 1].text;
-      runs.splice(i, 2);
-      i--;
-    }
-  }
-  let out2 = "";
-  for (let i = runs.length - 1; i >= 0; i--) {
-    const run = runs[i];
-    out2 += run.ltr ? run.text : [...run.text].reverse().join("");
-  }
-  return out2;
-}
-function hasRtl(text2) {
-  for (const ch of text2) if (isRtl(ch)) return true;
-  return false;
-}
-var TEXT_CAP_HEIGHT = 7;
-var GUTTER = 8;
-var GameText = class _GameText {
-  font;
-  lang;
-  qual;
-  /** Keyed, so that a line drawn again in the same place replaces it. */
-  lines = /* @__PURE__ */ new Map();
-  /**
-   * The hall of fame's name box, while it is taking a name.
-   *
-   * `input_str` draws a name one glyph at a time at an advancing x,
-   * which is left to right and cannot be anything else: it is a loop
-   * over `draw_text_character`, and the C has no notion of a line
-   * that grows the other way. So for Hebrew the glyphs are not drawn
-   * one at a time at all. What is typed is **read off the calls** --
-   * the C's own protocol says which is which, and there are only
-   * three kinds -- and the whole box is drawn again from the right
-   * every time it changes, which is what typing Hebrew looks like.
-   *
-   * The box is `start_text_input`'s rectangle and the colour is the
-   * one `input_str` filled it with on the line after.
-   */
-  box = null;
-  /** What has been typed into it, in logical order. */
-  typed = "";
-  /** Whether `draw_text_cursor` last drew the cursor or erased it. */
-  cursorUp = false;
-  /** `arg_4`: how far inside the box `input_str` starts. */
-  static BOX_INSET = 4;
-  constructor(font, options = {}) {
-    this.font = font;
-    this.lang = options.language ?? "en";
-    this.qual = options.quality ?? "original";
-  }
-  get language() {
-    return this.lang;
-  }
-  set language(value) {
-    this.lang = value;
-  }
-  get quality() {
-    return this.qual;
-  }
-  set quality(value) {
-    this.qual = value;
-  }
-  /** `quality: high` keeps the surface clear and draws on the canvas. */
-  get vector() {
-    return this.qual === "high";
-  }
-  /** Everything the canvas pass has to draw, oldest first. */
-  get overlay() {
-    return [...this.lines.values()];
-  }
-  // --------------------------------------------------------------- words
-  /** The words the game asked for, in the player's language. */
-  translate(text2) {
-    if (this.lang !== "he") return text2;
-    for (const [pattern, into] of HE_PATTERNS) {
-      if (pattern.test(text2)) return text2.replace(pattern, into);
-    }
-    return text2;
-  }
-  /** The story screen behind a `full_image_id`, or null for the picture. */
-  story(id) {
-    const table = this.lang === "he" ? STORY_HE : STORY_EN;
-    const screen2 = table[id];
-    if (!screen2) return null;
-    if (this.lang === "en" && !this.vector) return null;
-    return screen2;
-  }
-  // ------------------------------------------------------------- measuring
-  glyph(ch) {
-    const hebrew = HEBREW_GLYPHS.get(ch);
-    if (hebrew) return hebrew;
-    const code = ch.charCodeAt(0);
-    if (code < this.font.firstChar || code > this.font.lastChar) return null;
-    return this.font.glyphs[code - this.font.firstChar] ?? null;
-  }
-  /** `get_char_width`: the glyph and the gap after it. */
-  charWidth(ch) {
-    const hebrew = HEBREW_GLYPHS.get(ch);
-    if (hebrew) return hebrew.width + this.font.charSpacing;
-    return charWidth(this.font, ch.charCodeAt(0));
-  }
-  /** `get_cstring_width`. */
-  cstringWidth(text2) {
-    let width = 0;
-    for (const ch of text2) width += this.charWidth(ch);
-    return width;
-  }
-  /** The shell's own measure: no gap after the last character. */
-  shellWidth(text2) {
-    let width = 0;
-    let drawn = 0;
-    for (const ch of text2) {
-      const g2 = this.glyph(ch);
-      if (!g2) continue;
-      width += g2.width;
-      drawn += 1;
-    }
-    return width + Math.max(0, drawn - 1) * this.font.charSpacing;
-  }
-  // -------------------------------------------------------------- drawing
-  blitLine(surface, text2, x, top, color) {
-    let at = x;
-    for (const ch of text2) {
-      const g2 = this.glyph(ch);
-      if (!g2) continue;
-      surface.blitMono(g2.sprite, at, top, color);
-      at += g2.width + this.font.charSpacing;
-    }
-  }
-  remember(item) {
-    this.lines.delete(item.key);
-    this.lines.set(item.key, item);
-  }
-  /** The whole list, for a screen that has just been painted over. */
-  clearOverlay() {
-    this.lines.clear();
-  }
-  /** Everything whose line sits inside this box. */
-  clearOverlayIn(left, top, right, bottom) {
-    for (const [key, item] of [...this.lines]) {
-      const itemTop = item.baseline - item.capHeight;
-      if (item.right > left && item.left < right && item.baseline + 2 > top && itemTop < bottom) this.lines.delete(key);
-    }
-  }
-  /**
-   * The strip under the room: `show_text(&rect_bottom_text,
-   * halign_center, valign_bottom, ...)` with the rectangle blacked
-   * first, which the caller has already done.
-   */
-  bottomText(surface, text2, left, top, right, color) {
-    this.lines.delete("bottom");
-    if (text2 === null) return;
-    const words = this.translate(text2);
-    const rtl = hasRtl(words);
-    const lift = rtl ? 1 : 0;
-    if (this.vector) {
-      this.remember({
-        key: "bottom",
-        left,
-        right,
-        baseline: top + TEXT_CAP_HEIGHT - lift,
-        xAlign: 0,
-        text: words,
-        rtl,
-        color,
-        capHeight: TEXT_CAP_HEIGHT
-      });
-      return;
-    }
-    const visual = rtl ? toVisual(words) : words;
-    const width = this.shellWidth(visual);
-    if (lift) surface.fillRect(left, top - lift, right - left + 1, lift, 0);
-    this.blitLine(
-      surface,
-      visual,
-      left + (right - left + 1 - width >> 1),
-      top - lift,
-      color
-    );
-  }
-  /**
-   * `draw_text` for one line, which is how the hall of fame draws a
-   * name and a time. `xAlign`/`yAlign` are the C's.
-   */
-  showText(surface, text2, left, top, right, bottom, xAlign, yAlign, color) {
-    const words = this.translate(text2);
-    const rtl = hasRtl(words);
-    const baseline = this.baselineIn(top, bottom, yAlign);
-    const key = `t:${left},${top},${right},${bottom},${xAlign},${color}`;
-    if (this.vector) {
-      this.remember({
-        key,
-        left,
-        right,
-        baseline,
-        xAlign,
-        text: words,
-        rtl,
-        color,
-        capHeight: TEXT_CAP_HEIGHT
-      });
-      return;
-    }
-    const visual = rtl ? toVisual(words) : words;
-    const width = this.cstringWidth(visual);
-    let at = left;
-    if (xAlign === 0) at += ((right - left) / 2 | 0) - (width / 2 | 0);
-    else if (xAlign > 0) at += right - left - width;
-    const savedLeft = surface.clipLeft;
-    const savedRight = surface.clipRight;
-    const savedTop = surface.clipTop;
-    const savedBottom = surface.clipBottom;
-    surface.clipLeft = Math.max(savedLeft, left);
-    surface.clipRight = Math.min(savedRight, right);
-    surface.clipTop = Math.max(savedTop, top);
-    surface.clipBottom = Math.min(savedBottom, bottom);
-    this.blitLine(surface, visual, at, baseline - this.font.heightAbove, color);
-    surface.clipLeft = savedLeft;
-    surface.clipRight = savedRight;
-    surface.clipTop = savedTop;
-    surface.clipBottom = savedBottom;
-  }
-  /**
-   * Where `draw_text`'s own baseline falls, which is **not**
-   * `get_text_center_y`.
-   *
-   * `seg009:3F01` works the top of the line out with
-   * `((rect_height + 1) / 2) - ((text_height + 1) / 2)`, two
-   * truncating divisions that simulate SHR and ADC, and
-   * `get_text_center_y` works a different one out with a remainder
-   * added back. For an odd-height rectangle the two agree; for an
-   * even one they are a row apart. This is `draw_text`'s, because
-   * `draw_text` is what the hall of fame calls -- and it has to be
-   * exactly that, or the page and the headless port draw different
-   * pictures with the language at its default and
-   * `tools/dev/page-port.ts` says so.
-   */
-  baselineIn(top, bottom, yAlign) {
-    const rectHeight = bottom - top;
-    const textHeight = this.font.heightAbove + this.font.heightBelow;
-    let textTop = top;
-    if (yAlign >= 0) {
-      if (yAlign <= 0) {
-        textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
-      } else {
-        textTop += rectHeight - textHeight;
-      }
-    }
-    return textTop + this.font.heightAbove;
-  }
-  /**
-   * `SDL_StartTextInput()`, with the rectangle it is given.
-   *
-   * Nothing but the hall of fame's name box calls it, so this is the
-   * one place a right-to-left line is typed rather than drawn whole.
-   */
-  beginTextInput(left, top, right, bottom) {
-    this.box = { left, top, right, bottom, bg: 0 };
-    this.typed = "";
-    this.cursorUp = false;
-  }
-  /** `SDL_StopTextInput()`. */
-  endTextInput() {
-    this.box = null;
-    this.typed = "";
-  }
-  /** `draw_rect`: which colour the box was painted, and what it wipes. */
-  noteFill(left, top, right, bottom, color) {
-    const box = this.box;
-    if (box && box.left === left && box.top === top && box.right === right && box.bottom === bottom) {
-      box.bg = color;
-      this.typed = "";
-      this.cursorUp = false;
-    }
-    this.clearOverlayIn(left, top, right, bottom);
-  }
-  /** Is a Hebrew name being typed into the box at this baseline? */
-  typingRtl(y) {
-    const box = this.box;
-    return this.lang === "he" && box !== null && y > box.top && y <= box.bottom + 2;
-  }
-  /**
-   * One call of `draw_text_character` inside the name box, read as
-   * what it means rather than as a glyph at an x.
-   *
-   * `input_str` has exactly three kinds of call and the colour says
-   * which: the cursor is always `_`, and anything else drawn in the
-   * background colour is the erase half of a backspace.
-   */
-  typeInto(surface, ch, color) {
-    const box = this.box;
-    if (ch === "_") this.cursorUp = color !== box.bg;
-    else if (color === box.bg) this.typed = this.typed.slice(0, -1);
-    else this.typed += ch;
-    const line = (this.cursorUp ? "_" : "") + toVisual(this.typed);
-    const right = box.right - _GameText.BOX_INSET;
-    const baseline = this.baselineIn(box.top, box.bottom, 0);
-    if (this.vector) {
-      this.remember({
-        key: "name",
-        left: box.left + _GameText.BOX_INSET,
-        right,
-        baseline,
-        xAlign: 1,
-        text: this.typed + (this.cursorUp ? "_" : ""),
-        rtl: true,
-        color,
-        capHeight: TEXT_CAP_HEIGHT
-      });
-      return;
-    }
-    surface.fillRect(
-      box.left,
-      box.top,
-      box.right - box.left,
-      box.bottom - box.top,
-      box.bg
-    );
-    this.blitLine(
-      surface,
-      line,
-      right - this.shellWidth(line),
-      baseline - this.font.heightAbove,
-      color === box.bg ? this.textColour : color
-    );
-  }
-  /** The colour the name is drawn in, kept from the last glyph that was. */
-  textColour = 15;
-  /**
-   * `draw_text_character`: one glyph with its baseline at `y`, which is
-   * how `input_str` draws a name as it is typed and blinks a cursor at
-   * the end of it.
-   *
-   * At `quality: high` the glyph is not blitted; it is remembered at
-   * the place it would have gone, keyed by that place, so that the
-   * cursor redrawn in the background colour **replaces** the one drawn
-   * in the text colour rather than piling up beside it. That is the C's
-   * own erase, and it is why nothing here has to know what a cursor is.
-   */
-  drawChar(surface, x, y, ch, color) {
-    const g2 = this.glyph(ch);
-    if (!g2) return 0;
-    if (this.typingRtl(y)) {
-      if (color !== this.box.bg) this.textColour = color;
-      this.typeInto(surface, ch, color);
-      return this.font.charSpacing + g2.width;
-    }
-    if (this.vector) {
-      this.remember({
-        key: `c:${x},${y}`,
-        left: x,
-        right: x + g2.width,
-        baseline: y,
-        xAlign: -1,
-        text: ch,
-        rtl: isRtl(ch),
-        color,
-        capHeight: TEXT_CAP_HEIGHT
-      });
-    } else {
-      surface.blitMono(g2.sprite, x, y - this.font.heightAbove, color);
-    }
-    return this.font.charSpacing + g2.width;
-  }
-  // ---------------------------------------------------------- the story
-  /** Where a story screen's words go: the window inside `STORY_FRAME`. */
-  static STORY = {
-    left: 24,
-    right: 296,
-    top: 27,
-    lineHeight: 16,
-    /** The credits put the name beside the job rather than under it. */
-    creditsSplit: 150
-  };
-  /**
-   * Draw a story screen's words where the original blits its picture.
-   *
-   * The caller has already drawn `STORY_FRAME`, so this is the inside
-   * of the frame and nothing else.
-   */
-  drawStory(surface, id, color) {
-    const screen2 = this.story(id);
-    if (!screen2) return;
-    const { left, right, top, lineHeight, creditsSplit } = _GameText.STORY;
-    const rtl = this.lang === "he";
-    const split = left + creditsSplit;
-    for (const [index, line] of screen2.lines.entries()) {
-      const y = top + index * lineHeight;
-      const key = `s${id}:${index}`;
-      if (!screen2.credits) {
-        this.storyLine(surface, line, y, rtl ? 1 : -1, color, key, left, right);
-        continue;
-      }
-      const [job = "", name = ""] = line.split("|");
-      if (rtl) {
-        this.storyLine(surface, job, y, 1, color, `${key}:a`, split, right);
-        this.storyLine(surface, name, y, 1, color, `${key}:b`, left, split - GUTTER);
-      } else {
-        this.storyLine(surface, job, y, 1, color, `${key}:a`, left, split);
-        this.storyLine(surface, name, y, -1, color, `${key}:b`, split + GUTTER, right);
-      }
-    }
-  }
-  storyLine(surface, text2, top, xAlign, color, key, left, right) {
-    if (text2 === "") return;
-    if (this.vector) {
-      this.remember({
-        key,
-        left,
-        right,
-        baseline: top + TEXT_CAP_HEIGHT,
-        xAlign,
-        text: text2,
-        rtl: hasRtl(text2) || this.lang === "he",
-        color,
-        capHeight: TEXT_CAP_HEIGHT
-      });
-      return;
-    }
-    const visual = hasRtl(text2) ? toVisual(text2) : text2;
-    const width = this.shellWidth(visual);
-    let at = left;
-    if (xAlign === 0) at = left + (right - left - width >> 1);
-    else if (xAlign > 0) at = right - width;
-    this.blitLine(surface, visual, at, top, color);
-  }
-  /** How wide a story line is drawn, for the test that pins they fit. */
-  storyLineWidth(text2) {
-    return this.shellWidth(hasRtl(text2) ? toVisual(text2) : text2);
-  }
-};
-
 // web/settings.ts
 var DEFAULTS = {
   language: "en",
@@ -14677,8 +15070,8 @@ var HE = {
   record: "\u05D4\u05E7\u05DC\u05D8\u05EA \u05DE\u05E7\u05E9\u05D9\u05DD",
   recordStop: "\u05E2\u05E6\u05D9\u05E8\u05D4 \u05D5\u05E9\u05DE\u05D9\u05E8\u05D4",
   recordSaved: "\u05D4\u05D4\u05E7\u05DC\u05D8\u05D4 \u05E0\u05E9\u05DE\u05E8\u05D4",
-  saveGame: "\u05E9\u05DE\u05D9\u05E8\u05EA \u05DE\u05E9\u05D7\u05E7",
-  loadGame: "\u05D8\u05E2\u05D9\u05E0\u05EA \u05DE\u05E9\u05D7\u05E7",
+  saveGame: "\u05E9\u05DE\u05D9\u05E8\u05D4",
+  loadGame: "\u05D8\u05E2\u05D9\u05E0\u05D4",
   slot: "\u05DE\u05E9\u05D1\u05E6\u05EA",
   empty: "\u05E8\u05D9\u05E7\u05D4",
   saved: "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05E0\u05E9\u05DE\u05E8",
@@ -14702,9 +15095,9 @@ var HE = {
   pressToBegin: "\u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC",
   keysTitle: "\u05DE\u05E7\u05E9\u05D9\u05DD",
   keys: [
-    ["\u05D7\u05D9\u05E6\u05D9\u05DD / \u05DE\u05E7\u05DC\u05D3\u05EA \u05E1\u05E4\u05E8\u05EA\u05D9\u05EA", "\u05EA\u05E0\u05D5\u05E2\u05D4; \u05DE\u05E7\u05E9 \u05E4\u05D9\u05E0\u05EA\u05D9 \u05E7\u05D5\u05E4\u05E5 \u05DC\u05D0\u05D5\u05EA\u05D5 \u05DB\u05D9\u05D5\u05D5\u05DF"],
+    ["\u05D7\u05D9\u05E6\u05D9\u05DD / \u05E1\u05E4\u05E8\u05D5\u05EA", "\u05EA\u05E0\u05D5\u05E2\u05D4; \u05DE\u05E7\u05E9 \u05E4\u05D9\u05E0\u05EA\u05D9 \u05E7\u05D5\u05E4\u05E5 \u05DC\u05D0\u05D5\u05EA\u05D5 \u05DB\u05D9\u05D5\u05D5\u05DF"],
     ["Shift", "\u05E6\u05E2\u05D9\u05D3\u05D4 \u05D6\u05D4\u05D9\u05E8\u05D4 \u05D5\u05D0\u05D7\u05D9\u05D6\u05D4 \u05D1\u05E7\u05E6\u05D4"],
-    ["\u05D7\u05E5 \u05DC\u05DE\u05E2\u05DC\u05D4 \u05D1\u05E8\u05D9\u05E6\u05D4", "\u05E7\u05E4\u05D9\u05E6\u05EA \u05E8\u05D9\u05E6\u05D4"],
+    ["\u05DC\u05DE\u05E2\u05DC\u05D4 \u05D1\u05E8\u05D9\u05E6\u05D4", "\u05E7\u05E4\u05D9\u05E6\u05EA \u05E8\u05D9\u05E6\u05D4"],
     ["\u05E8\u05D5\u05D5\u05D7", "\u05D4\u05D6\u05DE\u05DF \u05E9\u05E0\u05D5\u05EA\u05E8"],
     ["Esc", "\u05D4\u05E9\u05D4\u05D9\u05D4, \u05D5\u05E9\u05D5\u05D1 \u05DC\u05E6\u05E2\u05D3 \u05D0\u05D7\u05D3"],
     ["Ctrl+A", "\u05D4\u05EA\u05D7\u05DC\u05EA \u05D4\u05E9\u05DC\u05D1 \u05DE\u05D7\u05D3\u05E9"],
@@ -15129,6 +15522,7 @@ async function boot() {
   const display = new Display(canvas);
   const settings = new SettingsStore();
   display.setAspect(settings.get("aspect"));
+  display.setQuality(settings.get("quality"));
   let words = stringsFor(settings.get("language"));
   let sayStatus = () => words.loading;
   const setStatus = (line) => {
@@ -15153,6 +15547,7 @@ async function boot() {
       const Context = Ctor.AudioContext ?? Ctor.webkitAudioContext;
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
+      sound.quality = settings.get("quality");
       const ALL_SOUNDS = Array.from({ length: 57 }, (_, i) => i);
       void sound.preloadAll([
         ...Object.values(SOUND),
@@ -16030,6 +16425,8 @@ async function boot() {
     },
     quality: (value) => {
       gameText.quality = value;
+      display.setQuality(value);
+      if (sound) sound.quality = value;
       relabelTheGame();
     },
     toggleRecording,

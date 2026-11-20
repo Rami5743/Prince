@@ -188,15 +188,28 @@
     outline: 2px solid var(--brass);
     outline-offset: 2px;
   }
-  .slot-row { display: grid; grid-template-columns: 1fr auto auto; gap: 4px; align-items: center; }
+  /* What is in the slot on its own line, the two buttons under it
+     sharing the width. A row of label-and-two-buttons fits in English
+     and does not in Hebrew -- measured at 1280 by 860, the label came
+     out fifty-one pixels wide and said `משבצת ...`. */
+  .slot-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .slot-row > span {
+    flex: 1 1 100%;
     font-size: 11px;
     color: var(--dim);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .slot-row > button { padding: 3px 6px; font-size: 11px; }
+  .slot-row > button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 3px 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .slot-row + .slot-row { margin-top: 7px; }
   #tool-note { font-size: 11px; color: var(--brass); min-height: 1.2em; }
 
   /* ------------------------------------------- the opening settings page */

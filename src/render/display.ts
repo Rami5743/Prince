@@ -7,9 +7,21 @@
  * display offers both the true 4:3 shape and an unstretched 1:1 mode.
  */
 import { SCREEN_WIDTH, SCREEN_HEIGHT, Surface } from './surface.ts';
-import type { OverlayItem } from './text.ts';
+import { fitLine, type OverlayItem } from './text.ts';
+import { upscale, type UpscaleFactor } from './upscale.ts';
 
 export type AspectMode = 'original-4-3' | 'square-pixels';
+export type PictureQuality = 'original' | 'high';
+
+/**
+ * The most the picture is ever enlarged before the browser scales it.
+ *
+ * Six is Scale3x and then Scale2x, which is 1920 by 1200 -- more than
+ * any window this game is played in, and four times the work of three.
+ * `chooseFactor` only asks for it when the canvas really is shown that
+ * big, which on an ordinary desktop window it is not.
+ */
+const MAX_FACTOR: UpscaleFactor = 6;
 
 /**
  * The faces the crisp pass asks for, best first.
@@ -53,6 +65,40 @@ export class Display {
   private overlay: HTMLCanvasElement | null = null;
   private overlayCtx: CanvasRenderingContext2D | null = null;
   private textSource: (() => readonly OverlayItem[]) | null = null;
+  /**
+   * `quality: high` for the **picture**, which is a bigger canvas.
+   *
+   * The words went onto a second canvas because a letter wants a
+   * vector face and the game has none; the picture cannot do that --
+   * there is nothing to draw it from but the art in the data files --
+   * so what it gets instead is `src/render/upscale.ts`, which rounds
+   * the corners of the art in palette indices and hands the canvas
+   * three or six times as many pixels. The browser then scales that
+   * down to the size the picture is shown at smoothly rather than
+   * with nearest neighbour, and the steps go out of the edges.
+   *
+   * At `original` none of this exists: the canvas is 320 by 200 and
+   * `image-rendering: pixelated`, exactly as it was.
+   */
+  private quality: PictureQuality = 'original';
+  private factor: UpscaleFactor = 1;
+  /** The last surface upscaled, and what it came out as. */
+  private hiFrom: Uint8Array | null = null;
+  private hiPixels: Uint8Array | null = null;
+  private hiImage: ImageData | null = null;
+  /**
+   * The last thing presented, so a resize can put it back.
+   *
+   * Changing a canvas's backing store **clears it**, and the factor
+   * changes when the window crosses a size. The game presents every
+   * tick so it would not show for long -- but a paused game and a
+   * scene that has stopped present nothing at all, and those would
+   * be left looking at a blank canvas until something else moved.
+   * These are references and not copies: the surface is the game's
+   * own and goes on being drawn into, which is what should be put
+   * back.
+   */
+  private last: { surface: Surface; palette: Uint8Array } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -70,6 +116,68 @@ export class Display {
   setAspect(mode: AspectMode): void {
     this.aspect = mode;
     this.applyAspect();
+  }
+
+  /**
+   * The picture's quality, which the player may move at any moment.
+   *
+   * Only the canvas changes. Nothing is told about it: the next
+   * `present` reads the same 320x200 surface it would have read
+   * anyway, so a game in the middle of a tick does not notice, and a
+   * player who changes their mind gets the original's own pixels back
+   * on the very next frame.
+   */
+  setQuality(mode: PictureQuality): void {
+    if (mode === this.quality) return;
+    this.quality = mode;
+    this.hiFrom = null;
+    this.sizeCanvas();
+  }
+
+  /**
+   * How much to enlarge, from how big the picture is really shown.
+   *
+   * There is nothing to be had from more pixels than the screen has,
+   * so this asks for the first factor that covers the canvas's own
+   * displayed size times the device's pixel ratio -- the same number
+   * the crisp-text canvas uses -- and stops at six. On a 1000-pixel
+   * window at ratio 1 that is three; on the same window on a retina
+   * screen it is six.
+   */
+  private chooseFactor(): UpscaleFactor {
+    if (this.quality !== 'high') return 1;
+    const dpr = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
+    const shown = (this.canvas.clientWidth || this.canvas.offsetWidth || SCREEN_WIDTH) * dpr;
+    const want = shown / SCREEN_WIDTH;
+    if (want <= 2) return 2;
+    if (want <= 3) return 3;
+    return MAX_FACTOR;
+  }
+
+  /** Give the canvas the backing store this quality asks for. */
+  private sizeCanvas(): void {
+    const factor = this.chooseFactor();
+    if (factor !== this.factor) {
+      this.factor = factor;
+      this.hiFrom = null;
+      this.hiPixels = null;
+      this.hiImage = null;
+    }
+    const width = SCREEN_WIDTH * factor;
+    const height = SCREEN_HEIGHT * factor;
+    let cleared = false;
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.ctx.imageSmoothingEnabled = false;
+      cleared = true;
+    }
+    // Nearest neighbour is the original's own look and is what
+    // `quality: original` is for; an enlarged picture is handed to the
+    // browser to shrink, and that has to be smooth or the enlarging
+    // bought nothing.
+    this.canvas.style.imageRendering = factor === 1 ? 'pixelated' : 'auto';
+    if (cleared && this.last) this.present(this.last.surface, this.last.palette);
   }
 
   /** The width of one screen height, in the shape of pixel chosen. */
@@ -91,17 +199,19 @@ export class Display {
    */
   private applyAspect(): void {
     const s = this.canvas.style;
-    s.imageRendering = 'pixelated';
     const box = this.canvas.parentElement?.getBoundingClientRect();
     if (!box || box.width < 1 || box.height < 1) {
       // Not laid out yet -- the observer below will come back to it.
       s.aspectRatio = this.aspect === 'original-4-3' ? '4 / 3' : '320 / 200';
+      this.sizeCanvas();
       return;
     }
     const width = Math.min(box.width, box.height * this.ratio);
     s.width = `${Math.floor(width)}px`;
     s.height = `${Math.floor(width / this.ratio)}px`;
     s.aspectRatio = '';
+    // The window may have grown enough to be worth more pixels.
+    this.sizeCanvas();
     this.placeOverlay();
   }
 
@@ -179,9 +289,61 @@ export class Display {
   }
 
   present(surface: Surface, paletteRgba: Uint8Array): void {
-    surface.toRgba(paletteRgba, this.imageData.data);
-    this.ctx.putImageData(this.imageData, 0, 0);
+    this.last = { surface, palette: paletteRgba };
+    if (this.factor > 1) this.presentHigh(surface, paletteRgba);
+    else {
+      surface.toRgba(paletteRgba, this.imageData.data);
+      this.ctx.putImageData(this.imageData, 0, 0);
+    }
     this.presentText(paletteRgba);
+  }
+
+  /**
+   * The same picture, enlarged, in the palette it was drawn with.
+   *
+   * The enlarging is done on the **indices** and only when the
+   * indices have moved, which is what makes this affordable: the
+   * flash puts the screen up twice inside one tick and a fade writes
+   * a new palette every other sixtieth, and neither of them changes a
+   * pixel of the surface. Only the expansion to RGBA runs again for
+   * those, which is the part that has to.
+   */
+  private presentHigh(surface: Surface, paletteRgba: Uint8Array): void {
+    const factor = this.factor;
+    const width = surface.width * factor;
+    const height = surface.height * factor;
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.ctx.imageSmoothingEnabled = false;
+    }
+    const src = surface.pixels;
+    let moved = this.hiFrom === null || this.hiFrom.length !== src.length;
+    if (!moved) {
+      const was = this.hiFrom!;
+      for (let i = 0; i < src.length; i++) {
+        if (was[i] !== src[i]) { moved = true; break; }
+      }
+    }
+    if (moved || !this.hiPixels) {
+      this.hiPixels = upscale(src, surface.width, surface.height, factor, this.hiPixels ?? undefined);
+      this.hiFrom = this.hiFrom?.length === src.length ? this.hiFrom : new Uint8Array(src.length);
+      this.hiFrom.set(src);
+    }
+    if (!this.hiImage || this.hiImage.width !== width || this.hiImage.height !== height) {
+      this.hiImage = this.ctx.createImageData(width, height);
+    }
+    const dst = this.hiImage.data;
+    const ix = this.hiPixels;
+    for (let i = 0; i < ix.length; i++) {
+      const c = ix[i]! * 4;
+      const o = i * 4;
+      dst[o] = paletteRgba[c]!;
+      dst[o + 1] = paletteRgba[c + 1]!;
+      dst[o + 2] = paletteRgba[c + 2]!;
+      dst[o + 3] = 255;
+    }
+    this.ctx.putImageData(this.hiImage, 0, 0);
   }
 
   /**
@@ -212,9 +374,8 @@ export class Display {
     ctx.setTransform(canvas.width / SCREEN_WIDTH, 0, 0, canvas.height / SCREEN_HEIGHT, 0, 0);
     ctx.textBaseline = 'alphabetic';
     for (const item of items) {
-      const size = item.capHeight / CAP_RATIO;
-      ctx.font = `${size}px ${VECTOR_FACE}`;
       ctx.direction = item.rtl ? 'rtl' : 'ltr';
+      const baseline = this.fitToBand(ctx, item);
       const at = item.color * 4;
       const r = paletteRgba[at] ?? 255;
       const g = paletteRgba[at + 1] ?? 255;
@@ -224,8 +385,33 @@ export class Display {
       if (item.xAlign === 0) { ctx.textAlign = 'center'; x = (item.left + item.right) / 2; }
       else if (item.xAlign > 0) { ctx.textAlign = 'right'; x = item.right; }
       else ctx.textAlign = 'left';
-      ctx.fillText(item.text, x, item.baseline);
+      ctx.fillText(item.text, x, baseline);
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /**
+   * Set the font for this line and say where its baseline goes.
+   *
+   * A line that declares no band keeps the size a seven-pixel capital
+   * asks for and the baseline the original drew on, which is every
+   * line of English in the game. A line that declares one is measured
+   * -- `actualBoundingBox` is the ink, not the em, so it is the real
+   * answer for this string in this face -- and made small enough to
+   * sit inside it, because the strip under the room has eight rows
+   * and a Hebrew lamed and qof together want twelve.
+   */
+  private fitToBand(ctx: CanvasRenderingContext2D, item: OverlayItem): number {
+    const size = item.capHeight / CAP_RATIO;
+    ctx.font = `${size}px ${VECTOR_FACE}`;
+    const { top, bottom } = item;
+    if (top === undefined || bottom === undefined) return item.baseline;
+    const fitted = fitLine(item.baseline, size, top, bottom, (at) => {
+      ctx.font = `${at}px ${VECTOR_FACE}`;
+      const m = ctx.measureText(item.text);
+      return { ascent: m.actualBoundingBoxAscent, descent: m.actualBoundingBoxDescent };
+    });
+    ctx.font = `${fitted.size}px ${VECTOR_FACE}`;
+    return fitted.baseline;
   }
 }

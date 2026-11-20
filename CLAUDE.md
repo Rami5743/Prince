@@ -41,6 +41,213 @@
 ## ============================================================
 
 
+## THE PICTURE AT `quality: high`: AN UPSCALER THAT MAY NOT MIX A COLOUR
+
+    measured   32260 of 33047   98%   (unmoved, run for run)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     854 -> 883
+
+    page-port.ts --scenes --cheats --entries --deaths --potion
+                 14 levels, 9 scenes, 13 entries, 2 deaths, the potion
+                 level -- exact
+
+The words became vectors in the round above this one. This is the
+other half of the same setting: the **picture**. There is nothing to
+draw the art from but the art, so what `high` gives it is more pixels
+of its own -- the canvas goes from 320 by 200 to 960 by 600 or 1920 by
+1200, and `image-rendering` stops being `pixelated`, so the browser
+shrinks that to the size the picture is shown at smoothly instead of
+with nearest neighbour. The steps go out of the edges and the art is
+the art.
+
+### 1. The one rule: every pixel out is a pixel that went in
+
+The game is drawn in palette **indices** and the palette moves while
+it plays -- `set_bg_attr` for the flash, sixty-four shades of every
+fade, `gen_palace_wall_colors` for a palace. **A pixel that is the
+average of two indices has no index left to change**, so it would
+stay bright through a `fade_out_2` and would not flash with the rest
+of the screen. An upscaler for this game may round a corner; it may
+not mix a colour.
+
+So `src/render/upscale.ts` is AdvMAME's **Scale2x** and **Scale3x**,
+which fill a corner with a neighbour's index when the two edges that
+meet there agree and the two that do not are different, and copy the
+pixel otherwise. ×6 is Scale3x and then Scale2x, in that order: the
+other way round would have to decide every corner twice, on a picture
+its own first pass had already rounded.
+
+`tests/render/upscale.test.ts` works the rule through by hand on a
+four-by-four step and then requires, over **twenty ticks of every one
+of the fourteen levels and all three factors**, that no index comes
+out that did not go in. `tests/browser/picture-quality.test.ts` does
+the same from the other end, on the canvas the player looks at: it
+holds the game still, reads every colour at both qualities, and
+requires the set at `high` to be a subset of the set at `original`.
+
+### 2. Two other upscalers were tried, and both lose
+
+Put beside Scale3x on the same six pictures -- the Prince standing,
+the Prince running, a dungeon room, a palace room, a guard, a torch:
+
+* **Eagle2x** (a corner takes the diagonal when all three of its
+  neighbours agree) eats single pixels, and this art is full of them:
+  the Prince's face flattened out and his hair became a blob.
+* **xBR level 2 with the blending removed** -- the usual answer for a
+  palette image -- came out thinner than the original everywhere and
+  lost the shape of the torch handle. Without its blend the
+  algorithm's own edge weighting has nothing to put at an edge but a
+  neighbour's flat colour, and it takes more than it gives.
+
+### 3. Nothing is generated ahead of time, and that is measured rather than chosen
+
+The plan the player accepted was "artwork upscaled at high quality,
+generated ahead of time and stored in the repo". It is done at run
+time instead, and the reason is the rule in §1: **an offline pass
+buys quality by spending time, and the only thing more time buys
+here is blending, which the palette forbids.** What is left once
+blending is off the table is a rule over a 3x3 neighbourhood, and
+that is as cheap to run on the player's machine as to ship -- where
+shipping it would mean the art at nine times the pixels in the
+download.
+
+Where the two would differ at all is the one place a composed frame
+loses something: an upscaler looking at a sprite on its own sees the
+sprite's outline, and one looking at the composed frame sees that
+outline already merged into the wall behind it, so it cannot tell
+the Prince's edge from a brick's. **Nobody has measured how much
+that is worth**, and finding out costs a round: every blit, every
+rect and every peel would have to exist at 3x as well, and the art
+at 3x would have to be shipped. That is the thing left here.
+
+### 4. The cost, and why it is affordable
+
+`presentHigh` enlarges the **indices** and only when the indices have
+moved: the flash puts the screen up twice inside one tick and a fade
+writes a new palette every other sixtieth, and neither changes a
+pixel of the surface. Only the expansion to RGBA runs again for
+those, which is the part that has to.
+
+`chooseFactor` asks for the first factor that covers the canvas's own
+displayed size times the device pixel ratio, and stops at six -- the
+same number the crisp-text canvas uses. There is nothing to be had
+from more pixels than the screen has, and the difference is not
+small. Measured in Chromium at 1280 by 860, one `__princeStep`
+(a game tick **and** the present):
+
+    device pixel ratio 1   original 0.28 ms   high, x3   3.37 ms
+    device pixel ratio 2   original 0.26 ms   high, x6   9.99 ms
+
+The game presents about twenty-four times a second -- twelve ticks
+and the flash's second present inside a tick -- so `high` is about
+eight per cent of a core at x3 and a quarter of one at x6, against
+well under one per cent at `original`. That is the price of the
+setting, and it is why the factor follows the window instead of
+being six always.
+
+### 5. Two bugs in the round above this one, found by looking at the screen
+
+Both are things a player meets and neither moved a score.
+
+* **The row above the strip was never rubbed out.** The caller blacks
+  `rect_bottom_text`, rows 193 to 201, because that is the rectangle
+  the C blacks -- and a Hebrew line is drawn one row higher than
+  that, so its top row is **outside** what the caller rubs out. It
+  stayed on the screen when the strip went empty, when the line
+  changed to a shorter one, and when the quality moved to `high`,
+  which blits nothing into the surface at all. Screenshotted: the
+  tops of `שלב 1` left standing in white over the floor of the room.
+  `GameText.bottomText` remembers whether the last line used that row
+  and rubs it out itself.
+* **A vector face is not the height of its cell.** A bitmap glyph is
+  exactly as tall as its cell and the original's seven strings have
+  no ascender past the capital and no descender at all, so
+  `rect_bottom_text`'s eight rows always sufficed. Hebrew has both,
+  and Chromium's own `actualBoundingBox` says by how much: at the
+  size that gives a seven-pixel capital, `שלב 3` puts the top of its
+  lamed on row **191.74** -- over the floor of the room -- and
+  `נותרו 60 דקות` is 8.8 rows of ink in a band of 8, with the qof's
+  tail off the bottom of the screen.
+
+  `fitLine` in `text.ts` moves the baseline when moving is enough and
+  makes the line smaller only when the ink is taller than the band
+  however it is placed. English never moves by it.
+
+  **It is arithmetic and is tested as arithmetic**, with those
+  measured numbers, because a browser test cannot see the second half
+  at all: a canvas cuts ink off at its own edge, so a tail that fits
+  and a tail that was cut both read as ink stopping at row 199. The
+  browser test reads the lamed, which it can see, and fails at 191.74
+  with the fit taken out.
+
+### 6. The sound at `high`: the same tune, the voice the hardware had
+
+"The same music, only cleaner" is a promise that can be broken
+without anyone hearing it, so what `rich` may do is pinned rather
+than listened to: **every note starts at the instant the plain voice
+starts it, lasts as long, and is the same pitch** -- checked note for
+note over the title's own tune, which is the longest thing the player
+hears before touching anything.
+
+What it adds is the three things a bare oscillator has not got:
+
+* **a second operator.** The chip these tracks were written for is
+  two operators to a voice and a plain oscillator is one, so each
+  note carries a sine an octave above it at a bit over a quarter of
+  its level. It is a harmonic of the note, at the same instant and
+  for the same time, which is why the pitch test still passes.
+* **an envelope.** The plain voice rises in 8 ms, holds dead level
+  and stops, which is the one thing no real instrument does and is
+  why it sounds like an organ. The rich one decays to a sustain and
+  releases.
+* **one low pass** over the whole tune at 3800 Hz -- one, not one per
+  note: the ending's music is eighteen hundred notes.
+
+And the **recordings**: `original` holds each sample for a whole
+number of the new rate's, which is exactly what the DAC did and is
+the hiss the player hears on top of the sound; `high` draws a line
+between the same samples instead. `tests/render/sound-quality.test.ts`
+reads the buffer back and requires the two to agree **at every sample
+point** and to differ between them, so it is the same recording
+either way.
+
+A sink with no `createBiquadFilter` falls back to the plain voice
+rather than throwing, and `SoundPlayer.quality` starts at `original`
+-- so every headless tool and every test hears what it heard before
+there was a setting, by construction.
+
+`tests/browser/every-sound-reads.test.ts` now plays **all fifty-odd
+`soundids` at `high` as well**, because new code on the path to the
+one channel is exactly how the exit door was lost for the whole life
+of the port: `SoundPlayer.read` catches what the decoding throws,
+writes the sound down as "neither a recording nor a tune", and every
+later `play` of it returns silently.
+
+### 7. And the Hebrew page, read with eyes rather than with a test
+
+Screenshotted at 1280 by 860 and looked at, which is the only way
+chrome gets checked: the slot rows had **no label at all**.
+`שמירת משחק` and `טעינת משחק` are twice the width of `Save game` and
+`Load game`, so the two buttons took the whole row, wrapped onto two
+lines each, and squeezed the `1fr` column that says what is in the
+slot down to fifty-one pixels of `משבצת ...`.
+
+Three things, and the first two are the fix:
+
+* the row is **the label on its own line and the two buttons under
+  it**, sharing the width, instead of three things side by side. It
+  is better in English too and it cannot be squeezed by a longer
+  word in a third language;
+* a slot button never wraps -- a two-line button is what a row looks
+  like just before its label is pushed out of it;
+* the Hebrew words are `שמירה` and `טעינה`, with the full phrase on
+  the button's `title`, and the two longest key names in the margin
+  (`חיצים / מקלדת ספרתית`, `חץ למעלה בריצה`) are shortened, because
+  the key list's first column is `auto` and one long name in it
+  narrows every description under it.
+
+
 ## THE GAME SPEAKS HEBREW, AND ITS WORDS CAN BE VECTORS
 
     measured   32260 of 33047   98%   (unmoved, run for run)

@@ -22,7 +22,9 @@
 import type { Assets } from './assets.ts';
 import { parseSound, SOUND_RESOURCE_BASE, type Sound } from '../dat/sound.ts';
 import { SOUND_SILENCE } from '../game/sequence.ts';
-import { midiTune, speakerTune, Tune, type Note, type MusicSink } from './music.ts';
+import {
+  midiTune, speakerTune, Tune, type Note, type MusicSink, type TuneVoice,
+} from './music.ts';
 
 /** The files that hold the recorded sounds, in the order to look in them. */
 export const DIGI_FILES = ['DIGISND1.DAT', 'DIGISND2.DAT', 'DIGISND3.DAT'] as const;
@@ -236,6 +238,16 @@ export class SoundPlayer {
   /** Nothing is played until the player has touched the page. */
   private woken = false;
   /**
+   * `quality: original` or `high`, for the **sound**.
+   *
+   * Nothing in `src/pop` knows this exists: the game asks for sound
+   * 15 and the question of how sound 15 is made is the shell's. It
+   * starts at `original`, so every headless tool and every test
+   * hears exactly what they heard before there was a setting, and
+   * `web/main.ts` is the only thing that ever moves it.
+   */
+  private qual: 'original' | 'high' = 'original';
+  /**
    * What is playing. The original had one channel: a new sound stopped
    * whatever was in it, which is why the byte-code can ask for silence by
    * name. Letting them pile up turns a run into a wall of noise.
@@ -329,6 +341,25 @@ export class SoundPlayer {
     this.start(index, buffer);
   }
 
+  get quality(): 'original' | 'high' { return this.qual; }
+
+  /**
+   * Move the quality, and forget what was read at the old one.
+   *
+   * A recording is turned into an `AudioBuffer` once and kept, and
+   * the two qualities build that buffer differently -- so the cache
+   * has to go, or the player would go on hearing the staircase until
+   * the page was reloaded. A tune keeps nothing: it is built out of
+   * its notes every time it is played.
+   */
+  set quality(value: 'original' | 'high') {
+    if (value === this.qual) return;
+    this.qual = value;
+    for (const [index, playable] of [...this.buffers]) {
+      if (playable && playable.kind === 'digi') this.buffers.delete(index);
+    }
+  }
+
   /**
    * Whether `index` may have the channel, by the original's rule: it
    * may if nothing is sounding, or if what is sounding may be
@@ -348,7 +379,8 @@ export class SoundPlayer {
     if (what.kind === 'tune') {
       const sink = this.context as unknown as MusicSink;
       if (typeof this.context.createOscillator !== 'function') return;
-      const tune = new Tune(sink, what.notes, what.wave, what.length);
+      const voice: TuneVoice = this.quality === 'high' ? 'rich' : 'plain';
+      const tune = new Tune(sink, what.notes, what.wave, what.length, voice);
       if (tune.empty) return;
       tune.onended = (): void => {
         if (this.playing === tune) { this.playing = null; this.playingIndex = -1; }
@@ -420,9 +452,30 @@ export class SoundPlayer {
         1, digi.samples.length * hold, digi.rate * hold);
       const channel = buffer.getChannelData(0);
       // Unsigned eight-bit with silence at 128, which is what the DAC took.
+      const value = (i: number): number => ((digi.samples[i] ?? 128) - 128) / 128;
+      /**
+       * `original` holds each sample, `high` draws a line between
+       * them.
+       *
+       * Holding is what the DAC did, so it is what the original
+       * sounded like and it is what `quality: original` must do: the
+       * step from one sample to the next is a hard edge, and a hard
+       * edge eight thousand times a second is the hiss the player
+       * hears on top of the sound. The samples themselves are the
+       * same eight bits either way: this is the same recording,
+       * played without the staircase, which is the whole of what
+       * "cleaner" can honestly mean for a sound the game ships as
+       * samples.
+       */
+      const smooth = this.quality === 'high' && hold > 1;
       for (let i = 0; i < digi.samples.length; i++) {
-        const v = (digi.samples[i] - 128) / 128;
-        for (let k = 0; k < hold; k++) channel[i * hold + k] = v;
+        const v = value(i);
+        if (!smooth) {
+          for (let k = 0; k < hold; k++) channel[i * hold + k] = v;
+          continue;
+        }
+        const next = i + 1 < digi.samples.length ? value(i + 1) : v;
+        for (let k = 0; k < hold; k++) channel[i * hold + k] = v + (next - v) * (k / hold);
       }
       return { kind: 'digi', buffer };
     }

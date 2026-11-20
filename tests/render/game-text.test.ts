@@ -24,7 +24,7 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import {
   readFont, drawTextCentred, drawTextInRect, textWidth,
 } from '../../src/render/font.ts';
-import { GameText, toVisual, hasRtl } from '../../src/render/text.ts';
+import { GameText, toVisual, hasRtl, fitLine } from '../../src/render/text.ts';
 import { HEBREW_GLYPHS } from '../../src/render/hebrew.ts';
 import { Surface } from '../../src/render/surface.ts';
 
@@ -168,14 +168,68 @@ describe('the words the game draws', () => {
     // line and not the visual one.
     expect(item.text).toBe('נותרו 60 דקות');
     expect(item.rtl).toBe(true);
-    // One row above where the English sits: `rect_bottom_text`'s
-    // baseline is the last row of the screen, and a qof has a tail.
-    expect(item.baseline).toBe(STRIP.top + 6);
+    // The baseline is the original's own -- the last row of the
+    // screen -- and the line carries the band of rows its ink has to
+    // stay inside. A vector face is not the height of its cell the
+    // way a bitmap glyph is, so where exactly it sits is settled at
+    // the canvas, by measuring this string in this face; what is
+    // settled here is the room it has, which is row 192 (the first
+    // under the 192-row room) to the bottom of the screen.
+    expect(item.baseline).toBe(STRIP.top + 7);
+    expect(item.top).toBe(STRIP.top - 1);
+    expect(item.bottom).toBe(STRIP.top + 7);
     // Asking again replaces the line rather than piling up beside it.
     text.bottomText(surface, 'GAME PAUSED', STRIP.left, STRIP.top, STRIP.right - 1, 15);
     expect(text.overlay).toHaveLength(1);
     text.bottomText(surface, null, STRIP.left, STRIP.top, STRIP.right - 1, 15);
     expect(text.overlay).toHaveLength(0);
+  });
+
+  it('rubs out the row a Hebrew line used above the rectangle', () => {
+    /**
+     * The caller blacks `rect_bottom_text`, rows 193 to 201, because
+     * that is the rectangle the C blacks -- and a Hebrew line is
+     * drawn one row higher than that, so its top row is outside what
+     * the caller rubs out. Measured on the page before this: the
+     * tops of `שלב 1` were left standing in white over the floor of
+     * the room after the strip went empty, and again after the
+     * quality moved to `high`, which blits nothing at all.
+     */
+    const row = (surface: Surface): number[] => {
+      const out: number[] = [];
+      for (let x = STRIP.left; x < STRIP.right; x++) {
+        out.push(surface.pixels[(STRIP.top - 1) * surface.width + x]!);
+      }
+      return out;
+    };
+    const black = (surface: Surface): boolean => row(surface).every((v) => v === 0);
+
+    const he = new GameText(font, { language: 'he', quality: 'original' });
+    const surface = new Surface();
+    // What the engine does before every line: black the C's rectangle,
+    // which does not reach row 192.
+    const clear = (): void => surface.fillRect(
+      STRIP.left, STRIP.top, STRIP.right - STRIP.left, 9, 0,
+    );
+
+    clear();
+    he.bottomText(surface, 'LEVEL 1', STRIP.left, STRIP.top, STRIP.right - 1, 15);
+    expect(black(surface), 'the Hebrew line really uses row 192').toBe(false);
+
+    // The strip goes empty, which is what `show_level` does after
+    // twenty-four ticks.
+    clear();
+    he.bottomText(surface, null, STRIP.left, STRIP.top, STRIP.right - 1, 15);
+    expect(black(surface), 'and the row is rubbed out with it').toBe(true);
+
+    // And again for the quality moving, which blits nothing.
+    clear();
+    he.bottomText(surface, 'LEVEL 1', STRIP.left, STRIP.top, STRIP.right - 1, 15);
+    expect(black(surface)).toBe(false);
+    he.quality = 'high';
+    clear();
+    he.bottomText(surface, 'LEVEL 1', STRIP.left, STRIP.top, STRIP.right - 1, 15);
+    expect(black(surface), 'nothing is left over the room at `high`').toBe(true);
   });
 
   it('has a story screen for Hebrew and none for English at the original quality', () => {
@@ -244,5 +298,63 @@ describe('the measurements the strip rests on', () => {
     // of PRINCE.EXE: the text layer must not have moved them.
     expect(textWidth(font, 'LEVEL 1')).toBe(41);
     expect(textWidth(font, 'Press Button to Continue')).toBe(150);
+  });
+});
+
+/**
+ * Fitting a vector line into the rows the original gave it.
+ *
+ * The numbers here are **measured**, off Chromium's own
+ * `actualBoundingBox` for the two Hebrew lines at the size a
+ * seven-pixel capital asks for, with the baseline on row 200 and the
+ * band rows 192 to 200 -- which is every row the strip under the room
+ * has. They are in a unit test because a browser cannot tell a tail
+ * that fits from a tail the canvas has cut off at its own edge: both
+ * read as ink stopping at row 199.
+ */
+describe('fitting a crisp line into the strip', () => {
+  const TOP = 192;
+  const BOTTOM = 200;
+  const SIZE = 10;
+
+  it('moves the baseline when moving is enough', () => {
+    // `שלב 3`: the lamed climbs 8.26 rows above the baseline and
+    // nothing hangs below, so the ink is 7.96 rows and fits -- but at
+    // baseline 200 its top is row 191.74, a quarter of a row over the
+    // floor of the room. Measured on the page before this.
+    const fitted = fitLine(200, SIZE, TOP, BOTTOM, () => ({ ascent: 8.26, descent: -0.3 }));
+    expect(fitted.size, 'nothing is made smaller').toBe(SIZE);
+    expect(fitted.baseline).toBeCloseTo(200.26, 2);
+    expect(fitted.baseline - 8.26, 'and the top is exactly on row 192').toBeCloseTo(TOP, 6);
+  });
+
+  it('makes the line smaller when the ink is taller than the band', () => {
+    // `נותרו 60 דקות`: 6.8 above and a qof's tail 2.0 below is 8.8
+    // rows in 8, and the tail was going off the bottom of the screen.
+    const seen: number[] = [];
+    const fitted = fitLine(200, SIZE, TOP, BOTTOM, (at) => {
+      seen.push(at);
+      const k = at / SIZE;
+      return { ascent: 6.8 * k, descent: 2.0 * k };
+    });
+    expect(fitted.size).toBeCloseTo(SIZE * (8 / 8.8), 6);
+    expect(seen, 'the face is measured again after it is resized').toHaveLength(2);
+    // The tail now ends on the last row of the screen, not past it.
+    expect(fitted.baseline + 2.0 * (fitted.size / SIZE)).toBeCloseTo(BOTTOM, 6);
+    expect(fitted.baseline - 6.8 * (fitted.size / SIZE)).toBeCloseTo(TOP, 6);
+  });
+
+  it('leaves a line that already fits exactly where it was', () => {
+    // Every line of English: `LEVEL 1` and `60 MINUTES LEFT` have no
+    // ascender past the capital and no descender at all.
+    const fitted = fitLine(200, SIZE, TOP, BOTTOM, () => ({ ascent: 7, descent: 0 }));
+    expect(fitted).toEqual({ size: SIZE, baseline: 200 });
+  });
+
+  it('says nothing when the canvas cannot measure', () => {
+    const fitted = fitLine(200, SIZE, TOP, BOTTOM, () => ({ ascent: NaN, descent: NaN }));
+    expect(fitted).toEqual({ size: SIZE, baseline: 200 });
+    expect(fitLine(200, SIZE, 200, 200, () => ({ ascent: 99, descent: 99 })))
+      .toEqual({ size: SIZE, baseline: 200 });
   });
 });

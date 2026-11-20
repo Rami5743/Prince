@@ -127,4 +127,48 @@ describe('the game\'s sounds, in a browser', () => {
     }, indices);
     expect(silent, `these played nothing: ${JSON.stringify(silent)}`).toEqual([]);
   }, 180000);
+
+  /**
+   * And again at `quality: high`, which builds both of them
+   * differently.
+   *
+   * A recording is resampled with a line between the samples instead
+   * of the DAC's staircase, and a tune gets a second oscillator a
+   * note and one low pass over the whole of it. Both are new code on
+   * the path to the one channel, and a sound that threw there would
+   * be written down as "neither a recording nor a tune" and would
+   * then be silent for the rest of the session -- which is exactly
+   * how the exit door was lost for the whole life of the port.
+   */
+  it('reads and plays every sound at `quality: high` as well', async () => {
+    const indices = [...new Set(Object.values(soundids) as number[])]
+      .filter((i) => i > 0).sort((a, b) => a - b);
+    await page.selectOption('#setting-quality', 'high');
+    await page.waitForTimeout(200);
+    const silent = await page.evaluate(async (list) => {
+      const w = window as unknown as {
+        __princePlaySound(i: number): void;
+        __princeMute(on: boolean): void;
+        __started: string[];
+      };
+      w.__princeMute(false);
+      const out: number[] = [];
+      for (const i of list) {
+        w.__started.length = 0;
+        w.__princePlaySound(i);
+        await new Promise((r) => setTimeout(r, 60));
+        if (w.__started.length === 0) out.push(i);
+      }
+      return out;
+    }, indices);
+    expect(silent, `these played nothing at high: ${JSON.stringify(silent)}`)
+      .toEqual([]);
+    const failed = await page.evaluate(() => (window as unknown as {
+      __princeSoundFailures(): Promise<[number, string][]>;
+    }).__princeSoundFailures());
+    expect(failed, `these would not read at high: ${JSON.stringify(failed)}`)
+      .toEqual([]);
+    await page.selectOption('#setting-quality', 'original');
+    expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
+  }, 180000);
 });
