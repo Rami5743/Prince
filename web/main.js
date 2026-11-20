@@ -638,11 +638,28 @@ var Surface = class {
 };
 
 // src/render/display.ts
+var VECTOR_FACE = '"Frank Ruehl CLM", "David Libre", David, "Noto Serif Hebrew", "Times New Roman", "Liberation Serif", "FreeSerif", "DejaVu Serif", serif';
+var CAP_RATIO = 0.7;
 var Display = class {
   canvas;
   ctx;
   imageData;
   aspect = "original-4-3";
+  /**
+   * The second canvas, over the first, for `quality: high`.
+   *
+   * The game's own canvas is 320 by 200 and nothing drawn into it can
+   * be sharper than that. So the crisp words are not drawn into it at
+   * all: they go on a canvas of the same size and place whose backing
+   * store is the size the picture is really shown at, times the
+   * device's own pixel ratio. The 320 by 200 surface underneath keeps
+   * its background -- the strip under the room is still blacked, the
+   * story frame is still drawn -- and `tools/dev/page-port.ts` goes on
+   * reading that surface and seeing the headless port's own picture.
+   */
+  overlay = null;
+  overlayCtx = null;
+  textSource = null;
   constructor(canvas) {
     this.canvas = canvas;
     canvas.width = SCREEN_WIDTH;
@@ -687,6 +704,70 @@ var Display = class {
     s.width = `${Math.floor(width)}px`;
     s.height = `${Math.floor(width / this.ratio)}px`;
     s.aspectRatio = "";
+    this.placeOverlay();
+  }
+  /**
+   * The crisp text canvas, exactly over the game's own.
+   *
+   * It is made the first time something asks to draw on it, so a page
+   * at `quality: original` never has a second canvas at all.
+   */
+  makeOverlay() {
+    if (this.overlayCtx) return this.overlayCtx;
+    const parent = this.canvas.parentElement;
+    if (!parent || typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    canvas.id = "screen-text";
+    canvas.setAttribute("aria-hidden", "true");
+    const s = canvas.style;
+    s.position = "absolute";
+    s.pointerEvents = "none";
+    s.background = "transparent";
+    s.border = "0";
+    s.imageRendering = "auto";
+    s.zIndex = "1";
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    parent.appendChild(canvas);
+    this.overlay = canvas;
+    this.overlayCtx = ctx;
+    this.placeOverlay();
+    return ctx;
+  }
+  /**
+   * Put the text canvas where the game's canvas is.
+   *
+   * The stage centres the game in its box, so the offset is read off
+   * the element rather than assumed -- and the border is a pixel, so
+   * the content box is what the picture fills, not the border box.
+   */
+  placeOverlay() {
+    const canvas = this.overlay;
+    if (!canvas) return;
+    const game = this.canvas;
+    const style = typeof getComputedStyle === "function" ? getComputedStyle(game) : null;
+    const borderLeft = style ? parseFloat(style.borderLeftWidth) || 0 : 0;
+    const borderTop = style ? parseFloat(style.borderTopWidth) || 0 : 0;
+    const width = game.clientWidth || game.offsetWidth;
+    const height = game.clientHeight || game.offsetHeight;
+    canvas.style.left = `${game.offsetLeft + borderLeft}px`;
+    canvas.style.top = `${game.offsetTop + borderTop}px`;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const dpr = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
+    const backingWidth = Math.max(1, Math.round(width * dpr));
+    const backingHeight = Math.max(1, Math.round(height * dpr));
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+  }
+  /**
+   * Where the crisp words come from, or null for none.
+   *
+   * `web/main.ts` points this at the text layer. Nothing else does, so
+   * a page that never asked for the better text never draws one.
+   */
+  setTextSource(source) {
+    this.textSource = source;
   }
   /** Follow the box the page gives the game, which a resize changes. */
   watch() {
@@ -697,6 +778,53 @@ var Display = class {
   present(surface, paletteRgba) {
     surface.toRgba(paletteRgba, this.imageData.data);
     this.ctx.putImageData(this.imageData, 0, 0);
+    this.presentText(paletteRgba);
+  }
+  /**
+   * The words, on the canvas over the picture, at the canvas's own
+   * resolution.
+   *
+   * The colour is looked up in the palette the picture was just drawn
+   * with, so a line fades with the screen it is on rather than staying
+   * bright through a `fade_out_2` -- the palette is the whole of how
+   * the original fades, and the overlay reads the same one.
+   */
+  presentText(paletteRgba) {
+    const items = this.textSource?.() ?? [];
+    if (items.length === 0) {
+      if (this.overlayCtx && this.overlay) {
+        this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
+      }
+      return;
+    }
+    const ctx = this.makeOverlay();
+    const canvas = this.overlay;
+    if (!ctx || !canvas) return;
+    if (canvas.width < 2 || canvas.height < 2) this.placeOverlay();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(canvas.width / SCREEN_WIDTH, 0, 0, canvas.height / SCREEN_HEIGHT, 0, 0);
+    ctx.textBaseline = "alphabetic";
+    for (const item of items) {
+      const size = item.capHeight / CAP_RATIO;
+      ctx.font = `${size}px ${VECTOR_FACE}`;
+      ctx.direction = item.rtl ? "rtl" : "ltr";
+      const at = item.color * 4;
+      const r = paletteRgba[at] ?? 255;
+      const g2 = paletteRgba[at + 1] ?? 255;
+      const b = paletteRgba[at + 2] ?? 255;
+      ctx.fillStyle = `rgb(${r} ${g2} ${b})`;
+      let x = item.left;
+      if (item.xAlign === 0) {
+        ctx.textAlign = "center";
+        x = (item.left + item.right) / 2;
+      } else if (item.xAlign > 0) {
+        ctx.textAlign = "right";
+        x = item.right;
+      } else ctx.textAlign = "left";
+      ctx.fillText(item.text, x, item.baseline);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 };
 
@@ -6509,7 +6637,7 @@ function* input_str(rect, buffer, max_length, initial, has_initial, arg_4, color
       }
     }
     const code = entered.charCodeAt(0);
-    const entered_char = entered.length === 1 && code <= 126 ? entered : "";
+    const entered_char = entered.length === 1 && code !== 127 ? entered : "";
     scr.clear_kbd_buf();
     if (key === "escape") {
       scr.rect(rect.left, rect.top, rect.right, rect.bottom, bgcolor);
@@ -6524,7 +6652,7 @@ function* input_str(rect, buffer, max_length, initial, has_initial, arg_4, color
       scr.draw_text_character(current_xpos, ypos, buffer.text[length], bgcolor);
       buffer.text = buffer.text.slice(0, length);
       draw_text_cursor(current_xpos, ypos, color);
-    } else if (entered_char !== "" && code >= 32 && code <= 126 && length < max_length) {
+    } else if (entered_char !== "" && code >= 32 && code !== 127 && length < max_length) {
       if (scr.char_width("_") + scr.char_width(entered_char) + current_xpos < rect.right) {
         draw_text_cursor(current_xpos, ypos, bgcolor);
         buffer.text = buffer.text.slice(0, length) + entered_char;
@@ -10451,6 +10579,16 @@ var PopGame = class _PopGame {
   fullRedrawClears = false;
   /** The game's own font, out of the executable. */
   font;
+  /**
+   * The shell's text layer, or nothing at all.
+   *
+   * Nothing here reads a setting: this is handed in by `web/main.ts`
+   * and is undefined everywhere else, so a headless run draws the
+   * original's own words in the original's own font by construction.
+   */
+  text;
+  /** The last thing `display_text_bottom` asked for, for a relabel. */
+  bottomText = null;
   /** `draw_level_first` has still to put the hit points up. */
   firstDraw = false;
   /** Where `play_sound` goes, if the shell has a speaker. */
@@ -10518,6 +10656,7 @@ var PopGame = class _PopGame {
     game.seamlessEntry = options.seamless === true;
     game.minutesLeft = options.minutesLeft ?? 60;
     game.seed = options.seed;
+    game.text = options.text;
     game.install(exe);
     const carried = options.carried;
     if (carried) {
@@ -10550,7 +10689,7 @@ var PopGame = class _PopGame {
       assets,
       exe,
       this.levelNumber,
-      { effects: this.effects, carried }
+      { effects: this.effects, carried, text: this.text }
     );
     g.need_level1_music = 0;
     return game;
@@ -10703,6 +10842,7 @@ var PopGame = class _PopGame {
    * and `draw_rect(&rect_bottom_text, color_0_black)` before it.
    */
   drawBottomText(text2) {
+    this.bottomText = text2;
     this.surface.fillRect(
       TEXT_RECT.left,
       TEXT_RECT.top,
@@ -10710,6 +10850,17 @@ var PopGame = class _PopGame {
       TEXT_RECT.bottom - TEXT_RECT.top,
       0
     );
+    if (this.text) {
+      this.text.bottomText(
+        this.surface,
+        text2,
+        TEXT_RECT.left,
+        TEXT_RECT.top,
+        TEXT_RECT.right - 1,
+        TEXT_WHITE
+      );
+      return;
+    }
     if (text2 === null || !this.font) return;
     drawTextCentred(
       this.surface,
@@ -10720,6 +10871,20 @@ var PopGame = class _PopGame {
       TEXT_RECT.top,
       TEXT_WHITE
     );
+  }
+  /**
+   * Draw the strip again, because the language or the quality moved.
+   *
+   * The words under the room are put there once, by
+   * `display_text_bottom`, and they stay on the surface until
+   * something paints over them -- so a player who changes the
+   * language while `60 MINUTES LEFT` is up would go on reading it in
+   * English until the next time the game had something to say. This
+   * is the shell asking for the same string again, and it is the only
+   * thing in this class the shell may call about a setting.
+   */
+  refreshText() {
+    this.drawBottomText(this.bottomText);
   }
   imageOf(chtab, id) {
     const name = CHTAB_NAME[chtab];
@@ -11738,6 +11903,21 @@ function show_hof() {
     show_hof_text(hof_rects[index], 1, 0, time_text);
   }
 }
+var HOF_HEBREW_FIRST = 224;
+var HEBREW_ALEF = 1488;
+var HEBREW_TAV = 1514;
+function hofByte(code) {
+  if (code >= HEBREW_ALEF && code <= HEBREW_TAV) {
+    return HOF_HEBREW_FIRST + (code - HEBREW_ALEF);
+  }
+  return code & 255;
+}
+function hofChar(byte) {
+  if (byte >= HOF_HEBREW_FIRST && byte <= HOF_HEBREW_FIRST + (HEBREW_TAV - HEBREW_ALEF)) {
+    return String.fromCharCode(HEBREW_ALEF + (byte - HOF_HEBREW_FIRST));
+  }
+  return String.fromCharCode(byte);
+}
 function hof_write() {
   const bytes = new Uint8Array(2 + MAX_HOF_COUNT * HOF_ENTRY_BYTES);
   const dv = new DataView(bytes.buffer);
@@ -11746,7 +11926,7 @@ function hof_write() {
     const at = 2 + i * HOF_ENTRY_BYTES;
     const entry = hof[i];
     for (let c = 0; c < 25 && c < entry.name.length; c++) {
-      bytes[at + c] = entry.name.charCodeAt(c) & 255;
+      bytes[at + c] = hofByte(entry.name.charCodeAt(c));
     }
     dv.setInt16(at + 25, entry.min, true);
     dv.setInt16(at + 27, entry.tick, true);
@@ -11778,7 +11958,7 @@ function hof_read() {
     for (let c = 0; c < 25; c++) {
       const b = bytes[at + c];
       if (b === 0) break;
-      name += String.fromCharCode(b);
+      name += hofChar(b);
     }
     hof[i] = { name, min: dv.getInt16(at + 25, true), tick: dv.getInt16(at + 27, true) };
   }
@@ -12495,6 +12675,16 @@ var CutscenePlayer = class _CutscenePlayer {
   exe;
   /** The game's own font, out of the executable, for the hall of fame. */
   font;
+  /**
+   * The shell's text layer, or nothing at all.
+   *
+   * Undefined in every headless tool, so `scene-report.ts` compares
+   * the original's own pictures with the original's own font. See
+   * `src/render/text.ts`.
+   */
+  text;
+  /** Which story screen is on the frame, so that a relabel can redraw it. */
+  storyShowing = null;
   /** What the shell has typed and `input_str` has not taken yet. */
   keys = [];
   /** `SDL_StartTextInput()` is in, `SDL_StopTextInput()` is out. */
@@ -12503,10 +12693,11 @@ var CutscenePlayer = class _CutscenePlayer {
     this.exe = exe;
     this.vgaPalette = vgaPalette;
   }
-  static async create(assets, exe, effects) {
+  static async create(assets, exe, effects, text2) {
     const constants = readExeConstants(exe);
     const player = new _CutscenePlayer(exe, constants.vgaPalette);
     player.effects = effects;
+    player.text = text2;
     player.banks.set(
       chtabs.id_chtab_0_sword,
       await assets.group("PRINCE.DAT", 700, ROW.sword * 16)
@@ -12923,15 +13114,20 @@ var CutscenePlayer = class _CutscenePlayer {
       },
       rect: (l, t, r, b, color) => {
         this.target.fillRect(l, t, r - l, b - t, color);
+        if (this.text) this.text.noteFill(l, t, r, b, color);
       },
       clear_screen: () => {
         this.offscreen.clear(0);
         this.onscreen.clear(0);
+        this.text?.clearOverlay();
+        this.storyShowing = null;
       },
       clear_screen_and_sounds: () => {
         out.stop_sounds();
         this.offscreen.clear(0);
         this.onscreen.clear(0);
+        this.text?.clearOverlay();
+        this.storyShowing = null;
       },
       set_bg_attr: (color) => this.setBackground(color),
       fade_start: (dir, rows, waitTime) => this.fadeStart(dir, rows, waitTime),
@@ -12950,22 +13146,31 @@ var CutscenePlayer = class _CutscenePlayer {
         this.setClip(this.clipRect);
       },
       show_text: (l, t, r, b, xa, ya, text2, color) => {
+        if (this.text) {
+          this.text.showText(this.target, text2, l, t, r, b, xa, ya, color);
+          return;
+        }
         if (!this.font) return;
         drawTextInRect(this.target, this.font, text2, l, t, r, b, xa, ya, color);
       },
       text_center_y: (t, b) => this.font ? textCenterY(this.font, t, b) : 0,
-      char_width: (ch) => this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0,
-      cstring_width: (text2) => this.font ? lineWidth(this.font, text2) : 0,
-      draw_text_character: (x, y, ch, color) => this.font ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color) : 0,
+      char_width: (ch) => this.text ? this.text.charWidth(ch) : this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0,
+      cstring_width: (text2) => this.text ? this.text.cstringWidth(text2) : this.font ? lineWidth(this.font, text2) : 0,
+      draw_text_character: (x, y, ch, color) => {
+        if (this.text) return this.text.drawChar(this.target, x, y, ch, color);
+        return this.font ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color) : 0;
+      },
       read_peel: (l, t, r, b) => this.readTargetPeel(l, t, r, b),
       restore_peel: (peel) => this.restoreTargetPeel(peel),
-      start_text_input: () => {
+      start_text_input: (l, t, r, b) => {
         this.textInput = true;
         this.keys.length = 0;
+        this.text?.beginTextInput(l, t, r, b);
       },
       stop_text_input: () => {
         this.textInput = false;
         this.keys.length = 0;
+        this.text?.endTextInput();
       },
       take_key: () => this.keys.shift() ?? null,
       /**
@@ -13048,6 +13253,22 @@ var CutscenePlayer = class _CutscenePlayer {
     const bank = spec.bank === 40 ? this.title40 : this.title50;
     const image = bank?.images[spec.id + 1];
     if (!bank || !image) return;
+    if (this.text) {
+      if (id === full_image_id.STORY_FRAME || spec.blit === blitters.blitters_0_no_transp) {
+        this.text.clearOverlayIn(
+          spec.xpos,
+          spec.ypos,
+          spec.xpos + image.width,
+          spec.ypos + image.height
+        );
+        this.storyShowing = null;
+      }
+      if (this.text.story(id)) {
+        this.storyShowing = id;
+        this.text.drawStory(this.target, id, STORY_TEXT_COLOR);
+        return;
+      }
+    }
     if (spec.blit === blitters.blitters_white) {
       this.target.blitMono(image, spec.xpos, spec.ypos, STORY_TEXT_COLOR);
     } else if (spec.blit === blitters.blitters_10h_transp) {
@@ -13055,6 +13276,29 @@ var CutscenePlayer = class _CutscenePlayer {
     } else {
       this.target.blitOpaqueBlack(image, spec.xpos, spec.ypos, bank.paletteBase);
     }
+  }
+  /**
+   * Draw the story screen again, because the language or the quality
+   * moved while it was on the screen.
+   *
+   * A scene paints into the offscreen surface and copies it over, so
+   * which of the two holds the words depends on where in the scene the
+   * player was when he opened the settings panel. Both are drawn: the
+   * frame is the whole 320 by 200 and opaque, so redrawing it on each
+   * costs nothing and the change is on the screen on the next frame
+   * rather than at the next scene.
+   */
+  refreshText() {
+    const id = this.storyShowing;
+    if (!this.text || id === null) return;
+    const saved = this.target;
+    for (const surface of [this.offscreen, this.onscreen]) {
+      this.target = surface;
+      this.drawFullImage(full_image_id.STORY_FRAME);
+      this.drawFullImage(id);
+    }
+    this.target = saved;
+    this.storyShowing = id;
   }
   /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */
   /** `clip_room`: a `load_intro` scene never reaches past row 191. */
@@ -13416,6 +13660,854 @@ function levelsDatWithPotionLevel(bytes) {
   }
   throw new Error(`LEVELS.DAT has no resource ${want}`);
 }
+
+// src/render/hebrew.ts
+var ROWS = {
+  // alef: the main stroke rises to the right, with an arm at each end.
+  "\u05D0": [
+    "....##",
+    "##.##.",
+    ".####.",
+    "..##..",
+    ".####.",
+    ".##.##",
+    "##...."
+  ],
+  // bet: the foot sticks out to the left, which is the whole of what
+  // tells it from a kaf.
+  "\u05D1": [
+    ".######",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".....##",
+    "#######"
+  ],
+  "\u05D2": [
+    ".####.",
+    "..##..",
+    "..##..",
+    "..##..",
+    "..##..",
+    ".###..",
+    "##..##"
+  ],
+  // dalet: a square corner, and the bar reaches the right edge.
+  "\u05D3": [
+    "#######",
+    "....##.",
+    "....##.",
+    "....##.",
+    "....##.",
+    "....##.",
+    "....##."
+  ],
+  // he: the left leg hangs free of the bar.
+  "\u05D4": [
+    "######",
+    "....##",
+    "....##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##"
+  ],
+  "\u05D5": [
+    "####",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##"
+  ],
+  "\u05D6": [
+    "#####",
+    ".##..",
+    ".##..",
+    ".##..",
+    ".##..",
+    ".##..",
+    ".##.."
+  ],
+  "\u05D7": [
+    "#######",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##"
+  ],
+  "\u05D8": [
+    "##.###",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    ".####."
+  ],
+  // yod: three rows, and so drawn at the top of the line.
+  "\u05D9": [
+    "###",
+    ".##",
+    ".##"
+  ],
+  "\u05DA": [
+    "######",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05DB": [
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    ".#####"
+  ],
+  // lamed: the one letter of the alphabet that climbs above the line,
+  // and the font has no room above the line -- `heightAbove` is the top
+  // of the cell. So the climb is inside the cell, which is what keeps
+  // it from reading as a kaf: measured on the story screen, a lamed
+  // whose body filled the cell left `של` looking like `שכ` on every
+  // line it appeared in.
+  "\u05DC": [
+    "##.....",
+    "###....",
+    ".######",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".######"
+  ],
+  "\u05DD": [
+    "######",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "######"
+  ],
+  // mem: the left stroke is angled and clear of the bar; a final mem's
+  // is neither.
+  "\u05DE": [
+    ".######",
+    ".....##",
+    ".....##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "#######"
+  ],
+  "\u05DF": [
+    "####",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##",
+    "..##"
+  ],
+  "\u05E0": [
+    ".####",
+    "...##",
+    "...##",
+    "...##",
+    "...##",
+    "...##",
+    "#####"
+  ],
+  // samekh: rounded at all four corners, where a final mem is square.
+  "\u05E1": [
+    ".####.",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    ".####."
+  ],
+  "\u05E2": [
+    "##..##",
+    "##..##",
+    ".#..##",
+    ".##.##",
+    "..####",
+    "....##",
+    "..####"
+  ],
+  "\u05E3": [
+    "######",
+    "##..##",
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05E4": [
+    "######",
+    "##..##",
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "######"
+  ],
+  "\u05E5": [
+    "##..##",
+    ".#..##",
+    ".##.##",
+    "..####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05E6": [
+    "##..##",
+    ".#..##",
+    ".##.##",
+    "..####",
+    "....##",
+    "....##",
+    "######"
+  ],
+  // qof: the stem stops on the line and the left leg carries on under it.
+  "\u05E7": [
+    "######",
+    "....##",
+    "....##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##..##",
+    "##....",
+    "##...."
+  ],
+  // resh: rounded, where a dalet's corner is square.
+  "\u05E8": [
+    ".#####",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##",
+    "....##"
+  ],
+  "\u05E9": [
+    "##.##.##",
+    "##.##.##",
+    "##.##.##",
+    "##.##.##",
+    "##.##.##",
+    ".######.",
+    "########"
+  ],
+  // tav: the left leg is inset and kicks left at the foot, which is what
+  // tells it from a het.
+  "\u05EA": [
+    "#######",
+    ".##..##",
+    ".##..##",
+    ".##..##",
+    ".##..##",
+    ".##..##",
+    "###..##"
+  ],
+  // The two Hebrew marks that stand in for a quote and an apostrophe.
+  "\u05F3": [
+    "##",
+    "##",
+    ".#"
+  ],
+  "\u05F4": [
+    "##.##",
+    "##.##",
+    ".#..#"
+  ]
+};
+function glyphFrom(rows) {
+  const height = rows.length;
+  const width = Math.max(...rows.map((r) => r.length));
+  const pixels = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const row = rows[y];
+    for (let x = 0; x < width; x++) pixels[y * width + x] = row[x] === "#" ? 1 : 0;
+  }
+  return { width, height, sprite: { width, height, pixels } };
+}
+var HEBREW_GLYPHS = new Map(
+  Object.entries(ROWS).map(([ch, rows]) => [ch, glyphFrom(rows)])
+);
+function isRtl(ch) {
+  const code = ch.codePointAt(0) ?? 0;
+  return code >= 1424 && code <= 1535;
+}
+
+// src/render/text.ts
+var HE_PATTERNS = [
+  [/^GAME PAUSED$/, "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05DE\u05D5\u05E9\u05D4\u05D4"],
+  [/^LEVEL (\d+)$/, "\u05E9\u05DC\u05D1 $1"],
+  [/^(\d+) MINUTES LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D5 $1 \u05D3\u05E7\u05D5\u05EA"],
+  [/^(\d+) SECONDS LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D5 $1 \u05E9\u05E0\u05D9\u05D5\u05EA"],
+  [/^1 SECOND LEFT$/, "\u05E0\u05D5\u05EA\u05E8\u05D4 \u05E9\u05E0\u05D9\u05D9\u05D4 \u05D0\u05D7\u05EA"],
+  [/^TIME HAS EXPIRED!$/, "\u05EA\u05DD \u05D4\u05D6\u05DE\u05DF!"],
+  [/^Press Button to Continue$/, "\u05D4\u05E7\u05E9 \u05DE\u05E7\u05E9 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05DE\u05E9\u05D9\u05DA"]
+];
+var STORY_EN = {
+  7: {
+    lines: [
+      "In the Sultan\u2019s absence the",
+      "Grand Vizier JAFFAR rules with",
+      "the iron fist of tyranny. Only",
+      "one obstacle remains between",
+      "Jaffar and the throne: the",
+      "Sultan\u2019s beautiful young",
+      "daughter..."
+    ]
+  },
+  8: {
+    lines: [
+      "Marry Jaffar... or die within",
+      "the hour. All the Princess\u2019s",
+      "hopes now rest on the brave",
+      "youth she loves. Little does",
+      "she know that he is already a",
+      "prisoner in Jaffar\u2019s",
+      "dungeons...."
+    ]
+  },
+  9: {
+    lines: [
+      "The tyrant Jaffar lies dead,",
+      "his power shattered. Throughout",
+      "the land the people of Persia",
+      "hail their Princess... and the",
+      "brave youth who saved her from",
+      "the forces of darkness. No",
+      "longer a stranger, he shall",
+      "from this day forth be known",
+      "as... PRINCE OF PERSIA."
+    ]
+  },
+  10: {
+    credits: true,
+    lines: [
+      "Programmed by|Lance Groody",
+      "Graphics by|Leila Bronstein",
+      "|Avril Harrison",
+      "|James St. Louis",
+      "Sound design by|Tom Rettig",
+      "Music composed by|Francis Mechner",
+      "Produced by|Brian Eheler",
+      "Directed by|Jordan Mechner"
+    ]
+  }
+};
+var STORY_HE = {
+  7: {
+    lines: [
+      "\u05D1\u05D4\u05D9\u05E2\u05D3\u05E8\u05D5 \u05E9\u05DC \u05D4\u05E1\u05D5\u05DC\u05D8\u05D0\u05DF \u05E9\u05D5\u05DC\u05D8",
+      "\u05D4\u05D5\u05D6\u05D9\u05E8 \u05D4\u05D2\u05D3\u05D5\u05DC \u05D2\u05F3\u05D0\u05E4\u05E8 \u05D1\u05D9\u05D3 \u05D1\u05E8\u05D6\u05DC.",
+      "\u05DE\u05DB\u05E9\u05D5\u05DC \u05D0\u05D7\u05D3 \u05D1\u05DC\u05D1\u05D3 \u05E0\u05D5\u05EA\u05E8 \u05D1\u05D9\u05DF",
+      "\u05D2\u05F3\u05D0\u05E4\u05E8 \u05D5\u05D1\u05D9\u05DF \u05DB\u05E1 \u05D4\u05DE\u05DC\u05D5\u05DB\u05D4: \u05D1\u05EA\u05D5",
+      "\u05D4\u05D9\u05E4\u05D4 \u05D5\u05D4\u05E6\u05E2\u05D9\u05E8\u05D4 \u05E9\u05DC \u05D4\u05E1\u05D5\u05DC\u05D8\u05D0\u05DF..."
+    ]
+  },
+  8: {
+    lines: [
+      "\u05D4\u05D9\u05E0\u05E9\u05D0\u05D9 \u05DC\u05D2\u05F3\u05D0\u05E4\u05E8... \u05D0\u05D5 \u05DE\u05D5\u05EA\u05D9",
+      "\u05D1\u05EA\u05D5\u05DA \u05E9\u05E2\u05D4. \u05DB\u05DC \u05EA\u05E7\u05D5\u05D5\u05EA\u05D9\u05D4 \u05E9\u05DC",
+      "\u05D4\u05E0\u05E1\u05D9\u05DB\u05D4 \u05E0\u05EA\u05D5\u05E0\u05D5\u05EA \u05E2\u05EA\u05D4 \u05D1\u05E0\u05E2\u05E8",
+      "\u05D4\u05D0\u05DE\u05D9\u05E5 \u05E9\u05D4\u05D9\u05D0 \u05D0\u05D5\u05D4\u05D1\u05EA. \u05D4\u05D9\u05D0 \u05D0\u05D9\u05E0\u05D4",
+      "\u05D9\u05D5\u05D3\u05E2\u05EA \u05DB\u05D9 \u05D4\u05D5\u05D0 \u05DB\u05D1\u05E8 \u05D0\u05E1\u05D9\u05E8",
+      "\u05D1\u05E6\u05D9\u05E0\u05D5\u05E7\u05D9\u05D5 \u05E9\u05DC \u05D2\u05F3\u05D0\u05E4\u05E8..."
+    ]
+  },
+  9: {
+    lines: [
+      "\u05D4\u05E2\u05E8\u05D9\u05E5 \u05D2\u05F3\u05D0\u05E4\u05E8 \u05DE\u05D5\u05D8\u05DC \u05DE\u05EA, \u05D5\u05DB\u05D5\u05D7\u05D5",
+      "\u05E0\u05D5\u05E4\u05E5. \u05D1\u05DB\u05DC \u05E8\u05D7\u05D1\u05D9 \u05D4\u05D0\u05E8\u05E5 \u05DE\u05E8\u05D9\u05E2\u05D9\u05DD",
+      "\u05D1\u05E0\u05D9 \u05E4\u05E8\u05E1 \u05DC\u05E0\u05E1\u05D9\u05DB\u05EA\u05DD... \u05D5\u05DC\u05E0\u05E2\u05E8",
+      "\u05D4\u05D0\u05DE\u05D9\u05E5 \u05E9\u05D4\u05E6\u05D9\u05DC\u05D4 \u05DE\u05D9\u05D3\u05D9 \u05DB\u05D5\u05D7\u05D5\u05EA",
+      "\u05D4\u05D0\u05D5\u05E4\u05DC. \u05DC\u05D0 \u05E2\u05D5\u05D3 \u05D6\u05E8, \u05DE\u05D4\u05D9\u05D5\u05DD \u05D4\u05D6\u05D4",
+      "\u05D5\u05D0\u05D9\u05DC\u05DA \u05D9\u05D9\u05E7\u05E8\u05D0... \u05E0\u05E1\u05D9\u05DA \u05E4\u05E8\u05E1."
+    ]
+  },
+  10: {
+    credits: true,
+    lines: [
+      "\u05EA\u05DB\u05E0\u05D5\u05EA|\u05DC\u05D0\u05E0\u05E1 \u05D2\u05E8\u05D5\u05D3\u05D9",
+      "\u05D2\u05E8\u05E4\u05D9\u05E7\u05D4|\u05DC\u05D9\u05D9\u05DC\u05D4 \u05D1\u05E8\u05D5\u05E0\u05E9\u05D8\u05D9\u05D9\u05DF",
+      "|\u05D0\u05D1\u05E8\u05D9\u05DC \u05D4\u05E8\u05D9\u05E1\u05D5\u05DF",
+      "|\u05D2\u05F3\u05D9\u05D9\u05DE\u05E1 \u05E1\u05E0\u05D8 \u05DC\u05D5\u05D0\u05D9\u05E1",
+      "\u05E2\u05D9\u05E6\u05D5\u05D1 \u05E7\u05D5\u05DC|\u05D8\u05D5\u05DD \u05E8\u05D8\u05D9\u05D2",
+      "\u05DE\u05D5\u05D6\u05D9\u05E7\u05D4|\u05E4\u05E8\u05E0\u05E1\u05D9\u05E1 \u05DE\u05DB\u05E0\u05E8",
+      "\u05D4\u05E4\u05E7\u05D4|\u05D1\u05E8\u05D9\u05D0\u05DF \u05D0\u05D9\u05D9\u05DC\u05E8",
+      "\u05D1\u05D9\u05DE\u05D5\u05D9|\u05D2\u05F3\u05D5\u05E8\u05D3\u05DF \u05DE\u05DB\u05E0\u05E8"
+    ]
+  }
+};
+function toVisual(text2) {
+  const runs = [];
+  for (const ch of text2) {
+    const ltr = /[0-9A-Za-z]/.test(ch);
+    const last = runs[runs.length - 1];
+    if (last && last.ltr === ltr) last.text += ch;
+    else runs.push({ ltr, text: ch });
+  }
+  for (let i = 1; i < runs.length - 1; i++) {
+    const run = runs[i];
+    if (!run.ltr && /^[.:,’'-]+$/.test(run.text) && runs[i - 1].ltr && runs[i + 1].ltr) {
+      runs[i - 1].text += run.text + runs[i + 1].text;
+      runs.splice(i, 2);
+      i--;
+    }
+  }
+  let out2 = "";
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i];
+    out2 += run.ltr ? run.text : [...run.text].reverse().join("");
+  }
+  return out2;
+}
+function hasRtl(text2) {
+  for (const ch of text2) if (isRtl(ch)) return true;
+  return false;
+}
+var TEXT_CAP_HEIGHT = 7;
+var GUTTER = 8;
+var GameText = class _GameText {
+  font;
+  lang;
+  qual;
+  /** Keyed, so that a line drawn again in the same place replaces it. */
+  lines = /* @__PURE__ */ new Map();
+  /**
+   * The hall of fame's name box, while it is taking a name.
+   *
+   * `input_str` draws a name one glyph at a time at an advancing x,
+   * which is left to right and cannot be anything else: it is a loop
+   * over `draw_text_character`, and the C has no notion of a line
+   * that grows the other way. So for Hebrew the glyphs are not drawn
+   * one at a time at all. What is typed is **read off the calls** --
+   * the C's own protocol says which is which, and there are only
+   * three kinds -- and the whole box is drawn again from the right
+   * every time it changes, which is what typing Hebrew looks like.
+   *
+   * The box is `start_text_input`'s rectangle and the colour is the
+   * one `input_str` filled it with on the line after.
+   */
+  box = null;
+  /** What has been typed into it, in logical order. */
+  typed = "";
+  /** Whether `draw_text_cursor` last drew the cursor or erased it. */
+  cursorUp = false;
+  /** `arg_4`: how far inside the box `input_str` starts. */
+  static BOX_INSET = 4;
+  constructor(font, options = {}) {
+    this.font = font;
+    this.lang = options.language ?? "en";
+    this.qual = options.quality ?? "original";
+  }
+  get language() {
+    return this.lang;
+  }
+  set language(value) {
+    this.lang = value;
+  }
+  get quality() {
+    return this.qual;
+  }
+  set quality(value) {
+    this.qual = value;
+  }
+  /** `quality: high` keeps the surface clear and draws on the canvas. */
+  get vector() {
+    return this.qual === "high";
+  }
+  /** Everything the canvas pass has to draw, oldest first. */
+  get overlay() {
+    return [...this.lines.values()];
+  }
+  // --------------------------------------------------------------- words
+  /** The words the game asked for, in the player's language. */
+  translate(text2) {
+    if (this.lang !== "he") return text2;
+    for (const [pattern, into] of HE_PATTERNS) {
+      if (pattern.test(text2)) return text2.replace(pattern, into);
+    }
+    return text2;
+  }
+  /** The story screen behind a `full_image_id`, or null for the picture. */
+  story(id) {
+    const table = this.lang === "he" ? STORY_HE : STORY_EN;
+    const screen2 = table[id];
+    if (!screen2) return null;
+    if (this.lang === "en" && !this.vector) return null;
+    return screen2;
+  }
+  // ------------------------------------------------------------- measuring
+  glyph(ch) {
+    const hebrew = HEBREW_GLYPHS.get(ch);
+    if (hebrew) return hebrew;
+    const code = ch.charCodeAt(0);
+    if (code < this.font.firstChar || code > this.font.lastChar) return null;
+    return this.font.glyphs[code - this.font.firstChar] ?? null;
+  }
+  /** `get_char_width`: the glyph and the gap after it. */
+  charWidth(ch) {
+    const hebrew = HEBREW_GLYPHS.get(ch);
+    if (hebrew) return hebrew.width + this.font.charSpacing;
+    return charWidth(this.font, ch.charCodeAt(0));
+  }
+  /** `get_cstring_width`. */
+  cstringWidth(text2) {
+    let width = 0;
+    for (const ch of text2) width += this.charWidth(ch);
+    return width;
+  }
+  /** The shell's own measure: no gap after the last character. */
+  shellWidth(text2) {
+    let width = 0;
+    let drawn = 0;
+    for (const ch of text2) {
+      const g2 = this.glyph(ch);
+      if (!g2) continue;
+      width += g2.width;
+      drawn += 1;
+    }
+    return width + Math.max(0, drawn - 1) * this.font.charSpacing;
+  }
+  // -------------------------------------------------------------- drawing
+  blitLine(surface, text2, x, top, color) {
+    let at = x;
+    for (const ch of text2) {
+      const g2 = this.glyph(ch);
+      if (!g2) continue;
+      surface.blitMono(g2.sprite, at, top, color);
+      at += g2.width + this.font.charSpacing;
+    }
+  }
+  remember(item) {
+    this.lines.delete(item.key);
+    this.lines.set(item.key, item);
+  }
+  /** The whole list, for a screen that has just been painted over. */
+  clearOverlay() {
+    this.lines.clear();
+  }
+  /** Everything whose line sits inside this box. */
+  clearOverlayIn(left, top, right, bottom) {
+    for (const [key, item] of [...this.lines]) {
+      const itemTop = item.baseline - item.capHeight;
+      if (item.right > left && item.left < right && item.baseline + 2 > top && itemTop < bottom) this.lines.delete(key);
+    }
+  }
+  /**
+   * The strip under the room: `show_text(&rect_bottom_text,
+   * halign_center, valign_bottom, ...)` with the rectangle blacked
+   * first, which the caller has already done.
+   */
+  bottomText(surface, text2, left, top, right, color) {
+    this.lines.delete("bottom");
+    if (text2 === null) return;
+    const words = this.translate(text2);
+    const rtl = hasRtl(words);
+    const lift = rtl ? 1 : 0;
+    if (this.vector) {
+      this.remember({
+        key: "bottom",
+        left,
+        right,
+        baseline: top + TEXT_CAP_HEIGHT - lift,
+        xAlign: 0,
+        text: words,
+        rtl,
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    const visual = rtl ? toVisual(words) : words;
+    const width = this.shellWidth(visual);
+    if (lift) surface.fillRect(left, top - lift, right - left + 1, lift, 0);
+    this.blitLine(
+      surface,
+      visual,
+      left + (right - left + 1 - width >> 1),
+      top - lift,
+      color
+    );
+  }
+  /**
+   * `draw_text` for one line, which is how the hall of fame draws a
+   * name and a time. `xAlign`/`yAlign` are the C's.
+   */
+  showText(surface, text2, left, top, right, bottom, xAlign, yAlign, color) {
+    const words = this.translate(text2);
+    const rtl = hasRtl(words);
+    const baseline = this.baselineIn(top, bottom, yAlign);
+    const key = `t:${left},${top},${right},${bottom},${xAlign},${color}`;
+    if (this.vector) {
+      this.remember({
+        key,
+        left,
+        right,
+        baseline,
+        xAlign,
+        text: words,
+        rtl,
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    const visual = rtl ? toVisual(words) : words;
+    const width = this.cstringWidth(visual);
+    let at = left;
+    if (xAlign === 0) at += ((right - left) / 2 | 0) - (width / 2 | 0);
+    else if (xAlign > 0) at += right - left - width;
+    const savedLeft = surface.clipLeft;
+    const savedRight = surface.clipRight;
+    const savedTop = surface.clipTop;
+    const savedBottom = surface.clipBottom;
+    surface.clipLeft = Math.max(savedLeft, left);
+    surface.clipRight = Math.min(savedRight, right);
+    surface.clipTop = Math.max(savedTop, top);
+    surface.clipBottom = Math.min(savedBottom, bottom);
+    this.blitLine(surface, visual, at, baseline - this.font.heightAbove, color);
+    surface.clipLeft = savedLeft;
+    surface.clipRight = savedRight;
+    surface.clipTop = savedTop;
+    surface.clipBottom = savedBottom;
+  }
+  /**
+   * Where `draw_text`'s own baseline falls, which is **not**
+   * `get_text_center_y`.
+   *
+   * `seg009:3F01` works the top of the line out with
+   * `((rect_height + 1) / 2) - ((text_height + 1) / 2)`, two
+   * truncating divisions that simulate SHR and ADC, and
+   * `get_text_center_y` works a different one out with a remainder
+   * added back. For an odd-height rectangle the two agree; for an
+   * even one they are a row apart. This is `draw_text`'s, because
+   * `draw_text` is what the hall of fame calls -- and it has to be
+   * exactly that, or the page and the headless port draw different
+   * pictures with the language at its default and
+   * `tools/dev/page-port.ts` says so.
+   */
+  baselineIn(top, bottom, yAlign) {
+    const rectHeight = bottom - top;
+    const textHeight = this.font.heightAbove + this.font.heightBelow;
+    let textTop = top;
+    if (yAlign >= 0) {
+      if (yAlign <= 0) {
+        textTop += ((rectHeight + 1) / 2 | 0) - ((textHeight + 1) / 2 | 0);
+      } else {
+        textTop += rectHeight - textHeight;
+      }
+    }
+    return textTop + this.font.heightAbove;
+  }
+  /**
+   * `SDL_StartTextInput()`, with the rectangle it is given.
+   *
+   * Nothing but the hall of fame's name box calls it, so this is the
+   * one place a right-to-left line is typed rather than drawn whole.
+   */
+  beginTextInput(left, top, right, bottom) {
+    this.box = { left, top, right, bottom, bg: 0 };
+    this.typed = "";
+    this.cursorUp = false;
+  }
+  /** `SDL_StopTextInput()`. */
+  endTextInput() {
+    this.box = null;
+    this.typed = "";
+  }
+  /** `draw_rect`: which colour the box was painted, and what it wipes. */
+  noteFill(left, top, right, bottom, color) {
+    const box = this.box;
+    if (box && box.left === left && box.top === top && box.right === right && box.bottom === bottom) {
+      box.bg = color;
+      this.typed = "";
+      this.cursorUp = false;
+    }
+    this.clearOverlayIn(left, top, right, bottom);
+  }
+  /** Is a Hebrew name being typed into the box at this baseline? */
+  typingRtl(y) {
+    const box = this.box;
+    return this.lang === "he" && box !== null && y > box.top && y <= box.bottom + 2;
+  }
+  /**
+   * One call of `draw_text_character` inside the name box, read as
+   * what it means rather than as a glyph at an x.
+   *
+   * `input_str` has exactly three kinds of call and the colour says
+   * which: the cursor is always `_`, and anything else drawn in the
+   * background colour is the erase half of a backspace.
+   */
+  typeInto(surface, ch, color) {
+    const box = this.box;
+    if (ch === "_") this.cursorUp = color !== box.bg;
+    else if (color === box.bg) this.typed = this.typed.slice(0, -1);
+    else this.typed += ch;
+    const line = (this.cursorUp ? "_" : "") + toVisual(this.typed);
+    const right = box.right - _GameText.BOX_INSET;
+    const baseline = this.baselineIn(box.top, box.bottom, 0);
+    if (this.vector) {
+      this.remember({
+        key: "name",
+        left: box.left + _GameText.BOX_INSET,
+        right,
+        baseline,
+        xAlign: 1,
+        text: this.typed + (this.cursorUp ? "_" : ""),
+        rtl: true,
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    surface.fillRect(
+      box.left,
+      box.top,
+      box.right - box.left,
+      box.bottom - box.top,
+      box.bg
+    );
+    this.blitLine(
+      surface,
+      line,
+      right - this.shellWidth(line),
+      baseline - this.font.heightAbove,
+      color === box.bg ? this.textColour : color
+    );
+  }
+  /** The colour the name is drawn in, kept from the last glyph that was. */
+  textColour = 15;
+  /**
+   * `draw_text_character`: one glyph with its baseline at `y`, which is
+   * how `input_str` draws a name as it is typed and blinks a cursor at
+   * the end of it.
+   *
+   * At `quality: high` the glyph is not blitted; it is remembered at
+   * the place it would have gone, keyed by that place, so that the
+   * cursor redrawn in the background colour **replaces** the one drawn
+   * in the text colour rather than piling up beside it. That is the C's
+   * own erase, and it is why nothing here has to know what a cursor is.
+   */
+  drawChar(surface, x, y, ch, color) {
+    const g2 = this.glyph(ch);
+    if (!g2) return 0;
+    if (this.typingRtl(y)) {
+      if (color !== this.box.bg) this.textColour = color;
+      this.typeInto(surface, ch, color);
+      return this.font.charSpacing + g2.width;
+    }
+    if (this.vector) {
+      this.remember({
+        key: `c:${x},${y}`,
+        left: x,
+        right: x + g2.width,
+        baseline: y,
+        xAlign: -1,
+        text: ch,
+        rtl: isRtl(ch),
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+    } else {
+      surface.blitMono(g2.sprite, x, y - this.font.heightAbove, color);
+    }
+    return this.font.charSpacing + g2.width;
+  }
+  // ---------------------------------------------------------- the story
+  /** Where a story screen's words go: the window inside `STORY_FRAME`. */
+  static STORY = {
+    left: 24,
+    right: 296,
+    top: 27,
+    lineHeight: 16,
+    /** The credits put the name beside the job rather than under it. */
+    creditsSplit: 150
+  };
+  /**
+   * Draw a story screen's words where the original blits its picture.
+   *
+   * The caller has already drawn `STORY_FRAME`, so this is the inside
+   * of the frame and nothing else.
+   */
+  drawStory(surface, id, color) {
+    const screen2 = this.story(id);
+    if (!screen2) return;
+    const { left, right, top, lineHeight, creditsSplit } = _GameText.STORY;
+    const rtl = this.lang === "he";
+    const split = left + creditsSplit;
+    for (const [index, line] of screen2.lines.entries()) {
+      const y = top + index * lineHeight;
+      const key = `s${id}:${index}`;
+      if (!screen2.credits) {
+        this.storyLine(surface, line, y, rtl ? 1 : -1, color, key, left, right);
+        continue;
+      }
+      const [job = "", name = ""] = line.split("|");
+      if (rtl) {
+        this.storyLine(surface, job, y, 1, color, `${key}:a`, split, right);
+        this.storyLine(surface, name, y, 1, color, `${key}:b`, left, split - GUTTER);
+      } else {
+        this.storyLine(surface, job, y, 1, color, `${key}:a`, left, split);
+        this.storyLine(surface, name, y, -1, color, `${key}:b`, split + GUTTER, right);
+      }
+    }
+  }
+  storyLine(surface, text2, top, xAlign, color, key, left, right) {
+    if (text2 === "") return;
+    if (this.vector) {
+      this.remember({
+        key,
+        left,
+        right,
+        baseline: top + TEXT_CAP_HEIGHT,
+        xAlign,
+        text: text2,
+        rtl: hasRtl(text2) || this.lang === "he",
+        color,
+        capHeight: TEXT_CAP_HEIGHT
+      });
+      return;
+    }
+    const visual = hasRtl(text2) ? toVisual(text2) : text2;
+    const width = this.shellWidth(visual);
+    let at = left;
+    if (xAlign === 0) at = left + (right - left - width >> 1);
+    else if (xAlign > 0) at = right - width;
+    this.blitLine(surface, visual, at, top, color);
+  }
+  /** How wide a story line is drawn, for the test that pins they fit. */
+  storyLineWidth(text2) {
+    return this.shellWidth(hasRtl(text2) ? toVisual(text2) : text2);
+  }
+};
 
 // web/settings.ts
 var DEFAULTS = {
@@ -14018,6 +15110,11 @@ async function boot() {
   const fetchFile = POTION_PAGE ? async (name) => name === "LEVELS.DAT" ? levelsDatWithPotionLevel(await fromDisc(name)) : fromDisc(name) : fromDisc;
   const assets = new Assets(fetchFile);
   const exe = await fetchFile("UNCRKD.EXE");
+  const gameText = new GameText(readFont(exe), {
+    language: settings.get("language"),
+    quality: settings.get("quality")
+  });
+  display.setTextSource(() => gameText.overlay);
   const firstLevel = readExeConstants(exe).firstLevel;
   let sound = null;
   const wakeSound = () => {
@@ -14055,7 +15152,7 @@ async function boot() {
     if (!cutscene) {
       cutsceneBuilding = true;
       try {
-        cutscene = await CutscenePlayer.create(assets, exe, effects);
+        cutscene = await CutscenePlayer.create(assets, exe, effects, gameText);
       } finally {
         cutsceneBuilding = false;
       }
@@ -14180,7 +15277,12 @@ async function boot() {
     current = index;
     building += 1;
     try {
-      game = await PopGame.start(assets, exe, v.level, { effects, seamless: carry.seamless });
+      game = await PopGame.start(
+        assets,
+        exe,
+        v.level,
+        { effects, seamless: carry.seamless, text: gameText }
+      );
     } finally {
       building -= 1;
     }
@@ -14871,15 +15973,31 @@ async function boot() {
     sound?.play(which);
   };
   void RoomRenderer;
+  function relabelTheGame() {
+    gameText.clearOverlay();
+    if (cutscene?.running) {
+      cutscene.refreshText();
+      display.present(cutscene.render(), cutscene.palette.toRgba());
+      return;
+    }
+    if (game) {
+      game.refreshText();
+      if (lastShown) display.present(lastShown, game.scene.screenPalette.toRgba());
+    }
+  }
   const chrome = new Chrome(settings, {
     begin: () => {
       wakeSound();
       beganFromOpening?.();
     },
     aspect: (value) => display.setAspect(value),
-    language: () => {
+    language: (value) => {
+      gameText.language = value;
+      relabelTheGame();
     },
-    quality: () => {
+    quality: (value) => {
+      gameText.quality = value;
+      relabelTheGame();
     },
     toggleRecording,
     save: (slot2) => {

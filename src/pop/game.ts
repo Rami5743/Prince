@@ -20,6 +20,7 @@ import { buildLevelScene, type LevelScene } from '../game/scene.ts';
 import { readExeTables } from '../game/exe-tables.ts';
 import { flipHorizontally } from '../render/room.ts';
 import { readFont, drawTextCentred, type Font } from '../render/font.ts';
+import type { GameText } from '../render/text.ts';
 
 import { g, newChar, resetGlobals, type RectType } from './state.ts';
 import { chtabs, blitters, directions, soundids } from './types.ts';
@@ -139,6 +140,18 @@ export interface PopOptions {
    * all.
    */
   readonly seed?: number;
+  /**
+   * The shell's text layer: the player's language and the quality he
+   * asked for, which are **not** the game's business.
+   *
+   * `src/pop` never reads a setting. The engine goes on asking for
+   * `60 MINUTES LEFT` and goes on calling `display_text_bottom`; what
+   * the words come out as is this object's affair, and when it is not
+   * given -- which is every headless tool, every digest, every test
+   * that does not ask for it -- the strip is drawn exactly as it was
+   * before there was such a thing as a setting.
+   */
+  readonly text?: GameText;
 }
 
 /** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
@@ -276,6 +289,16 @@ export class PopGame {
   private fullRedrawClears = false;
   /** The game's own font, out of the executable. */
   private font?: Font;
+  /**
+   * The shell's text layer, or nothing at all.
+   *
+   * Nothing here reads a setting: this is handed in by `web/main.ts`
+   * and is undefined everywhere else, so a headless run draws the
+   * original's own words in the original's own font by construction.
+   */
+  private text?: GameText;
+  /** The last thing `display_text_bottom` asked for, for a relabel. */
+  private bottomText: string | null = null;
   /** `draw_level_first` has still to put the hit points up. */
   private firstDraw = false;
   /** Where `play_sound` goes, if the shell has a speaker. */
@@ -351,6 +374,7 @@ export class PopGame {
     game.seamlessEntry = options.seamless === true;
     game.minutesLeft = options.minutesLeft ?? 60;
     game.seed = options.seed;
+    game.text = options.text;
     game.install(exe);
     /**
      * **Before `startLevel`, which is where `do_startpos` reads them.**
@@ -395,7 +419,8 @@ export class PopGame {
       checkpoint: g.checkpoint,
     };
     const game = await PopGame.start(
-      assets, exe, this.levelNumber, { effects: this.effects, carried },
+      assets, exe, this.levelNumber,
+      { effects: this.effects, carried, text: this.text },
     );
     // Beginning a level again is not an opening, and does not wait for
     // one: the Prince stands straight up.
@@ -705,15 +730,38 @@ export class PopGame {
    * and `draw_rect(&rect_bottom_text, color_0_black)` before it.
    */
   private drawBottomText(text: string | null): void {
+    this.bottomText = text;
     this.surface.fillRect(
       TEXT_RECT.left, TEXT_RECT.top,
       TEXT_RECT.right - TEXT_RECT.left, TEXT_RECT.bottom - TEXT_RECT.top, 0,
     );
+    if (this.text) {
+      this.text.bottomText(
+        this.surface, text,
+        TEXT_RECT.left, TEXT_RECT.top, TEXT_RECT.right - 1, TEXT_WHITE,
+      );
+      return;
+    }
     if (text === null || !this.font) return;
     drawTextCentred(
       this.surface, this.font, text,
       TEXT_RECT.left, TEXT_RECT.right - 1, TEXT_RECT.top, TEXT_WHITE,
     );
+  }
+
+  /**
+   * Draw the strip again, because the language or the quality moved.
+   *
+   * The words under the room are put there once, by
+   * `display_text_bottom`, and they stay on the surface until
+   * something paints over them -- so a player who changes the
+   * language while `60 MINUTES LEFT` is up would go on reading it in
+   * English until the next time the game had something to say. This
+   * is the shell asking for the same string again, and it is the only
+   * thing in this class the shell may call about a setting.
+   */
+  refreshText(): void {
+    this.drawBottomText(this.bottomText);
   }
 
   private imageOf(chtab: number, id: number): { width: number; height: number } | null {

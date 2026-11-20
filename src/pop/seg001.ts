@@ -199,6 +199,35 @@ export function show_hof(): void {
  * equivalent in a browser, so `cutscene.ts` keeps them in
  * `localStorage`.
  */
+/**
+ * One byte of a hall of fame name, and back again.
+ *
+ * `PRINCE.HOF` gives a name twenty-five **bytes**, so a name is one
+ * byte a letter and always was. Hebrew fits that: the Hebrew letters
+ * are 0xE0 to 0xFA in CP1255, the code page a Hebrew DOS or Windows
+ * machine of the time ran, and those twenty-seven bytes are the only
+ * ones in the file's range that the release's own font cannot draw
+ * anyway (`lastChar` is 131). So the file keeps its shape and a
+ * Hebrew name survives a reload.
+ */
+const HOF_HEBREW_FIRST = 0xe0;
+const HEBREW_ALEF = 0x05d0;
+const HEBREW_TAV = 0x05ea;
+
+function hofByte(code: number): number {
+  if (code >= HEBREW_ALEF && code <= HEBREW_TAV) {
+    return HOF_HEBREW_FIRST + (code - HEBREW_ALEF);
+  }
+  return code & 0xff;
+}
+
+function hofChar(byte: number): string {
+  if (byte >= HOF_HEBREW_FIRST && byte <= HOF_HEBREW_FIRST + (HEBREW_TAV - HEBREW_ALEF)) {
+    return String.fromCharCode(HEBREW_ALEF + (byte - HOF_HEBREW_FIRST));
+  }
+  return String.fromCharCode(byte);
+}
+
 export function hof_write(): void {
   const bytes = new Uint8Array(2 + MAX_HOF_COUNT * HOF_ENTRY_BYTES);
   const dv = new DataView(bytes.buffer);
@@ -207,7 +236,7 @@ export function hof_write(): void {
     const at = 2 + i * HOF_ENTRY_BYTES;
     const entry = hof[i]!;
     for (let c = 0; c < 25 && c < entry.name.length; c++) {
-      bytes[at + c] = entry.name.charCodeAt(c) & 0xff;
+      bytes[at + c] = hofByte(entry.name.charCodeAt(c));
     }
     dv.setInt16(at + 25, entry.min, true);
     dv.setInt16(at + 27, entry.tick, true);
@@ -232,7 +261,7 @@ export function hof_read(): void {
     for (let c = 0; c < 25; c++) {
       const b = bytes[at + c]!;
       if (b === 0) break;
-      name += String.fromCharCode(b);
+      name += hofChar(b);
     }
     hof[i] = { name, min: dv.getInt16(at + 25, true), tick: dv.getInt16(at + 27, true) };
   }

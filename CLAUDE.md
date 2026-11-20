@@ -41,6 +41,226 @@
 ## ============================================================
 
 
+## THE GAME SPEAKS HEBREW, AND ITS WORDS CAN BE VECTORS
+
+    measured   32260 of 33047   98%   (unmoved, run for run)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     833 -> 854
+
+    page-port.ts --scenes --cheats --entries --deaths --potion
+                 14 levels, 9 scenes, 13 entries, 2 deaths, the potion
+                 level -- every picture, exact, as before
+
+Two settings the page already stored became real for **every word the
+game itself draws**: `language: he` puts the whole game into Hebrew,
+and `quality: high` draws its words from a vector font at the size the
+canvas is really shown at. Both switch live, from the Settings panel,
+with no reload and without the game taking a tick.
+
+### 1. Nothing in `src/pop` reads a setting, and that is the shape of it
+
+The engine is measured against captures of a real `PRINCE.EXE`, so it
+must not learn that a player has preferences. It does not. `PopGame`
+and `CutscenePlayer` each take an **optional** `GameText`
+(`src/render/text.ts`); `web/main.ts` is the only thing that ever
+passes one. Every headless tool builds them without it and so draws
+the original's own words in the original's own font **by
+construction** rather than by promise -- which is why the three scores
+above are unmoved run for run, and why `page-port.ts` still requires
+the page to draw the headless port's own picture on every tick with
+the settings at their defaults.
+
+What the engine says is unchanged: `show_time` still asks for
+`60 MINUTES LEFT`, `show_hof_text` still calls `show_text`. The
+translation and the glyphs are behind the seams -- `paint.text` in
+`game.ts`, and `show_text`, `draw_text_character`, `char_width`,
+`cstring_width` and `draw_full_image` in `cutscene.ts`.
+
+**One exactness trap, and it was real.** `GameText.showText` has to be
+`seg009:3F01`'s `draw_text` and not `get_text_center_y`: the two work
+the vertical centre out differently --
+`((rect_height + 1) / 2) - ((text_height + 1) / 2)` against an
+`empty % 2` added back -- and they agree only for an odd-height
+rectangle. Written the obvious way the hall of fame's rows moved a row
+with the language at its default, which `page-port.ts` would have
+called a divergence. `tests/render/game-text.test.ts` requires the
+English path to be byte-for-byte what `drawTextCentred` and
+`drawTextInRect` drew, for every string the game can draw.
+
+### 2. There are seven strings, and the story is not one of them
+
+Measured by reading, and it is a short list. `display_text_bottom`
+(`seg008:2644`) is the only way text reaches the strip under the room
+and its callers are `show_level`, `show_time`, `do_paused` and
+`play_kid_frame`:
+
+    GAME PAUSED                המשחק מושהה
+    LEVEL n                    שלב n
+    n MINUTES LEFT             נותרו n דקות
+    n SECONDS LEFT             נותרו n שניות
+    1 SECOND LEFT              נותרה שנייה אחת
+    TIME HAS EXPIRED!          תם הזמן!
+    Press Button to Continue   הקש מקש כדי להמשיך
+
+**The story screens are not text at all**, which is the finding that
+decided their design. `STORY_ABSENCE`, `STORY_MARRY`, `STORY_HAIL` and
+`STORY_CREDITS` are four one-bit images in `TITLE.DAT`, blitted whole
+with `blitters_white` -- there is no string anywhere in the game to
+translate. So they are **transcribed**, read off the pictures pixel by
+pixel into `STORY_EN` and translated into `STORY_HE`, and drawn as
+words inside `STORY_FRAME` in the same colour the picture was blitted
+in. Hebrew gets words at both qualities; English keeps the original
+artwork at `quality: original` -- there is nothing a bitmap redraw
+could improve about it -- and gets the same words, crisp, at `high`.
+
+`TITLE_PRESENTS` and `TITLE_GAME` are left alone in both languages:
+they read `Broderbund Software presents` and `a game by Jordan
+Mechner`, which are a company and a person, and they are painted into
+the title art rather than drawn over it.
+
+### 3. A Hebrew face at the original's cell size, and the weight is measured
+
+`src/render/hebrew.ts` is twenty-nine glyphs drawn by hand, because
+the release's font is ASCII and has no Hebrew in it. The weight is not
+chosen: dumping `E`, `B`, `T` and `L` out of `PRINCE.EXE` says what
+the face does -- **a vertical stem is two columns and a horizontal bar
+is one row**, a capital is seven rows tall and five or six wide. Every
+Hebrew letter here is that, nine rows for the five that hang below the
+line (ך ן ף ץ ק), and three for a yod, which sits at the top of the
+line because the font's glyphs share a top rather than a baseline.
+
+**Four letters were redrawn after reading them on the screen**, which
+is the only way to design a face this small:
+
+* **ל** filled its cell like a kaf, so `של` read `שכ` on every line
+  it appeared in. A lamed is the one letter that climbs above the
+  line and there is no room above the line, so the climb is inside
+  the cell.
+* **ב** differed from **כ** by one pixel of bottom bar. Its foot now
+  sticks out to the left, as a bet's does, and `בין` stopped reading
+  `כין`.
+* **מ** read as a kaf with noise; its left stroke is solid now, and
+  what tells it from a final mem is the gap at the top left.
+* **ד** and **ר** were a pixel apart. A dalet's bar now overhangs its
+  stem to the right and a resh's does not.
+
+### 4. The strip has no room under the line, and Hebrew needs some
+
+`rect_bottom_text` is `{193, 70, 202, 250}` on a screen two hundred
+rows tall, so `show_text` puts the baseline on **row 200** and
+anything below the line is off the screen. The original never notices:
+not one of its seven strings has a descender in it. Hebrew is not so
+lucky -- `דקות` ends in a qof and `להמשיך` in a final kaf.
+
+Measured on the page before the fix, `נותרו 60 דקות` came out reading
+`נותרד 60 דהות`: both tails clipped away and the letters turned into
+different letters. Row 192 is the first row **under** the room -- the
+gameplay buffer is 192 rows, 0 to 191 -- so a Hebrew line is drawn one
+row higher and gets the first of its two tail rows. English is drawn
+exactly where the capture has it, and
+`tests/render/game-text.test.ts` pins both: the English line occupies
+rows 193 to 199 and the Hebrew 192 to 199.
+
+### 5. `quality: high` is a second canvas, not a second font in the surface
+
+A 320 by 200 canvas cannot hold a crisp letter however it is drawn, so
+at `high` **nothing is blitted into the game's surface at all**. The
+line goes on a display list with the box it was asked to sit in, and
+`Display.presentText` draws it on a second canvas of the same size and
+place whose backing store is the size the picture is really shown at,
+times the device pixel ratio. Three things fall out of that and all
+three are the point:
+
+* the 320 by 200 surface keeps its background -- the strip is still
+  blacked, the story frame is still drawn -- so there is nothing
+  underneath the crisp words to show through;
+* `tools/dev/page-port.ts` reads that surface and still sees the
+  headless port's own picture;
+* the overlay is drawn with the **palette the picture was just drawn
+  with**, so a line fades with the screen it is on instead of staying
+  bright through a `fade_out_2`. The palette is the whole of how the
+  original fades, and the overlay reads the same one.
+
+The canvas is given the game's own coordinates through a transform, so
+the letters are stretched exactly as the picture under them is -- the
+original's pixels were not square and neither are its words. Bidi is
+the browser's: the overlay carries the **logical** line and
+`ctx.direction = 'rtl'`, which runs the real algorithm. The bitmap
+path cannot, so `toVisual` in `text.ts` is bidi for the one case this
+game has: a right-to-left line with a number in it, where a run of
+digits keeps its own order and everything else is reversed. That is
+what puts `60` the right way round inside `נותרו 60 דקות` and the `!`
+at the left-hand end of `תם הזמן!`.
+
+### 6. The hall of fame, and typing a name in Hebrew
+
+Three things had to move and none of them is a setting.
+
+* **`input_str` would not take the letter.** The C's test is
+  `>= 0x20 && <= 0x7e`, which is every character a DOS keyboard could
+  put in `last_text_input` on the machine it was written for. The
+  upper bound is widened by one word -- "not the delete key" -- and
+  nothing measured moves by it: `input_str` runs in the hall of fame
+  and no capture in the suite ever types.
+* **`PRINCE.HOF` gives a name twenty-five bytes.** Hebrew fits: the
+  letters are 0xE0 to 0xFA in CP1255, the code page a Hebrew machine
+  of the time ran, and those twenty-seven bytes are the only ones in
+  the file's range the release's own font cannot draw anyway
+  (`lastChar` is 131). So the file keeps its shape and a Hebrew name
+  survives a reload.
+* **A name typed into the box grew the wrong way.** `input_str` draws
+  one glyph at a time at an advancing x, which is left to right and
+  cannot be anything else -- it is a loop over
+  `draw_text_character`. So for Hebrew the glyphs are not drawn one
+  at a time: what is typed is **read off the calls**, because the C's
+  own protocol has only three kinds (the cursor is always `_`, and
+  anything else in the background colour is the erase half of a
+  backspace), and the whole box is drawn again from the right every
+  time it changes. Screenshotted: `הנסיך` with the cursor on its
+  left, and the finished name right way round in the hall of fame
+  row.
+
+### 7. What the tests caught that nothing else would have
+
+`tests/browser/game-text.test.ts` reads the strip **off the very
+canvas the player looks at**, and it found a real bug on its first
+run: `relabelTheGame` presented the game *and* the cutscene, and a
+page that has played its title still holds a `CutscenePlayer` with the
+last scene's picture in it. Changing the language mid-level put a
+stale title screen over the game. It presents whichever of the two is
+actually running now.
+
+The same test pins that the relabel costs the game no tick, that the
+overlay canvas's backing store is bigger than 320 and sits exactly
+over the picture inside its one-pixel border, and that going back to
+`original` puts the bitmap words back and takes the crisp ones away.
+
+Two things about writing it, both of which cost a run:
+
+* the hit points live in the same seven rows as the words, to the
+  left of `rect_bottom_text`, so a test that counts lit pixels across
+  the whole strip is counting flasks;
+* `show_level` puts `LEVEL n` up for twenty-four ticks and
+  `60 MINUTES LEFT` for twenty-four more and then the strip is empty,
+  so a test that reads the words has to stop the clock or it is
+  racing a four-second countdown -- and on a loaded machine, running
+  as one of eighty files rather than alone, it loses.
+
+### 8. What is left
+
+* **The status line under the canvas** (`press any key to begin`,
+  `paused — press any key`) is still English in both languages. It is
+  page chrome rather than a word the game draws, and `web/strings.ts`
+  is where it belongs.
+* **A story screen switched mid-`transition_ltr`** pops rather than
+  wiping: the wipe is two video frames of picture copying and the
+  overlay has no part in it.
+* **The name in a hall of fame row is left-aligned** in its column,
+  which is the original's layout; right-aligning it for Hebrew would
+  run it into the time at the other end of the same rectangle.
+
+
 ## A `goto` READ AS A `return`, THE 1.3 SOUND PRIORITIES, AND SIX SOUNDS A SPEAKER CANNOT MAKE
 
     measured   32260 of 33047   98%   (unmoved, run for run)

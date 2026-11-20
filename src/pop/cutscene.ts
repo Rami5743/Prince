@@ -21,6 +21,7 @@ import {
   readFont, charWidth, lineWidth, textCenterY, drawTextCharacter, drawTextInRect,
   type Font,
 } from '../render/font.ts';
+import type { GameText } from '../render/text.ts';
 import { flipHorizontally } from '../render/room.ts';
 
 import { g, newChar, type RectType } from './state.ts';
@@ -206,6 +207,16 @@ export class CutscenePlayer {
   private readonly exe: Uint8Array;
   /** The game's own font, out of the executable, for the hall of fame. */
   private font?: Font;
+  /**
+   * The shell's text layer, or nothing at all.
+   *
+   * Undefined in every headless tool, so `scene-report.ts` compares
+   * the original's own pictures with the original's own font. See
+   * `src/render/text.ts`.
+   */
+  private text?: GameText;
+  /** Which story screen is on the frame, so that a relabel can redraw it. */
+  private storyShowing: number | null = null;
   /** What the shell has typed and `input_str` has not taken yet. */
   private readonly keys: KeyPress[] = [];
   /** `SDL_StartTextInput()` is in, `SDL_StopTextInput()` is out. */
@@ -220,11 +231,12 @@ export class CutscenePlayer {
   }
 
   static async create(
-    assets: Assets, exe: Uint8Array, effects?: CutsceneEffects,
+    assets: Assets, exe: Uint8Array, effects?: CutsceneEffects, text?: GameText,
   ): Promise<CutscenePlayer> {
     const constants = readExeConstants(exe);
     const player = new CutscenePlayer(exe, constants.vgaPalette);
     player.effects = effects;
+    player.text = text;
     // `load_chtab_from_file`, once: a page cannot stop in the middle
     // of a cutscene to fetch a file, so every bank any of them asks
     // for is read in here.
@@ -633,15 +645,24 @@ export class CutscenePlayer {
       },
       rect: (l, t, r, b, color) => {
         this.target.fillRect(l, t, r - l, b - t, color);
+        // A rectangle painted over the screen takes the words that
+        // were in it with it -- which is how `input_str`'s name box
+        // starts empty, and how a scene that paints itself out loses
+        // the lines the canvas pass was still drawing.
+        if (this.text) this.text.noteFill(l, t, r, b, color);
       },
       clear_screen: () => {
         this.offscreen.clear(0);
         this.onscreen.clear(0);
+        this.text?.clearOverlay();
+        this.storyShowing = null;
       },
       clear_screen_and_sounds: () => {
         out.stop_sounds();
         this.offscreen.clear(0);
         this.onscreen.clear(0);
+        this.text?.clearOverlay();
+        this.storyShowing = null;
       },
       set_bg_attr: (color) => this.setBackground(color),
       fade_start: (dir, rows, waitTime) => this.fadeStart(dir, rows, waitTime),
@@ -658,19 +679,38 @@ export class CutscenePlayer {
         this.setClip(this.clipRect);
       },
       show_text: (l, t, r, b, xa, ya, text, color) => {
+        if (this.text) {
+          this.text.showText(this.target, text, l, t, r, b, xa, ya, color);
+          return;
+        }
         if (!this.font) return;
         drawTextInRect(this.target, this.font, text, l, t, r, b, xa, ya, color);
       },
       text_center_y: (t, b) => (this.font ? textCenterY(this.font, t, b) : 0),
-      char_width: (ch) => (this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0),
-      cstring_width: (text) => (this.font ? lineWidth(this.font, text) : 0),
-      draw_text_character: (x, y, ch, color) => (this.font
-        ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color)
-        : 0),
+      char_width: (ch) => (this.text
+        ? this.text.charWidth(ch)
+        : (this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0)),
+      cstring_width: (text) => (this.text
+        ? this.text.cstringWidth(text)
+        : (this.font ? lineWidth(this.font, text) : 0)),
+      draw_text_character: (x, y, ch, color) => {
+        if (this.text) return this.text.drawChar(this.target, x, y, ch, color);
+        return this.font
+          ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color)
+          : 0;
+      },
       read_peel: (l, t, r, b) => this.readTargetPeel(l, t, r, b),
       restore_peel: (peel) => this.restoreTargetPeel(peel),
-      start_text_input: () => { this.textInput = true; this.keys.length = 0; },
-      stop_text_input: () => { this.textInput = false; this.keys.length = 0; },
+      start_text_input: (l, t, r, b) => {
+        this.textInput = true;
+        this.keys.length = 0;
+        this.text?.beginTextInput(l, t, r, b);
+      },
+      stop_text_input: () => {
+        this.textInput = false;
+        this.keys.length = 0;
+        this.text?.endTextInput();
+      },
       take_key: () => this.keys.shift() ?? null,
       /**
        * `clear_kbd_buf()` is `last_key_scancode = last_text_input = 0`:
@@ -755,6 +795,31 @@ export class CutscenePlayer {
     const bank = spec.bank === 40 ? this.title40 : this.title50;
     const image = bank?.images[spec.id + 1];
     if (!bank || !image) return;
+    /**
+     * The four story screens are pictures, and in Hebrew they cannot be.
+     *
+     * `STORY_ABSENCE`, `STORY_MARRY`, `STORY_HAIL` and `STORY_CREDITS`
+     * are one-bit images in `TITLE.DAT`, blitted whole in the story
+     * bank's fifteenth colour -- there is no string anywhere in the
+     * game to translate. So the text layer carries a transcription of
+     * all four and draws them as words, in the same colour, inside the
+     * same frame. Where it has nothing to say -- English at the
+     * original quality, or no text layer at all -- the picture is
+     * blitted exactly as before.
+     */
+    if (this.text) {
+      // A fresh frame, or the title over it, takes the old words away.
+      if (id === full_image_id.STORY_FRAME || spec.blit === blitters.blitters_0_no_transp) {
+        this.text.clearOverlayIn(spec.xpos, spec.ypos,
+          spec.xpos + image.width, spec.ypos + image.height);
+        this.storyShowing = null;
+      }
+      if (this.text.story(id)) {
+        this.storyShowing = id;
+        this.text.drawStory(this.target, id, STORY_TEXT_COLOR);
+        return;
+      }
+    }
     if (spec.blit === blitters.blitters_white) {
       this.target.blitMono(image, spec.xpos, spec.ypos, STORY_TEXT_COLOR);
     } else if (spec.blit === blitters.blitters_10h_transp) {
@@ -762,6 +827,30 @@ export class CutscenePlayer {
     } else {
       this.target.blitOpaqueBlack(image, spec.xpos, spec.ypos, bank.paletteBase);
     }
+  }
+
+  /**
+   * Draw the story screen again, because the language or the quality
+   * moved while it was on the screen.
+   *
+   * A scene paints into the offscreen surface and copies it over, so
+   * which of the two holds the words depends on where in the scene the
+   * player was when he opened the settings panel. Both are drawn: the
+   * frame is the whole 320 by 200 and opaque, so redrawing it on each
+   * costs nothing and the change is on the screen on the next frame
+   * rather than at the next scene.
+   */
+  refreshText(): void {
+    const id = this.storyShowing;
+    if (!this.text || id === null) return;
+    const saved = this.target;
+    for (const surface of [this.offscreen, this.onscreen]) {
+      this.target = surface;
+      this.drawFullImage(full_image_id.STORY_FRAME);
+      this.drawFullImage(id);
+    }
+    this.target = saved;
+    this.storyShowing = id;
   }
 
   /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */

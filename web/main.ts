@@ -30,6 +30,8 @@ import { readExeConstants } from '../src/game/exe-constants.ts';
 import {
   levelsDatWithPotionLevel, POTION_LEVEL_NUMBER,
 } from '../src/dat/potion-level.ts';
+import { GameText } from '../src/render/text.ts';
+import { readFont } from '../src/render/font.ts';
 import { SettingsStore } from './settings.ts';
 import { Chrome } from './chrome.ts';
 import {
@@ -82,6 +84,20 @@ async function boot(): Promise<void> {
     : fromDisc;
   const assets = new Assets(fetchFile);
   const exe = await fetchFile('UNCRKD.EXE');
+  /**
+   * Every word the game itself draws, in the player's language.
+   *
+   * It is handed to `PopGame` and to `CutscenePlayer` as an option and
+   * is the only thing either of them knows about a setting -- they
+   * never read one. A headless tool builds neither with it, so the
+   * digests measure the original's own words in the original's own
+   * font. See `src/render/text.ts`.
+   */
+  const gameText = new GameText(readFont(exe), {
+    language: settings.get('language'),
+    quality: settings.get('quality'),
+  });
+  display.setTextSource(() => gameText.overlay);
   /** `custom->first_level`, which is what a key during the demo starts. */
   const firstLevel = readExeConstants(exe).firstLevel;
 
@@ -165,7 +181,7 @@ async function boot(): Promise<void> {
     if (!cutscene) {
       cutsceneBuilding = true;
       try {
-        cutscene = await CutscenePlayer.create(assets, exe, effects);
+        cutscene = await CutscenePlayer.create(assets, exe, effects, gameText);
       } finally {
         cutsceneBuilding = false;
       }
@@ -427,7 +443,8 @@ async function boot(): Promise<void> {
      */
     building += 1;
     try {
-      game = await Game.start(assets, exe, v.level, { effects, seamless: carry.seamless });
+      game = await Game.start(assets, exe, v.level,
+        { effects, seamless: carry.seamless, text: gameText });
     } finally {
       building -= 1;
     }
@@ -1563,18 +1580,51 @@ async function boot(): Promise<void> {
    * page may sound, so the player's first click does two things at
    * once instead of asking them to press a key as well.
    */
+  /**
+   * The language or the quality moved while the game was on the screen.
+   *
+   * The words the game draws are put on the screen once, by
+   * `display_text_bottom` or by a story screen, and they stay there
+   * until something paints over them -- so without this a player who
+   * chose Hebrew went on reading `60 MINUTES LEFT` in English until
+   * the next thing the game had to say. Nothing is stepped: the
+   * surface is drawn into again and the picture that was last shown is
+   * shown again, so the change costs the game no tick.
+   */
+  function relabelTheGame(): void {
+    gameText.clearOverlay();
+    /**
+     * Whichever of the two is **on the screen**, and only that one.
+     *
+     * A page that has played its title still has a `CutscenePlayer`
+     * with the last scene's picture in it long after the level has
+     * started, so presenting both put a stale scene over the game.
+     */
+    if (cutscene?.running) {
+      cutscene.refreshText();
+      display.present(cutscene.render(), cutscene.palette.toRgba());
+      return;
+    }
+    if (game) {
+      game.refreshText();
+      if (lastShown) display.present(lastShown, game.scene.screenPalette.toRgba());
+    }
+  }
+
   const chrome = new Chrome(settings, {
     begin: () => {
       wakeSound();
       beganFromOpening?.();
     },
     aspect: (value) => display.setAspect(value),
-    language: () => {
-      // The page's own words are the chrome's own business and it has
-      // already changed them. The words the *game* draws go through
-      // the original's bitmap font and are the next piece of work.
+    language: (value) => {
+      gameText.language = value;
+      relabelTheGame();
     },
-    quality: () => { /* the pictures are chosen when they are loaded */ },
+    quality: (value) => {
+      gameText.quality = value;
+      relabelTheGame();
+    },
     toggleRecording,
     save: (slot) => {
       const ok = saveGame(slot);

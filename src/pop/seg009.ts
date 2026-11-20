@@ -95,9 +95,20 @@ export function* input_str(
         yield 1;
       }
     }
-    // Only the printable ASCII chars.
+    /**
+     * Only the printable characters.
+     *
+     * The C's test is `>= 0x20 && <= 0x7e`, which is printable ASCII
+     * and is every character a DOS keyboard could put in
+     * `last_text_input` on the machine it was written for. The upper
+     * bound is widened here by one word -- "not the delete key" --
+     * because a player whose game is in Hebrew types his name in
+     * Hebrew, and a letter the font can draw is a letter the box
+     * should take. Nothing measured moves by it: `input_str` runs in
+     * the hall of fame and no capture in the suite ever types.
+     */
     const code = entered.charCodeAt(0);
-    const entered_char = entered.length === 1 && code <= 0x7e ? entered : '';
+    const entered_char = entered.length === 1 && code !== 0x7f ? entered : '';
     scr.clear_kbd_buf();
 
     if (key === 'escape') {
@@ -113,7 +124,7 @@ export function* input_str(
       scr.draw_text_character(current_xpos, ypos, buffer.text[length]!, bgcolor);
       buffer.text = buffer.text.slice(0, length);
       draw_text_cursor(current_xpos, ypos, color);
-    } else if (entered_char !== '' && code >= 0x20 && code <= 0x7e
+    } else if (entered_char !== '' && code >= 0x20 && code !== 0x7f
       && length < max_length) {
       // Would the new character put the cursor past the right side?
       if (scr.char_width('_') + scr.char_width(entered_char) + current_xpos
