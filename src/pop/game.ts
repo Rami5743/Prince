@@ -15,7 +15,7 @@
  */
 import type { Assets } from '../render/assets.ts';
 import { Surface, PALETTE_SIZE as PALETTE_ENTRIES, type ScreenPalette } from '../render/surface.ts';
-import { soundPriority, setSoundInterruptible } from '../render/audio.ts';
+import { soundPriority, soundInterruptible, setSoundInterruptible } from '../render/audio.ts';
 import { buildLevelScene, type LevelScene } from '../game/scene.ts';
 import { readExeTables } from '../game/exe-tables.ts';
 import { flipHorizontally } from '../render/room.ts';
@@ -1276,22 +1276,44 @@ export class PopGame {
    *     }
    *     next_sound = -1;
    *
-   * The test in the middle of it is `SoundPlayer.mayTake`, which is
-   * where the shell keeps it, so what is left here is the queue and
-   * `current_sound`. `play_kid` reads `current_sound`: a Prince who
-   * dies while a gate is opening does not wait for the gate to
-   * finish sounding.
+   * **The test in the middle of it is the game's and not only the
+   * device's.** `SoundPlayer.mayTake` applies the same rule, so the
+   * right sound reached the channel either way -- but this used to
+   * write `current_sound` whatever the device then did with it, and
+   * `current_sound` is read by `play_kid`:
+   *
+   *     if (check_sound_playing() && current_sound != 5) return;
+   *
+   * -- a dying Prince waits for whatever is sounding unless it is a
+   * gate opening. With a gate in the channel and a footstep asked
+   * for in the same tick, the device refuses the footstep (0xA0
+   * against the gate's 0x37) and the channel still holds 5, while
+   * `current_sound` said 23 and the Prince stopped to listen to a
+   * sound nobody was playing.
+   *
+   * Everything the test needs is here: `check_sound_playing` is an
+   * effect already and the two tables are the executable's. Where
+   * there is no device -- `pop-report.ts`, `sound-report.ts`, every
+   * test that is not the browser's -- `check_sound_playing` answers
+   * nought except while the death music or a feather is being
+   * counted out, so the first half of the test is true and nothing
+   * changes.
    */
   private playNextSound(): void {
     if (this.nextSound >= 0) {
-      g.current_sound = this.nextSound;
-      // The feather's own clock: `timers` reads the length of this
-      // sound back as the length of the potion. See
-      // `FEATHER_SOUND_TICKS`.
-      if (this.nextSound === soundids.sound_39_low_weight) {
-        this.featherSound = FEATHER_SOUND_TICKS;
+      const current = g.current_sound;
+      if (!out.check_sound_playing()
+        || (current >= 0 && soundInterruptible(current)
+          && soundPriority(this.nextSound) <= soundPriority(current))) {
+        g.current_sound = this.nextSound;
+        // The feather's own clock: `timers` reads the length of this
+        // sound back as the length of the potion. See
+        // `FEATHER_SOUND_TICKS`.
+        if (this.nextSound === soundids.sound_39_low_weight) {
+          this.featherSound = FEATHER_SOUND_TICKS;
+        }
+        this.effects?.sound?.(this.nextSound);
       }
-      this.effects?.sound?.(this.nextSound);
     }
     this.nextSound = -1;
   }

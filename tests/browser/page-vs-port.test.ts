@@ -413,7 +413,17 @@ describe('the page and the headless port', () => {
    * anywhere in the project that reaches `do_pickup`.
    *
    * `sound_18_drink` is the swallow in `seq_78_drink` and every one
-   * of the six potions plays it, so six of them is six drunk.
+   * of the six potions **asks** for it -- but only five are heard,
+   * and that is the original's own: the fourth potion is the
+   * feather, `sound_39_low_weight` is priority 0 and
+   * uninterruptible, and the inversion is drunk at tick 479 inside
+   * the feather's 365 to 588. The capture agrees from the other
+   * side: `potionsnd` has one unbroken noise from 81.2 to 99.9 and
+   * then blips from 101.1, with nothing in between.
+   *
+   * So what is counted is the four potions that make a sound of
+   * their own -- hurt 13, heal 33, life 30, feather 39 -- and the
+   * five swallows that reach the channel.
    */
   it('draw the same potion level, tick for tick', async () => {
     const { levelsDatWithPotionLevel, POTION_LEVEL_NUMBER } =
@@ -444,7 +454,10 @@ describe('the page and the headless port', () => {
       for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
       portHashes.push(h >>> 0);
     }
-    expect(asked.filter((w) => w === 18).length, 'potions drunk').toBe(6);
+    expect(asked.filter((w) => w === 18).length, 'swallows heard').toBe(5);
+    for (const effect of [13, 33, 30, 39]) {
+      expect(asked, `the potion that plays ${effect}`).toContain(effect);
+    }
 
     const potionPage = await browser.newPage();
     potionPage.on('console', (m) => {

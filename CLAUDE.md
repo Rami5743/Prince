@@ -46,7 +46,7 @@
     measured   32260 of 33047   98%   (unmoved, run for run)
     scenes      2442 of  2601   94%   (unmoved)
     sounds       491 of   494  ->  **493 of 494**
-    npm test     797 -> 824
+    npm test     797 -> 825
 
     feather1snd   49 of 50  ->  **50 of 50**, exact
     gate1snd      94 of 96  ->  95 of 96
@@ -390,7 +390,50 @@ speaker cannot reach (the six, and 31, 34, 42 and 57, which have no
 sound behind them at all) and checks them against the bytes of
 `sound_pcspeaker_exists` the release has left readable.
 
-### 10. Every unguarded SDLPoP fix, checked one by one
+### 10. And `play_next_sound`'s own test, which the port left to the device
+
+    if (next_sound >= 0) {
+        if (!check_sound_playing() ||
+            (sound_interruptible[current_sound] != 0 &&
+             sound_prio_table[next_sound] <= sound_prio_table[current_sound]))
+        {
+            current_sound = next_sound;
+            play_sound_from_buffer(sound_pointers[current_sound]);
+        }
+    }
+    next_sound = -1;
+
+`SoundPlayer.mayTake` applies the same rule, so the right sound
+reached the channel either way -- but the port wrote `current_sound`
+whatever the device then did with it, and **`current_sound` is read
+by `play_kid`**:
+
+    if (check_sound_playing() && current_sound != 5) return;
+
+-- a dying Prince waits for whatever is sounding unless it is a gate
+opening. With a gate in the channel and a footstep asked for in the
+same tick, the device refuses the footstep (0xA0 against the gate's
+0x37) and the channel still holds 5, while `current_sound` said 23
+and the Prince stopped to listen to a sound nobody was playing.
+
+Everything the test needs is already here, so the port does the
+whole of it now. Where there is **no device** -- `pop-report.ts`,
+`sound-report.ts`, every test but the browser's --
+`check_sound_playing` answers nought except while the death music or
+a feather is being counted out, so the first half of the test is
+true and almost nothing changes. Pictures 32260 of 33047 and sounds
+493 of 494, either way.
+
+**The exception is the potion level, and the capture settles it.**
+`potion1` asks for `sound_18_drink` six times, and the fifth --
+the inversion's, on tick 479 -- falls inside the feather's 365 to
+588. `sound_39_low_weight` is priority 0 and uninterruptible, so the
+original refuses it, and `potionsnd`'s capture has one unbroken
+noise from 81.2 to 99.9 and then blips from 101.1 with **nothing in
+between**. Five swallows, not six, and the page and the port now
+agree on all sixteen sounds of the run rather than seventeen.
+
+### 11. Every unguarded SDLPoP fix, checked one by one
 
 `FIX_SOUND_PRIORITIES` was found by reading, so the rest were swept
 for. Most `FIX_*` in `sdlpop/src` are gated at run time by
@@ -420,7 +463,7 @@ vanilla side of **every one but the one above**:
 (`FIX_COLL_FLAGS`, `FIX_DISAPPEARING_GUARD_A` and `_B` are commented
 out in `config.h` and are not SDLPoP's behaviour either.)
 
-### 11. Two paths the page had never been compared on, and both are exact
+### 12. Two paths the page had never been compared on, and both are exact
 
 `tools/dev/page-port.ts` covered fourteen levels, nine scenes, the
 eleven cheats and all thirteen transitions. It now also covers the

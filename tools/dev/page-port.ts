@@ -673,17 +673,26 @@ async function main(): Promise<void> {
     }
     const sameSound = got.asked.length === port.asked.length
       && got.asked.every((v, i) => v === port.asked[i]);
-    // `sound_18_drink` is the swallow in `seq_78_drink`, and every one
-    // of the six potions plays it: six of them means six were drunk.
+    /**
+     * `sound_18_drink` is the swallow in `seq_78_drink` and every one
+     * of the six potions asks for it -- but only five are heard, and
+     * that is the original's own: the fourth is the feather,
+     * `sound_39_low_weight` is priority 0 and uninterruptible, and
+     * the inversion is drunk at tick 479 inside the feather's 365 to
+     * 588. `potionsnd`'s capture agrees -- one unbroken noise from
+     * 81.2 to 99.9 and then blips from 101.1, nothing in between.
+     */
     const drinks = port.asked.filter((w) => w === 18).length;
+    const effects = [13, 33, 30, 39].filter((w) => port.asked.includes(w));
     console.log(`potion    pictures ${ticks.length - differ} of ${ticks.length}`
       + (first < 0 ? '' : `  first apart at ${first}`)
       + `  sounds ${got.asked.length} page / ${port.asked.length} port`
-      + `  drinks ${drinks}`
+      + `  swallows ${drinks}  effects ${effects.length}`
       + (sameSound ? '' : '  DIFFERENT'));
-    if (drinks !== 6) {
+    if (drinks !== 5 || effects.length !== 4) {
       bad += 1;
-      console.log(`  !! potion: ${drinks} of the six potions were drunk`);
+      console.log(`  !! potion: ${drinks} swallows and ${effects.length} of the `
+        + 'four potions that make a sound of their own');
     }
     if (differ) {
       bad += 1;

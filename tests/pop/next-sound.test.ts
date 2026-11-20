@@ -75,6 +75,80 @@ describe('next_sound', () => {
     expect(heard).toEqual([5]);
   });
 
+  /**
+   * **`play_next_sound`'s own test, which the port left to the
+   * device.**
+   *
+   *     if (next_sound >= 0) {
+   *         if (!check_sound_playing() ||
+   *             (sound_interruptible[current_sound] != 0 &&
+   *              sound_prio_table[next_sound] <= sound_prio_table[current_sound]))
+   *         {
+   *             current_sound = next_sound;
+   *             play_sound_from_buffer(sound_pointers[current_sound]);
+   *         }
+   *     }
+   *     next_sound = -1;
+   *
+   * `SoundPlayer.mayTake` applies the same rule, so the right sound
+   * reached the channel either way -- but the port wrote
+   * `current_sound` whatever the device then did with it, and
+   * `current_sound` is read by `play_kid`:
+   * `if (check_sound_playing() && current_sound != 5) return;`, a
+   * dying Prince waiting for whatever is sounding unless it is a
+   * gate opening. With a gate in the channel and a footstep asked
+   * for in the same tick, the device refuses the footstep (0xA0
+   * against the gate's 0x37) and the channel still holds 5, while
+   * `current_sound` said 23 and the Prince stopped to listen to a
+   * sound nobody was playing.
+   *
+   * Only the browser can meet it: where there is no device,
+   * `check_sound_playing` answers nought and the first half of the
+   * test is always true. Pictures 32260 of 33047 and sounds 493 of
+   * 494 either way.
+   */
+  it('refuses a sound the channel will not take, and keeps current_sound', async () => {
+    const heard: number[] = [];
+    let playing = false;
+    const game = await PopGame.start(assets, exe, 1, {
+      effects: {
+        sound: (which: number) => { heard.push(which); },
+        stopSounds: () => { playing = false; },
+        soundPlaying: () => playing,
+      },
+    });
+    game.render();
+    heard.length = 0;
+
+    // A gate takes the channel.
+    out.play_sound(5);
+    game.render();
+    expect(heard).toEqual([5]);
+    expect(g.current_sound).toBe(5);
+    playing = true;
+
+    // A footstep is worth 0xA0 against the gate's 0x37, so it is
+    // refused -- and `current_sound` stays the gate.
+    out.play_sound(23);
+    game.render();
+    expect(heard).toEqual([5]);
+    expect(g.current_sound).toBe(5);
+
+    // The feather is priority 0 and takes the channel off the gate.
+    out.play_sound(39);
+    game.render();
+    expect(heard).toEqual([5, 39]);
+    expect(g.current_sound).toBe(39);
+
+    // And nothing at all takes it back: `sound_interruptible[39]` is
+    // nought, which is the eighteen and a half seconds of silence
+    // the capture measures after a feather.
+    out.play_sound(0);
+    game.render();
+    expect(heard).toEqual([5, 39]);
+    expect(g.current_sound).toBe(39);
+  });
+
   it('empties the queue even when nothing could be played', async () => {
     const { game, heard } = await gameWithEar();
     game.render();
