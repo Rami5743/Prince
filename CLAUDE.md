@@ -135,13 +135,18 @@ in the suite moves by a tick.
 **The lesson is the slot.** `wire.ts` has thirty-odd of them and one
 was a stub; the only thing that ever called it was a cheat, and the
 only probe that uses that cheat is the one that was short.
+`link.ts`'s own `slot()` makes an **unwired** seam throw ("has not
+been linked in"), so the only way a call across a segment cycle can
+quietly do nothing is an empty function in `wire.ts`.
+`tests/pop/dropped-lines.test.ts` reads the file and fails on one:
+there is no such thing as a seam that should do nothing.
 
 
 ## THE BUTTON AFTER A DEATH IS A HELD KEY, AND IT WAITS FOR THE DEATH
 
     measured   32093 of 33067   97%   (unmoved, run for run)
     retired     1883 of  3767         (unmoved, run for run)
-    npm test     795 -> 796
+    npm test     795 -> 797  (with the seam test below)
 
 `process_key`, before its switch (`seg000:0784`):
 

@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GAME_DIR } from '../helpers/fixtures.ts';
+import { GAME_DIR, REPO } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { g } from '../../src/pop/state.ts';
@@ -220,6 +220,34 @@ describe('the lines the translation dropped', () => {
    * and room 1 above-left, and room 6 has nothing below it and room
    * 11 below-left.
    */
+  /**
+   * **And no seam in `wire.ts` may be wired to nothing.**
+   *
+   * `link.ts`'s own `slot()` makes an unwired seam **throw** -- "has
+   * not been linked in" -- so the only way a call across a segment
+   * cycle can quietly do nothing is for `wire.ts` to fill it in with
+   * an empty function. One was: `l2.set_start_pos.fn = () => {}`.
+   *
+   * It cost `rooms7` the only shortfall left in the suite that was
+   * the port's. `play_kid`'s resurrect is the one caller that goes
+   * through that seam -- `do_startpos` calls `set_start_pos`
+   * directly -- so `r` left the Prince standing wherever his corpse
+   * lay, two pixels above `y_land[Char.curr_row + 1]`, with
+   * `fall_y`, `fall_x`, `is_feather_fall`, `upside_down`, `knock`,
+   * the sword and `savekid()` all skipped. Nine pixels outside the
+   * digest's mask, on fifty-two ticks: `rooms7` 1057 of 1109 ->
+   * **1109 of 1109**.
+   *
+   * A seam is a translation of a call the C makes. There is no such
+   * thing as one that should do nothing, so this reads the file.
+   */
+  it('wires every seam to a real function', () => {
+    const wire = readFileSync(join(REPO, 'src', 'pop', 'wire.ts'), 'utf8');
+    const stubs = [...wire.matchAll(/^\s*(\S+)\.fn = \([^)]*\)(: \w+)? => \{\s*\};?$/gm)]
+      .map((m) => m[1]);
+    expect(stubs, 'seams wired to an empty function').toEqual([]);
+  });
+
   it('the diagonal rooms are found sideways when there is none above', async () => {
     await PopGame.start(assets, exe, 1);
     g.drawn_room = 3;
