@@ -456,9 +456,70 @@ async function boot(): Promise<void> {
    * While it was here no capture could measure it.
    */
   function present(g: Game): void {
-    display.present(g.render(), g.scene.screenPalette.toRgba());
+    const surface = g.render();
+    lastShown = surface;
+    display.present(surface, g.scene.screenPalette.toRgba());
+    /**
+     * `flash_if_hurt`, which `play_level_2` runs straight after
+     * `draw_game_frame` -- and `remove_flash_if_hurt` takes it off
+     * again before `do_simple_wait(timer_1)` spends the rest of the
+     * tick, so the colour is on the screen for a sixtieth of a
+     * second and off for the other four.
+     *
+     * A capture of `PRINCE.EXE` grabbed at sixty frames a second
+     * says it exactly: `shift+t` on level 2 flashes on frames 3384,
+     * 3389, 3394 and 3399, one frame each and five apart, with the
+     * screen 43.1% pure black on every frame between them and 0.0%
+     * on those four. `PopGame.render` used to hold the colour for
+     * the whole tick, so eight ticks of a sword came out as two
+     * thirds of a second of solid yellow instead of eight blinks.
+     */
+    if (g.flashColour > 0) {
+      g.raiseFlash();
+      display.present(surface, g.scene.screenPalette.toRgba());
+      flashOff = performance.now() + FLASH_MS;
+    }
   }
 
+  /** The picture last put on the canvas, to show again without the flash. */
+  let lastShown: Surface | null = null;
+  /** When `remove_flash` is owed, by `performance.now()`; 0 if none is up. */
+  let flashOff = 0;
+
+  /**
+   * How long `do_flash` leaves the colour on the screen.
+   *
+   * `set_timer_length(timer_2, 2)` is two sixtieths, 33ms; the
+   * capture says one. Grabbed at sixty frames a second, `addlife2`'s
+   * four flashes are frames 3384, 3389, 3394 and 3399 -- **one video
+   * frame each**, where a colour up for a full 33ms would have to
+   * cover two sample instants out of every pair. Where the capture
+   * and a reading of the code disagree the capture wins, so the
+   * colour comes off on the first animation frame at least this far
+   * on: one frame of a sixty-hertz display, two of a hundred-and-
+   * twenty-hertz one, a sixtieth of a second either way.
+   */
+  const FLASH_MS = 12;
+
+  /** `remove_flash`, a sixtieth of a second after `do_flash`. */
+  function takeFlashDown(now: number): void {
+    if (flashOff === 0 || !game) return;
+    if (now < flashOff) return;
+    flashOff = 0;
+    game.dropFlash();
+    // Not while a scene is coming up: `lastShown` is the level's own
+    // picture, and putting it back would paint over the scene.
+    if (changing || building > 0 || cutsceneBuilding || cutscene?.running) return;
+    if (lastShown) display.present(lastShown, game.scene.screenPalette.toRgba());
+  }
+
+  /**
+   * The single tick `do_paused`'s busy wait lets through, set by the
+   * key that ended it. See `frame`.
+   */
+  let stepOnce = false;
+  /** The paused picture has been put on the canvas once already. */
+  let pauseShown = false;
   /** Held while a scene change is in flight; see `changeScene`. */
   let changing = false;
   /** How many level fetches are out; see `select`. */
@@ -482,11 +543,31 @@ async function boot(): Promise<void> {
     if (changing || building > 0 || cutsceneBuilding) return;
     // Esc: `do_paused` stops the game where it stands and leaves the
     // screen up until a key comes.
-    if (game.paused) {
-      present(game);
+    if (game.paused && !stepOnce) {
+      /**
+       * `do_paused` draws nothing while it waits -- it is
+       * `do { idle(); delay_ticks(1); } while (! process_key());`
+       * -- so the screen keeps the picture the tick before it left
+       * there, with GAME PAUSED under it. Presenting every frame
+       * would run `draw_game_frame` sixty times a second, counting
+       * the bottom text down and spending the flash.
+       */
+      if (!pauseShown) { pauseShown = true; present(game); }
       status.textContent = 'paused — press any key';
       return;
     }
+    /**
+     * The one tick `do_paused` lets through.
+     *
+     * The busy wait ends on **any** key and `is_paused` is already
+     * nought by then, so `play_frame` goes on and plays the tick.
+     * `process_key`'s own `case SDL_SCANCODE_ESCAPE` sets
+     * `is_paused` back to 1, so Escape plays exactly one tick and
+     * pauses again -- the original's frame advance -- while every
+     * other key resumes.
+     */
+    stepOnce = false;
+    pauseShown = false;
     /**
      * H, J, U and N do not stop the game.
      *
@@ -499,6 +580,17 @@ async function boot(): Promise<void> {
      *
      * This used to stop stepping altogether while a room was being
      * looked at, which is a mode the game does not have.
+     */
+    /**
+     * **And the loop steps once a tick while a room is being looked
+     * at, like every other tick.** It used to call `frame()` again on
+     * every animation frame that owed no step, so that the view
+     * refreshed at once -- and `frame()` steps the game, so pressing
+     * H, J, U or N ran it at the display's rate. Measured in
+     * Chromium: 24 ticks in two seconds playing, **120 in two
+     * seconds while looking around** -- five times too fast, with
+     * the Prince off the screen where the player could not see him
+     * do it.
      */
     if (watchRoom && game.drawnRoom !== watchRoom) game.showRoom(watchRoom);
     {
@@ -759,8 +851,30 @@ async function boot(): Promise<void> {
       return;
     }
 
-    // `do_paused`: while it is paused the game waits for a key, any key.
-    if (game.paused) { e.preventDefault(); game.paused = false; return; }
+    /**
+     * `do_paused`: while it is paused the game waits for a key, any key.
+     *
+     *     is_paused = 0;
+     *     do { idle(); delay_ticks(1); } while (! process_key());
+     *     erase_bottom_text(1);
+     *
+     * `is_paused` is cleared **before** the wait and the key that
+     * ends it is itself put through `process_key` -- whose Escape
+     * case sets `is_paused` straight back to 1. So Escape advances
+     * the game by exactly one tick and pauses again, and any other
+     * key resumes play. The page used to swallow the key here, so
+     * Escape resumed like everything else and the original's frame
+     * advance was missing.
+     *
+     * It does not return: the key goes on through the page's own
+     * `process_key` below, and an arrow that ended the pause is
+     * held in the tick that follows, as `read_user_control` reads it.
+     */
+    if (game.paused) {
+      e.preventDefault();
+      game.paused = false;
+      stepOnce = true;
+    }
 
     /**
      * After a death, any key begins the level again.
@@ -1060,6 +1174,9 @@ async function boot(): Promise<void> {
   let last = performance.now();
   function tick(now: number): void {
     requestAnimationFrame(tick);
+    // `remove_flash`, a sixtieth of a second after `do_flash` put it
+    // up: the animation frame after the one the flash was drawn on.
+    takeFlashDown(now);
     owed += now - last;
     last = now;
     if (owed > STEP_MS * 5) owed = STEP_MS; // came back from a pause
@@ -1074,13 +1191,10 @@ async function boot(): Promise<void> {
     // sixtieths of a second where the game's tick is five, and the
     // waits between the title's pictures are counted in sixtieths too.
     if (sceneFrame(Math.min(owed, STEP_MS * 5))) { owed = 0; return; }
-    let stepped = false;
     while (owed >= STEP_MS) {
       owed -= STEP_MS;
       frame();
-      stepped = true;
     }
-    if (!stepped && game && watchRoom !== null) frame();
   }
   requestAnimationFrame(tick);
 
@@ -1218,6 +1332,10 @@ async function boot(): Promise<void> {
     awaitingButton: game.awaitingButton, level: w0Level(),
     /** `current_level == 0`: the attract-mode level is playing itself. */
     demo: game.isDemo,
+    /** `is_paused`, which `do_paused` leaves set between single steps. */
+    paused: game.paused,
+    /** The colour `do_flash` is owed after this tick's picture. */
+    flashColour: game.flashColour,
     maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_GUARD ? null : {

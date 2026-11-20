@@ -41,6 +41,158 @@
 ## ============================================================
 
 
+## A GAMEPLAY FLASH IS A BLINK TRAIN, AND ESCAPE IS A FRAME ADVANCE
+
+    measured   31082 of 32056   97%   (was 31080 of 32056)
+    scenes      2442 of  2601   94%   (unmoved, to the frame)
+    sounds       417 of   419         (unmoved)
+    npm test     760 of   760         (was 755)
+
+    addlife2     188 of   191  ->  190 of 191
+
+Two bugs the player found by playing, and both were in the page's
+own loop, where no tick score could see them. A third fell out of
+measuring the first.
+
+### 1. "Instead of a train of short flashes it is one long flash"
+
+The gameplay flash does **not** go through `proc_cutscene_frame`.
+`play_level_2` (`seg003.c:346`) is
+
+    draw_game_frame();
+    flash_if_hurt();         // seg003:0AFC -> do_flash(flash_color)
+    remove_flash_if_hurt();  // seg003:0B1A -> --flash_time; remove_flash()
+    do_simple_wait(timer_1);
+
+and `do_flash` (`seg001.c:541`) is `reset_timer(timer_2);
+set_timer_length(timer_2, 2); set_bg_attr(0, color);
+do_simple_wait(timer_2)`. So the colour is up for the **first
+sixtieth or two of a five-sixtieth tick** and off for the rest of
+it, `flash_time` times over: eight blinks for a sword, four for a
+life potion, three for the feather, two for a heal, eighteen for
+Jaffar's death. The port's `flash()` put the colour up at the end
+of `render()` and took it off at the top of the **next** `render()`,
+so every flash was one solid block of colour as long as the whole
+train.
+
+**Measured, and the capture is sharper than the code.** A fresh
+capture of `PRINCE.EXE` replaying `addlife2` (`shift+t` on level 2,
+`flash_color` 4, `flash_time` 4), grabbed at **sixty** frames a
+second, every frame's share of the screen that is pure black:
+
+    frame  3380 3381 3382 3383 3384 3385 3386 3387 3388 3389 ...
+    black% 43.1 43.1 43.1 43.1  0.0 43.1 43.1 43.1 43.1  0.0
+
+**Four flashed frames -- 3384, 3389, 3394, 3399 -- one video frame
+each, five apart**, which is one tick. A colour up for the full two
+sixtieths would have to cover two sample instants of every pair, so
+the emulator really shows it for about one sixtieth, and the page
+takes it down on the first animation frame at least 12ms on (one
+frame of a 60Hz display, two of a 120Hz one).
+
+The flashed screen's commonest colour is **(170, 0, 0)**, which is
+the hardcoded VGA red (42,0,0) through the DAC's
+`(v << 2) | (v >> 4)`. Black goes 43.1% -> 0.0% and back, which is
+the "every black pixel" model holding on a second capture.
+
+`PopGame.render()` now only counts the tick down and says what
+colour is owed (`flashColour`); `raiseFlash` and `dropFlash` are the
+two halves, and `web/main.ts` presents **twice inside a tick** --
+the flashed palette, then the plain one a sixtieth later.
+
+**And it is worth two measured ticks, not nothing.**
+`split_ticks.py` keeps for each tick the frame just before the next
+change, which is one of the four *unflashed* frames above, so a
+port whose tick picture carried the flash could never agree on a
+flashing tick. `addlife2` 188 -> **190 of 191**, and that is the
+only run in the suite that moved: 31080 -> **31082 of 32056**.
+
+`tests/browser/flash.test.ts` counts it on the canvas the player
+looks at: of 45 animation frames after a `shift+t`, **4 are flashed
+and 41 are not**. With the take-down removed the same test reads
+**20 of 45**, which is four ticks held end to end -- so the test
+sees the bug and not merely the ticks.
+
+#### The colour was the side-question, and both models agree
+
+`set_bg_attr`'s commented-out original line is
+`palette[vga_pal_index] = vga_palette[hc_pal_index]` -- the
+hardcoded sixteen -- where SDLPoP's stand-in reads
+`palette[hc_pal_index]`, the room's own. Measured for the four
+colours a flash ever takes, on all fourteen levels:
+
+    hardcoded   2=[0,42,0]  4=[42,0,0]  14=[63,63,21]  15=[63,63,63]
+    levels 1-14 the same, every one, every entry
+
+because `buildLevelScene` loads the EXE's own `vga_palette` into
+entries 0 to 15 and the lowest sprite bank's base is 32. **The
+difference is a no-op**; the capture's (170,0,0) confirms it from
+the other side. `tests/pop/flash.test.ts` pins the table.
+
+`flash_if_hurt`'s second branch stays out, as before: the captures
+say the original does not flash red on a bare `hitp_delta < 0`, and
+putting it in costs 14069 -> 14045.
+
+### 2. Escape while paused advances one tick; it does not resume
+
+`do_paused` (`seg000.c:1703`) is
+
+    if (is_paused) {
+        display_text_bottom("GAME PAUSED");
+        is_paused = 0;
+        do { idle(); delay_ticks(1); } while (! process_key());
+        erase_bottom_text(1);
+    }
+
+and `process_key`'s own `case SDL_SCANCODE_ESCAPE` sets
+`is_paused = 1` and returns the key. So the busy wait ends on **any**
+key with `is_paused` already nought -- and if that key was Escape it
+has just been set back to 1, so `play_frame` plays exactly one tick
+and the next one pauses again.
+
+`web/main.ts` had
+`if (game.paused) { e.preventDefault(); game.paused = false; return; }`,
+which swallowed the key before the page's own `process_key` could
+see it, so Escape resumed like everything else. It now clears the
+pause, asks for one tick (`stepOnce`) and **does not return**: the
+key goes on through `commandKey`, Escape's case puts the pause back,
+and an arrow that ended the pause is held in the tick that follows,
+as `read_user_control` reads it.
+
+**`src/pop` has no hole to fix, because it has no pause at all.**
+`control_kid` there is `rest_ctrl_1(); read_user_control();
+user_control(); save_ctrl_1();` with no `do_paused` between them,
+and nothing in `src/pop` ever reads `g.is_paused` -- `PopGame.paused`
+is a getter and a setter for the shell. A headless replay never
+pauses, so the rule is pinned where it lives:
+`tests/browser/pause.test.ts` presses Escape and watches
+`__princeState().ticks` -- three Escapes, three single ticks, paused
+after each, and then Space resumes.
+
+And one smaller thing out of the same loop: **`do_paused` draws
+nothing while it waits.** The page presented on every animation
+frame while paused, which is `draw_game_frame` sixty times a second
+-- counting the bottom text down and spending the flash. It
+presents once on entering the pause now.
+
+### 3. Looking around ran the game five times too fast
+
+`tick()` ended with `if (!stepped && game && watchRoom !== null)
+frame();` -- and `frame()` **steps the game**. So on every animation
+frame that owed no step, with H, J, U or N held, the game took
+another tick. Measured in Chromium:
+
+    playing normally        24 ticks in 2s
+    while looking around   120 ticks in 2s
+
+Five times too fast, with the Prince off the screen where the
+player could not see him do it. The line is gone; the watched room
+is redrawn on the game's own tick, at most 83ms later, and
+`__princeShow` still calls `frame()` once itself. (It also means
+every browser test that drives the page through `__princeShow`,
+which leaves `watchRoom` set, had been running at 60 ticks a
+second.)
+
 ## THE ROOMS WERE THE UNMEASURED HALF, AND JAFFAR'S FLASH WAS HALF A SECOND OF WHITE
 
     measured   31080 of 32056   97%   (was 19478 of 20232)
@@ -1955,9 +2107,9 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         31080 of 32056   97%
+    measured         31082 of 32056   97%
     retired           1883 of  3767   50%
-    all              32963 of 35823   92%
+    all              32965 of 35823   92%
 
 (The jump is the twelve room tours: see the top of this file. The
 suite had drawn 59 of the game's 266 rooms and now draws 250.)

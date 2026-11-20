@@ -1597,12 +1597,54 @@ harness: in the browser the shell calls `heal()`, `addLife()` and
 and K all did nothing to the bar. `cheat` queues now, and `step`
 drains the queue right after clearing the deltas.
 
-### The capture cannot see a flash, and this is the second time
+### A flash CAN be captured, at sixty frames a second
 
-`addlife2`'s last two ticks are 62 and 63, and they are the red
+The section below is right about `split_ticks.py` and wrong about
+the capture. A **raw** grab sees a flash perfectly well; it is the
+tick splitter that cannot, by construction.
+
+`addlife2`'s own script, captured with `--fps 60` and read frame by
+frame rather than through `split_ticks.py` -- the share of each
+frame that is pure black:
+
+    frame  3380 3381 3382 3383 3384 3385 3386 3387 3388 3389 ...
+    black% 43.1 43.1 43.1 43.1  0.0 43.1 43.1 43.1 43.1  0.0
+
+Four flashed frames, **3384, 3389, 3394 and 3399: one video frame
+each, five apart**, which is `flash_time` 4 at one blink a tick.
+The flashed screen's commonest colour is (170, 0, 0), the hardcoded
+VGA red (42,0,0) through the DAC. So the original's flash is a
+*blink train* and not a block, and `do_flash`'s
+`set_timer_length(timer_2, 2)` shows for about one sixtieth at this
+cycle count and not two.
+
+That settled the player's "instead of a train of short flashes it
+is one long flash": `PopGame.render` had been holding the colour
+for the whole tick. Taking it out of `render` and giving the page
+`raiseFlash`/`dropFlash` a sixtieth apart also put the port's
+once-a-tick picture where the capture's is, and **`addlife2` went
+188 of 191 to 190** -- the two ticks the section below writes off.
+
+The recipe, for the next flash that wants settling:
+
+    node tools/oracle/recording_to_script.mjs \
+        tools/oracle/recordings/addlife2.json /tmp/f.txt --settle 0.04
+    python3 tools/oracle/dosbox_oracle.py --script /tmp/f.txt --out /tmp/f \
+        --record /tmp/f/run60.mkv --fps 60 --cycles 20000
+    ffprobe -v error -f lavfi -i "movie=/tmp/f/run60.mkv,signalstats" \
+        -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0
+
+and the flash frames are the ones whose YAVG stands out from the
+median of their neighbours (88.7 against 69.8 here).
+
+### The capture cannot see a flash in a *tick digest*
+
+`addlife2`'s last two ticks were 62 and 63, and they are the red
 flash `add_life` asks for. Take `flash_color` and `flash_time` out
-and the probe reads **190 of 191**, so the capture does not show the
-flash at all.
+and the probe read **190 of 191**, so the tick digest does not show
+the flash at all. (It reads 190 with the flash in now: the port no
+longer carries the colour in the picture it hands back once a tick.
+See the section above.)
 
 That is the harness. `play_level_2` runs `draw_game_frame`, then
 `flash_if_hurt`, then `do_simple_wait(1)`, then
@@ -1613,8 +1655,9 @@ next change, which is the frame the flash has already come off. So a
 flash that really happens is invisible to this oracle by
 construction.
 
-The flash stays in the port, where the player can see it. The first
-measurement to point this way was `flash_if_hurt`'s second branch --
+The flash stays in the port, where the player can see it -- a
+sixtieth at a time, which is what the sixty-frame grab above
+measures. The first measurement to point this way was `flash_if_hurt`'s second branch --
 red whenever `hitp_delta` is negative -- which is left out of the
 port for the same reason; that one should probably go back in now
 that the cause is understood, but it costs ticks against the

@@ -10727,7 +10727,7 @@ var PopGame = class _PopGame {
       draw_tables();
     }
     this.tickBottomText();
-    this.flash();
+    this.flashTick();
     this.playNextSound();
     return this.upsideDown ? this.flipped() : this.surface;
   }
@@ -10774,7 +10774,7 @@ var PopGame = class _PopGame {
   /**
    * Which palette entries a flash took, to put back on the next tick.
    *
-   * Entry nought was not enough: see `flash`.
+   * Entry nought was not enough: see `raiseFlash`.
    */
   flashedEntries = [];
   /**
@@ -10786,6 +10786,62 @@ var PopGame = class _PopGame {
    * drawn and the countdown happens after it. The original does it by
    * filling the screen with the colour and blitting the frame back
    * over it with black punched out.
+   *
+   * ### A flash is a sixtieth of a second, not a tick
+   *
+   * `flash_if_hurt` is `do_flash(flash_color)`, which is
+   * `set_timer_length(timer_2, 2); set_bg_attr(0, color);
+   * do_simple_wait(timer_2)`, and `remove_flash_if_hurt` then takes
+   * the colour off **before** `do_simple_wait(timer_1)` spends the
+   * rest of the tick. So the colour is up for the first sixtieth or
+   * two of a five-sixtieth tick and the screen is normal for the
+   * rest of it. A flash is a *blink* at twelve a second, and for
+   * eight ticks of a sword it is eight blinks.
+   *
+   * **Measured, on a capture of `PRINCE.EXE` grabbed at sixty frames
+   * a second**: `addlife2`'s `shift+t` (`flash_color` 4,
+   * `flash_time` 4) on level 2, every frame's share of the screen
+   * that is pure black --
+   *
+   *     frame  3380 3381 3382 3383 3384 3385 3386 3387 3388 3389 ...
+   *     black% 43.1 43.1 43.1 43.1  0.0 43.1 43.1 43.1 43.1  0.0
+   *
+   * -- **four flash frames, 3384, 3389, 3394 and 3399, one video
+   * frame each and five apart**, which is one tick. The flashed
+   * screen's commonest colour is `(170, 0, 0)`, which is the
+   * hardcoded VGA palette's red (42,0,0) through the DAC's
+   * `(v << 2) | (v >> 4)`.
+   *
+   * The port used to hold the colour for the whole tick, because
+   * `render()` put it up and the next `render()` took it down. Eight
+   * ticks of a sword were two thirds of a second of solid yellow
+   * where the original blinks eight times: "the flash when picking
+   * up the sword and when drinking a potion is not the original's".
+   * `render()` now only counts the tick down and says what colour is
+   * owed; `raiseFlash` and `dropFlash` are the two halves the page
+   * runs a sixtieth apart.
+   *
+   * It also puts the port's once-a-tick picture where the capture's
+   * is. `split_ticks.py` keeps, for each tick, the frame just before
+   * the next change -- one of the four unflashed frames above -- so
+   * a port whose tick picture carries the flash can never agree on
+   * a flashing tick. `addlife2` 188 of 191 -> 190.
+   *
+   * ### The colour is the hardcoded sixteen, and it is the same table
+   *
+   * `set_bg_attr`'s commented-out original line is
+   * `palette[vga_pal_index] = vga_palette[hc_pal_index]` -- the
+   * hardcoded sixteen-colour table -- where SDLPoP's stand-in reads
+   * `palette[hc_pal_index]`, the room's own. The two were measured
+   * against each other for the four colours a flash ever takes, on
+   * all fourteen levels:
+   *
+   *     hardcoded   2=[0,42,0]  4=[42,0,0]  14=[63,63,21]  15=[63,63,63]
+   *     levels 1-14 the same, every one
+   *
+   * because `buildLevelScene` loads the EXE's own `vga_palette` into
+   * entries 0 to 15 and no sprite bank's base is under 32. So the
+   * difference is a no-op and `pal.entry(flash_color)` stands.
    *
    * **Every black pixel, not the background entry.** The port gave
    * entry nought the colour and nothing else, and a sprite drawn
@@ -10828,22 +10884,46 @@ var PopGame = class _PopGame {
    * recordings -- 14069 of 16599 down to 14045 -- which is the
    * measurement saying the same thing twice.
    */
-  flash() {
+  flashTick() {
+    this.dropFlash();
+    this.flashColourThisTick = g.flash_time !== 0 ? g.flash_color : 0;
+    if (g.flash_time !== 0) --g.flash_time;
+  }
+  /**
+   * The colour `do_flash` is owed after this tick's picture, or nought.
+   *
+   * A driver that can draw inside a tick -- the page -- reads this
+   * after `render()` and puts the colour up for a sixtieth. A driver
+   * that draws once a tick leaves it alone, and so holds the picture
+   * the original holds for four fifths of the tick.
+   */
+  get flashColour() {
+    return this.flashColourThisTick;
+  }
+  flashColourThisTick = 0;
+  /**
+   * `do_flash(color)` -> `set_bg_attr(0, color)`: the colour over
+   * every pixel of the screen that is black.
+   */
+  raiseFlash() {
+    const colour = this.flashColourThisTick;
+    if (colour <= 0 || this.flashedEntries.length !== 0) return;
+    const pal = this.scene.screenPalette;
+    const [r, gr, b] = pal.entry(colour);
+    for (let i = 0; i < PALETTE_SIZE2; i++) {
+      const [er, eg, eb] = pal.entry(i);
+      if (er === 0 && eg === 0 && eb === 0) {
+        this.flashedEntries.push(i);
+        pal.setEntry(i, r, gr, b);
+      }
+    }
+  }
+  /** `remove_flash()` -> `set_bg_attr(0, 0)`: the black entries back. */
+  dropFlash() {
+    if (this.flashedEntries.length === 0) return;
     const pal = this.scene.screenPalette;
     for (const i of this.flashedEntries) pal.setEntry(i, 0, 0, 0);
     this.flashedEntries = [];
-    const colour = g.flash_time !== 0 ? g.flash_color : 0;
-    if (colour > 0) {
-      const [r, gr, b] = pal.entry(colour);
-      for (let i = 0; i < PALETTE_SIZE2; i++) {
-        const [er, eg, eb] = pal.entry(i);
-        if (er === 0 && eg === 0 && eb === 0) {
-          this.flashedEntries.push(i);
-          pal.setEntry(i, r, gr, b);
-        }
-      }
-    }
-    if (g.flash_time !== 0) --g.flash_time;
   }
   /**
    * `play_next_sound`, the last line of `draw_game_frame`.
@@ -13148,18 +13228,43 @@ async function boot() {
     return v.kind === "level" ? v.level : 0;
   };
   function present(g2) {
-    display.present(g2.render(), g2.scene.screenPalette.toRgba());
+    const surface = g2.render();
+    lastShown = surface;
+    display.present(surface, g2.scene.screenPalette.toRgba());
+    if (g2.flashColour > 0) {
+      g2.raiseFlash();
+      display.present(surface, g2.scene.screenPalette.toRgba());
+      flashOff = performance.now() + FLASH_MS;
+    }
   }
+  let lastShown = null;
+  let flashOff = 0;
+  const FLASH_MS = 12;
+  function takeFlashDown(now) {
+    if (flashOff === 0 || !game) return;
+    if (now < flashOff) return;
+    flashOff = 0;
+    game.dropFlash();
+    if (changing || building > 0 || cutsceneBuilding || cutscene?.running) return;
+    if (lastShown) display.present(lastShown, game.scene.screenPalette.toRgba());
+  }
+  let stepOnce = false;
+  let pauseShown = false;
   let changing = false;
   let building = 0;
   function frame() {
     if (!game) return;
     if (changing || building > 0 || cutsceneBuilding) return;
-    if (game.paused) {
-      present(game);
+    if (game.paused && !stepOnce) {
+      if (!pauseShown) {
+        pauseShown = true;
+        present(game);
+      }
       status.textContent = "paused \u2014 press any key";
       return;
     }
+    stepOnce = false;
+    pauseShown = false;
     if (watchRoom && game.drawnRoom !== watchRoom) game.showRoom(watchRoom);
     {
       const c = controls();
@@ -13362,7 +13467,7 @@ async function boot() {
     if (game.paused) {
       e.preventDefault();
       game.paused = false;
-      return;
+      stepOnce = true;
     }
     if (game.awaitingButton) {
       e.preventDefault();
@@ -13555,6 +13660,7 @@ async function boot() {
   let last = performance.now();
   function tick(now) {
     requestAnimationFrame(tick);
+    takeFlashDown(now);
     owed += now - last;
     last = now;
     if (owed > STEP_MS * 5) owed = STEP_MS;
@@ -13571,13 +13677,10 @@ async function boot() {
       owed = 0;
       return;
     }
-    let stepped = false;
     while (owed >= STEP_MS) {
       owed -= STEP_MS;
       frame();
-      stepped = true;
     }
-    if (!stepped && game && watchRoom !== null) frame();
   }
   requestAnimationFrame(tick);
   const w = window;
@@ -13666,6 +13769,10 @@ async function boot() {
     level: w0Level(),
     /** `current_level == 0`: the attract-mode level is playing itself. */
     demo: game.isDemo,
+    /** `is_paused`, which `do_paused` leaves set between single steps. */
+    paused: game.paused,
+    /** The colour `do_flash` is owed after this tick's picture. */
+    flashColour: game.flashColour,
     maxHitPoints: game.maxHitPoints,
     sword: game.kid.sword,
     guard: game.guard.direction === NO_DIRECTION ? null : {

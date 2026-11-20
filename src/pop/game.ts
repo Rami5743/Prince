@@ -856,7 +856,7 @@ export class PopGame {
       draw_tables();
     }
     this.tickBottomText();
-    this.flash();
+    this.flashTick();
     this.playNextSound();
     return this.upsideDown ? this.flipped() : this.surface;
   }
@@ -906,7 +906,7 @@ export class PopGame {
   /**
    * Which palette entries a flash took, to put back on the next tick.
    *
-   * Entry nought was not enough: see `flash`.
+   * Entry nought was not enough: see `raiseFlash`.
    */
   private flashedEntries: number[] = [];
 
@@ -919,6 +919,62 @@ export class PopGame {
    * drawn and the countdown happens after it. The original does it by
    * filling the screen with the colour and blitting the frame back
    * over it with black punched out.
+   *
+   * ### A flash is a sixtieth of a second, not a tick
+   *
+   * `flash_if_hurt` is `do_flash(flash_color)`, which is
+   * `set_timer_length(timer_2, 2); set_bg_attr(0, color);
+   * do_simple_wait(timer_2)`, and `remove_flash_if_hurt` then takes
+   * the colour off **before** `do_simple_wait(timer_1)` spends the
+   * rest of the tick. So the colour is up for the first sixtieth or
+   * two of a five-sixtieth tick and the screen is normal for the
+   * rest of it. A flash is a *blink* at twelve a second, and for
+   * eight ticks of a sword it is eight blinks.
+   *
+   * **Measured, on a capture of `PRINCE.EXE` grabbed at sixty frames
+   * a second**: `addlife2`'s `shift+t` (`flash_color` 4,
+   * `flash_time` 4) on level 2, every frame's share of the screen
+   * that is pure black --
+   *
+   *     frame  3380 3381 3382 3383 3384 3385 3386 3387 3388 3389 ...
+   *     black% 43.1 43.1 43.1 43.1  0.0 43.1 43.1 43.1 43.1  0.0
+   *
+   * -- **four flash frames, 3384, 3389, 3394 and 3399, one video
+   * frame each and five apart**, which is one tick. The flashed
+   * screen's commonest colour is `(170, 0, 0)`, which is the
+   * hardcoded VGA palette's red (42,0,0) through the DAC's
+   * `(v << 2) | (v >> 4)`.
+   *
+   * The port used to hold the colour for the whole tick, because
+   * `render()` put it up and the next `render()` took it down. Eight
+   * ticks of a sword were two thirds of a second of solid yellow
+   * where the original blinks eight times: "the flash when picking
+   * up the sword and when drinking a potion is not the original's".
+   * `render()` now only counts the tick down and says what colour is
+   * owed; `raiseFlash` and `dropFlash` are the two halves the page
+   * runs a sixtieth apart.
+   *
+   * It also puts the port's once-a-tick picture where the capture's
+   * is. `split_ticks.py` keeps, for each tick, the frame just before
+   * the next change -- one of the four unflashed frames above -- so
+   * a port whose tick picture carries the flash can never agree on
+   * a flashing tick. `addlife2` 188 of 191 -> 190.
+   *
+   * ### The colour is the hardcoded sixteen, and it is the same table
+   *
+   * `set_bg_attr`'s commented-out original line is
+   * `palette[vga_pal_index] = vga_palette[hc_pal_index]` -- the
+   * hardcoded sixteen-colour table -- where SDLPoP's stand-in reads
+   * `palette[hc_pal_index]`, the room's own. The two were measured
+   * against each other for the four colours a flash ever takes, on
+   * all fourteen levels:
+   *
+   *     hardcoded   2=[0,42,0]  4=[42,0,0]  14=[63,63,21]  15=[63,63,63]
+   *     levels 1-14 the same, every one
+   *
+   * because `buildLevelScene` loads the EXE's own `vga_palette` into
+   * entries 0 to 15 and no sprite bank's base is under 32. So the
+   * difference is a no-op and `pal.entry(flash_color)` stands.
    *
    * **Every black pixel, not the background entry.** The port gave
    * entry nought the colour and nothing else, and a sprite drawn
@@ -961,24 +1017,49 @@ export class PopGame {
    * recordings -- 14069 of 16599 down to 14045 -- which is the
    * measurement saying the same thing twice.
    */
-  private flash(): void {
+  private flashTick(): void {
+    this.dropFlash();
+    this.flashColourThisTick = g.flash_time !== 0 ? g.flash_color : 0;
+    if (g.flash_time !== 0) --g.flash_time;
+  }
+
+  /**
+   * The colour `do_flash` is owed after this tick's picture, or nought.
+   *
+   * A driver that can draw inside a tick -- the page -- reads this
+   * after `render()` and puts the colour up for a sixtieth. A driver
+   * that draws once a tick leaves it alone, and so holds the picture
+   * the original holds for four fifths of the tick.
+   */
+  get flashColour(): number { return this.flashColourThisTick; }
+  private flashColourThisTick = 0;
+
+  /**
+   * `do_flash(color)` -> `set_bg_attr(0, color)`: the colour over
+   * every pixel of the screen that is black.
+   */
+  raiseFlash(): void {
+    const colour = this.flashColourThisTick;
+    if (colour <= 0 || this.flashedEntries.length !== 0) return;
+    const pal = this.scene.screenPalette;
+    const [r, gr, b] = pal.entry(colour);
+    // Every entry that is black is a pixel the original's colour
+    // key would have let the flash through.
+    for (let i = 0; i < PALETTE_ENTRIES; i++) {
+      const [er, eg, eb] = pal.entry(i);
+      if (er === 0 && eg === 0 && eb === 0) {
+        this.flashedEntries.push(i);
+        pal.setEntry(i, r, gr, b);
+      }
+    }
+  }
+
+  /** `remove_flash()` -> `set_bg_attr(0, 0)`: the black entries back. */
+  dropFlash(): void {
+    if (this.flashedEntries.length === 0) return;
     const pal = this.scene.screenPalette;
     for (const i of this.flashedEntries) pal.setEntry(i, 0, 0, 0);
     this.flashedEntries = [];
-    const colour = g.flash_time !== 0 ? g.flash_color : 0;
-    if (colour > 0) {
-      const [r, gr, b] = pal.entry(colour);
-      // Every entry that is black is a pixel the original's colour
-      // key would have let the flash through.
-      for (let i = 0; i < PALETTE_ENTRIES; i++) {
-        const [er, eg, eb] = pal.entry(i);
-        if (er === 0 && eg === 0 && eb === 0) {
-          this.flashedEntries.push(i);
-          pal.setEntry(i, r, gr, b);
-        }
-      }
-    }
-    if (g.flash_time !== 0) --g.flash_time;
   }
 
   /**

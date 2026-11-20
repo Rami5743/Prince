@@ -39,7 +39,7 @@ describe('the hour', () => {
 });
 
 describe('the flash', () => {
-  it('gives the background the flash colour for as long as it lasts', async () => {
+  it('is owed for as many ticks as `flash_time`, and is a blink in each', async () => {
     const game = await PopGame.start(assets, exe, 1);
     const pal = game.scene.screenPalette;
     // Past the opening picture, which `draw_level_first` draws and
@@ -57,12 +57,46 @@ describe('the flash', () => {
     for (let i = 0; i < 8; i++) {
       game.step({ x: 0, y: 0, shift: false });
       game.render();
+      // `draw_game_frame` leaves the screen alone: the colour goes
+      // up in `flash_if_hurt`, after it, and comes off a sixtieth
+      // later, which is four fifths of the tick with it off. That
+      // is the picture the capture's splitter keeps.
+      expect(pal.entry(0), `tick ${i}, drawn`).toEqual(black);
+      expect(game.flashColour, `tick ${i}, owed`).toBe(14);
+      game.raiseFlash();
       expect(pal.entry(0), `tick ${i} of the flash`).toEqual(yellow);
+      game.dropFlash();
+      expect(pal.entry(0), `tick ${i}, taken down`).toEqual(black);
     }
-    // And the ninth tick has it black again.
+    // And the ninth tick is owed nothing.
     game.step({ x: 0, y: 0, shift: false });
     game.render();
+    expect(game.flashColour).toBe(0);
+    game.raiseFlash();
     expect(pal.entry(0)).toEqual(black);
+  });
+
+  /**
+   * The colour is the hardcoded sixteen, which the room's palette
+   * holds unchanged in entries 0 to 15.
+   *
+   * `set_bg_attr`'s commented-out original line reads
+   * `vga_palette[hc_pal_index]` where SDLPoP's stand-in reads
+   * `palette[hc_pal_index]`. For the four colours a flash ever takes
+   * the two are the same on all fourteen levels, which is why
+   * `pal.entry(flash_color)` is right.
+   */
+  it('takes the hardcoded VGA colour, which is what the room holds too', async () => {
+    const vga: Record<number, [number, number, number]> = {
+      2: [0, 42, 0], 4: [42, 0, 0], 14: [63, 63, 21], 15: [63, 63, 63],
+    };
+    for (const level of [1, 2, 8, 13, 14]) {
+      const game = await PopGame.start(assets, exe, level);
+      const pal = game.scene.screenPalette;
+      for (const [i, want] of Object.entries(vga)) {
+        expect(pal.entry(Number(i)), `level ${level}, entry ${i}`).toEqual(want);
+      }
+    }
   });
 
   it('leaves the background alone when nothing is flashing', async () => {
@@ -71,6 +105,7 @@ describe('the flash', () => {
     for (let i = 0; i < 20; i++) {
       game.step({ x: 0, y: 0, shift: false });
       game.render();
+      game.raiseFlash();
       expect(pal.entry(0)).toEqual([0, 0, 0]);
     }
   });
@@ -100,8 +135,13 @@ describe('the flash, over the torches', () => {
     const game = await PopGame.start(assets, exe, 2);
     for (let i = 0; i < 6; i++) { game.step({ x: 0, y: 0, shift: false }); game.render(); }
 
+    // The surface the last `render()` handed back, read again with
+    // whatever is in the palette now: `render()` is
+    // `draw_game_frame`, so calling it again would spend a tick of
+    // the flash it is being asked about.
+    let shown = game.render();
     const blackPixels = (): number => {
-      const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+      const rgb = shown.toRgb(game.scene.screenPalette.toRgba());
       let n = 0;
       for (let i = 0; i < rgb.length; i += 3) {
         if (rgb[i] < 30 && rgb[i + 1] < 30 && rgb[i + 2] < 30) n += 1;
@@ -117,12 +157,15 @@ describe('the flash, over the torches', () => {
     // `add_life`: four ticks of red.
     game.cheat('shift+t');
     game.step({ x: 0, y: 0, shift: false });
-    game.render();
+    shown = game.render();
     expect(g.flash_color).toBe(4);
+    expect(game.flashColour).toBe(4);
+    game.raiseFlash();
     expect(blackPixels(), 'not one pixel of the screen is still black').toBe(0);
+    game.dropFlash();
 
     // And it all comes back.
-    for (let i = 0; i < 6; i++) { game.step({ x: 0, y: 0, shift: false }); game.render(); }
+    for (let i = 0; i < 6; i++) { game.step({ x: 0, y: 0, shift: false }); shown = game.render(); }
     expect(blackPixels()).toBeGreaterThan(20000);
   });
 });
