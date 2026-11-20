@@ -41,7 +41,7 @@
 ## ============================================================
 
 
-## A `goto` READ AS A `return`, SEVEN SEAMS THAT DEFAULTED TO NOTHING, AND TEN GLOBALS NOBODY READ
+## A `goto` READ AS A `return`, THE 1.3 SOUND PRIORITIES, AND SIX SOUNDS A SPEAKER CANNOT MAKE
 
     measured   32260 of 33047   98%   (unmoved, run for run)
     scenes      2442 of  2601   94%   (unmoved)
@@ -53,8 +53,14 @@
 
 A round spent entirely in the vein the last one opened: divergences
 **no score can see**, found by reading `sdlpop/src` beside
-`src/pop`. Not one number moved, and the three fixes are each
-something a player can meet.
+`src/pop`. Ten of them, and one moved a number -- the other nine are
+each something a player can meet and nothing in the project could
+have told us about. The sections are, in order: a `goto` read as a
+`return`, seven seams that defaulted to nothing, ten globals nobody
+read, two tables read off their ends, two keys the page never read,
+an erase it skipped, the rooms a level really has, three sound
+priorities from the wrong version of the game, six sounds a PC
+speaker cannot make, and `play_next_sound`'s own test.
 
 ### 1. `play_guard`'s `goto` is not a `return`
 
