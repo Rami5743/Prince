@@ -10256,8 +10256,7 @@ function link() {
   l2.autocontrol_opponent.fn = autocontrol_opponent;
   l2.clear_char.fn = clear_char;
   l2.died_on_button.fn = died_on_button;
-  l2.set_start_pos.fn = () => {
-  };
+  l2.set_start_pos.fn = set_start_pos;
   l2.on_guard_killed.fn = on_guard_killed;
   l2.inc_curr_row.fn = inc_curr_row;
   dist2.char_opp_dist = char_opp_dist;

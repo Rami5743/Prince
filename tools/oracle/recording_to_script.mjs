@@ -309,12 +309,60 @@ const DEADLY_LEVELS = new Set([7]);
  * probe got three good ones out of five.
  */
 const DEADLY_WAIT = arg('deadly-wait', 2);
+/**
+ * **And six when the chain stops there**, which is a different
+ * question with a different answer.
+ *
+ * `DEADLY_WAIT` is two because a `shift+l` sent after it is eaten:
+ * once `Kid.alive > 6`, `process_key`'s own
+ * `if (rem_min != 0 && Kid.alive > 6 && control_shift) key = Ctrl+A`
+ * turns the Shift of the skip into a restart. **Nothing is sent
+ * after the last one but Ctrl+A**, which is neither Shift nor
+ * Enter, so the prompt cannot eat it and the wait is free.
+ *
+ * It has to be long, and `rooms7` is why. Two seconds puts the
+ * level's own arrival **inside the window the splitter searches for
+ * the restart flash**: measured on three captures of `rooms7`, the
+ * emulator takes the skip about 1.1 seconds late and the Ctrl+A
+ * about 1.45, so the arrival's black screen lands at `restartAt`
+ * minus 0.9 and `--after-blank` from `restartAt - 1` finds *that*
+ * and numbers the whole run from it. `split_ticks` says so itself:
+ * `restart flash at video frame 71 (117.367s)` against a Ctrl+A the
+ * video puts at 119.73. The arrival also writes its own `LEVEL 7`
+ * for 24 ticks, so `--anchor-text 25` lands on the arrival's title
+ * and not the restart's, and no `--start` can mend it: the Ctrl+A
+ * redraw is quicker than a video frame and leaves no blank at all,
+ * so a later `--start` walks off to the first room change (376 of
+ * 1030, measured).
+ *
+ * **Ten**, so that both the `--start` values `recapture.sh` tries
+ * fall between the two `LEVEL 7` blocks. The arrival's title is dark
+ * by `restartAt - W + 3.1` and the Ctrl+A reaches the emulator at
+ * about `restartAt + 3.7`, and the two candidates are
+ * `restartAt - 4` and `restartAt - 1`: the first needs W over 7.1
+ * and the second over 4.1. The Prince is long dead by then and
+ * `Press Button to Continue` is up -- it appears about five seconds
+ * after the arrival and holds for 288 ticks -- and that does not
+ * matter: Ctrl+A is neither Shift nor Enter, so the prompt cannot
+ * eat it, and it restarts the level whatever is written under the
+ * room.
+ *
+ * The blank search cannot help here whatever `--start` is given:
+ * the Ctrl+A redraw is quicker than a video frame, so the restart
+ * leaves **no blank at all** and `--after-blank` walks off to the
+ * first room change of the tour (376 of 1030, measured). It is the
+ * `--anchor-text` splits with no blank search -- which
+ * `recapture.sh` tries once the four ordinary ones have agreed on
+ * less than half the run -- that land on the restart.
+ */
+const LAST_DEADLY_WAIT = arg('last-deadly-wait', 10);
 let skipSeconds = 0;
 let lastWait = SETTLE_L1;
 for (let l = 1; l < rec.level; l++) {
   // `shift+l` takes the game from level `l` to level `l + 1`, and it
   // is the level arrived at that may have a scene before it.
-  const w = DEADLY_LEVELS.has(l + 1) ? DEADLY_WAIT
+  const w = DEADLY_LEVELS.has(l + 1)
+    ? (l + 1 === rec.level ? LAST_DEADLY_WAIT : DEADLY_WAIT)
     : SKIP_WAIT + (CUTSCENE_SECONDS[l + 1] ?? 0);
   skipSeconds += w;
   lastWait = w;

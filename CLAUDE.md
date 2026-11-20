@@ -41,6 +41,102 @@
 ## ============================================================
 
 
+## `rooms7` IS EXACT: A STUBBED `set_start_pos` AND A CAPTURE NUMBERED FROM THE WRONG TICK
+
+    measured   32260 of 33047   98%   (was 32093 of 33067, 97%)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       491 of   494         (unmoved)
+
+    rooms7       942 of  1129  ->  **1109 of 1109**
+
+The last gameplay shortfall with a real fault in it. It was two
+things, and the old account -- "the twenty are the death:
+`Char.alive` does not advance while the death music plays and the
+port's `RESTART_PROMPT_DELAY` is a constant 46" -- was neither of
+them. (`RESTART_PROMPT_DELAY` is in `src/game`, the hand-written
+port nothing uses.)
+
+### 1. The capture's tick nought was the level's *arrival*, not the Ctrl+A
+
+`rooms7` is the one probe whose chain ends on level 7, and level 7
+is the one level the chain has to hurry past: `DEADLY_WAIT` is two
+seconds because a `shift+l` sent after that is eaten --
+`process_key`'s `if (rem_min != 0 && Kid.alive > 6 && control_shift)
+key = Ctrl+A` turns the Shift of a skip into a restart.
+
+Two seconds is not enough room for the **splitter**. The emulator
+takes the skip about 1.1 seconds late and the Ctrl+A about 1.45, so
+the level's own arrival lands inside the window
+`split_ticks.py --after-blank` searches, and it is a real black
+screen where the Ctrl+A redraw is quicker than a video frame and
+leaves none at all. The splitter says so itself:
+
+    restart flash at video frame 71 (117.367s)
+    title goes off at tick 24; renumbering by +1
+
+against a Ctrl+A the video puts at **119.73** -- and the two are
+indistinguishable, because both start level 7, both write `LEVEL 7`
+for 24 ticks, and in both he falls down the shaft and dies. The
+whole run was numbered **twenty-six ticks early**.
+
+No `--start` can mend it: with the search started after the arrival
+the blank walk goes off to the first room change of the tour (376 of
+1030, measured), and the anchor lands on the arrival's title
+whatever it is given. **Three fresh captures at two seconds scored
+885, 913 and 925** against the pinned 942, so it was never the
+capture lottery.
+
+`LAST_DEADLY_WAIT` is **ten** seconds: the wait after the *last*
+skip of a chain, where nothing follows but the Ctrl+A, which is
+neither Shift nor Enter and so cannot be eaten. Ten puts both the
+`--start` values `recapture.sh` tries between the two `LEVEL 7`
+blocks -- the arrival's title is dark by `restartAt - W + 3.1` and
+the Ctrl+A arrives at about `restartAt + 3.7`, so the candidates
+`restartAt - 4` and `restartAt - 1` need W over 7.1 and over 4.1.
+**Eight splits of two captures then read 1041 to 1057**, with no
+spread worth the name, and the best is 1057 of 1109.
+
+### 2. And the fifty-two ticks left were **nine pixels**, from a stub
+
+`play_kid`'s resurrect is
+
+    if (resurrect_time) {
+        stop_sounds(); loadkid(); hitp_delta = hitp_max;
+        seqtbl_offset_char(seq_2_stand); Char.x += 8;
+        play_seq(); load_fram_det_col(); set_start_pos();
+    }
+
+and it reaches `set_start_pos` through a slot in `link.ts`, because
+seg006 and seg003 are a cycle. **`wire.ts` had the slot wired to
+`() => {}`.** `do_startpos` calls the real one directly, so nothing
+but the `r` cheat ever went through the slot and nothing ever
+noticed.
+
+So `r` left the Prince standing wherever his corpse had come to
+rest, with every one of that function's resets undone: `Char.y =
+y_land[Char.curr_row + 1]`, `fall_y`, `fall_x`, `is_feather_fall`,
+`upside_down`, `knock`, `is_screaming`, `offguard`, the sword
+sheathed, and the `savekid()` that writes it all back.
+
+Measured, on the tick after the `r`:
+
+    the port    Char.y 179   where he died, on the floor of room 3
+    y_land[3]          181   where `set_start_pos` puts him
+
+Two pixels. Over the fifty-two ticks he then stands still that is
+**194 pixels of each frame and nine outside the digest's mask** --
+a sliver of the back of his cloak at x 77..78, y 152..160 -- and
+the capture's picture is the port's shifted down by two:
+differences in the box round him go 147 at dy 0 and **43 at dy 2**.
+
+With the slot wired, **`rooms7` is 1109 of 1109** and nothing else
+in the suite moves by a tick.
+
+**The lesson is the slot.** `wire.ts` has thirty-odd of them and one
+was a stub; the only thing that ever called it was a cheat, and the
+only probe that uses that cheat is the one that was short.
+
+
 ## THE BUTTON AFTER A DEATH IS A HELD KEY, AND IT WAITS FOR THE DEATH
 
     measured   32093 of 33067   97%   (unmoved, run for run)
@@ -950,7 +1046,7 @@ second.)
     rooms4    1154 of 1154   rooms11   1104 of 1105
     rooms5     914 of  914   rooms12   1157 of 1157
     rooms6     626 of  627   rooms13    451 of  483
-    rooms7     942 of 1129   rooms14    221 of  221
+    rooms7    1109 of 1109   rooms14    221 of  221
     rooms8     967 of  967
 
     title        586 of   633  ->  588 of 633
@@ -1042,7 +1138,10 @@ minutes of DOSBox at two tries.
   dropping six floors on room 23 -- the room level 13 starts in and
   the same `prandom` that is the whole of what `level13` and
   `jaffar` are short. Every tick from 53 on is exact.
-* **`rooms7`'s 187 are the fall level 7 opens with.** The Prince is
+* **`rooms7`'s 187** -- it is **1109 of 1109** now; what follows is
+  how it read before the capture was numbered from the Ctrl+A and
+  `set_start_pos` was wired in. See the top of this file.
+  The Prince is
   dead on tick 17 and a tour played past a dead Prince scored **292
   of 1131** (342 at its best offset). Nothing a player can hold
   saves him: fifteen Shift hold lengths measured in the port, and
@@ -2854,9 +2953,9 @@ and it is now the game the player plays: `web/main.ts` starts
 Where it stands, measured by `tools/dev/pop-report.ts` against the
 captures of a real PRINCE.EXE:
 
-    measured         32093 of 33067   97%
+    measured         32260 of 33047   98%
     retired           1883 of  3767   50%
-    all              33976 of 36834   92%
+    all              34143 of 36814   93%
 
 (The jump is the thirteen room tours: see the top of this file. The
 suite had drawn 59 of the game's 266 rooms and now draws 262.)

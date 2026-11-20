@@ -21,7 +21,7 @@ import {
   on_guard_killed, inc_curr_row, control_guard_inactive, hp as guardHp,
   do_auto_moves, demo as demoMoves,
 } from './seg002.ts';
-import { dist as seg003dist, rooms as seg003rooms } from './seg003.ts';
+import { dist as seg003dist, rooms as seg003rooms, set_start_pos } from './seg003.ts';
 import {
   draw_hp, draw_kid_hp, draw_guard_hp, add_life, feather_fall, toggle_upside,
 } from './seg000.ts';
@@ -55,7 +55,28 @@ export function link(): void {
   l2.autocontrol_opponent.fn = autocontrol_opponent;
   l2.clear_char.fn = clear_char;
   l2.died_on_button.fn = died_on_button;
-  l2.set_start_pos.fn = () => {};
+  /**
+   * **The resurrect cheat's own `set_start_pos`, which was a stub.**
+   *
+   * `play_kid`'s `if (resurrect_time) { ...; set_start_pos(); }` is
+   * the only caller that reaches this slot -- `do_startpos` calls
+   * `set_start_pos` directly -- and the slot was wired to nothing,
+   * so `r` left the Prince standing wherever his corpse had come to
+   * rest and with every one of that function's resets undone:
+   * `Char.y = y_land[Char.curr_row + 1]`, `fall_y`, `fall_x`,
+   * `is_feather_fall`, `upside_down`, `knock`, `is_screaming`,
+   * `offguard`, the sword sheathed, and the `savekid()` that writes
+   * all of it back.
+   *
+   * Measured against the original on `rooms7`, which is the one
+   * probe that uses `r`: the Prince died on the floor of level 7's
+   * room 3 at **y 179** and stood up there, where
+   * `y_land[2 + 1]` is **181** and the capture draws him two pixels
+   * lower. Nine pixels outside the digest's mask, on every one of
+   * the fifty-two ticks he then stands still -- `rooms7` 1057 of
+   * 1109 -> 1109 of 1109.
+   */
+  l2.set_start_pos.fn = set_start_pos;
   l2.on_guard_killed.fn = on_guard_killed;
   l2.inc_curr_row.fn = inc_curr_row;
   seg003dist.char_opp_dist = char_opp_dist;

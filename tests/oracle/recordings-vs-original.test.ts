@@ -257,31 +257,44 @@ const EXPECTED: Record<string, number> = {
    */
   rooms13: 451,
   /**
-   * **942 of 1129**, and the whole of its 187 is the fall level 7
-   * opens with.
+   * **1109 of 1109, exact**, and it took a capture that was numbered
+   * from the right tick and one stubbed-out function.
    *
    * `set_start_pos` drops the Prince down a three-room shaft and
    * `land()` makes six rows of terminal velocity `take_hp(100)`, so
-   * he is dead on tick 17 and a tour played past a dead Prince is
-   * a different run: the first try of this probe, with nothing done
-   * about it, scored **292 of 1131** and 342 at its best offset.
-   * Nothing the player can hold saves him -- measured in the port
-   * at fifteen Shift hold lengths, he grabs and dies four ticks
-   * after the grab is let go, every time (hold 0 dies at 17, hold
-   * 40 at 52) -- and `shift+w` does not either, because the fall
-   * has already started. `r` does: `resurrect` on tick 24 leaves
-   * him alive in room 3 with three flasks.
+   * he is dead on tick 17 and a tour played past a dead Prince is a
+   * different run: the first try of this probe, with nothing done
+   * about it, scored **292 of 1131**. Nothing the player can hold
+   * saves him -- measured in the port at fifteen Shift hold lengths,
+   * he grabs and dies four ticks after the grab is let go, every
+   * time -- and `shift+w` does not either, because the fall has
+   * already started. `r` does, and the probe takes it on tick 24.
    *
-   * What is left is one offset. At **-20** the capture agrees with
-   * the port on **1028 of its 1129**, which is twenty ticks more
-   * than `exactAgreement`'s window can walk, and the twenty are the
-   * death: `Char.alive` does not advance while the death music is
-   * playing and the port's `RESTART_PROMPT_DELAY` is a constant 46.
-   * Fifty ticks the port never draws anywhere are the death
-   * animation itself. Every one of the twenty-four rooms is on the
-   * screen of both runs.
+   * **The 187 it was short of was two things and neither was the
+   * death music.**
+   *
+   * The capture's tick nought was the *arrival* of level 7 from the
+   * skip chain and not the Ctrl+A, twenty-six ticks later:
+   * `recording_to_script.mjs` left only two seconds between the last
+   * `shift+l` and the restart, the emulator takes the skip about 1.1
+   * seconds late and the Ctrl+A about 1.45, and the splitter said so
+   * itself -- `restart flash at video frame 71 (117.367s)` against a
+   * Ctrl+A the video puts at 119.73. Three fresh captures at two
+   * seconds scored 885, 913 and 925 against the pinned 942, so it
+   * was never the capture lottery. At ten seconds
+   * (`LAST_DEADLY_WAIT`, which is free because nothing is sent after
+   * the last skip but a Ctrl+A, and Ctrl+A is neither Shift nor
+   * Enter) eight splits of two captures all read 1041 to 1057.
+   *
+   * What was left after that was **nine pixels**, on every one of
+   * the fifty-two ticks the Prince stands still after the `r`:
+   * `play_kid`'s `if (resurrect_time) { ...; set_start_pos(); }`
+   * reaches that function through a slot in `link.ts`, and
+   * `wire.ts` had the slot wired to `() => {}`. He stood up where
+   * his corpse lay, at **y 179**, where `y_land[2 + 1]` is **181**,
+   * and the capture draws him two pixels lower.
    */
-  rooms7: 942,
+  rooms7: 1109,
   /**
    * **221 of 221**, the five rooms of level 14 a tour may draw.
    *

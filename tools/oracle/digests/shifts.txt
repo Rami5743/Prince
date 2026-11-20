@@ -153,7 +153,17 @@ rooms2 0  (one capture; try 1 scored 781, try 2 1153 on all four splits)
 # The room tours. No keys, so no shift: 0 is the only one there is.
 rooms3 0   rooms4 0   rooms5 0   rooms6 0   rooms8 0
 rooms9 0   rooms10 0  rooms11 0  rooms12 0  rooms13 0
-rooms7 0   rooms14 0
+rooms14 0
+# `rooms7` is captured with `LAST_DEADLY_WAIT` ten, not the two the
+# chain uses when it only passes through level 7: at two seconds the
+# level's own arrival is inside the window the splitter searches for
+# the restart flash, and the whole run was numbered from it --
+# twenty-six ticks early, and 885, 913, 925 and 942 on four captures
+# that way. At ten, eight splits of two captures read 1041 to 1057
+# and the winner is 1057 of 1109 (`--start 120`, clock numbering,
+# `--anchor-text 25`, `--after-blank`). The port then scores
+# 1109 of 1109.
+rooms7 0
 # `rooms1` is the one tour the chain reaches with no `shift+l` in
 # front of it, so its Ctrl+A lands while the first level is still
 # showing its own LEVEL 1 / 60 MINUTES LEFT and the anchor numbers
