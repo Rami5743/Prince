@@ -199,10 +199,30 @@ second**, which is the two halves of this round's work meeting in the
 middle: `FEATHER_SOUND_TICKS` 223 is now measured twice, by two
 different routes, against the original.
 
-What is still not done is a **picture** digest of the potion level:
-`digest-common.ts` builds its `Assets` from `GAME_DIR` with no way to
-say otherwise, and the rule is not to weaken it. A `levels` field
-there, matching the sound side's, is the whole of what it needs.
+### 7. And a **picture** digest of it is `prandom`, which is measured
+
+Before spending a capture on the eye as well as the ear, the question
+`probe-seeds.ts` exists to ask: two runs of `potion1` at seeds 77776
+apart, every tick's picture hashed.
+
+    346 of 1012 ticks differ, from tick 0
+
+It is the **bubbles**. `start_anim_potion` (`seg007:0852`) is
+`curr_room_modif[tilepos] &= 0xf8; |= prandom(6) + 1`, so every flask
+on the screen draws a phase the generator chose, `anim_tile_modif`
+runs it on every room that is drawn, and the original seeds
+`random_seed` from its own clock. A room with three flasks in it is
+never the same picture twice. (Seeding *after* `PopGame.start`
+instead of through it reads 137 of 1012, which is the same thing
+measured wrong -- room 1's flasks were already seeded by then. The
+346 is the honest number.)
+
+So **the potion level is measurable by ear and not by eye**, and that
+is the finding rather than a thing to go and fix: the only way to
+make the pictures agree would be to mask the potion tiles out of
+`digest.py`, which is weakening the one instrument that decides
+whether a tick counts. `potionsnd`'s 25 of 25 is what this level has
+to say, and it says it exactly.
 
 ## THE FEATHER SOUND: THE ORIGINAL GOES SILENT FOR EIGHTEEN AND A HALF SECONDS, AND A TUNE ENDS WHEN ITS SEQUENCE DOES
 
