@@ -23,7 +23,28 @@ export class LevelState {
 
   constructor(level: Level) {
     this.fg = level.fg.slice();
-    this.modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
+    /**
+     * `alter_mods_allrm` walks `1 .. level.used_rooms`, not `1 .. 24`.
+     *
+     *     if (level.used_rooms > 24) level.used_rooms = 24;
+     *     for (word room = 1; room <= level.used_rooms; room++) { ... }
+     *
+     * The port passed a flat 24. Eleven of the sixteen records say 25
+     * and are capped to 24, so for them it is the same walk -- but
+     * **level 10 says 21, level 14 says 7 and level 15 says 9**, and
+     * in those the rooms past the count keep their raw modifiers in
+     * the original: a gate with modifier 1 stays 1 instead of
+     * becoming 188, a potion stays unshifted, a wall keeps its stored
+     * byte instead of its connections.
+     *
+     * Nothing in the suite draws one of those rooms -- level 10's
+     * tour reaches 19 and level 14's 6 -- so no score moves by it
+     * (measured: 32260 of 33047, run for run), but it is a line of
+     * the C and the rooms are there in the file.
+     */
+    this.modifiers = alterModifiers(
+      level.fg, level.bg, level.roomLinks, level.usedRooms,
+    );
     this.roomLinks = level.roomLinks.slice();
     this.doorLinks1 = level.doorLinks1.slice();
     this.doorLinks2 = level.doorLinks2.slice();

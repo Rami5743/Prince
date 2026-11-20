@@ -306,14 +306,40 @@ async function boot(): Promise<void> {
     + 'hold shift to step carefully and to keep hold of a ledge, '
     + 'then up again to climb it';
 
-  /** Which directions a key stands for. */
+  /**
+   * Which directions a key stands for, against `read_keyb_control`.
+   *
+   * `seg000:1500` is four lists and they are not the four a keyboard
+   * suggests:
+   *
+   *     up     UP, HOME, PAGEUP, KP_8, KP_7, KP_9
+   *     down   DOWN, CLEAR, KP_5, KP_2
+   *     left   LEFT, HOME, KP_4, KP_7
+   *     right  RIGHT, PAGEUP, KP_6, KP_9
+   *
+   * Two of those the page did not have, and both are keys a player
+   * presses:
+   *
+   * * **`KP_5` is `down`**, not nothing. It was mapped to no
+   *   direction at all, so a player using the keypad the way the
+   *   game's own manual draws it got nothing from the middle key.
+   * * **Home and PageUp are the diagonals**, each in two lists at
+   *   once -- Home is left *and* up, PageUp right *and* up. On a
+   *   keyboard with no numeric keypad they are the only way to jump
+   *   diagonally with the keys the original names, and the page had
+   *   neither.
+   *
+   * `Numpad1` and `Numpad3` are in no list of the C's and are kept
+   * anyway: they are the obvious diagonals on a keypad and taking
+   * them away would only cost a player a key that works.
+   */
   function directionsOf(e: KeyboardEvent): string[] | null {
     switch (e.code) {
-      case 'Numpad7': return ['left', 'up'];
+      case 'Numpad7': case 'Home': return ['left', 'up'];
       case 'Numpad8': return ['up'];
-      case 'Numpad9': return ['right', 'up'];
+      case 'Numpad9': case 'PageUp': return ['right', 'up'];
       case 'Numpad4': return ['left'];
-      case 'Numpad5': return [];
+      case 'Numpad5': case 'NumpadClear': return ['down'];
       case 'Numpad6': return ['right'];
       case 'Numpad1': return ['left', 'down'];
       case 'Numpad2': return ['down'];
@@ -915,7 +941,6 @@ async function boot(): Promise<void> {
     // Taken, so that a key meant for the game never reaches the page
     // and scrolls it instead.
     e.preventDefault();
-    if (dirs.length === 0) held.clear();
     for (const d of dirs) { held.add(d); pressedSinceStep.add(d); }
     recorder.key('down', e.code);
     if (watchRoom !== null) {

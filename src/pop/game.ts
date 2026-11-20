@@ -1585,9 +1585,19 @@ export class PopGame {
    * And it drew the new room *before* the tick rather than inside it,
    * so `do_mobs`, `check_skel`, `play_kid_frame` and `exit_room` all
    * ran a tick early against the room they test `drawn_room` for.
+   *
+   * **And there is no test in front of the two lines.** This opened
+   * on `if (room === g.drawn_room) return;`, which costs nothing for
+   * `next_room` -- `check_the_end` is `if (next_room != 0 &&
+   * next_room != drawn_room)` and does nothing either way -- but
+   * skipped the erase. So **Ctrl+B pressed in the room the Prince is
+   * already in**, which is the ordinary way to stop looking around,
+   * left the guard's flasks painted under the room where the
+   * original rubs them out, and nothing redraws them: `draw_hp` only
+   * touches them while `guardhp_delta` is set. No digest moves by
+   * it, measured: 32260 of 33047 either way, run for run.
    */
   showRoom(room: number): void {
-    if (room === g.drawn_room) return;
     draw_guard_hp(0, 10);
     g.next_room = room;
   }

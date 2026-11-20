@@ -21,6 +21,7 @@ import { loose_land } from '../../src/pop/seg007.ts';
 import { on_guard_killed, clear_char, load_room_links } from '../../src/pop/seg002.ts';
 import { play_kid_frame, play_guard_frame } from '../../src/pop/seg000.ts';
 import * as seg006 from '../../src/pop/seg006.ts';
+import { setPainter, type Peel } from '../../src/pop/seg008.ts';
 import { jump_through_mirror } from '../../src/pop/seg003.ts';
 import { hud } from '../../src/pop/link.ts';
 import { tiles, charids, directions, seqids } from '../../src/pop/types.ts';
@@ -364,6 +365,54 @@ describe('the lines the translation dropped', () => {
     // bytes after it.
     expect([get_tile_div_mod(256), obj_xl_of()]).toEqual([12, 244]);
     expect([get_tile_div_mod(260), obj_xl_of()]).toEqual([2, 44]);
+  });
+
+  /**
+   * **H, J, U, N and Ctrl+B erase the guard's hit points, even when
+   * the room asked for is the one already drawn.**
+   *
+   * `process_key`'s five looking-around cheats are each two lines:
+   *
+   *     case SDL_SCANCODE_H: draw_guard_hp(0, 10); next_room = room_L; break;
+   *
+   * and there is no test in front of them. The port's `showRoom`
+   * opened on `if (room === g.drawn_room) return;`, which costs
+   * nothing for `next_room` -- `check_the_end` is
+   * `if (next_room != 0 && next_room != drawn_room)` and does
+   * nothing either way -- but skips the erase. So **Ctrl+B pressed
+   * in the room the Prince is already in**, which is the ordinary
+   * way to stop looking around, left the guard's flasks painted
+   * under the room where the original rubs them out. Nothing
+   * redraws them: `draw_hp` only touches them while `guardhp_delta`
+   * is set.
+   *
+   * No digest moves by it, measured: 32260 of 33047 either way, run
+   * for run.
+   */
+  it('looking at the room already drawn still erases the guard hit points', async () => {
+    const game = await PopGame.start(assets, exe, 2);
+    const blits: Array<{ x: number; y: number; blit: number }> = [];
+    // The painter is one global and `PopGame.start` sets it, so the
+    // recorder goes in after the game is built and the next
+    // `PopGame.start` puts the real one back.
+    setPainter({
+      image: () => null,
+      blit: (_chtab, _id, x, y, blit) => { blits.push({ x, y, blit }); },
+      rect: () => {},
+      clip: () => {},
+      text: () => {},
+      readPeel: () => ({ x: 0, y: 0, width: 0, height: 0, pixels: new Uint8Array(0) } as unknown as Peel),
+      restorePeel: () => {},
+      target: () => {},
+    });
+    g.Guard.charid = charids.charid_2_guard;
+    game.showRoom(g.drawn_room);
+    // `draw_guard_hp(0, 10)` is ten erases of the flask row and
+    // nothing drawn: `blitters_9_black` on row 194.
+    expect(blits.length).toBe(10);
+    expect(blits.every((b) => b.blit === 9 && b.y === 194)).toBe(true);
+    // And the real painter back, for whatever runs next.
+    await PopGame.start(assets, exe, 1);
   });
 
   it('the diagonal rooms are found sideways when there is none above', async () => {

@@ -3104,7 +3104,12 @@ var LevelState = class {
   startDir;
   constructor(level) {
     this.fg = level.fg.slice();
-    this.modifiers = alterModifiers(level.fg, level.bg, level.roomLinks, 24);
+    this.modifiers = alterModifiers(
+      level.fg,
+      level.bg,
+      level.roomLinks,
+      level.usedRooms
+    );
     this.roomLinks = level.roomLinks.slice();
     this.doorLinks1 = level.doorLinks1.slice();
     this.doorLinks2 = level.doorLinks2.slice();
@@ -11461,9 +11466,19 @@ var PopGame = class _PopGame {
    * And it drew the new room *before* the tick rather than inside it,
    * so `do_mobs`, `check_skel`, `play_kid_frame` and `exit_room` all
    * ran a tick early against the room they test `drawn_room` for.
+   *
+   * **And there is no test in front of the two lines.** This opened
+   * on `if (room === g.drawn_room) return;`, which costs nothing for
+   * `next_room` -- `check_the_end` is `if (next_room != 0 &&
+   * next_room != drawn_room)` and does nothing either way -- but
+   * skipped the erase. So **Ctrl+B pressed in the room the Prince is
+   * already in**, which is the ordinary way to stop looking around,
+   * left the guard's flasks painted under the room where the
+   * original rubs them out, and nothing redraws them: `draw_hp` only
+   * touches them while `guardhp_delta` is set. No digest moves by
+   * it, measured: 32260 of 33047 either way, run for run.
    */
   showRoom(room) {
-    if (room === g.drawn_room) return;
     draw_guard_hp(0, 10);
     g.next_room = room;
   }
@@ -13459,15 +13474,18 @@ async function boot() {
   function directionsOf(e) {
     switch (e.code) {
       case "Numpad7":
+      case "Home":
         return ["left", "up"];
       case "Numpad8":
         return ["up"];
       case "Numpad9":
+      case "PageUp":
         return ["right", "up"];
       case "Numpad4":
         return ["left"];
       case "Numpad5":
-        return [];
+      case "NumpadClear":
+        return ["down"];
       case "Numpad6":
         return ["right"];
       case "Numpad1":
@@ -13837,7 +13855,6 @@ async function boot() {
     const dirs = directionsOf(e);
     if (dirs === null) return;
     e.preventDefault();
-    if (dirs.length === 0) held.clear();
     for (const d of dirs) {
       held.add(d);
       pressedSinceStep.add(d);

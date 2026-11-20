@@ -27,12 +27,34 @@ import { proc_get_object } from '../../src/pop/seg006.ts';
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
 
-/** Every `tiles_10_potion` of a level, with the kind `do_pickup` reads. */
+/**
+ * Every `tiles_10_potion` of a level, with the kind `do_pickup` reads.
+ *
+ * `1 .. used_rooms`, which is the walk `alter_mods_allrm` makes and
+ * so the only rooms whose modifier byte means anything:
+ *
+ *     if (level.used_rooms > 24) level.used_rooms = 24;
+ *     for (word room = 1; room <= level.used_rooms; room++) { ... }
+ *
+ * Eleven of the sixteen records say 25 and are capped to 24, but
+ * **level 10 says 21, level 14 says 7 and level 15 says 9**, and the
+ * rooms past the count keep whatever raw byte the file has -- level
+ * 14's rooms 8, 12, 13 and 18 have a potion tile among them, with a
+ * raw byte that reads as an inversion once it is shifted and does
+ * not once it is left alone.
+ *
+ * Nothing can reach them, and that is measured rather than assumed:
+ * walking `roomlinks` from each level's start room reaches
+ * **no room past `used_rooms` on any of the sixteen records**
+ * (level 10 reaches 19 of its 21, level 14 six of its 7, level 15
+ * six of its 9).
+ */
 async function potionsOf(level: number): Promise<{ room: number; row: number; col: number; kind: number }[]> {
   const game = await PopGame.start(assets, exe, level);
   const st = game.scene.state;
+  const rooms = Math.min(game.scene.level.usedRooms, 24);
   const out: { room: number; row: number; col: number; kind: number }[] = [];
-  for (let room = 1; room <= 24; room++) {
+  for (let room = 1; room <= rooms; room++) {
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 10; col++) {
         if (st.typeAt(room, col, row) !== 10) continue;
@@ -42,6 +64,50 @@ async function potionsOf(level: number): Promise<{ room: number; row: number; co
   }
   return out;
 }
+
+describe('the rooms a level really has', () => {
+  /**
+   * **`alter_mods_allrm` walks `1 .. used_rooms`, not `1 .. 24`**,
+   * and three of the sixteen records say less than 24: level 10
+   * says 21, level 14 says 7 and level 15 says 9. The port used to
+   * pass a flat 24, so a gate with modifier 1 in one of those rooms
+   * became 188 where the original leaves it 1, and a potion was
+   * shifted where the original leaves it alone. 47 tiles of level
+   * 10 and 278 of level 14 are altered by the difference.
+   *
+   * It is unobservable in play, and that is the measurement rather
+   * than an assumption: walking `roomlinks` from the start room
+   * reaches no room past `used_rooms` on any of the sixteen.
+   */
+  it('never links to a room past used_rooms', async () => {
+    for (let level = 0; level <= 15; level++) {
+      const game = await PopGame.start(assets, exe, level);
+      const { roomLinks, usedRooms, startRoom } = game.scene.level;
+      const used = Math.min(usedRooms, 24);
+      const seen = new Set<number>([startRoom]);
+      const queue = [startRoom];
+      while (queue.length) {
+        const room = queue.pop()!;
+        for (let dir = 0; dir < 4; dir++) {
+          const next = roomLinks[(room - 1) * 4 + dir];
+          if (next >= 1 && next <= 24 && !seen.has(next)) {
+            seen.add(next);
+            queue.push(next);
+          }
+        }
+      }
+      expect([...seen].filter((r) => r > used), `level ${level}`).toEqual([]);
+    }
+  });
+
+  it('says 21 rooms on level 10, 7 on level 14 and 9 on level 15', async () => {
+    const used = [];
+    for (const level of [10, 14, 15]) {
+      used.push((await PopGame.start(assets, exe, level)).scene.level.usedRooms);
+    }
+    expect(used).toEqual([21, 7, 9]);
+  });
+});
 
 describe('where the potions are', () => {
   it('puts the two inversion potions in level 9, and no others anywhere', async () => {

@@ -46,7 +46,7 @@
     measured   32260 of 33047   98%   (unmoved, run for run)
     scenes      2442 of  2601   94%   (unmoved)
     sounds       491 of   494         (unmoved)
-    npm test     797 -> 801
+    npm test     797 -> 818
 
 A round spent entirely in the vein the last one opened: divergences
 **no score can see**, found by reading `sdlpop/src` beside
@@ -199,7 +199,72 @@ checked line by line against `sdlpop/src` and is faithful:
   `get_edge_distance`, `add_guard_to_objtable`, `hurt_by_sword`,
   `draw_objtable_item`** -- all faithful.
 
-### 6. Two paths the page had never been compared on, and both are exact
+### 6. Two keys the page did not read, and one erase it skipped
+
+Neither of these is in `src/pop` and neither could be: `pop-report.ts`
+and `page-port.ts` both hand the game a `{x, y, shift}` and never go
+through the page's key map at all, and `__princeHold` takes a
+direction by name.
+
+**`read_keyb_control` (`seg000:1500`) is four lists and they are not
+the four a keyboard suggests:**
+
+    up     UP, HOME, PAGEUP, KP_8, KP_7, KP_9
+    down   DOWN, CLEAR, KP_5, KP_2
+    left   LEFT, HOME, KP_4, KP_7
+    right  RIGHT, PAGEUP, KP_6, KP_9
+
+Two of those the page did not have, and both are keys a player
+presses. **`KP_5` is `down`**, where the page had it standing for no
+direction at all -- the middle key of the keypad did nothing. And
+**Home and PageUp are the diagonals**, each in two lists at once; on
+a keyboard with no numeric keypad they are the only way to jump
+diagonally with the keys the original names, and the page had
+neither. `Numpad1` and `Numpad3` are in no list of the C's and are
+kept anyway, because taking them away would only cost a player a key
+that works. `tests/browser/controls.test.ts` dispatches a real
+`KeyboardEvent` for each of the thirteen and reads `held` back.
+
+**And `showRoom` had a test the C does not.** The five
+looking-around cheats are each two lines --
+`draw_guard_hp(0, 10); next_room = room_L;` -- with nothing in front
+of them, and the port opened on `if (room === g.drawn_room) return;`.
+That costs nothing for `next_room`, because `check_the_end` is
+`if (next_room != 0 && next_room != drawn_room)` and does nothing
+either way; what it skipped is the **erase**. So Ctrl+B pressed in
+the room the Prince is already in -- the ordinary way to stop
+looking around -- left the guard's flasks painted under the room
+where the original rubs them out, and nothing redraws them:
+`draw_hp` only touches them while `guardhp_delta` is set. Measured:
+**32260 of 33047 either way, run for run.**
+
+### 7. `alter_mods_allrm` walks `1 .. used_rooms`, and three records say less than 24
+
+    if (level.used_rooms > 24) level.used_rooms = 24;
+    for (word room = 1; room <= level.used_rooms; room++) { ... }
+
+The port passed a flat 24. Eleven of the sixteen records say 25 and
+are capped, so for them it is the same walk -- but **level 10 says
+21, level 14 says 7 and level 15 says 9**, and in the original the
+rooms past the count keep their raw modifier byte: a gate with
+modifier 1 stays 1 instead of becoming 188, a potion stays
+unshifted, a wall keeps its stored byte instead of its connections.
+**47 tiles of level 10 and 278 of level 14** are altered by the
+difference, and level 15 has none.
+
+It is unobservable in play, and that is measured rather than
+assumed: walking `roomlinks` from the start room reaches **no room
+past `used_rooms` on any of the sixteen records** (level 10 reaches
+19 of its 21, level 14 six of its 7, level 15 six of its 9). The
+score is 32260 of 33047 either way, run for run.
+
+It did move a **test**, which is the useful half: `potions.test.ts`
+walked rooms 1 to 24 of every level and so found four more
+"inversion potions" in level 14's rooms 8, 12, 13 and 18 -- raw
+bytes in rooms the game never alters and nothing can reach. The walk
+is `1 .. used_rooms` now, and the reachability is pinned beside it.
+
+### 8. Two paths the page had never been compared on, and both are exact
 
 `tools/dev/page-port.ts` covered fourteen levels, nine scenes, the
 eleven cheats and all thirteen transitions. It now also covers the
