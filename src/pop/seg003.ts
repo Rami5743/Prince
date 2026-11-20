@@ -20,7 +20,7 @@ import {
 } from './seg006.ts';
 import { seqtbl_offset_char } from './seg005.ts';
 import { trigger_button, start_level_door, do_knock } from './seg007.ts';
-import { l8, out, hud } from './link.ts';
+import { l8, out, hud, unlinked } from './link.ts';
 
 const TILE_SIZEX = 14;
 const TILE_MIDX = 7;
@@ -33,9 +33,11 @@ export let distance_mirror = 0;
 export const screen = { different_room: 0 };
 
 /** `char_opp_dist`, which is in seg002; filled in there. */
-export const dist = { char_opp_dist: (): number => 0 };
+export const dist = { char_opp_dist: unlinked<() => number>('char_opp_dist') };
 /** `goto_other_room`, which is in seg002. */
-export const rooms = { goto_other_room: (_direction: number): void => {} };
+export const rooms = {
+  goto_other_room: unlinked<(direction: number) => number>('goto_other_room'),
+};
 
 // seg003:0239
 /** `custom->demo_hitp` and `custom->demo_end_room`, out of the executable. */

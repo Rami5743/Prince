@@ -25,6 +25,22 @@ function slot<T extends Fn>(name: string): { fn: T } {
   return { fn: (() => missing(name)) as unknown as T };
 }
 
+/**
+ * The same default for a seam that is **not** shaped `{ fn }`.
+ *
+ * Seven of them are declared in the segment that calls them rather
+ * than here, because they are one function on an object the segment
+ * already exports. Those had a silent default -- `(): void => {}`
+ * for `goto_other_room` and `draw_mobs`, and worse, `(): number => 0`
+ * for `char_opp_dist`, which is a wrong answer rather than no answer.
+ * A seam that is not wired in is a mistake and has to say so, which
+ * is the whole of what `slot` is for and the whole of what the stub
+ * in `wire.ts` was not.
+ */
+export function unlinked<T extends Fn>(name: string): T {
+  return (() => missing(name)) as unknown as T;
+}
+
 /** `seg007.c`. */
 export const l7 = {
   start_chompers: slot<() => void>('start_chompers'),

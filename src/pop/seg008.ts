@@ -37,7 +37,7 @@ import { redraw_at_char, redraw_at_char2, check_mirror } from './seg003.ts';
 import { get_doorlink_timer, clear_tile_wipes, get_curr_tile } from './seg007.ts';
 import { load_room_links } from './seg002.ts';
 import { prandom } from './seg009.ts';
-import { out } from './link.ts';
+import { out, unlinked } from './link.ts';
 
 const TILE_SIZEX = 14;
 
@@ -117,7 +117,7 @@ export function free_peels(): void {
 }
 
 /** `draw_hp` lives in seg000; linked here to avoid a cycle. */
-export const hp = { draw_hp: (): void => {} };
+export const hp = { draw_hp: unlinked<() => void>('draw_hp') };
 
 /** `tbl_level_type`: 0 dungeon, 1 palace. */
 export const levelType = { of: (_level: number): number => 0 };
@@ -141,9 +141,7 @@ export function reset_tables(): void {
   g.foretable.length = 0;
   g.midtable.length = 0;
   g.wipetable.length = 0;
-  g.wipetable_count = 0;
   g.objtable.length = 0;
-  g.objtable_count = 0;
 }
 
 // seg008:0000
@@ -731,7 +729,6 @@ export function add_wipetable(
 ): void {
   if (g.wipetable.length >= 300) return;
   g.wipetable.push({ left, bottom: bottom + 1, height, width, color, layer });
-  g.wipetable_count = g.wipetable.length;
 }
 
 // seg008:12BB
@@ -1225,7 +1222,6 @@ export function add_objtable(obj_type: number): void {
     direction: g.obj_direction,
     tilepos: 30,
   });
-  g.objtable_count = g.objtable.length;
   mark_obj_tile_redraw(g.objtable.length - 1);
 }
 
@@ -1552,7 +1548,7 @@ export function show_level(): void {
 }
 
 /** `draw_mobs` lives in seg007; linked here to avoid a cycle. */
-export const mobs = { draw_mobs: (): void => {} };
+export const mobs = { draw_mobs: unlinked<() => void>('draw_mobs') };
 function draw_mobs(): void { mobs.draw_mobs(); }
 
 export const UNUSED = {

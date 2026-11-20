@@ -154,7 +154,6 @@ class Globals {
   level!: LevelType;
   current_level = 0;
   next_level = 0;
-  start_level = 0;
   is_restart_level = 0;
   checkpoint = 0;
   hitp_beg_lev = 0;
@@ -229,12 +228,7 @@ class Globals {
   obj_clip_top = 0;
   obj_clip_right = 0;
   obj_clip_bottom = 0;
-  obj2_clip_left = 0;
-  obj2_clip_top = 0;
-  obj2_clip_right = 0;
-  obj2_clip_bottom = 0;
   objtable: ObjTableType[] = [];
-  objtable_count = 0;
 
   // -------------------------------------------------------- the draw tables
   backtable: BackTableType[] = [];
@@ -242,7 +236,6 @@ class Globals {
   midtable: MidTableType[] = [];
   table_counts = new Int16Array(TABLES);
   wipetable: WipeTableType[] = [];
-  wipetable_count = 0;
   /** Which of `backtable` and `foretable` `ptr_add_table` points at. */
   ptr_add_table: 'back' | 'fore' | 'mid' = 'back';
   draw_xh = 0;
@@ -250,7 +243,6 @@ class Globals {
   draw_bottom_y = 0;
   drawn_row = 0;
   drawn_col = 0;
-  draw_mode = 0;
   leveldoor_open = 0;
   leveldoor_right = 0;
   leveldoor_ybottom = 0;
@@ -325,7 +317,6 @@ class Globals {
   united_with_shadow = 0;
   guard_notice_timer = 0;
   is_guard_notice = 0;
-  guard_refrac_timer = 0;
 
   // -------------------------------------------------------- odds and ends
   is_screaming = 0;
@@ -371,7 +362,6 @@ class Globals {
   upside_down = 0;
   need_level1_music = 0;
   is_blind_mode = 0;
-  torch_colors: Uint8Array[] = [];
   palace_wall_colors = new Uint8Array(44 * 3);
   demo_index = 0;
   demo_time = 0;
@@ -382,7 +372,6 @@ class Globals {
   chtab_addrs: (readonly { width: number; height: number; data: Uint8Array }[] | null)[]
     = Array.from({ length: 10 }, () => null);
 
-  tile_table: readonly Piece[] = [];
 }
 
 export const g = new Globals();

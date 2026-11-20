@@ -1016,7 +1016,6 @@ export function add_mob_to_objtable(ypos: number): void {
     clip: { top: 0, bottom: 0, left: 0, right: 40 },
     tilepos: 30,
   });
-  g.objtable_count = g.objtable.length;
   l8.mark_obj_tile_redraw.fn(g.objtable.length - 1);
 }
 

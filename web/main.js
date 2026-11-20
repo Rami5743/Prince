@@ -3433,7 +3433,6 @@ var Globals = class {
   level;
   current_level = 0;
   next_level = 0;
-  start_level = 0;
   is_restart_level = 0;
   checkpoint = 0;
   hitp_beg_lev = 0;
@@ -3504,19 +3503,13 @@ var Globals = class {
   obj_clip_top = 0;
   obj_clip_right = 0;
   obj_clip_bottom = 0;
-  obj2_clip_left = 0;
-  obj2_clip_top = 0;
-  obj2_clip_right = 0;
-  obj2_clip_bottom = 0;
   objtable = [];
-  objtable_count = 0;
   // -------------------------------------------------------- the draw tables
   backtable = [];
   foretable = [];
   midtable = [];
   table_counts = new Int16Array(TABLES);
   wipetable = [];
-  wipetable_count = 0;
   /** Which of `backtable` and `foretable` `ptr_add_table` points at. */
   ptr_add_table = "back";
   draw_xh = 0;
@@ -3524,7 +3517,6 @@ var Globals = class {
   draw_bottom_y = 0;
   drawn_row = 0;
   drawn_col = 0;
-  draw_mode = 0;
   leveldoor_open = 0;
   leveldoor_right = 0;
   leveldoor_ybottom = 0;
@@ -3594,7 +3586,6 @@ var Globals = class {
   united_with_shadow = 0;
   guard_notice_timer = 0;
   is_guard_notice = 0;
-  guard_refrac_timer = 0;
   // -------------------------------------------------------- odds and ends
   is_screaming = 0;
   is_feather_fall = 0;
@@ -3638,7 +3629,6 @@ var Globals = class {
   upside_down = 0;
   need_level1_music = 0;
   is_blind_mode = 0;
-  torch_colors = [];
   palace_wall_colors = new Uint8Array(44 * 3);
   demo_index = 0;
   demo_time = 0;
@@ -3646,7 +3636,6 @@ var Globals = class {
   shadow_initialized = 0;
   /** `chtab_addrs`: the sprite banks, filled in by the loader. */
   chtab_addrs = Array.from({ length: 10 }, () => null);
-  tile_table = [];
 };
 var g = new Globals();
 function resetGlobals() {
@@ -4314,6 +4303,9 @@ function missing(name) {
 }
 function slot(name) {
   return { fn: (() => missing(name)) };
+}
+function unlinked(name) {
+  return (() => missing(name));
 }
 var l7 = {
   start_chompers: slot("start_chompers"),
@@ -4990,13 +4982,16 @@ function play_guard() {
     l2.autocontrol_opponent.fn();
     return;
   }
+  let stillAlive = false;
   if (g.Char.alive < 0) {
     if (g.guardhp_curr === 0) {
       g.Char.alive = 0;
       l2.on_guard_killed.fn();
-      return;
+    } else {
+      stillAlive = true;
     }
-  } else if (g.Char.charid === charids.charid_1_shadow) {
+  }
+  if (!stillAlive && g.Char.charid === charids.charid_1_shadow) {
     l2.clear_char.fn();
   }
   l2.autocontrol_opponent.fn();
@@ -5668,7 +5663,7 @@ var CONTROL_HELD_FORWARD2 = -1;
 var CONTROL_HELD_BACKWARD2 = 1;
 var CONTROL_HELD_UP2 = -1;
 var CONTROL_HELD_DOWN2 = 1;
-var dist = { char_opp_dist: () => 0 };
+var dist = { char_opp_dist: unlinked("char_opp_dist") };
 function seqtbl_offset_char(seq_index) {
   g.Char.curr_seq = seqOffset(seq_index);
 }
@@ -7173,7 +7168,6 @@ function add_mob_to_objtable(ypos) {
     clip: { top: 0, bottom: 0, left: 0, right: 40 },
     tilepos: 30
   });
-  g.objtable_count = g.objtable.length;
   l8.mark_obj_tile_redraw.fn(g.objtable.length - 1);
 }
 function is_spike_harmful() {
@@ -7226,9 +7220,10 @@ var FIRST_ONSCREEN_COLUMN4 = 5;
 var SCREEN_TILECOUNTX2 = 10;
 var ROOMCOUNT = 24;
 var distance_mirror = 0;
-var dist2 = { char_opp_dist: () => 0 };
-var rooms = { goto_other_room: (_direction) => {
-} };
+var dist2 = { char_opp_dist: unlinked("char_opp_dist") };
+var rooms = {
+  goto_other_room: unlinked("goto_other_room")
+};
 var demo = { hitp: 4, end_room: 24 };
 function do_startpos() {
   if (g.current_level === 3 && g.checkpoint) {
@@ -7669,10 +7664,8 @@ function do_auto_moves(moves) {
   }
 }
 var hp = {
-  draw_guard_hp: (_curr, _max) => {
-  },
-  add_life: () => {
-  }
+  draw_guard_hp: unlinked("draw_guard_hp"),
+  add_life: unlinked("add_life")
 };
 function enter_guard() {
   const room_minus_1 = g.drawn_room - 1;
@@ -8318,8 +8311,7 @@ function restore_peels() {
 function free_peels() {
   peels_table.length = 0;
 }
-var hp2 = { draw_hp: () => {
-} };
+var hp2 = { draw_hp: unlinked("draw_hp") };
 var levelType2 = { of: (_level) => 0 };
 var n_curr_objs = 0;
 var curr_objs = [];
@@ -8332,9 +8324,7 @@ function reset_tables() {
   g.foretable.length = 0;
   g.midtable.length = 0;
   g.wipetable.length = 0;
-  g.wipetable_count = 0;
   g.objtable.length = 0;
-  g.objtable_count = 0;
 }
 function redraw_room() {
   free_peels();
@@ -9087,7 +9077,6 @@ function add_midtable(chtab_id, id, xh, xl, ybottom, blit, peel) {
 function add_wipetable(layer, left, bottom, height, width, color) {
   if (g.wipetable.length >= 300) return;
   g.wipetable.push({ left, bottom: bottom + 1, height, width, color, layer });
-  g.wipetable_count = g.wipetable.length;
 }
 function draw_table(which_table) {
   const count = g.table_counts[which_table];
@@ -9608,7 +9597,6 @@ function add_objtable(obj_type) {
     direction: g.obj_direction,
     tilepos: 30
   });
-  g.objtable_count = g.objtable.length;
   mark_obj_tile_redraw(g.objtable.length - 1);
 }
 function mark_obj_tile_redraw(index) {
@@ -9970,8 +9958,7 @@ function show_level() {
   }
   g.seamless = 0;
 }
-var mobs = { draw_mobs: () => {
-} };
+var mobs = { draw_mobs: unlinked("draw_mobs") };
 function draw_mobs2() {
   mobs.draw_mobs();
 }
@@ -10530,7 +10517,6 @@ var PopGame = class _PopGame {
     g.mobs = [];
     g.mobs_count = 0;
     g.wipetable = [];
-    g.wipetable_count = 0;
     g.leveldoor_open = 0;
     g.exit_room_timer = 0;
     g.have_sword = 0;

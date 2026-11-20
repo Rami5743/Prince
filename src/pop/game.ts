@@ -555,7 +555,6 @@ export class PopGame {
     g.mobs = [];
     g.mobs_count = 0;
     g.wipetable = [];
-    g.wipetable_count = 0;
     g.leveldoor_open = 0;
     g.exit_room_timer = 0;
     g.have_sword = 0;

@@ -15,14 +15,15 @@ import { join } from 'node:path';
 import { GAME_DIR, REPO } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
-import { g } from '../../src/pop/state.ts';
+import { g, copyChar } from '../../src/pop/state.ts';
 import { draw_hurt_splash } from '../../src/pop/seg008.ts';
 import { loose_land } from '../../src/pop/seg007.ts';
 import { on_guard_killed, clear_char, load_room_links } from '../../src/pop/seg002.ts';
 import { play_kid_frame, play_guard_frame } from '../../src/pop/seg000.ts';
 import { jump_through_mirror } from '../../src/pop/seg003.ts';
 import { hud } from '../../src/pop/link.ts';
-import { tiles, charids, directions } from '../../src/pop/types.ts';
+import { tiles, charids, directions, seqids } from '../../src/pop/types.ts';
+import { seqtbl_offset_char } from '../../src/pop/seg005.ts';
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -246,6 +247,82 @@ describe('the lines the translation dropped', () => {
     const stubs = [...wire.matchAll(/^\s*(\S+)\.fn = \([^)]*\)(: \w+)? => \{\s*\};?$/gm)]
       .map((m) => m[1]);
     expect(stubs, 'seams wired to an empty function').toEqual([]);
+  });
+
+  /**
+   * **`play_guard`'s `goto` is not a `return`, and the tick a guard
+   * dies is a tick he is still played.**
+   *
+   *     if (Char.alive < 0) {
+   *         if (guardhp_curr == 0) { Char.alive = 0; on_guard_killed(); }
+   *         else goto loc_7A65;
+   *     }
+   *     if (Char.charid == charid_1_shadow) clear_char();
+   *     loc_7A65:
+   *     autocontrol_opponent();
+   *     control();
+   *
+   * The `goto` skips `clear_char` for a guard who is merely alive. It
+   * does **not** skip the two calls after it, and the port had read
+   * the whole of the kill branch as a `return`, so on the one tick
+   * `guardhp_curr` reaches nought nothing ran at all.
+   *
+   * `control()` with `Char.alive >= 0` -- which the line above has
+   * just written -- is three lines long: a character standing on
+   * frame 15, 166, 158 or 171 is put into `seq_71_dying`. So a guard
+   * whose last hit point comes off while he is standing collapses on
+   * that tick in the original and a tick later in the port.
+   *
+   * Measured, one tick after `guardhp_curr` reaches nought with
+   * `Guard.alive` still -1 and the guard standing on `seq_2_stand`:
+   *
+   *     guard, frame 166    the C 179 (collapse 1)   the port 15
+   *     guard, frame  15    the C 179                the port 15
+   *     shadow              direction 86 (none)      direction -1
+   *
+   * -- the shadow's being `clear_char`, which the original runs on
+   * the death tick and the port ran on the one after, so the mirror
+   * shadow of level 4 stayed on the screen a tick longer than he
+   * should.
+   *
+   * **No digest moves by a tick**, measured: 32260 of 33047 either
+   * way, run for run. The one probe in the suite that kills a guard
+   * is `killguard6`, and `k` is `guardhp_delta = -guardhp_curr;
+   * Guard.alive = 0` -- it writes `alive` itself, so it never takes
+   * this branch at all and reads 299 of 299 both ways.
+   */
+  it('the tick a guard dies still runs control and clear_char', async () => {
+    const standing = async (charid: number, frame: number) => {
+      await PopGame.start(assets, exe, 4);
+      g.drawn_room = g.Kid.room;
+      g.Guard.charid = charid;
+      g.Guard.direction = directions.dir_FF_left;
+      g.Guard.room = g.drawn_room;
+      g.Guard.curr_row = 1;
+      g.Guard.curr_col = 5;
+      g.Guard.alive = -1;
+      g.Guard.sword = 0;
+      g.Guard.frame = frame;
+      g.Guard.x = 120;
+      g.Guard.y = 118;
+      copyChar(g.Char, g.Guard);
+      seqtbl_offset_char(seqids.seq_2_stand);
+      g.Guard.curr_seq = g.Char.curr_seq;
+      // The last hit point has just come off in `do_delta_hp`, which
+      // runs after `play_guard_frame`: so the next tick opens with
+      // `guardhp_curr` nought and `Guard.alive` still -1.
+      g.guardhp_curr = 0;
+      g.guardhp_max = 3;
+      g.shadow_initialized = 1;
+      play_guard_frame();
+      return { frame: g.Guard.frame, dir: g.Guard.direction };
+    };
+    // frame_179_collapse_1, the first frame of `seq_71_dying`.
+    expect(await standing(charids.charid_2_guard, 166)).toEqual({ frame: 179, dir: -1 });
+    expect(await standing(charids.charid_2_guard, 15)).toEqual({ frame: 179, dir: -1 });
+    // And a shadow is `clear_char`'d on the same tick, not the next.
+    expect(await standing(charids.charid_1_shadow, 15))
+      .toEqual({ frame: 179, dir: directions.dir_56_none });
   });
 
   it('the diagonal rooms are found sideways when there is none above', async () => {

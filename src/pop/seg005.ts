@@ -26,7 +26,7 @@ import {
 import {
   get_edge_distance, edge_type, EDGE_TYPE_FLOOR, EDGE_TYPE_WALL, can_bump_into_gate,
 } from './seg004.ts';
-import { l2, l6, l7, out } from './link.ts';
+import { l2, l6, l7, out, unlinked } from './link.ts';
 
 const TILE_SIZEX = 14;
 const FIRST_ONSCREEN_COLUMN = 5;
@@ -39,7 +39,7 @@ const CONTROL_HELD_UP = -1;
 const CONTROL_HELD_DOWN = 1;
 
 /** `char_opp_dist`, which lives in seg002; linked in to avoid a cycle. */
-export const dist = { char_opp_dist: (): number => 0 };
+export const dist = { char_opp_dist: unlinked<() => number>('char_opp_dist') };
 
 // seg005:000A
 export function seqtbl_offset_char(seq_index: number): void {

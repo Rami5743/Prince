@@ -33,7 +33,7 @@ import {
 import { seqtbl_offset_char, draw_sword } from './seg005.ts';
 import { trigger_button } from './seg007.ts';
 import { prandom } from './seg009.ts';
-import { hud, l8, out } from './link.ts';
+import { hud, l8, out, unlinked } from './link.ts';
 
 const TILE_SIZEX = 14;
 const TILE_MIDX = 7;
@@ -316,8 +316,8 @@ export function do_auto_moves(moves: readonly (readonly [number, number])[]): vo
 
 /** `draw_guard_hp` lives in seg000; linked here to avoid a cycle. */
 export const hp = {
-  draw_guard_hp: (_curr: number, _max: number): void => {},
-  add_life: (): void => {},
+  draw_guard_hp: unlinked<(curr: number, max: number) => void>('draw_guard_hp'),
+  add_life: unlinked<() => void>('add_life'),
 };
 
 // seg002:00DF

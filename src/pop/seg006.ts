@@ -817,13 +817,40 @@ export function play_guard(): void {
     l2.autocontrol_opponent.fn();
     return;
   }
+  /**
+   * **The tick a guard dies is a tick he is still played.**
+   *
+   * The C is a `goto` into the middle of its own body and the
+   * translation had read it as a `return`:
+   *
+   *     if (Char.alive < 0) {
+   *         if (guardhp_curr == 0) { Char.alive = 0; on_guard_killed(); }
+   *         else goto loc_7A65;
+   *     }
+   *     if (Char.charid == charid_1_shadow) clear_char();
+   *     loc_7A65:
+   *     autocontrol_opponent();
+   *     control();
+   *
+   * The `goto` skips `clear_char` for a guard who is merely alive;
+   * what it does **not** skip is the two calls at the end. So on the
+   * one tick `guardhp_curr` reaches nought the original still runs
+   * `clear_char` (for a shadow), `autocontrol_opponent` and
+   * `control` -- and `control` with `Char.alive >= 0`, which has just
+   * been written, is the line that puts a guard killed while
+   * *standing* into `seq_71_dying`.
+   */
+  let stillAlive = false;
   if (g.Char.alive < 0) {
     if (g.guardhp_curr === 0) {
       g.Char.alive = 0;
       l2.on_guard_killed.fn();
-      return;
+    } else {
+      // `goto loc_7A65`: a guard who is alive is not cleared.
+      stillAlive = true;
     }
-  } else if (g.Char.charid === charids.charid_1_shadow) {
+  }
+  if (!stillAlive && g.Char.charid === charids.charid_1_shadow) {
     l2.clear_char.fn();
   }
   l2.autocontrol_opponent.fn();
