@@ -793,9 +793,28 @@ export class PopGame {
     }
   }
 
-  /** The player pressing the button after a death. */
+  /**
+   * The player pressing the button after a death.
+   *
+   * `process_key` (`seg000:0784`), before its switch:
+   *
+   *     // If the Kid died, Enter or Shift will restart the level.
+   *     if (rem_min != 0 && Kid.alive > 6 &&
+   *         (control_shift || key == SDL_SCANCODE_RETURN)) {
+   *         key = SDL_SCANCODE_A | WITH_CTRL; // Ctrl+A
+   *     }
+   *
+   * The port took it from `Kid.alive >= 0`, which is the first tick
+   * of the death, and with no `rem_min` guard at all -- so a player
+   * mashing Shift as the Prince fell began the level again before
+   * the death had played, where the original makes him watch it out,
+   * and a Prince who died on the last tick of the hour restarted the
+   * level instead of getting the hourglass. `Char.alive` counts 0 to
+   * 6 over the death and stops at 7 for as long as the death music
+   * is in the channel, so `> 6` is "the death is over".
+   */
   pressButton(): void {
-    if (g.Kid.alive >= 0) this.restartDue = true;
+    if (g.rem_min !== 0 && g.Kid.alive > 6) this.restartDue = true;
   }
 
   step(controls: Controls): void {
@@ -842,6 +861,26 @@ export class PopGame {
     if (this.pendingCheats.length) {
       for (const key of this.pendingCheats) this.applyCheat(key);
       this.pendingCheats.length = 0;
+    }
+    /**
+     * `process_key`'s own "the Kid died" line, which is a **held**
+     * key and not a press:
+     *
+     *     if (rem_min != 0 && Kid.alive > 6 &&
+     *         (control_shift || key == SDL_SCANCODE_RETURN)) {
+     *         key = SDL_SCANCODE_A | WITH_CTRL; // Ctrl+A
+     *     }
+     *
+     * `control_shift` is the state of the key, so a player who holds
+     * Shift down through the death begins the level again the moment
+     * the death is over; nothing has to be pressed again. The port
+     * had it only on the *edge*, through `pressButton`, and with the
+     * guard `Kid.alive >= 0` -- so a Shift held from before the
+     * death restarted the level on the first tick of it, and a Shift
+     * pressed during it never restarted at all.
+     */
+    if (g.control_shift && g.rem_min !== 0 && g.Kid.alive > 6) {
+      this.restartDue = true;
     }
     play_frame();
     if (g.is_restart_level) {

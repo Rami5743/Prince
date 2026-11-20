@@ -69,6 +69,57 @@ describe('the falling entry of level 7', () => {
     expect(g.hitp_curr).toBe(0);
   });
 
+  /**
+   * **The button after a death is a held key, and it waits for the
+   * death to be over.**
+   *
+   * `process_key`, before its switch:
+   *
+   *     // If the Kid died, Enter or Shift will restart the level.
+   *     if (rem_min != 0 && Kid.alive > 6 &&
+   *         (control_shift || key == SDL_SCANCODE_RETURN)) {
+   *         key = SDL_SCANCODE_A | WITH_CTRL; // Ctrl+A
+   *     }
+   *
+   * `control_shift` is the **state** of the key, so holding Shift
+   * through a death begins the level again the moment the death is
+   * over, with nothing pressed again; and `Kid.alive > 6` is what
+   * makes the player watch it out. The port had the line only on the
+   * *edge*, in `pressButton`, and guarded by `Kid.alive >= 0`: a
+   * Shift pressed as the Prince fell began the level in the middle
+   * of the death, and a Shift already held when he died did nothing
+   * at all until it was let go and pressed again.
+   *
+   * Level 7 is where it can be measured without a fight: the entry
+   * kills him on tick 17 with no key touched. Shift held from tick
+   * 18 -- during the death -- restarts on tick **24**, which is the
+   * first tick `Kid.alive` is past 6; from 25 and from 40 it
+   * restarts on that very tick. Every digest in the suite is
+   * unchanged by it, run for run.
+   */
+  it('restarts on a held Shift, but not until the death is over', async () => {
+    const restartTick = async (from: number, minutes?: number): Promise<number> => {
+      const game = await PopGame.start(assets, exe, 7,
+        minutes === undefined ? undefined : { minutesLeft: minutes });
+      for (let t = 0; t < 80; t++) {
+        if (minutes === 1 && t === 20) g.rem_min = 0; // the hour runs out
+        game.step({ x: 0, y: 0, shift: t >= from });
+        game.render();
+        if (game.restartDue) return t;
+      }
+      return -1;
+    };
+    // Shift from the start is the grab: he never dies, so nothing restarts.
+    expect(await restartTick(0), 'he catches the ledge').toBe(-1);
+    // `Kid.alive` counts 0 to 6 over the death and stops at 7.
+    expect(await restartTick(18), 'held through the death').toBe(24);
+    expect(await restartTick(25), 'pressed after it').toBe(25);
+    expect(await restartTick(40)).toBe(40);
+    // `rem_min != 0`: a Prince who dies on the last tick of the hour
+    // gets the hourglass, not the level again.
+    expect(await restartTick(20, 1), 'the hour has run out').toBe(-1);
+  }, 60000);
+
   it('leaves the other levels opening where they started', async () => {
     for (const level of [1, 2, 6, 8, 13]) {
       await PopGame.start(assets, exe, level);

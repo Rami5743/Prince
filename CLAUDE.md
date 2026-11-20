@@ -41,6 +41,58 @@
 ## ============================================================
 
 
+## THE BUTTON AFTER A DEATH IS A HELD KEY, AND IT WAITS FOR THE DEATH
+
+    measured   32093 of 33067   97%   (unmoved, run for run)
+    retired     1883 of  3767         (unmoved, run for run)
+    npm test     795 -> 796
+
+`process_key`, before its switch (`seg000:0784`):
+
+    // If the Kid died, Enter or Shift will restart the level.
+    if (rem_min != 0 && Kid.alive > 6 &&
+        (control_shift || key == SDL_SCANCODE_RETURN)) {
+        key = SDL_SCANCODE_A | WITH_CTRL; // Ctrl+A
+    }
+
+`control_shift` is the **state** of the key, not a press, so holding
+Shift through a death begins the level again the moment the death is
+over. The port had the line in `pressButton`, called by the driver
+and by the page on the key's **edge**, and guarded by
+`Kid.alive >= 0` instead of `> 6`, with no `rem_min` guard at all.
+
+Three differences, all of them things a player meets:
+
+* a Shift **already held** when the Prince died did nothing, because
+  the edge was already past: the player had to let go and press
+  again;
+* a Shift **pressed during the death** began the level in the middle
+  of the death animation, where the original makes him watch it out;
+* a Prince who died on the **last tick of the hour** restarted the
+  level instead of getting the hourglass.
+
+Measured on level 7, whose entry kills him on tick 17 with no key
+touched -- the tick `restartDue` goes true, Shift held from:
+
+    tick  0   never      he catches the ledge and lives
+    tick 18   **24**     the first tick `Kid.alive` is past 6
+    tick 25     25
+    tick 40     40
+    rem_min 0   never
+
+The line is in `PopGame.step`, where `process_key` is in the C --
+after `timers()` and before `play_frame()` -- so it reads the held
+control rather than an edge. `pressButton` keeps the same guard for
+the page's own "any key while `Press Button to Continue` is up",
+which is a deliberate departure written up in `web/main.ts`.
+
+**Every digest in the suite is unchanged by it, run for run**, and
+that is worth the line it takes: the first attempt moved the guard
+to `Kid.alive > 6` and left the edge, and `gate2b` fell from 1179 to
+**740**. The edge is the half that was wrong, not the guard.
+`tests/pop/level7-entry.test.ts` pins all five numbers.
+
+
 ## THE GHOST OF THE PRINCE DRINKING: `redraw_screen` NEVER BLACKED THE ROOM
 
     measured   32093 of 33067   97%   (unmoved, to the tick)
