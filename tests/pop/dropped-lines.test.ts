@@ -20,6 +20,7 @@ import { draw_hurt_splash } from '../../src/pop/seg008.ts';
 import { loose_land } from '../../src/pop/seg007.ts';
 import { on_guard_killed, clear_char, load_room_links } from '../../src/pop/seg002.ts';
 import { play_kid_frame, play_guard_frame } from '../../src/pop/seg000.ts';
+import * as seg006 from '../../src/pop/seg006.ts';
 import { jump_through_mirror } from '../../src/pop/seg003.ts';
 import { hud } from '../../src/pop/link.ts';
 import { tiles, charids, directions, seqids } from '../../src/pop/types.ts';
@@ -27,6 +28,10 @@ import { seqtbl_offset_char } from '../../src/pop/seg005.ts';
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+
+const { get_tile_div_mod } = seg006;
+/** `obj_xl`, which `get_tile_div_mod` leaves its remainder in. */
+const obj_xl_of = (): number => seg006.obj_xl;
 
 describe('the lines the translation dropped', () => {
   /**
@@ -323,6 +328,42 @@ describe('the lines the translation dropped', () => {
     // And a shadow is `clear_char`'d on the same tick, not the next.
     expect(await standing(charids.charid_1_shadow, 15))
       .toEqual({ frame: 179, dir: directions.dir_56_none });
+  });
+
+  /**
+   * **`get_tile_div_mod` reads off the ends of its two tables, and
+   * the original's answer is not `xpos & 0xff`.**
+   *
+   * `get_tile_div_mod` is two unchecked array reads --
+   * `obj_xl = tile_mod_tbl[xpos]; return tile_div_tbl[xpos];` -- and
+   * the two tables are 256 bytes each, laid out `tile_div_tbl` then
+   * `tile_mod_tbl`. So a negative `xpos` reads `tile_div_tbl` for
+   * `xl` and the bytes **in front of** `tile_div_tbl` for `xh`, and
+   * SDLPoP writes both runs out verbatim to simulate it.
+   *
+   * The port answered `tile_div_tbl[xpos & 0xff]` under a comment
+   * saying the game's own range of x never notices. It does not, and
+   * that is measured: over every recording in the suite, every tick,
+   * `xpos` runs **30 to 242**. But eight seeds of random keys over
+   * all fourteen levels get it to **-4**, where the two answers are
+   * not even the same pair -- `& 0xff` gives `tile_div_tbl[252]` for
+   * `xh` where the original gives the byte 0xB5 before the table.
+   *
+   * So no score can move by this and no score could have caught it.
+   */
+  it('reads off the ends of the tile tables the way the DOS game does', () => {
+    // In range, which is every tick anything in the suite plays.
+    expect([get_tile_div_mod(58), obj_xl_of()]).toEqual([0, 0]);
+    expect([get_tile_div_mod(72), obj_xl_of()]).toEqual([1, 0]);
+    expect([get_tile_div_mod(255), obj_xl_of()]).toEqual([14, 1]);
+    // Before the table: `xh` out of the bytes in front of
+    // `tile_div_tbl`, `xl` out of `tile_div_tbl` itself.
+    expect([get_tile_div_mod(-1), obj_xl_of()]).toEqual([0, 14]);
+    expect([get_tile_div_mod(-4), obj_xl_of()]).toEqual([181, 13]);
+    // And past the end: `xh` out of `tile_mod_tbl`, `xl` out of the
+    // bytes after it.
+    expect([get_tile_div_mod(256), obj_xl_of()]).toEqual([12, 244]);
+    expect([get_tile_div_mod(260), obj_xl_of()]).toEqual([2, 44]);
   });
 
   it('the diagonal rooms are found sideways when there is none above', async () => {

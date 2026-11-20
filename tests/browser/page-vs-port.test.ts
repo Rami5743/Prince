@@ -321,6 +321,171 @@ describe('the page and the headless port', () => {
     expect(best, 'ticks on which the page and the port differ').toBe(0);
   }, 300000);
 
+  /**
+   * **A level played past a death and the level begun again.**
+   *
+   * Neither score reaches this. A digest ends where its recording
+   * does and only `probeF` and `f6874819` restart at all; the page's
+   * own restart is `changeScene(restart)` in the animation loop, and
+   * `__princeStep` -- which every browser test drives -- leaves it
+   * out, so a page stepped through it plays straight on past the
+   * death with `restartDue` stuck true. `__princeStepRestarting` is
+   * the loop's own order instead: step, restart if it is due, and
+   * only then draw, which is `digest-common.ts`'s `runOf` exactly.
+   *
+   * Level 7 kills the Prince with no key touched. Shift is held for
+   * a third of the ticks on top of `PATTERN`: `process_key` reads
+   * the **state** of the key, so a Shift held through a death begins
+   * the level again -- and a Shift held *into* the new level makes
+   * him grab the ledge of the shaft and live, which is why it is
+   * held in blocks rather than throughout.
+   *
+   * Measured: the port restarts on ticks 40, 100, 160, 220 and 280
+   * of level 7, and the page restarts on the same five and draws the
+   * same picture on every one of the three hundred.
+   */
+  it('die and start the level again the same way', async () => {
+    const TICKS_D = 300;
+    const at = (t: number): { x: number; y: number; shift: boolean } => {
+      const p = PATTERN[((t / 11) | 0) % PATTERN.length]!;
+      return { x: p.x, y: p.y, shift: p.shift || ((t / 20) | 0) % 3 === 2 };
+    };
+    const assets = new Assets(
+      async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+    const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+    const effects = {
+      sound: () => {}, stopSounds: () => {}, soundPlaying: () => false,
+    };
+    let game = await PopGame.start(assets, exe, 7, { effects });
+    const portHashes: number[] = [];
+    const portRestarts: number[] = [];
+    for (let t = 0; t < TICKS_D; t++) {
+      game.step(at(t));
+      if (game.restartDue) { portRestarts.push(t); game = await game.restart(assets, exe); }
+      const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+      let h = 2166136261;
+      for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+      portHashes.push(h >>> 0);
+    }
+    expect(portRestarts, 'the Prince has to die for this to measure anything')
+      .toEqual([40, 100, 160, 220, 280]);
+
+    const got = await page.evaluate(async ([ticks, pattern]) => {
+      const w = window as unknown as {
+        __princeEnterLevel(l: number): Promise<void>;
+        __princePause(on: boolean): void;
+        __princeMute(on: boolean): void;
+        __princeStepRestarting(c: unknown):
+        Promise<{ hash: number; restarted: boolean } | null>;
+      };
+      const P = pattern as { x: number; y: number; shift: boolean }[];
+      w.__princeMute(true);
+      w.__princePause(true);
+      await w.__princeEnterLevel(7);
+      const hashes: number[] = [];
+      const restarts: number[] = [];
+      for (let t = 0; t < (ticks as number); t++) {
+        const p = P[((t / 11) | 0) % P.length]!;
+        const r = await w.__princeStepRestarting(
+          { x: p.x, y: p.y, shift: p.shift || ((t / 20) | 0) % 3 === 2 },
+        );
+        hashes.push(r ? r.hash : -1);
+        if (r?.restarted) restarts.push(t);
+      }
+      return { hashes, restarts };
+    }, [TICKS_D, PATTERN] as const);
+
+    expect(got.restarts).toEqual(portRestarts);
+    const apart: number[] = [];
+    for (let t = 0; t < TICKS_D; t++) {
+      if (got.hashes[t] !== portHashes[t]) apart.push(t);
+    }
+    expect(apart, `the page's picture differs on ${apart.length} ticks`).toEqual([]);
+  }, 300000);
+
+  /**
+   * **`potion.html`, which is the one page that drinks a potion.**
+   *
+   * It is the same bundle with one extra `LEVELS.DAT` record, and it
+   * is a second document because `__princePotionLevel` is read before
+   * `game.js` runs. `potion1` is the probe -- sixteen careful steps
+   * with four taps of Shift after each -- and it is the only run
+   * anywhere in the project that reaches `do_pickup`.
+   *
+   * `sound_18_drink` is the swallow in `seq_78_drink` and every one
+   * of the six potions plays it, so six of them is six drunk.
+   */
+  it('draw the same potion level, tick for tick', async () => {
+    const { levelsDatWithPotionLevel, POTION_LEVEL_NUMBER } =
+      await import('../../src/dat/potion-level.ts');
+    const { decodeTimeline, parseRecording } =
+      await import('../../src/game/recording.ts');
+    const rec = parseRecording(readFileSync(
+      join(REPO, 'tools', 'oracle', 'recordings', 'potion1.json'), 'utf8'));
+    const ticks = decodeTimeline(rec.timeline);
+    const assets = new Assets(async (n: string) => {
+      const bytes = new Uint8Array(readFileSync(join(GAME_DIR, n)));
+      return n === 'LEVELS.DAT' ? levelsDatWithPotionLevel(bytes) : bytes;
+    });
+    const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+    const asked: number[] = [];
+    const game = await PopGame.start(assets, exe, POTION_LEVEL_NUMBER, {
+      effects: {
+        sound: (which: number) => { asked.push(which); },
+        stopSounds: () => {},
+        soundPlaying: () => false,
+      },
+    });
+    const portHashes: number[] = [];
+    for (const c of ticks) {
+      game.step(c);
+      const rgb = game.render().toRgb(game.scene.screenPalette.toRgba());
+      let h = 2166136261;
+      for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+      portHashes.push(h >>> 0);
+    }
+    expect(asked.filter((w) => w === 18).length, 'potions drunk').toBe(6);
+
+    const potionPage = await browser.newPage();
+    potionPage.on('console', (m) => {
+      if (m.type() === 'error') consoleErrors.push(m.text());
+    });
+    potionPage.on('pageerror', (e) => consoleErrors.push(String(e)));
+    await potionPage.addInitScript(
+      'window.__name = window.__name || function (f) { return f; };');
+    await potionPage.goto(`http://localhost:${PORT}/potion.html`, { waitUntil: 'load' });
+    await potionPage.waitForFunction('window.__princeReady === true', null,
+      { timeout: 60000 });
+    const got = await potionPage.evaluate(async ([lvl, controls]) => {
+      const w = window as unknown as {
+        __princeEnterLevel(l: number): Promise<void>;
+        __princePause(on: boolean): void;
+        __princeMute(on: boolean): void;
+        __princeStep(n: number, c: unknown, hash: boolean): { hash: number } | null;
+        __princeAsked(): { tick: number; which: number }[];
+      };
+      w.__princeMute(true);
+      w.__princePause(true);
+      await w.__princeEnterLevel(lvl as number);
+      const before = w.__princeAsked().length;
+      const hashes: number[] = [];
+      for (const c of controls as { x: number; y: number; shift: boolean }[]) {
+        const r = w.__princeStep(1, c, true);
+        hashes.push(r ? r.hash : -1);
+      }
+      return { hashes, asked: w.__princeAsked().slice(before).map((a) => a.which) };
+    }, [POTION_LEVEL_NUMBER, ticks] as const);
+    await potionPage.close();
+
+    const apart: number[] = [];
+    for (let t = 0; t < ticks.length; t++) {
+      if (got.hashes[t] !== portHashes[t]) apart.push(t);
+    }
+    expect(apart, `the potion page's picture differs on ${apart.length} ticks`)
+      .toEqual([]);
+    expect(got.asked).toEqual(asked);
+  }, 300000);
+
   it('threw nothing while it did it', () => {
     expect(consoleErrors).toEqual([]);
   });

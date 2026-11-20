@@ -1286,6 +1286,43 @@ async function boot(): Promise<void> {
     for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
     return { ...game.kid, hash: h >>> 0 };
   };
+  /**
+   * One tick, and the level begun again if the Prince's death has
+   * asked for it.
+   *
+   * `__princeStep` is the loop's `frame()` with the restart left out,
+   * because a test that drives it is paused and the restart lives in
+   * the loop: `if (game.restartDue) { void changeScene(restart);
+   * return; }`, which is `play_level_2` returning `current_level` and
+   * `play_level` building it again. So a page stepped through
+   * `__princeStep` plays straight on past a death with `restartDue`
+   * stuck true, and the one path a player meets more than any other
+   * -- die, press a key, start the level again -- could not be put
+   * beside the headless port at all.
+   *
+   * This is the loop's own order: step, restart if it is due, and
+   * only then draw. `digest-common.ts`'s `runOf` does exactly that,
+   * so the two sides number their ticks the same way.
+   */
+  w.__princeStepRestarting = async (c: Partial<Controls> = {}):
+  Promise<{ hash: number; restarted: boolean } | null> => {
+    if (!game || changing || building > 0) return null;
+    watchRoom = null;
+    game.step({ x: 0, y: 0, shift: false, ...c });
+    let restarted = false;
+    if (game.restartDue) {
+      restarted = true;
+      await changeScene(restart);
+      if (!game) return null;
+    }
+    const surface = game.render();
+    const rgba = game.scene.screenPalette.toRgba();
+    display.present(surface, rgba);
+    const rgb = surface.toRgb(rgba);
+    let h = 2166136261;
+    for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+    return { hash: h >>> 0, restarted };
+  };
   /** Every `play_sound` the byte-code has made; see `asked`. */
   w.__princeAsked = (): { tick: number; which: number }[] => [...asked];
   /**

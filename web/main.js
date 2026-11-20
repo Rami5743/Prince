@@ -4379,8 +4379,10 @@ var out = {
 };
 
 // src/pop/seg006.ts
+var TILE_SIZEX = 14;
 var TILE_SIZEY = 63;
 var TILE_RIGHTX = 13;
+var SCREENSPACE_X = 58;
 var FALLING_SPEED_ACCEL2 = 3;
 var FALLING_SPEED_MAX2 = 33;
 var FALLING_SPEED_ACCEL_FEATHER = 1;
@@ -4620,10 +4622,104 @@ function play_seq() {
 function get_tile_div_mod_m7(xpos) {
   return get_tile_div_mod(xpos - 7);
 }
+var BEFORE_TILE_DIV_TBL = [
+  2,
+  0,
+  65,
+  0,
+  128,
+  0,
+  191,
+  0,
+  254,
+  0,
+  255,
+  1,
+  1,
+  255,
+  196,
+  255,
+  3,
+  0,
+  66,
+  0,
+  129,
+  0,
+  192,
+  0,
+  248,
+  255,
+  55,
+  0,
+  118,
+  0,
+  181,
+  0,
+  244,
+  0
+];
+var AFTER_TILE_MOD_TBL = [
+  244,
+  2,
+  16,
+  30,
+  44,
+  58,
+  72,
+  86,
+  100,
+  114,
+  128,
+  142,
+  156,
+  170,
+  184,
+  198,
+  212,
+  226,
+  240,
+  254,
+  0,
+  10,
+  0,
+  255,
+  0,
+  0,
+  0,
+  0,
+  10,
+  13,
+  0,
+  0,
+  0,
+  0
+];
 function get_tile_div_mod(xpos) {
-  const i = xpos & 255;
-  obj_xl = tile_mod_tbl[i];
-  return tile_div_tbl[i];
+  if (xpos >= 0 && xpos < 256) {
+    obj_xl = tile_mod_tbl[xpos];
+    return tile_div_tbl[xpos];
+  }
+  if (xpos < 0) {
+    const i = BEFORE_TILE_DIV_TBL.length + xpos;
+    if (i < 0) return arithmetic(xpos);
+    obj_xl = tile_div_tbl[tile_div_tbl.length + xpos];
+    return BEFORE_TILE_DIV_TBL[i];
+  }
+  const over = xpos - 256;
+  if (over >= AFTER_TILE_MOD_TBL.length) return arithmetic(xpos);
+  obj_xl = AFTER_TILE_MOD_TBL[over];
+  return tile_mod_tbl[over];
+}
+function arithmetic(xpos) {
+  const x = xpos - SCREENSPACE_X;
+  let xh = Math.trunc(x / TILE_SIZEX);
+  let xl = x % TILE_SIZEX;
+  if (xl < 0) {
+    xh -= 1;
+    xl += TILE_SIZEX;
+  }
+  obj_xl = xl;
+  return xh;
 }
 function y_to_row_mod4(ypos) {
   return Math.trunc((ypos + 60) / TILE_SIZEY) % 4 - 1;
@@ -5281,7 +5377,7 @@ function load_frame_to_obj() {
 }
 
 // src/pop/seg004.ts
-var TILE_SIZEX = 14;
+var TILE_SIZEX2 = 14;
 var TILE_MIDX = 7;
 var TILE_RIGHTX2 = 13;
 var FIRST_ONSCREEN_COLUMN2 = 5;
@@ -5351,7 +5447,7 @@ function get_row_collision_data(row, room_ptr, flags_ptr) {
     curr_flags |= (right_wall_xpos > g.char_x_left_coll ? 1 : 0) * 240;
     flags_ptr[g.tile_col] = curr_flags;
     room_ptr[g.tile_col] = g.curr_room;
-    g.coll_tile_left_xpos += TILE_SIZEX;
+    g.coll_tile_left_xpos += TILE_SIZEX2;
   }
 }
 function get_left_wall_xpos(room, column, row) {
@@ -5414,9 +5510,9 @@ function is_obstacle() {
 function xpos_in_drawn_room(xpos) {
   if (g.curr_room !== g.drawn_room) {
     if (g.curr_room === g.room_L || g.curr_room === g.room_BL) {
-      xpos -= TILE_SIZEX * SCREEN_TILECOUNTX;
+      xpos -= TILE_SIZEX2 * SCREEN_TILECOUNTX;
     } else if (g.curr_room === g.room_R || g.curr_room === g.room_BR) {
-      xpos += TILE_SIZEX * SCREEN_TILECOUNTX;
+      xpos += TILE_SIZEX2 * SCREEN_TILECOUNTX;
     }
   }
   return xpos;
@@ -5654,7 +5750,7 @@ function resetSeg004() {
 }
 
 // src/pop/seg005.ts
-var TILE_SIZEX2 = 14;
+var TILE_SIZEX3 = 14;
 var FIRST_ONSCREEN_COLUMN3 = 5;
 var CONTROL_HELD2 = -1;
 var CONTROL_RELEASED2 = 0;
@@ -6027,7 +6123,7 @@ function jump_up_or_grab() {
   } else if (!tile_is_floor(get_tile_behind_char())) {
     grab_up_no_floor_behind();
   } else {
-    g.Char.x = byteOf(char_dx_forward(distance - TILE_SIZEX2));
+    g.Char.x = byteOf(char_dx_forward(distance - TILE_SIZEX3));
     load_fram_det_col();
     grab_up_with_floor_behind();
   }
@@ -6108,7 +6204,7 @@ function run_jump() {
       col += [-1, 1][g.Char.direction + 1];
       get_tile(g.Char.room, col, g.Char.curr_row);
       if (g.curr_tile2 === tiles.tiles_2_spike || !tile_is_floor(g.curr_tile2)) {
-        let pos_adjustment = distance_to_edge(xpos) + TILE_SIZEX2 * tiles_forward - TILE_SIZEX2;
+        let pos_adjustment = distance_to_edge(xpos) + TILE_SIZEX3 * tiles_forward - TILE_SIZEX3;
         if (wordOf(pos_adjustment) < wordOf(-8) || pos_adjustment >= 2) {
           if (pos_adjustment < 128) return;
           pos_adjustment = -3;
@@ -7214,7 +7310,7 @@ function resetSeg007() {
 }
 
 // src/pop/seg003.ts
-var TILE_SIZEX3 = 14;
+var TILE_SIZEX4 = 14;
 var TILE_MIDX2 = 7;
 var FIRST_ONSCREEN_COLUMN4 = 5;
 var SCREEN_TILECOUNTX2 = 10;
@@ -7238,7 +7334,7 @@ function do_startpos() {
   let x = g.level.start_pos;
   g.Char.curr_col = x % SCREEN_TILECOUNTX2;
   g.Char.curr_row = Math.trunc(x / SCREEN_TILECOUNTX2);
-  g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX3);
+  g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX4);
   g.Char.direction = ~g.level.start_dir;
   if (g.seamless === 0) {
     x = g.current_level !== 0 ? g.hitp_beg_lev : demo.hitp;
@@ -7396,7 +7492,7 @@ function check_mirror_image() {
   const xpos = x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN4] + 10;
   let distance = distance_to_edge_weight();
   if (g.Char.direction >= directions.dir_0_right) {
-    distance = ~distance + TILE_SIZEX3;
+    distance = ~distance + TILE_SIZEX4;
   }
   distance_mirror = distance - 2;
   g.Char.x = byteOf((xpos << 1) - g.Char.x);
@@ -7418,7 +7514,7 @@ function pos_guards() {
     const guard_tile = g.level.guards_tile[room1];
     if (guard_tile < 30) {
       g.level.guards_x[room1] = byteOf(
-        x_bump[guard_tile % 10 + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX3
+        x_bump[guard_tile % 10 + FIRST_ONSCREEN_COLUMN4] + TILE_SIZEX4
       );
       g.level.guards_seq_hi[room1] = 0;
     }
@@ -7439,8 +7535,8 @@ function check_can_guard_see_kid() {
       left_pos = right_pos;
       right_pos = temp;
     }
-    if (get_tile_at_kid(left_pos) === tiles.tiles_18_chomper) left_pos += TILE_SIZEX3;
-    if (get_tile_at_kid(right_pos) === tiles.tiles_4_gate) right_pos -= TILE_SIZEX3;
+    if (get_tile_at_kid(left_pos) === tiles.tiles_18_chomper) left_pos += TILE_SIZEX4;
+    if (get_tile_at_kid(right_pos) === tiles.tiles_4_gate) right_pos -= TILE_SIZEX4;
     while (left_pos <= right_pos) {
       if (get_tile_at_kid(left_pos) === tiles.tiles_20_wall || g.curr_tile2 === tiles.tiles_7_doortop_with_floor || g.curr_tile2 === tiles.tiles_12_doortop) {
         g.can_guard_see_kid = 0;
@@ -7449,7 +7545,7 @@ function check_can_guard_see_kid() {
       if (g.curr_tile2 === tiles.tiles_11_loose || g.curr_tile2 === tiles.tiles_18_chomper || g.curr_tile2 === tiles.tiles_4_gate && g.curr_room_modif[g.curr_tilepos] < 112 || !tile_is_floor(g.curr_tile2)) {
         g.can_guard_see_kid = 1;
       }
-      left_pos += TILE_SIZEX3;
+      left_pos += TILE_SIZEX4;
     }
   } else {
     g.can_guard_see_kid = 0;
@@ -7473,7 +7569,7 @@ function do_mouse() {
 }
 
 // src/pop/seg002.ts
-var TILE_SIZEX4 = 14;
+var TILE_SIZEX5 = 14;
 var TILE_MIDX3 = 7;
 var FIRST_ONSCREEN_COLUMN5 = 5;
 var SCREEN_TILECOUNTX3 = 10;
@@ -8266,7 +8362,7 @@ function check_skel() {
     g.Char.curr_row = 1;
     g.Char.y = byteOf(y_land[g.Char.curr_row + 1]);
     g.Char.curr_col = 5;
-    g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN5] + TILE_SIZEX4);
+    g.Char.x = byteOf(x_bump[g.Char.curr_col + FIRST_ONSCREEN_COLUMN5] + TILE_SIZEX5);
     g.Char.direction = directions.dir_FF_left;
     seqtbl_offset_char(seqids.seq_88_skel_wake_up);
     play_seq();
@@ -13976,6 +14072,24 @@ async function boot() {
     let h = 2166136261;
     for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
     return { ...game.kid, hash: h >>> 0 };
+  };
+  w.__princeStepRestarting = async (c = {}) => {
+    if (!game || changing || building > 0) return null;
+    watchRoom = null;
+    game.step({ x: 0, y: 0, shift: false, ...c });
+    let restarted = false;
+    if (game.restartDue) {
+      restarted = true;
+      await changeScene(restart);
+      if (!game) return null;
+    }
+    const surface = game.render();
+    const rgba = game.scene.screenPalette.toRgba();
+    display.present(surface, rgba);
+    const rgb = surface.toRgb(rgba);
+    let h = 2166136261;
+    for (let i = 0; i < rgb.length; i++) h = Math.imul(h ^ rgb[i], 16777619);
+    return { hash: h >>> 0, restarted };
   };
   w.__princeAsked = () => [...asked];
   w.__princeSeed = (n) => {

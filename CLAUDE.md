@@ -41,6 +41,219 @@
 ## ============================================================
 
 
+## A `goto` READ AS A `return`, SEVEN SEAMS THAT DEFAULTED TO NOTHING, AND TEN GLOBALS NOBODY READ
+
+    measured   32260 of 33047   98%   (unmoved, run for run)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       491 of   494         (unmoved)
+    npm test     797 -> 801
+
+A round spent entirely in the vein the last one opened: divergences
+**no score can see**, found by reading `sdlpop/src` beside
+`src/pop`. Not one number moved, and the three fixes are each
+something a player can meet.
+
+### 1. `play_guard`'s `goto` is not a `return`
+
+`seg006.c:1486` is a jump into the middle of its own body:
+
+    if (Char.alive < 0) {
+        if (guardhp_curr == 0) { Char.alive = 0; on_guard_killed(); }
+        else goto loc_7A65;
+    }
+    if (Char.charid == charid_1_shadow) clear_char();
+    loc_7A65:
+    autocontrol_opponent();
+    control();
+
+The `goto` skips `clear_char` for a guard who is merely alive. What
+it does **not** skip is the two calls after it, and the port had read
+the whole kill branch as a `return`, so on the one tick
+`guardhp_curr` reaches nought nothing ran at all.
+
+`control()` with `Char.alive >= 0` -- which the line above has just
+written -- is three lines long: a character standing on frame 15,
+166, 158 or 171 is put into `seq_71_dying`. Measured, one tick after
+the last hit point comes off with `Guard.alive` still -1 and the
+guard standing on `seq_2_stand`:
+
+    guard, frame 166    the C 179 (collapse 1)   the port 15
+    guard, frame  15    the C 179                the port 15
+    shadow              direction 86 (none)      direction -1
+
+-- so a guard whose last hit point came off while he stood took an
+extra tick to fall over, and the mirror shadow of level 4 stayed on
+the screen an extra tick after he was killed.
+
+**Every digest is unchanged, run for run.** The one probe in the
+suite that kills a guard is `killguard6`, and `k` is `guardhp_delta
+= -guardhp_curr; Guard.alive = 0` -- it writes `alive` itself, so it
+never takes this branch at all and reads 299 of 299 either way.
+`tests/pop/dropped-lines.test.ts` pins the three numbers.
+
+### 2. Seven seams were declared outside `link.ts` and defaulted to nothing
+
+The round before this one found `wire.ts` wiring a slot to
+`() => {}` and made the test forbid it. `slot()` in `link.ts` makes
+an **unwired** seam throw, so that is the whole of the protection --
+except that seven seams are not `slot()`s at all. They are one
+function on an object the calling segment already exports, and they
+had silent defaults:
+
+    seg003  dist.char_opp_dist      (): number => 0
+    seg005  dist.char_opp_dist      (): number => 0
+    seg003  rooms.goto_other_room   (_d: number): void => {}
+    seg008  hp.draw_hp              (): void => {}
+    seg008  mobs.draw_mobs          (): void => {}
+    seg002  hp.draw_guard_hp        (_c, _m): void => {}
+    seg002  hp.add_life             (): void => {}
+
+`char_opp_dist`'s is the worst of them: a **wrong answer** rather
+than no answer. `link.ts` exports `unlinked()` now -- the same
+throwing body `slot()` uses -- and all seven take it, so the hole is
+gone from the port rather than merely forbidden in one file.
+(`rooms.goto_other_room` also had its return type as `void` where
+the C's is `int`.)
+
+### 3. Ten globals were written and never read, which is the `need_full_redraw` shape
+
+Walked every field of `Globals` and counted reads against writes
+across `src`:
+
+    draw_mode            SDLPoP's `-draw` debug switch
+    guard_refrac_timer   no such global in the C at all
+    obj2_clip_top/_bottom/_left/_right
+                         `save_obj`/`load_obj`, which nothing in the
+                         C calls either
+    start_level          SDLPoP's command line
+    tile_table           shadowing the real const in `data.ts`
+    torch_colors         `USE_COLORED_TORCHES`
+    objtable_count       a dead mirror of `g.objtable.length`,
+    wipetable_count      and of `g.wipetable.length`: four places
+                         wrote them and nobody read them
+
+All ten are gone. **`loaded_room` stays**: the C writes it in
+`get_room_address` and the only things that read it are the copy
+protection and the coloured torches, neither of which this port has.
+
+### 4. `get_tile_div_mod` reads off the ends of its tables, and `& 0xff` is not what the original gets
+
+`get_tile_div_mod` (`seg006:0433`) is two unchecked array reads --
+`obj_xl = tile_mod_tbl[xpos]; return tile_div_tbl[xpos];` -- and the
+two tables are 256 bytes each, laid out `tile_div_tbl` then
+`tile_mod_tbl`. So a negative `xpos` reads `tile_div_tbl` for `xl`
+and the thirty-four bytes **in front of** `tile_div_tbl` for `xh`,
+and SDLPoP writes both runs out verbatim to simulate it.
+
+The port answered `tile_div_tbl[xpos & 0xff]` under a comment saying
+the game's own range of x never notices. **It does not, and that is
+measured**: over every recording in the suite, every tick, `xpos`
+runs **30 to 242**. But eight seeds of random keys over all fourteen
+levels get it to **-4**, where the two answers are not even the same
+pair -- `& 0xff` gives `tile_div_tbl[252]` = 13 for `xh` where the
+original gives the byte 0xB5 = 181 in front of the table.
+
+So no score can move by it (measured: 32260 of 33047 either way, run
+for run) and no score could have caught it. Both runs of bytes and
+both overflow directions are in now, with SDLPoP's arithmetic
+fallback past the bytes it knows.
+
+### 5. What was read and is **right**, with what it cost
+
+A rejected hypothesis is a measurement. Every one of these was
+checked line by line against `sdlpop/src` and is faithful:
+
+* **Call counts, every shared function.** A script that counts the
+  calls each C function makes against the same function in the port
+  flagged 62; all but `play_guard` are `#ifdef` branches SDLPoP
+  added (`USE_JUMP_GRAB`, `USE_SUPER_HIGH_JUMP`, `USE_TELEPORTS`,
+  `USE_COLORED_TORCHES`, `FIX_*`), the `l*.fn` indirection, or my
+  extractor running two C functions together.
+* **Comparison constants, every shared function.** The same script
+  for every `name OP number` in a body: `autocontrol_guard_active`
+  is De Morgan's of the C's guard, `control_hanging` and `land` the
+  same, `up_pressed` and `grab_up_with_floor_behind` take the
+  vanilla side of their `#ifdef`, `get_loose_frame`'s second test is
+  `custom->loose_floor_delay > 11` which is false at the default 11,
+  and `find_room_of_tile` has the `#ifndef FIX_CORNER_GRAB` order.
+* **The `+` cheat does not add two minutes.** The C reads
+  `if (rem_min < 0) {...} else ++rem_min; ++rem_min;` only with
+  `ALLOW_INFINITE_TIME`; the `#else` is a single `++rem_min`, which
+  is what the port has. An hour was nearly spent on that.
+* **`process_key`'s whole switch against `web/main.ts`'s
+  `commandKey`**, including `restartLevel`'s `current_level != 15`,
+  `skipLevel`'s `< 4 || cheats` and its fifteen-minute crop, and the
+  `need_show_text` tail's `text_time_total = text_time_remaining =
+  24`.
+* **`do_paused`'s `next_room = 0`**, which the port does not have
+  and does not need: `check_the_end` leaves `next_room` either equal
+  to `drawn_room` or nought, and both are a no-op on the next tick.
+* **`timers`, `play_level_2`, `check_the_end`, `check_shadow`,
+  `check_fall_flo`, `do_startpos`, `set_start_pos`, `play_kid_frame`,
+  `read_user_control`, `control_kid`, `save_ctrl_1`/`rest_ctrl_1`,
+  `release_arrows`, `play_seq`, `do_fall`, `land`, `take_hp`,
+  `add_life`, `do_delta_hp`, `draw_hp`, `control_standing`,
+  `control_crouched`, `check_get_item`, `do_pickup`, `fell_out`,
+  `check_guard_fallout`, `check_killed_shadow`, `draw_tile_right`,
+  `draw_tile_topright`, `draw_tile_fore`, `show_time`,
+  `get_edge_distance`, `add_guard_to_objtable`, `hurt_by_sword`,
+  `draw_objtable_item`** -- all faithful.
+
+### 6. Two paths the page had never been compared on, and both are exact
+
+`tools/dev/page-port.ts` covered fourteen levels, nine scenes, the
+eleven cheats and all thirteen transitions. It now also covers the
+two things a player does that none of those reach.
+
+**`--deaths`: a level played past a death and a restart.** No digest
+reaches it (a recording ends where it ends, and only `probeF` and
+`f6874819` restart at all), and **no browser test could**, because
+the page's restart is `changeScene(restart)` in the animation loop
+and `__princeStep` -- which every browser test drives -- leaves it
+out. A page stepped through it plays straight on past the death with
+`restartDue` stuck true. `__princeStepRestarting` is the loop's own
+order instead: step, restart if it is due, and only then draw, which
+is `digest-common.ts`'s `runOf` exactly.
+
+    death  1  pictures 400 of 400  restarts page [224] port [224]
+    death  7  pictures 400 of 400
+              restarts page [40,100,160,220,280,340,379] port the same
+
+Shift is held for a third of the ticks on top of `PATTERN` rather
+than throughout, and that is measured rather than chosen: a Shift
+held *into* the new level makes the Prince grab the ledge of level
+7's shaft and live, and holding it throughout kills nobody at all on
+any of the fourteen.
+
+**`--potion`: `potion.html`, the one page that drinks a potion.**
+It is the same bundle with one extra `LEVELS.DAT` record and a
+second document, because `__princePotionLevel` is read before
+`game.js` runs. Driven by `potion1`'s own timeline:
+
+    potion    pictures 1012 of 1012  sounds 17 page / 17 port  drinks 6
+
+**And `--entries 8` had been failing since the held-Shift restart
+went in**, which nobody had noticed because the tool is not in `npm
+test`. It plays sixty ticks of the level before and then sends
+Shift+L -- and on level 7 sixty ticks is forty-three ticks after the
+Prince is dead, so `process_key`'s own `if (rem_min != 0 && Kid.alive
+> 6 && control_shift) key = Ctrl+A` turned the skip into a restart
+and the tool read `arrived at 7`. That is the original's behaviour
+and not a fault; the tool holds Shift for the first twenty ticks now,
+which grabs the ledge. Measured in the headless port, the Prince's
+state at tick 60 for each hold length: 0, 10, 14, 26 and 33 leave
+level 7 **dead** and **20** leaves him alive, with every other level
+alive under all six. All thirteen entries are exact again.
+
+Both new comparisons are in `npm test`
+(`tests/browser/page-vs-port.test.ts`), and the whole tool reads
+
+    npx tsx tools/dev/page-port.ts --scenes --cheats --entries --deaths --potion
+
+with 14 levels, 9 scenes, 13 entries, 2 death runs and the potion
+level all exact.
+
+
 ## `rooms7` IS EXACT: A STUBBED `set_start_pos` AND A CAPTURE NUMBERED FROM THE WRONG TICK
 
     measured   32260 of 33047   98%   (was 32093 of 33067, 97%)

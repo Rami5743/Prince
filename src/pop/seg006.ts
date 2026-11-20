@@ -357,15 +357,79 @@ export function get_tile_div_mod_m7(xpos: number): number {
   return get_tile_div_mod(xpos - 7);
 }
 
+/**
+ * The bytes `tile_div_tbl` and `tile_mod_tbl` have **in front of**
+ * them in the DOS executable, which is what the original reads for a
+ * negative `xpos`.
+ *
+ * `get_tile_div_mod` is two unchecked array reads and the two tables
+ * are 256 bytes each, laid out `tile_div_tbl` then `tile_mod_tbl`.
+ * So `tile_mod_tbl[xpos]` with `xpos` negative lands in
+ * `tile_div_tbl`, and `tile_div_tbl[xpos]` lands in the thirty-four
+ * bytes before it, which SDLPoP writes out verbatim.
+ */
+const BEFORE_TILE_DIV_TBL = [
+  0x02, 0x00, 0x41, 0x00, 0x80, 0x00, 0xbf, 0x00, 0xfe, 0x00, 0xff, 0x01,
+  0x01, 0xff, 0xc4, 0xff, 0x03, 0x00, 0x42, 0x00, 0x81, 0x00, 0xc0, 0x00,
+  0xf8, 0xff, 0x37, 0x00, 0x76, 0x00, 0xb5, 0x00, 0xf4, 0x00,
+] as const;
+
+/** And the bytes **after** `tile_mod_tbl`, for a positive overflow. */
+const AFTER_TILE_MOD_TBL = [
+  0xf4, 0x02, 0x10, 0x1e, 0x2c, 0x3a, 0x48, 0x56, 0x64, 0x72, 0x80, 0x8e,
+  0x9c, 0xaa, 0xb8, 0xc6, 0xd4, 0xe2, 0xf0, 0xfe, 0x00, 0x0a, 0x00, 0xff,
+  0x00, 0x00, 0x00, 0x00, 0x0a, 0x0d, 0x00, 0x00, 0x00, 0x00,
+] as const;
+
 // seg006:0433
 export function get_tile_div_mod(xpos: number): number {
-  // The tables are indexed by a byte, and the C indexes them with the
-  // raw x; out of range it reads whatever is next in memory, which is
-  // not something to reproduce. Clamping is what the game's own range
-  // of x never notices.
-  const i = xpos & 0xff;
-  obj_xl = tile_mod_tbl[i];
-  return tile_div_tbl[i];
+  /**
+   * **The two reads are unchecked in the original, and `xpos` really
+   * does leave 0..255.**
+   *
+   * The port used to answer `tile_div_tbl[xpos & 0xff]` with a
+   * comment saying the game's own range of x never notices. It does
+   * not, and that is measured: over every recording in the suite,
+   * every tick, `xpos` runs **30 to 242**. But a player holding Left
+   * and Up at the same time gets it down to **-4** (eight seeds of
+   * `fuzz.ts`-shaped input over all fourteen levels), and there
+   * `& 0xff` is not what the original reads -- it is not even the
+   * same pair of values, because the two tables are adjacent and a
+   * negative index into `tile_mod_tbl` lands inside `tile_div_tbl`.
+   *
+   * So no score can move by this, and the page can.
+   */
+  if (xpos >= 0 && xpos < 256) {
+    obj_xl = tile_mod_tbl[xpos];
+    return tile_div_tbl[xpos];
+  }
+  if (xpos < 0) {
+    const i = BEFORE_TILE_DIV_TBL.length + xpos;
+    // Further back than the bytes SDLPoP wrote down is further back
+    // than anything can be known about, and the C prints and carries
+    // on with the arithmetic answer.
+    if (i < 0) return arithmetic(xpos);
+    obj_xl = tile_div_tbl[tile_div_tbl.length + xpos];
+    return BEFORE_TILE_DIV_TBL[i];
+  }
+  const over = xpos - 256;
+  if (over >= AFTER_TILE_MOD_TBL.length) return arithmetic(xpos);
+  obj_xl = AFTER_TILE_MOD_TBL[over];
+  return tile_mod_tbl[over];
+}
+
+/**
+ * `x / 14` and `x % 14` about the left edge of the screen, rounded
+ * down -- what the two tables hold where they are indexed in range,
+ * and what SDLPoP falls back to past the bytes it knows.
+ */
+function arithmetic(xpos: number): number {
+  const x = xpos - SCREENSPACE_X;
+  let xh = Math.trunc(x / TILE_SIZEX);
+  let xl = x % TILE_SIZEX;
+  if (xl < 0) { xh -= 1; xl += TILE_SIZEX; }
+  obj_xl = xl;
+  return xh;
 }
 
 // seg006:0448

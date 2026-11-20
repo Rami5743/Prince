@@ -73,6 +73,11 @@ import { SOUND_NAME } from './sound-trace.ts';
 import { playScene, SpeakerClock } from './scene-common.ts';
 import type { SceneName } from '../../src/pop/cutscene.ts';
 import { PROOM_RANDOM_PIXELS } from '../../src/pop/seg001.ts';
+import {
+  levelsDatWithPotionLevel, POTION_LEVEL_NUMBER,
+} from '../../src/dat/potion-level.ts';
+import { decodeTimeline, parseRecording } from '../../src/game/recording.ts';
+import type { Controls } from '../../src/game/control-latch.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
@@ -92,9 +97,22 @@ const TICKS = Number(flag('ticks', '400'));
 const SCENES = flag('scenes', 'title,2,4,6,8,9,12,expired,ending').split(',');
 const WANT_SCENES = args.includes('--scenes') || args.includes('--only-scenes');
 
-const WANT_LEVELS = !args.includes('--only-scenes') && !args.includes('--only-entries');
+const WANT_LEVELS = !args.includes('--only-scenes') && !args.includes('--only-entries')
+  && !args.includes('--only-deaths') && !args.includes('--only-potion');
 const CHEATS = args.includes('--cheats');
 const WANT_ENTRIES = args.includes('--entries') || args.includes('--only-entries');
+const WANT_DEATHS = args.includes('--deaths') || args.includes('--only-deaths');
+const WANT_POTION = args.includes('--potion') || args.includes('--only-potion');
+/**
+ * The levels a death-and-restart is run on.
+ *
+ * Level 7 kills the Prince with no key touched -- the falling entry
+ * drops him down the shaft -- and 5, 6 and 11 kill anyone who runs
+ * right off the start, which `page-walk.ts` found the hard way.
+ */
+const DEATH_LEVELS = flag('deaths', '1,7').split(',').map(Number);
+/** Long enough for several deaths and the level begun again after each. */
+const DEATH_TICKS = Number(flag('deathticks', '400'));
 const ENTRY_LEVELS = flag('entries', '2,3,4,5,6,7,8,9,10,11,12,13,14')
   .split(',').map(Number);
 /** Ticks played in the level before, and in the level arrived at. */
@@ -128,6 +146,27 @@ const PATTERN = [
 ];
 const controlsAt = (t: number): { x: number; y: number; shift: boolean } =>
   PATTERN[((t / 11) | 0) % PATTERN.length]!;
+
+/**
+ * The same, with Shift held for the first twenty ticks.
+ *
+ * `--entries` plays sixty ticks of the level before and then sends
+ * Shift+L, and on **level 7** sixty ticks is forty-three ticks after
+ * the Prince is dead: the falling entry drops him down the shaft and
+ * `land()` makes six rows `take_hp(100)`. `process_key`'s own line --
+ * `if (rem_min != 0 && Kid.alive > 6 && control_shift) key = Ctrl+A`
+ * -- then turns the Shift of the skip into a restart, which is the
+ * original's behaviour and not a fault, so the entry to level 8 came
+ * back `arrived at 7`.
+ *
+ * Holding Shift grabs the ledge of room 1 and he keeps all three
+ * flasks. Measured in the headless port, the Prince's state at tick
+ * 60 for each hold: 0, 10, 14, 26 and 33 all leave level 7 dead and
+ * **20** leaves him alive, with every other level alive under all
+ * six. So twenty it is, on every level, for both sides.
+ */
+const beforeControlsAt = (t: number): { x: number; y: number; shift: boolean } => (
+  t < 20 ? { x: 0, y: 0, shift: true } : controlsAt(t));
 
 /** The page's own hash, written once so the two cannot drift apart. */
 function fnv(rgb: Uint8Array): number {
@@ -251,7 +290,7 @@ async function portEntry(level: number, idle: number): Promise<Side> {
     sound: () => {}, stopSounds: () => {}, soundPlaying: () => false,
   };
   const before = await PopGame.start(assets, exe, level - 1, { effects });
-  for (let t = 0; t < BEFORE; t++) { before.step(controlsAt(t)); before.render(); }
+  for (let t = 0; t < BEFORE; t++) { before.step(beforeControlsAt(t)); before.render(); }
   const carried = {
     ticks: before.remainingTicks,
     sword: before.hasSword,
@@ -284,6 +323,86 @@ async function portEntry(level: number, idle: number): Promise<Side> {
   const hashes: number[] = [];
   for (let t = 0; t < AFTER; t++) {
     game.step(controlsAt(t));
+    const surface = game.render();
+    hashes.push(fnv(surface.toRgb(game.scene.screenPalette.toRgba())));
+  }
+  return { hashes, asked };
+}
+
+/**
+ * `PATTERN`, with Shift held for a third of the time on top of it.
+ *
+ * `process_key`'s own line -- `if (rem_min != 0 && Kid.alive > 6 &&
+ * (control_shift || key == RETURN)) key = Ctrl+A` -- reads the
+ * **state** of the key, so a Shift held through a death begins the
+ * level again the moment the death animation is over. Holding it in
+ * blocks rather than throughout is what gets a second death: a Shift
+ * held *into* the new level makes the Prince grab the ledge of level
+ * 7's shaft and live.
+ *
+ * Measured in the headless port over four hundred ticks: level 7
+ * restarts on ticks 40, 100, 160, 220, 280 and 340, and level 1 on
+ * 224. Running right with Shift held throughout kills nobody at all
+ * on any of the fourteen.
+ */
+const deathControlsAt = (t: number): { x: number; y: number; shift: boolean } => {
+  const p = PATTERN[((t / 11) | 0) % PATTERN.length]!;
+  return { x: p.x, y: p.y, shift: p.shift || ((t / 20) | 0) % 3 === 2 };
+};
+
+/** The headless port, dying and starting the level again. */
+async function portDeaths(level: number): Promise<{ hashes: number[]; restarts: number[] }> {
+  const assets = new Assets(
+    async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
+  const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+  const effects = {
+    sound: () => {}, stopSounds: () => {}, soundPlaying: () => false,
+  };
+  let game = await PopGame.start(assets, exe, level, { effects });
+  const hashes: number[] = [];
+  const restarts: number[] = [];
+  for (let t = 0; t < DEATH_TICKS; t++) {
+    game.step(deathControlsAt(t));
+    // `runOf`'s own order: the level is built again *before* the tick
+    // is drawn, because the original reads the button and shows the
+    // new level in the same tick.
+    if (game.restartDue) {
+      restarts.push(t);
+      game = await game.restart(assets, exe);
+    }
+    const surface = game.render();
+    hashes.push(fnv(surface.toRgb(game.scene.screenPalette.toRgba())));
+  }
+  return { hashes, restarts };
+}
+
+/**
+ * The potion level's own side: `potion.html`'s `LEVELS.DAT`.
+ *
+ * The page swaps the record in before `Assets` ever sees the file, so
+ * the headless port has to be given the same bytes or the two are
+ * playing different levels. `potion1` is the probe that drinks all
+ * six -- sixteen careful steps with four taps of Shift after each --
+ * and it is the only run in the suite that reaches `do_pickup` at
+ * all.
+ */
+async function portPotion(ticks: readonly Controls[]): Promise<Side> {
+  const assets = new Assets(async (n: string) => {
+    const bytes = new Uint8Array(readFileSync(join(GAME_DIR, n)));
+    return n === 'LEVELS.DAT' ? levelsDatWithPotionLevel(bytes) : bytes;
+  });
+  const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+  const asked: number[] = [];
+  const game = await PopGame.start(assets, exe, POTION_LEVEL_NUMBER, {
+    effects: {
+      sound: (which: number) => { asked.push(which); },
+      stopSounds: () => {},
+      soundPlaying: () => false,
+    },
+  });
+  const hashes: number[] = [];
+  for (const c of ticks) {
+    game.step(c);
     const surface = game.render();
     hashes.push(fnv(surface.toRgb(game.scene.screenPalette.toRgba())));
   }
@@ -445,6 +564,143 @@ async function main(): Promise<void> {
     }
   }
 
+  if (WANT_DEATHS) {
+    for (const level of DEATH_LEVELS) {
+      const port = await portDeaths(level);
+      const got = await page.evaluate(async ([lvl, ticks, pattern]) => {
+        const w = window as unknown as {
+          __princeEnterLevel(l: number): Promise<void>;
+          __princePause(on: boolean): void;
+          __princeMute(on: boolean): void;
+          __princeStepRestarting(c: unknown):
+          Promise<{ hash: number; restarted: boolean } | null>;
+        };
+        const P = pattern as { x: number; y: number; shift: boolean }[];
+        w.__princeMute(true);
+        w.__princePause(true);
+        await w.__princeEnterLevel(lvl as number);
+        const hashes: number[] = [];
+        const restarts: number[] = [];
+        for (let t = 0; t < (ticks as number); t++) {
+          const p = P[((t / 11) | 0) % P.length]!;
+          const r = await w.__princeStepRestarting(
+            { x: p.x, y: p.y, shift: p.shift || ((t / 20) | 0) % 3 === 2 },
+          );
+          hashes.push(r ? r.hash : -1);
+          if (r?.restarted) restarts.push(t);
+        }
+        return { hashes, restarts };
+      }, [level, DEATH_TICKS, PATTERN] as const);
+
+      let first = -1;
+      let differ = 0;
+      for (let t = 0; t < DEATH_TICKS; t++) {
+        if (got.hashes[t] !== port.hashes[t]) {
+          differ += 1;
+          if (first < 0) first = t;
+        }
+      }
+      const sameRestarts = got.restarts.length === port.restarts.length
+        && got.restarts.every((v, i) => v === port.restarts[i]);
+      console.log(`death ${String(level).padStart(2)}`
+        + `  pictures ${DEATH_TICKS - differ} of ${DEATH_TICKS}`
+        + (first < 0 ? '' : `  first apart at ${first}`)
+        + `  restarts page [${got.restarts}] port [${port.restarts}]`
+        + (sameRestarts ? '' : '  DIFFERENT'));
+      if (!port.restarts.length) {
+        bad += 1;
+        console.log(`  !! death ${level}: nobody died, so nothing was measured`);
+      }
+      if (differ) {
+        bad += 1;
+        console.log(`  !! death ${level}: the page draws a different picture `
+          + `on ${differ} of ${DEATH_TICKS} ticks, from tick ${first}`);
+      }
+      if (!sameRestarts) {
+        bad += 1;
+        console.log(`  !! death ${level}: the two restart on different ticks`);
+      }
+    }
+  }
+
+  if (WANT_POTION) {
+    /**
+     * `potion.html`, which is the same bundle with one extra level
+     * record and is where the player drinks all six potions.
+     *
+     * The page is a second document because `__princePotionLevel` is
+     * read before `game.js` runs, and it opens straight on the
+     * potion level rather than on the title.
+     */
+    const rec = parseRecording(
+      readFileSync(join(REPO, 'tools', 'oracle', 'recordings', 'potion1.json'), 'utf8'),
+    );
+    const ticks = decodeTimeline(rec.timeline);
+    const port = await portPotion(ticks);
+    const potionPage: Page = await browser.newPage();
+    potionPage.on('console', (m) => { if (m.type() === 'error') thrown.push(m.text()); });
+    potionPage.on('pageerror', (e) => thrown.push(String(e)));
+    await potionPage.addInitScript(
+      'window.__name = window.__name || function (f) { return f; };');
+    await potionPage.goto(`http://localhost:${PORT}/potion.html`, { waitUntil: 'load' });
+    await potionPage.waitForFunction('window.__princeReady === true', null,
+      { timeout: 60000 });
+    const got = await potionPage.evaluate(async ([lvl, controls]) => {
+      const w = window as unknown as {
+        __princeEnterLevel(l: number): Promise<void>;
+        __princePause(on: boolean): void;
+        __princeMute(on: boolean): void;
+        __princeStep(n: number, c: unknown, hash: boolean): { hash: number } | null;
+        __princeAsked(): { tick: number; which: number }[];
+      };
+      w.__princeMute(true);
+      w.__princePause(true);
+      await w.__princeEnterLevel(lvl as number);
+      const before = w.__princeAsked().length;
+      const hashes: number[] = [];
+      for (const c of controls as { x: number; y: number; shift: boolean }[]) {
+        const r = w.__princeStep(1, c, true);
+        hashes.push(r ? r.hash : -1);
+      }
+      return { hashes, asked: w.__princeAsked().slice(before).map((a) => a.which) };
+    }, [POTION_LEVEL_NUMBER, ticks] as const);
+    await potionPage.close();
+
+    let first = -1;
+    let differ = 0;
+    for (let t = 0; t < ticks.length; t++) {
+      if (got.hashes[t] !== port.hashes[t]) { differ += 1; if (first < 0) first = t; }
+    }
+    const sameSound = got.asked.length === port.asked.length
+      && got.asked.every((v, i) => v === port.asked[i]);
+    // `sound_18_drink` is the swallow in `seq_78_drink`, and every one
+    // of the six potions plays it: six of them means six were drunk.
+    const drinks = port.asked.filter((w) => w === 18).length;
+    console.log(`potion    pictures ${ticks.length - differ} of ${ticks.length}`
+      + (first < 0 ? '' : `  first apart at ${first}`)
+      + `  sounds ${got.asked.length} page / ${port.asked.length} port`
+      + `  drinks ${drinks}`
+      + (sameSound ? '' : '  DIFFERENT'));
+    if (drinks !== 6) {
+      bad += 1;
+      console.log(`  !! potion: ${drinks} of the six potions were drunk`);
+    }
+    if (differ) {
+      bad += 1;
+      console.log(`  !! potion: the page draws a different picture on `
+        + `${differ} of ${ticks.length} ticks, from tick ${first}`);
+    }
+    if (!sameSound) {
+      bad += 1;
+      const n = Math.max(got.asked.length, port.asked.length);
+      let at = 0;
+      while (at < n && got.asked[at] === port.asked[at]) at += 1;
+      console.log(`  !! potion: the sounds asked for part at ${at}: `
+        + `page ${got.asked[at] === undefined ? '--' : named(got.asked[at]!)}, `
+        + `port ${port.asked[at] === undefined ? '--' : named(port.asked[at]!)}`);
+    }
+  }
+
   if (WANT_ENTRIES) {
     for (const level of ENTRY_LEVELS) {
       const got = await page.evaluate(async ([lvl, before, after, pattern]) => {
@@ -463,7 +719,11 @@ async function main(): Promise<void> {
         w.__princePause(true);
         await w.__princeEnterLevel((lvl as number) - 1);
         for (let t = 0; t < (before as number); t++) {
-          w.__princeStep(1, P[((t / 11) | 0) % P.length], false);
+          // `beforeControlsAt`: Shift for the first twenty ticks, so
+          // that the Prince is still alive on level 7 when Shift+L
+          // is sent. A dead Prince turns it into Ctrl+A.
+          w.__princeStep(1, t < 20 ? { x: 0, y: 0, shift: true }
+            : P[((t / 11) | 0) % P.length], false);
         }
         // Shift+L, and then the page's own loop: the scene, the wait
         // on the sound, `nextLevel`'s carry and `select`. None of it
