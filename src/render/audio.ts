@@ -22,7 +22,7 @@
 import type { Assets } from './assets.ts';
 import { parseSound, SOUND_RESOURCE_BASE, type Sound } from '../dat/sound.ts';
 import { SOUND_SILENCE } from '../game/sequence.ts';
-import { midiNotes, speakerNotes, Tune, type Note, type MusicSink } from './music.ts';
+import { midiTune, speakerTune, Tune, type Note, type MusicSink } from './music.ts';
 
 /** The files that hold the recorded sounds, in the order to look in them. */
 export const DIGI_FILES = ['DIGISND1.DAT', 'DIGISND2.DAT', 'DIGISND3.DAT'] as const;
@@ -55,7 +55,9 @@ export interface AudioSink {
  */
 type Playable =
   | { readonly kind: 'digi'; readonly buffer: AudioBuffer }
-  | { readonly kind: 'tune'; readonly notes: readonly Note[]; readonly wave: OscillatorType }
+  | { readonly kind: 'tune'; readonly notes: readonly Note[]; readonly wave: OscillatorType;
+      /** The end of the sequence; see `TuneData`. */
+      readonly length: number }
   | null;
 
 /**
@@ -312,7 +314,7 @@ export class SoundPlayer {
     if (what.kind === 'tune') {
       const sink = this.context as unknown as MusicSink;
       if (typeof this.context.createOscillator !== 'function') return;
-      const tune = new Tune(sink, what.notes, what.wave);
+      const tune = new Tune(sink, what.notes, what.wave, what.length);
       if (tune.empty) return;
       tune.onended = (): void => {
         if (this.playing === tune) { this.playing = null; this.playingIndex = -1; }
@@ -392,15 +394,15 @@ export class SoundPlayer {
     }
     const midi = await loadSound(this.assets, index, MIDI_FILES);
     if (midi && midi.kind === 'midi') {
-      const notes = midiNotes(midi);
+      const { notes, length } = midiTune(midi);
       // A triangle is the nearest a plain oscillator comes to the
       // AdLib's softer voices; a square for the beeps below.
-      if (notes.length) return { kind: 'tune', notes, wave: 'triangle' };
+      if (notes.length) return { kind: 'tune', notes, wave: 'triangle', length };
     }
     const beep = await loadSound(this.assets, index, SPEAKER_FILES);
     if (beep && beep.kind === 'speaker') {
-      const notes = speakerNotes(beep);
-      if (notes.length) return { kind: 'tune', notes, wave: 'square' };
+      const { notes, length } = speakerTune(beep);
+      if (notes.length) return { kind: 'tune', notes, wave: 'square', length };
     }
     return null;
   }

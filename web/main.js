@@ -2445,14 +2445,16 @@ function parseSound(payload) {
 // src/render/music.ts
 var hzOf = (note) => 440 * 2 ** ((note - 69) / 12);
 var DRUMS = 9;
-function midiNotes(sound) {
+function midiTune(sound) {
   const b = sound.bytes;
-  if (b.length < 14 || b[0] !== 77 || b[1] !== 84) return [];
+  const nothing = { notes: [], length: 0 };
+  if (b.length < 14 || b[0] !== 77 || b[1] !== 84) return nothing;
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const division = dv.getUint16(12, false);
-  if (division & 32768 || division === 0) return [];
+  if (division & 32768 || division === 0) return nothing;
   const raw = [];
   const tempos = [];
+  let endTick = 0;
   let at = 8 + dv.getUint32(4, false);
   while (at + 8 <= b.length) {
     const isTrack = b[at] === 77 && b[at + 1] === 84 && b[at + 2] === 114 && b[at + 3] === 107;
@@ -2503,6 +2505,7 @@ function midiNotes(sound) {
         else if (kind === 128 || kind === 144) raw.push({ tick, on: false, note: a, vel: 0, ch });
       }
     }
+    if (tick > endTick) endTick = tick;
   }
   tempos.sort((x, y) => x.tick - y.tick);
   raw.sort((x, y) => x.tick - y.tick || (x.on ? 1 : 0) - (y.on ? 1 : 0));
@@ -2540,9 +2543,10 @@ function midiNotes(sound) {
       });
     }
   }
-  return notes.sort((a, b2) => a.at - b2.at);
+  notes.sort((a, b2) => a.at - b2.at);
+  return { notes, length: seconds(endTick) };
 }
-function speakerNotes(sound) {
+function speakerTune(sound) {
   const notes = [];
   let at = 0;
   const tempo = sound.tempo || 1e3;
@@ -2553,19 +2557,27 @@ function speakerNotes(sound) {
     }
     at += dur;
   }
-  return notes;
+  return { notes, length: at };
 }
+var TUNE_NOTE_CAP = 2048;
 var Tune = class {
   nodes = [];
   sink;
   /** When the last note ends, in the sink's own clock. */
   endsAt;
   onended = null;
-  constructor(sink, notes, wave) {
+  /**
+   * @param length how long the sequence itself lasts, where that is
+   * longer than its last note. The channel is held until then, as the
+   * original's own driver holds it: the feather's tune stops sounding
+   * at 18.000 s and its sequence ends at 18.667, and the whole of
+   * `is_feather_fall` is `while (check_sound_playing())`.
+   */
+  constructor(sink, notes, wave, length = 0) {
     this.sink = sink;
     const t0 = sink.currentTime + 0.03;
-    let end = t0;
-    for (const n of notes.slice(0, 600)) {
+    let end = t0 + length;
+    for (const n of notes.slice(0, TUNE_NOTE_CAP)) {
       const osc = sink.createOscillator();
       const gain = sink.createGain();
       osc.type = wave;
@@ -2585,10 +2597,19 @@ var Tune = class {
       if (stop > end) end = stop;
     }
     this.endsAt = end;
-    const last = this.nodes[this.nodes.length - 1];
-    if (last) last.osc.onended = () => {
-      this.onended?.();
-    };
+    if (this.nodes.length) {
+      const osc = sink.createOscillator();
+      const gain = sink.createGain();
+      gain.gain.value = 0;
+      osc.connect(gain);
+      gain.connect(sink.destination);
+      osc.onended = () => {
+        this.onended?.();
+      };
+      osc.start(t0);
+      osc.stop(end + 0.01);
+      this.nodes.push({ osc, gain });
+    }
   }
   get empty() {
     return this.nodes.length === 0;
@@ -2878,7 +2899,7 @@ var SoundPlayer = class {
     if (what.kind === "tune") {
       const sink = this.context;
       if (typeof this.context.createOscillator !== "function") return;
-      const tune = new Tune(sink, what.notes, what.wave);
+      const tune = new Tune(sink, what.notes, what.wave, what.length);
       if (tune.empty) return;
       tune.onended = () => {
         if (this.playing === tune) {
@@ -2963,13 +2984,13 @@ var SoundPlayer = class {
     }
     const midi = await loadSound(this.assets, index, MIDI_FILES);
     if (midi && midi.kind === "midi") {
-      const notes = midiNotes(midi);
-      if (notes.length) return { kind: "tune", notes, wave: "triangle" };
+      const { notes, length } = midiTune(midi);
+      if (notes.length) return { kind: "tune", notes, wave: "triangle", length };
     }
     const beep = await loadSound(this.assets, index, SPEAKER_FILES);
     if (beep && beep.kind === "speaker") {
-      const notes = speakerNotes(beep);
-      if (notes.length) return { kind: "tune", notes, wave: "square" };
+      const { notes, length } = speakerTune(beep);
+      if (notes.length) return { kind: "tune", notes, wave: "square", length };
     }
     return null;
   }

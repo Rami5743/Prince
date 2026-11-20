@@ -38,26 +38,61 @@ const hzOf = (note: number): number => 440 * 2 ** ((note - 69) / 12);
 const DRUMS = 9;
 
 /**
- * A standard MIDI file as a list of notes.
+ * A tune: its notes, and how long the sequence itself lasts.
+ *
+ * The two are not the same number, and the difference is what
+ * `check_sound_playing` answers with. A sequencer plays a sequence to
+ * its **end**, trailing rest and all, and only then is the channel
+ * free; `notes` stops at the last note-off. For most of the game's
+ * tunes the gap is a few tenths, and for the two the game reads back
+ * as a timer it is the whole of a measured error -- see `midiTune`.
+ */
+export interface TuneData {
+  readonly notes: Note[];
+  /** The end of the sequence, in seconds from its start. */
+  readonly length: number;
+}
+
+/**
+ * A standard MIDI file as a list of notes, and the length of the
+ * sequence that holds them.
  *
  * Format 0 and format 1 both appear here, so every track is read and
  * the results merged; the delta times are in the header's ticks and
  * the tempo changes as the file says, so the times come out in
  * seconds.
+ *
+ * **`length` is the end of the longest track, not the end of the last
+ * note**, and that is measured and not assumed. `sound_39_low_weight`
+ * -- the feather, the one effect whose length the game reads back as
+ * a timer (`timers` clears `is_feather_fall` the moment
+ * `check_sound_playing()` goes quiet) -- has its last note-off at
+ * **18.000 s** and its end of track at **18.667 s**, and the PC
+ * speaker's arrangement of the same chord in `IBM_SND1.DAT` is
+ * **18.612 s**, which a capture of `PRINCE.EXE` taking `shift+w`
+ * measures as one unbroken noise of **18.598 s**. So the two
+ * arrangements are the same length to fifty-five milliseconds once
+ * the trailing rest is counted, and three quarters of a second apart
+ * without it. The title's own tune is the same story: sound 54's last
+ * note is at 22.794 s and its sequence ends at 24.294, against the
+ * 24.77 the capture measures `show_title`'s first wait at.
  */
-export function midiNotes(sound: MidiSound): Note[] {
+export function midiTune(sound: MidiSound): TuneData {
   const b = sound.bytes;
-  if (b.length < 14 || b[0] !== 0x4d || b[1] !== 0x54) return []; // 'MT'
+  const nothing = { notes: [] as Note[], length: 0 };
+  if (b.length < 14 || b[0] !== 0x4d || b[1] !== 0x54) return nothing; // 'MT'
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const division = dv.getUint16(12, false);
   // An SMPTE division is negative; the game's files are not, and
   // guessing at one would be worse than silence.
-  if (division & 0x8000 || division === 0) return [];
+  if (division & 0x8000 || division === 0) return nothing;
 
   /** Every track's events, in the file's own ticks. */
   interface Raw { tick: number; on: boolean; note: number; vel: number; ch: number }
   const raw: Raw[] = [];
   const tempos: { tick: number; usPerBeat: number }[] = [];
+  /** The last tick any track reaches, which is the end of the sequence. */
+  let endTick = 0;
 
   let at = 8 + dv.getUint32(4, false);
   while (at + 8 <= b.length) {
@@ -136,6 +171,7 @@ export function midiNotes(sound: MidiSound): Note[] {
         else if (kind === 0x80 || kind === 0x90) raw.push({ tick, on: false, note: a, vel: 0, ch });
       }
     }
+    if (tick > endTick) endTick = tick;
   }
 
   // Ticks into seconds, walking the tempo changes.
@@ -173,8 +209,14 @@ export function midiNotes(sound: MidiSound): Note[] {
       });
     }
   }
-  return notes.sort((a, b2) => a.at - b2.at);
+  notes.sort((a, b2) => a.at - b2.at);
+  // `seconds` walks the tempo list forwards and never back, so the end
+  // of the sequence is asked for last, after every note.
+  return { notes, length: seconds(endTick) };
 }
+
+/** `midiTune(sound).notes`, for the callers that want only the notes. */
+export function midiNotes(sound: MidiSound): Note[] { return midiTune(sound).notes; }
 
 /**
  * A PC speaker tune as a list of notes.
@@ -184,7 +226,7 @@ export function midiNotes(sound: MidiSound): Note[] {
  * lasts `length / tempo` seconds, 1 or less is a rest, and 0x12 ends
  * the tune -- which `parseSound` has already cut it off at.
  */
-export function speakerNotes(sound: SpeakerSound): Note[] {
+export function speakerTune(sound: SpeakerSound): TuneData {
   const notes: Note[] = [];
   let at = 0;
   const tempo = sound.tempo || 1000;
@@ -195,7 +237,17 @@ export function speakerNotes(sound: SpeakerSound): Note[] {
     }
     at += dur;
   }
-  return notes;
+  // The whole list, trailing rest and all: the speaker's driver walks
+  // it to the end before the channel is free. Only two of the game's
+  // tunes have anything after their last note -- 14 by 0.097 s and 18
+  // by 0.174 -- and `sound_39_low_weight` is not one of them, which
+  // is why `FEATHER_SOUND_TICKS` is the speaker tune's own 18.612 s.
+  return { notes, length: at };
+}
+
+/** `speakerTune(sound).notes`, for the callers that want only the notes. */
+export function speakerNotes(sound: SpeakerSound): Note[] {
+  return speakerTune(sound).notes;
 }
 
 /** Just enough of `AudioContext` to make a noise with. */
@@ -214,6 +266,11 @@ export interface MusicSink {
  * it, so a tune has to be stoppable at any moment -- which is what
  * `stop_sounds` and the next footstep both do.
  */
+/**
+ * The most notes a tune may schedule at once; see the loop below.
+ */
+export const TUNE_NOTE_CAP = 2048;
+
 export class Tune {
   private readonly nodes: { osc: OscillatorNode; gain: GainNode }[] = [];
   private readonly sink: MusicSink;
@@ -221,14 +278,29 @@ export class Tune {
   readonly endsAt: number;
   onended: (() => void) | null = null;
 
-  constructor(sink: MusicSink, notes: readonly Note[], wave: OscillatorType) {
+  /**
+   * @param length how long the sequence itself lasts, where that is
+   * longer than its last note. The channel is held until then, as the
+   * original's own driver holds it: the feather's tune stops sounding
+   * at 18.000 s and its sequence ends at 18.667, and the whole of
+   * `is_feather_fall` is `while (check_sound_playing())`.
+   */
+  constructor(sink: MusicSink, notes: readonly Note[], wave: OscillatorType, length = 0) {
     this.sink = sink;
     const t0 = sink.currentTime + 0.03;
-    let end = t0;
-    // A tune with hundreds of notes would be hundreds of oscillators
-    // at once; the game's are far shorter than that, and the cap is
-    // only here so a malformed file cannot wedge the page.
-    for (const n of notes.slice(0, 600)) {
+    let end = t0 + length;
+    /**
+     * A tune with hundreds of notes is hundreds of oscillators at
+     * once, and the cap is here so a malformed file cannot wedge the
+     * page. **Six hundred was not enough and that is measured**:
+     * `sound_56_ending_music`, which plays under the hall of fame at
+     * the end of the game, is 1800 notes and 121.700 seconds, and six
+     * hundred of them is 42.000 -- so the music the player who has
+     * just finished the game hears stopped a third of the way in.
+     * Nothing else in the game comes near: the next longest is sound
+     * 52 at 202 notes.
+     */
+    for (const n of notes.slice(0, TUNE_NOTE_CAP)) {
       const osc = sink.createOscillator();
       const gain = sink.createGain();
       osc.type = wave;
@@ -249,8 +321,31 @@ export class Tune {
       if (stop > end) end = stop;
     }
     this.endsAt = end;
-    const last = this.nodes[this.nodes.length - 1];
-    if (last) last.osc.onended = (): void => { this.onended?.(); };
+    /**
+     * A silent node that stops when the **sequence** does, and carries
+     * `onended`.
+     *
+     * The event used to hang on the last node the loop made, which is
+     * the last note by its start and not always by its end -- and
+     * which stops at the last note whatever the sequence's own length
+     * is. So the channel was freed at the last note: for the feather
+     * that is 18.000 s against the sequence's 18.667, and
+     * `SoundPlayer.mayTake` reads `playing` directly and does none of
+     * `isPlaying`'s lazy clearing, so `endsAt` alone could not hold
+     * it. Measured in Chromium on `shift+w`: the next footstep was
+     * heard 18.09 s after the feather and is 18.70 s after it now.
+     */
+    if (this.nodes.length) {
+      const osc = sink.createOscillator();
+      const gain = sink.createGain();
+      gain.gain.value = 0;
+      osc.connect(gain);
+      gain.connect(sink.destination);
+      osc.onended = (): void => { this.onended?.(); };
+      osc.start(t0);
+      osc.stop(end + 0.01);
+      this.nodes.push({ osc, gain });
+    }
   }
 
   get empty(): boolean { return this.nodes.length === 0; }

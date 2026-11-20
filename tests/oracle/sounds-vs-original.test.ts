@@ -68,6 +68,30 @@ const assets = new Assets(
  * 33.81 seconds, which no origin pairs with anything the port plays
  * -- the seven blips around them all sit a steady 0.216 s off.
  *
+ * `feather1snd` is the feather, and it is the first time anything in
+ * this project has heard `sound_39_low_weight`. Six hundred and
+ * eighty-six ticks of level 1 with `shift+w` -- `feather_fall()`, the
+ * same call the green potion makes -- on tick 362, and the Prince
+ * walking back and forth on the flat of room 2 the whole way, so the
+ * feather changes no frame of the run (the trajectory is identical
+ * with the cheat and without) and what the capture measures is the
+ * sound alone.
+ *
+ * It settles two things nothing else could. The potion's whole length
+ * is its sound's -- `timers` clears `is_feather_fall` the moment
+ * `check_sound_playing()` goes quiet -- and the capture puts that
+ * sound at **one unbroken noise from 58.564 to 77.162 seconds,
+ * 18.598 of them**, against the 18.612 of `IBM_SND1.DAT`'s own tune
+ * and the 223 ticks `FEATHER_SOUND_TICKS` is set to. And
+ * `sound_interruptible[39]` is 0 with priority 0, so
+ * `play_next_sound` refuses everything else while it lasts: the
+ * footsteps the Prince goes on asking for every four ticks are
+ * **not in the capture at all** between those two instants, and the
+ * first one back is at 77.566. The original really does go silent
+ * for eighteen and a half seconds after the feather.
+ *
+ * The one it is short of is a four-millisecond click at 43.97.
+ *
  * `level10bsnd` is **exact, 90 of 90**, and it is the run the gate
  * stutter was found on: `animate_door` asks for `sound_5_gate_opening`
  * four times in one tick there, which before the queue in front of
@@ -77,6 +101,7 @@ const assets = new Assets(
 const EXPECTED: Record<string, number> = {
   title: 212,
   cutscene2snd: 21,
+  feather1snd: 49,
   gate1snd: 94,
   level10bsnd: 90,
 };

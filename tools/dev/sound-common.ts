@@ -523,6 +523,19 @@ export async function recordingSounds(
    * about it independently. See `tools/oracle/README.md`.
    */
   deaf = true,
+  /**
+   * The recording's cheats, by the tick `process_key` reads them on.
+   *
+   * The picture side has replayed a probe's cheats since the cheats
+   * went in -- `digest-common.ts` calls `game.cheat(key)` just before
+   * `step` -- and this did not, so a sound probe whose whole point is
+   * a cheat heard nothing at all. `feather1snd` is the first:
+   * `shift+w` on tick 362 is `feather_fall()`, the only way anything
+   * in the suite can reach `sound_39_low_weight`, and without this
+   * the port's channel carried on with the footsteps the original
+   * refuses for eighteen and a half seconds.
+   */
+  cheats: ReadonlyMap<number, readonly string[]> = new Map(),
 ): Promise<SoundEvent[]> {
   const channel = await SpeakerChannel.load(assets);
   const game = await PopGame.start(assets, exe, rec.level, {
@@ -534,6 +547,7 @@ export async function recordingSounds(
     },
   });
   for (let t = 0; t < ticks; t++) {
+    for (const key of cheats.get(t) ?? []) game.cheat(key);
     game.step(timeline[t] ?? { x: 0, y: 0, shift: false });
     game.render();
     channel.tick(1 / 12);

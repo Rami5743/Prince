@@ -26,6 +26,7 @@ import {
   type SoundDigest, type SoundNote, type SoundEvent, type Noise,
 } from './sound-common.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
+import { cheatsByTick } from './digest-common.ts';
 import { SOUND_NAME } from './sound-trace.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -76,7 +77,11 @@ export async function sceneSounds(spec: SoundSpec, deaf = true): Promise<SoundEv
     const rec = parseRecording(readFileSync(
       join(REPO, 'tools', 'oracle', 'recordings', `${spec.recording}.json`), 'utf8'));
     const timeline = decodeTimeline(rec.timeline);
-    return recordingSounds(assets, exe, rec, timeline, timeline.length, deaf);
+    // A probe's cheats, which the picture side has replayed since the
+    // cheats went in and this had never passed on. See
+    // `recordingSounds`.
+    return recordingSounds(assets, exe, rec, timeline, timeline.length, deaf,
+                           cheatsByTick(rec.cheats));
   }
   const clock = await RecordingClock.load(assets) as RecordingClock;
   await playScene(assets, exe, spec.scene!, spec.frames ?? 0, () => {}, undefined,

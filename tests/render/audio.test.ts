@@ -220,6 +220,63 @@ describe('the MIDI music', () => {
     expect(compared, 'every tune the game has both ways').toBeGreaterThanOrEqual(17);
   });
 
+  /**
+   * A tune lasts to the end of its sequence, not to its last note.
+   *
+   * The difference is what `check_sound_playing` answers with, and
+   * for the feather it is the whole of a measured error.
+   * `sound_39_low_weight` has its last note-off at 18.000 s and its
+   * end of track at **18.667**, and a capture of `PRINCE.EXE` taking
+   * `shift+w` measures the original's own noise at **18.598** -- so
+   * the sequence's length is right to fifty-five milliseconds and
+   * the last note's is three quarters of a second short. The title's
+   * tune is the same: 22.794 against 24.294, where the capture puts
+   * `show_title`'s first wait at 24.77.
+   */
+  it('lasts to the end of its sequence and not to its last note', async () => {
+    const { loadSound, MIDI_FILES } = await import('../../src/render/audio.ts');
+    const { midiTune } = await import('../../src/render/music.ts');
+    const want: Record<number, [number, number]> = {
+      39: [18.000, 18.667], // the feather
+      54: [22.794, 24.294], // the title
+      24: [3.200, 3.600], // the death
+      56: [121.700, 124.700], // the ending
+    };
+    for (const [key, [lastNote, sequence]] of Object.entries(want)) {
+      const midi = await loadSound(assets, Number(key), MIDI_FILES as unknown as string[]);
+      if (!midi || midi.kind !== 'midi') throw new Error(`MIDISND has no sound ${key}`);
+      const tune = midiTune(midi);
+      const end = tune.notes.reduce((m, n) => Math.max(m, n.at + n.dur), 0);
+      expect(end, `sound ${key}: last note`).toBeCloseTo(lastNote, 2);
+      expect(tune.length, `sound ${key}: end of sequence`).toBeCloseTo(sequence, 2);
+    }
+  });
+
+  /**
+   * And every note of it is scheduled.
+   *
+   * `Tune` caps a tune at a number of oscillators so a malformed file
+   * cannot wedge the page, and six hundred was below the longest tune
+   * the game has: `sound_56_ending_music` is **1800 notes**, and six
+   * hundred of them is 42.0 seconds of its 121.7 -- the music under
+   * the hall of fame, cut off a third of the way in, for the player
+   * who has just finished the game.
+   */
+  it('has nothing longer than the cap on the notes a tune may schedule', async () => {
+    const { loadSound, MIDI_FILES, SPEAKER_FILES } = await import('../../src/render/audio.ts');
+    const { midiTune, speakerTune, TUNE_NOTE_CAP } = await import('../../src/render/music.ts');
+    let longest = 0;
+    for (let i = 0; i < 58; i++) {
+      const midi = await loadSound(assets, i, MIDI_FILES as unknown as string[]);
+      if (midi && midi.kind === 'midi') longest = Math.max(longest, midiTune(midi).notes.length);
+      const beep = await loadSound(assets, i, SPEAKER_FILES as unknown as string[]);
+      if (beep && beep.kind === 'speaker') longest = Math.max(longest, speakerTune(beep).notes.length);
+    }
+    expect(longest, 'the longest tune in the game').toBeGreaterThan(600);
+    expect(longest, `the cap is ${TUNE_NOTE_CAP} and the longest tune is ${longest}`)
+      .toBeLessThanOrEqual(TUNE_NOTE_CAP);
+  });
+
   it('puts the melody at the start of the tune and not twelve seconds in', async () => {
     const { loadSound, MIDI_FILES } = await import('../../src/render/audio.ts');
     const { midiNotes } = await import('../../src/render/music.ts');

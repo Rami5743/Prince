@@ -26,6 +26,7 @@ import { PopGame } from '../../src/pop/game.ts';
 import { SoundPlayer, type AudioSink } from '../../src/render/audio.ts';
 import { parseRecording, decodeTimeline } from '../../src/game/recording.ts';
 import { soundids } from '../../src/pop/types.ts';
+import { cheatsByTick } from './digest-common.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GAME_DIR = join(REPO, 'original', 'prince1');
@@ -134,6 +135,16 @@ async function main(): Promise<void> {
     readFileSync(join(REPO, 'tools', 'oracle', 'recordings', `${name}.json`), 'utf8'),
   );
   const timeline = decodeTimeline(rec.timeline);
+  /**
+   * The probe's cheats, by the tick `process_key` reads them on.
+   *
+   * The picture replay has had them since the cheats went in and
+   * this had not, so a probe whose whole point is a cheat -- the
+   * feather's `shift+w` is the only way anything in the suite
+   * reaches `sound_39_low_weight` -- traced as though nothing had
+   * been pressed.
+   */
+  const cheats = cheatsByTick(rec.cheats);
   const limit = Number(ticksArg ?? timeline.length);
   const sink = new FakeSink();
   const player = new SoundPlayer(assets, sink);
@@ -179,6 +190,7 @@ async function main(): Promise<void> {
      */
     const now = timeline[t] ?? { x: 0, y: 0, shift: false };
     if (now.shift && !(timeline[t - 1]?.shift)) run.pressButton();
+    for (const key of cheats.get(t) ?? []) run.cheat(key);
     run.step(now);
     if (run.restartDue) run = await run.restart(assets, exe);
     // `play_next_sound` is the last line of `draw_game_frame`, so the

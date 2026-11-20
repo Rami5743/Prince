@@ -1,0 +1,222 @@
+{
+ "format": "prince-input-recording",
+ "version": 1,
+ "recordedAt": "2026-11-20T07:58:33.113Z",
+ "level": 1,
+ "startMinutes": 60,
+ "ticksPerSecond": 12,
+ "timeline": "40.,30l,10.,30r,10.,30l,10.,30r,10.,30l,10.,30r,10.,30l,10.,30r,10.,6s,30l,10.,30r,10.,30l,10.,30r,10.,30l,10.,30r,10.,30l,10.,30r,10.",
+ "events": [
+  {
+   "ms": 3333,
+   "tick": 40,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 5833,
+   "tick": 70,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 6667,
+   "tick": 80,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 9167,
+   "tick": 110,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 10000,
+   "tick": 120,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 12500,
+   "tick": 150,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 13333,
+   "tick": 160,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 15833,
+   "tick": 190,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 16667,
+   "tick": 200,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 19167,
+   "tick": 230,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 20000,
+   "tick": 240,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 22500,
+   "tick": 270,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 23333,
+   "tick": 280,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 25833,
+   "tick": 310,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 26667,
+   "tick": 320,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 29167,
+   "tick": 350,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 30000,
+   "tick": 360,
+   "type": "down",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 30500,
+   "tick": 366,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 30500,
+   "tick": 366,
+   "type": "up",
+   "key": "ShiftLeft"
+  },
+  {
+   "ms": 33000,
+   "tick": 396,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 33833,
+   "tick": 406,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 36333,
+   "tick": 436,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 37167,
+   "tick": 446,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 39667,
+   "tick": 476,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 40500,
+   "tick": 486,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 43000,
+   "tick": 516,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 43833,
+   "tick": 526,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 46333,
+   "tick": 556,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 47167,
+   "tick": 566,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 49667,
+   "tick": 596,
+   "type": "up",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 50500,
+   "tick": 606,
+   "type": "down",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 53000,
+   "tick": 636,
+   "type": "up",
+   "key": "Numpad4"
+  },
+  {
+   "ms": 53833,
+   "tick": 646,
+   "type": "down",
+   "key": "Numpad6"
+  },
+  {
+   "ms": 56333,
+   "tick": 676,
+   "type": "up",
+   "key": "Numpad6"
+  }
+ ],
+ "states": [],
+ "cheats": [
+  {
+   "tick": 362,
+   "key": "shift+w"
+  }
+ ]
+}

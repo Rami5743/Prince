@@ -41,6 +41,135 @@
 ## ============================================================
 
 
+## THE FEATHER SOUND: THE ORIGINAL GOES SILENT FOR EIGHTEEN AND A HALF SECONDS, AND A TUNE ENDS WHEN ITS SEQUENCE DOES
+
+    measured   32093 of 33067   97%   (unmoved, to the tick)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       466 of   469         (was 417 of 419)
+    npm test     774 of   774         (was 769)
+
+    feather1snd   49 of 50 noises   the first capture of a potion
+
+The player said "there is still a problem with the feather sound" and
+nothing more. Four things were measured and three of them say the
+port is right; the fourth is the fault and it is in `Tune`.
+
+### 1. The original really does go silent for eighteen and a half seconds
+
+`sound_interruptible[39]` is **0** and `sound_prio_table[39]` is
+**0x00**, so `play_next_sound` refuses everything else while the
+feather is in the one channel. Nothing in the suite had ever heard
+it, so a probe was built for it.
+
+**`feather1`** is 686 ticks of level 1 with `shift+w` -- which is
+`feather_fall()`, the same call `proc_get_object` case 3 makes -- on
+tick 362, and the Prince walking back and forth on the flat of room 2
+the whole way, so a footstep is asked for every four ticks. The
+feather changes **no frame** of that run (measured: the trajectory is
+identical tick for tick with the cheat and without), so what the
+capture measures is the sound alone.
+
+Three captures, 48, 48 and 47 of 50. What the best one has:
+
+    58.564 .. 77.162   one unbroken noise, 18.598 s
+    57.894 .. 57.900   the last footstep before it
+    77.566 .. 77.579   the first footstep after it
+
+-- against `IBM_SND1.DAT`'s own tune of **18.612 s** and the **223
+ticks** `FEATHER_SOUND_TICKS` is set to. Fourteen milliseconds over
+eighteen and a half seconds. And between those two instants the
+capture has **nothing at all** while the Prince goes on asking for a
+footstep every four ticks. So the port honours the table and the
+table is the game: the silence the player hears after a feather is
+the original's own.
+
+### 2. `recordingSounds` and `sound-trace.ts` never replayed a probe's cheats
+
+The picture side has called `game.cheat(key)` just before `step`
+since the cheats went in. The **sound** side never did, so a probe
+whose whole point is a cheat heard nothing: the port's channel
+carried on with the footsteps the original refuses, and `feather1snd`
+read 48 of 50 with the 18.598-second noise listed as "the original
+alone". With the cheats passed through it is **49 of 50** and the
+port's own feather is 30.167 .. 48.779 -- 18.612 s, the tune to the
+millisecond. Every other sound probe is unmoved (title 212, gate1snd
+94, level10bsnd 90, cutscene2snd 21), so **sounds 417 of 419 -> 466
+of 469**.
+
+The one it is short of is a four-millisecond click at 43.97.
+
+### 3. A tune lasts to the end of its sequence, not to its last note
+
+**This is the fault, and it is the feather's.** `midiNotes` stops at
+the last note-off and `Tune.endsAt` was the last note's end, so the
+page freed the one channel when the music stopped rather than when
+the sequence did. A sequencer plays a sequence to its end, trailing
+rest and all.
+
+    sound   last note   end of track   the speaker's twin
+    39       18.000       18.667         18.612   the feather
+    54       22.794       24.294         24.737   the title
+    24        3.200        3.600          2.967   the death
+    56      121.700      124.700        120.042   the ending
+
+So the feather's two arrangements are the same length to **55
+milliseconds** once the trailing rest is counted, and three quarters
+of a second apart without it -- and the capture's 18.598 settles
+which is right. Measured in Chromium, the gap from `shift+w` to the
+next footstep the page lets through:
+
+    before   18.09 s
+    after    18.70 s      the capture: 18.598, the port's clock: 18.583
+
+`midiTune` and `speakerTune` return `{ notes, length }` now and
+`midiNotes`/`speakerNotes` are wrappers, so `sound-common.ts` and
+`scene-common.ts` are untouched. Only two speaker tunes have anything
+after their last note -- 14 by 0.097 s and 18 by 0.174 -- and 39 is
+not one of them, which is why `FEATHER_SOUND_TICKS` is the speaker
+tune's own 18.612 and needs no change.
+
+**`endsAt` alone could not do it**, and that cost an hour: `onended`
+hung on the last node the loop made, which stops at the last *note*,
+and `SoundPlayer.mayTake` reads `playing` directly and does none of
+`isPlaying`'s lazy clearing. So the channel was freed at 18.09 s
+however long `endsAt` said. `Tune` now adds one silent oscillator
+that stops when the sequence does and carries `onended`.
+
+### 4. The note cap was below the longest tune in the game
+
+`Tune` caps a tune at a number of oscillators so a malformed file
+cannot wedge the page, and the cap was **600**.
+`sound_56_ending_music` is **1800 notes and 121.700 seconds**, and
+six hundred of them is **42.000** -- the music under the hall of
+fame, cut off a third of the way in, for the player who has just
+finished the game. `TUNE_NOTE_CAP` is 2048 and
+`tests/render/audio.test.ts` fails if any tune in the game ever
+exceeds it. The next longest is sound 52 at 202.
+
+### 5. What was measured and is **not** wrong, with its cost
+
+* **The transition does not stall.** Drink the feather and then
+  `shift+l`: **11219 ms** against the control's **11120**, three runs
+  of each. `skipScene`/`select` call `effects.stopSounds()`, so the
+  scene's own sound 27 takes the channel as usual and the player
+  waits no longer than they ever did.
+* **The tune is heard whole and once.** Every `AudioContext.start()`
+  logged on a real keydown of Shift+W: **15 oscillators, all
+  scheduled in one instant**, at 0.03, 1.36, 2.70, 3.36, 4.03, 5.36,
+  6.70, 6.70, 7.36, 8.70, 9.36, 10.70, 12.03, 12.70 and 15.36
+  seconds. No restart, no truncation, nothing dropped. The same on
+  the deployed root `index.html` as on `web/index.html`.
+* **It is not a loudness fault.** Rendered with `Tune`'s own
+  envelope, the feather's RMS runs 0.024 to 0.076 a second where the
+  footstep recording's is 0.049.
+* **The MIDI is not a bad parse.** `MIDISND1.DAT`'s sound 39 is seven
+  tracks of a single pitch each -- A1, C#4, F4, A2 -- which is an
+  A-augmented chord held and re-struck, and the speaker's 248 notes
+  of 75 ms are **the same chord arpeggiated**, 55, 69, 87, 110, 139,
+  175, 220, 277, 349, 440. One machine sustains what the other
+  ripples. The page plays the AdLib arrangement because it plays the
+  better hardware's wherever there is one.
+
 ## LEVEL 1'S TWENTY-ONE ROOMS: 1011 OF 1011, AND THE ANCHOR HAS TWO DARK TICKS
 
     measured   32093 of 33067   97%   (was 31082 of 32056)
@@ -2359,6 +2488,8 @@ and what the player *hears*, for the first time, by
 
     title         212 of 212 notes    gate1snd      94 of  96 noises
     cutscene2snd   21 of  21 notes    level10bsnd   90 of  90 noises
+    feather1snd    49 of  50 noises   the feather, and the first
+                                      capture of a potion
 
 **Most of what used to be short was the encoder, not the clock** --
 see the top of this file: the same eight scenes went from 756 to 1224

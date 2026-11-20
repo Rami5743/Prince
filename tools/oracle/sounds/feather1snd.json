@@ -1,0 +1,5 @@
+{
+  "what": "feather1: 680 ticks of level 1 with `shift+w` on tick 360, which is `feather_fall()` -- the same call the green potion makes. The Prince walks back and forth on the flat of room 2 the whole way, so the feather changes no frame of the run (measured: the trajectory is identical with the cheat and without) and what the capture measures is the sound alone. `sound_39_low_weight` is the longest effect in the game and the one the game reads back as a timer, and nothing in the suite had ever heard it.",
+  "recording": "feather1",
+  "shift": 0
+}
