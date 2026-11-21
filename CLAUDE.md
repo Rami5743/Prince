@@ -1,5 +1,85 @@
 # Read this first
 
+## AND THE PLAYER SAID IT WAS UGLY: A FILED-DOWN STAIRCASE IS STILL A STAIRCASE
+
+    218 sprites traced   219 ms, 1456 layers, 564 KiB
+    npm test             906 -> 908
+
+The section below this one wrote up a trace that was faithful,
+tested and **wrong to look at**. The player's words: still very
+pixelated, and noisy. Both halves were true and each had its own
+cause.
+
+### 1. Rounding every joint by a pixel is not a curve
+
+The first version kept the simplified polygon's straight segments
+and filed the joints down by at most a pixel. A shoulder was still
+six short straight runs with the corners softened: **a filed-down
+staircase is a staircase**.
+
+What it is now is one continuous **cubic spline**. The turn at each
+vertex decides: sharper than `CORNER_ANGLE` -- 72 degrees -- is a
+corner the artist meant, a heel or the point of a sword, and the
+curve stops dead there; everything gentler is carried through, with
+the tangent at a vertex pointing along the chord between its two
+neighbours. A corner lends no tangent on its own side, so the curve
+arrives at it and leaves it straight and the join stays sharp.
+
+### 2. The noise was the artist's dithering, traced faithfully
+
+Sixteen colours at this size cannot make a gradient, so the shading
+on the Prince's sleeve is **single pixels of the next shade along**,
+scattered through it. Traced faithfully, every one became its own
+little island: a hundred specks floating over the cloth, which is
+what the player called noise.
+
+`denoise` labels every connected region and dissolves one no bigger
+than `DENOISE` whose boundary is mostly a single other index and
+whose colour is within `MERGE` of that index's. Four passes, because
+dissolving one speck can leave its neighbour small enough to go too.
+
+**It was got wrong twice and both ways are worth keeping:**
+
+* **Too timid, and it dissolved nothing at all.** The background got
+  a vote. A speck of the next shade sitting on the silhouette's own
+  edge is half air, so its best neighbour took 50 per cent of the
+  boundary and failed the test. Measured on sprite 401: the
+  commonest small region was `7->15, distance 162, share 0.50`,
+  eleven of them, failing on both counts. The background is not a
+  candidate and does not vote, and `MERGE` is 170.
+* **Too greedy, and it took his face.** At `DENOISE` 6 with `MERGE`
+  200 the head came out a flat skin block: the eye, the brow and the
+  mouth had all gone, and the figure read as a paper cut-out. Four
+  settings were put side by side on one sheet at sixteen times and
+  looked at. **`DENOISE` 4, `MERGE` 170** keeps the face and the
+  fold-shading and loses the dither.
+
+The distance test is the whole of what keeps the eye: it is dark
+against skin, and the dither is one shade against its neighbour.
+
+### 3. All 218 looked at again, at the new settings
+
+Ten sheets, the original's pixels beside the outline. The figures
+read as drawn now -- the limbs flow, the sword in 569 is a clean
+taper, the star in 619 has points rather than steps -- and nothing
+is lost that was not dither.
+
+Tracing all of him costs **219 ms** (up from 148: the denoise is
+four passes of connected components) and the path data is **564
+KiB**, down from 787 because there is less to draw.
+
+### 4. What the tests had to stop saying
+
+`vectorize.test.ts` asserted that every index a sprite uses gets a
+layer. With the dither dissolved that is false **by design**, so it
+is two tests now: with `denoise: 0` every index gets a layer, and
+with the dither on, every index whose **largest connected patch** is
+bigger than `DENOISE` still does -- a colour that exists only as
+scattered single pixels is dither by definition, however many of
+them there are. And one test puts a pale speck and a dark speck in
+the same picture and requires the first to go and the second to
+stay.
+
 ## THE PRINCE IS OUTLINES NOW: 218 SPRITES TRACED, AND EVERY ONE LOOKED AT
 
     npm test   897 -> 906

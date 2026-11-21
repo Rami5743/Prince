@@ -83,6 +83,35 @@ export const ROUND = 1;
 /** A loop no bigger than this is drawn as it is: a speck is a speck. */
 export const SPECK = 2.5;
 
+/**
+ * A turn sharper than this is a corner the artist meant.
+ *
+ * Everything gentler is carried through by one continuous curve, so
+ * that a shoulder or a hip is an arc and not a chain of short straight
+ * segments with the joints filed off. The first version of this file
+ * had no such thing: it rounded each joint by at most a pixel and left
+ * the straight runs straight, which is why the player looked at it and
+ * said it was still pixelated.
+ */
+export const CORNER_ANGLE = 72;
+
+/**
+ * The biggest patch of colour that counts as the artist's dithering.
+ *
+ * Sixteen colours at this size are not enough for a gradient, so the
+ * shading on the Prince's sleeve is **single pixels of the next shade
+ * along**, scattered. Traced faithfully they are what the player
+ * called noise: a hundred little islands floating over the cloth. A
+ * region this small whose boundary is mostly one other index, and
+ * whose colour is within `MERGE` of that index's, is dissolved into
+ * it -- so the dither goes and the eye, which is dark against skin,
+ * stays.
+ */
+export const DENOISE = 4;
+
+/** How far apart two palette entries may be and still be one shading. */
+export const MERGE = 170;
+
 export interface VectorLayer {
   /** The palette index this layer is filled with. */
   readonly index: number;
@@ -108,6 +137,17 @@ export interface VectorOptions {
   readonly round?: number;
   /** Both arms this long make a turn a corner; 0 rounds every turn. */
   readonly cornerRun?: number;
+  /**
+   * A turn of more than this many degrees is a corner and stays sharp.
+   * Everything gentler is carried through by one continuous curve.
+   */
+  readonly cornerAngle?: number;
+  /** A region of this area or less may be dissolved into its neighbour. */
+  readonly denoise?: number;
+  /** How far apart two colours may be and still be the same shading. */
+  readonly merge?: number;
+  /** The palette the sprite is drawn with, for that colour distance. */
+  readonly palette?: Uint8Array;
 }
 
 /** x, y pairs round a closed loop of unit, axis-aligned steps. */
@@ -261,10 +301,28 @@ function simplify(poly: Loop, tol: number): Loop {
   return out.length >= 8 ? out : poly;
 }
 
-function emit(poly: Loop, sharp: boolean, rMax: number, run: number): string {
+/**
+ * One loop as a path: straight where it must be, curved everywhere else.
+ *
+ * The turn at each vertex decides. A turn sharper than `cornerAngle`
+ * is a corner the artist meant -- a heel, an elbow, the point of a
+ * sword -- and the curve stops dead there. Everything gentler is
+ * **one continuous cubic spline** whose tangent at a vertex points
+ * along the chord between that vertex's two neighbours, which is the
+ * oldest way there is of putting a smooth curve through a set of
+ * points, and is why the outline reads as drawn rather than stepped.
+ *
+ * The version before this one rounded each joint by at most a pixel
+ * and left every straight run straight, and the player looked at it
+ * and said it was still pixelated. It was: a filed-down staircase is
+ * a staircase.
+ */
+function emit(poly: Loop, sharp: boolean, angle: number): string {
   const n = poly.length / 2;
   if (n < 3) return '';
-  const at = (i: number): [number, number] => [poly[i * 2]!, poly[i * 2 + 1]!];
+  const at = (i: number): number => (((i % n) + n) % n);
+  const px = (i: number): number => poly[at(i) * 2]!;
+  const py = (i: number): number => poly[at(i) * 2 + 1]!;
 
   if (sharp || area(poly) <= SPECK) {
     let d = `M${poly[0]} ${poly[1]}`;
@@ -272,49 +330,148 @@ function emit(poly: Loop, sharp: boolean, rMax: number, run: number): string {
     return `${d}Z`;
   }
 
-  const len = (i: number, j: number): number => Math.hypot(
-    poly[j * 2]! - poly[i * 2]!, poly[j * 2 + 1]! - poly[i * 2 + 1]!,
-  );
-  // A turn between two long arms is a corner the artist meant and is
-  // left sharp; everything else is softened, by at most half of its
-  // shorter arm so that two neighbouring curves can never cross.
-  const arm: number[] = [];
+  const cosLimit = Math.cos((angle * Math.PI) / 180);
   const sharpAt: boolean[] = [];
+  const tx: number[] = [];
+  const ty: number[] = [];
   for (let i = 0; i < n; i++) {
-    const a = len((i + n - 1) % n, i);
-    const b = len(i, (i + 1) % n);
-    arm.push(Math.min(a, b) / 2);
-    sharpAt.push(run > 0 && a >= run && b >= run);
+    const ax = px(i) - px(i - 1); const ay = py(i) - py(i - 1);
+    const bx = px(i + 1) - px(i); const by = py(i + 1) - py(i);
+    const la = Math.hypot(ax, ay) || 1;
+    const lb = Math.hypot(bx, by) || 1;
+    sharpAt.push((ax * bx + ay * by) / (la * lb) < cosLimit);
+    const cx = px(i + 1) - px(i - 1); const cy = py(i + 1) - py(i - 1);
+    const lc = Math.hypot(cx, cy) || 1;
+    tx.push(cx / lc);
+    ty.push(cy / lc);
   }
-  const radius = (i: number): number => (sharpAt[i] ? 0 : Math.min(rMax, arm[i]!));
 
-  /** The point `r` pixels back from vertex i towards vertex j. */
-  const back = (i: number, j: number, r: number): [number, number] => {
-    const [ax, ay] = at(i); const [bx, by] = at(j);
-    const d = Math.hypot(bx - ax, by - ay) || 1;
-    return [ax + ((bx - ax) / d) * r, ay + ((by - ay) / d) * r];
-  };
-
-  const parts: string[] = [];
-  const first = radius(0) > 0 ? back(0, (n - 1) % n, radius(0)) : at(0);
-  parts.push(`M${round(first[0])} ${round(first[1])}`);
-  for (let k = 0; k < n; k++) {
-    const next = (k + 1) % n;
-    const r = radius(next);
-    if (r <= 0) {
-      const [x, y] = at(next);
-      parts.push(`L${round(x)} ${round(y)}`);
-      continue;
-    }
-    const a = back(next, k, r);
-    const b = back(next, (next + 1) % n, r);
-    const [vx, vy] = at(next);
-    parts.push(`L${round(a[0])} ${round(a[1])}`);
-    parts.push(`Q${round(vx)} ${round(vy)} ${round(b[0])} ${round(b[1])}`);
+  const parts = [`M${round(px(0))} ${round(py(0))}`];
+  for (let i = 0; i < n; i++) {
+    const dx = px(i + 1) - px(i); const dy = py(i + 1) - py(i);
+    const d = Math.hypot(dx, dy);
+    if (d === 0) continue;
+    const k = d / 3;
+    const a = at(i); const b = at(i + 1);
+    // A corner lends no tangent on its own side, so the curve leaves
+    // it and arrives at it along the chord: the join stays sharp.
+    const c1x = sharpAt[a] ? px(i) + (dx / d) * k : px(i) + tx[a]! * k;
+    const c1y = sharpAt[a] ? py(i) + (dy / d) * k : py(i) + ty[a]! * k;
+    const c2x = sharpAt[b] ? px(i + 1) - (dx / d) * k : px(i + 1) - tx[b]! * k;
+    const c2y = sharpAt[b] ? py(i + 1) - (dy / d) * k : py(i + 1) - ty[b]! * k;
+    parts.push(`C${round(c1x)} ${round(c1y)} ${round(c2x)} ${round(c2y)}`
+      + ` ${round(px(i + 1))} ${round(py(i + 1))}`);
   }
   parts.push('Z');
   return parts.join('');
 }
+
+/**
+ * The artist's dithering, dissolved.
+ *
+ * Sixteen colours cannot make a gradient at this size, so the shading
+ * on the Prince's sleeve is **single pixels of the next shade along**,
+ * scattered through it. Traced faithfully they are what the player
+ * called noise: a hundred little islands floating over the cloth.
+ *
+ * Every connected region is labelled; one no bigger than `maxArea`
+ * whose boundary is at least seventy per cent a single other index,
+ * and whose colour is within `maxDist` of that index's, is repainted
+ * with it. Four passes, because dissolving one speck can leave its
+ * neighbour small enough to go too.
+ *
+ * A speck whose neighbour is a **different** colour is never touched,
+ * however small: the eye is two dark pixels against skin, and the
+ * distance test is the whole of what keeps it.
+ */
+function denoise(
+  px: Uint8Array, w: number, h: number, transparent: number | undefined,
+  maxArea: number, maxDist: number, palette: Uint8Array | undefined,
+): Uint8Array {
+  const out = new Uint8Array(px);
+  if (maxArea <= 0) return out;
+  const dist = (a: number, b: number): number => {
+    if (!palette) return 0;
+    return Math.abs(palette[a * 4]! - palette[b * 4]!)
+      + Math.abs(palette[a * 4 + 1]! - palette[b * 4 + 1]!)
+      + Math.abs(palette[a * 4 + 2]! - palette[b * 4 + 2]!);
+  };
+  const STEP = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+
+  for (let pass = 0; pass < 4; pass++) {
+    const label = new Int32Array(w * h).fill(-1);
+    const stack: number[] = [];
+    let moved = false;
+    for (let seed = 0; seed < w * h; seed++) {
+      if (label[seed] !== -1) continue;
+      const index = out[seed]!;
+      const cells: number[] = [];
+      label[seed] = seed;
+      stack.length = 0;
+      stack.push(seed);
+      while (stack.length > 0) {
+        const cell = stack.pop()!;
+        cells.push(cell);
+        const x = cell % w; const y = (cell - x) / w;
+        for (const [dx, dy] of STEP) {
+          const nx = x + dx; const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const to = ny * w + nx;
+          if (label[to] !== -1 || out[to] !== index) continue;
+          label[to] = seed;
+          stack.push(to);
+        }
+      }
+      if (cells.length > maxArea) continue;
+
+      if (index === transparent) continue;
+      // Who is round it, and by how much of its boundary. **The
+      // background is not a candidate and does not get a vote**: a
+      // speck of the next shade along, sitting on the silhouette's
+      // own edge, is half air -- which is why the first attempt
+      // dissolved nothing at all and the player saw no change.
+      const touch = new Map<number, number>();
+      for (const cell of cells) {
+        const x = cell % w; const y = (cell - x) / w;
+        for (const [dx, dy] of STEP) {
+          const nx = x + dx; const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const other = out[ny * w + nx]!;
+          if (other === index || other === transparent) continue;
+          touch.set(other, (touch.get(other) ?? 0) + 1);
+        }
+      }
+      let best = -1; let bestN = 0; let total = 0;
+      for (const [other, count] of touch) {
+        total += count;
+        if (count > bestN) { bestN = count; best = other; }
+      }
+      if (best < 0 || bestN < total * 0.5) continue;
+      if (dist(index, best) > maxDist) continue;
+      for (const cell of cells) out[cell] = best;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return out;
+}
+
+/** `denoise`, with the transparent index held out of it. */
+function denoiseKeeping(
+  px: Uint8Array, w: number, h: number, transparent: number | undefined,
+  maxArea: number, maxDist: number, palette: Uint8Array | undefined,
+): Uint8Array {
+  const out = denoise(px, w, h, transparent, maxArea, maxDist, palette);
+  if (transparent !== undefined) {
+    // Nothing may become see-through and nothing see-through may
+    // change: the silhouette is the one thing a trace must not touch.
+    for (let i = 0; i < px.length; i++) {
+      if (px[i] === transparent || out[i] === transparent) out[i] = px[i]!;
+    }
+  }
+  return out;
+}
+
 
 /** The shoelace area of a loop, unsigned. */
 function area(poly: Loop): number {
@@ -341,8 +498,15 @@ export function vectorize(
   pixels: Uint8Array, width: number, height: number, opts: VectorOptions = {},
 ): VectorSprite {
   const transparent = opts.transparent;
+  // The dithering goes first, so that the trace never sees it.
+  const clean = opts.sharp === true
+    ? pixels
+    : denoiseKeeping(
+      pixels, width, height, transparent,
+      opts.denoise ?? DENOISE, opts.merge ?? MERGE, opts.palette,
+    );
   const area = new Map<number, number>();
-  for (const v of pixels) {
+  for (const v of clean) {
     if (v === transparent) continue;
     area.set(v, (area.get(v) ?? 0) + 1);
   }
@@ -353,14 +517,13 @@ export function vectorize(
   const live = new Set(order);
   for (const index of order) {
     mask.fill(0);
-    for (let i = 0; i < pixels.length; i++) if (live.has(pixels[i]!)) mask[i] = 1;
+    for (let i = 0; i < clean.length; i++) if (live.has(clean[i]!)) mask[i] = 1;
     const loops = trace(mask, width, height);
     const tol = opts.sharp === true ? 0 : (opts.tolerance ?? TOLERANCE);
-    const rMax = opts.round ?? ROUND;
-    const run = opts.cornerRun ?? CORNER_RUN;
+    const angle = opts.cornerAngle ?? CORNER_ANGLE;
     const path = loops
       .map((l) => emit(
-        tol > 0 ? simplify(corners(l), tol) : corners(l), opts.sharp === true, rMax, run,
+        tol > 0 ? simplify(corners(l), tol) : corners(l), opts.sharp === true, angle,
       ))
       .join('');
     if (path !== '') layers.push({ index, path });

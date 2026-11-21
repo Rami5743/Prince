@@ -74,6 +74,16 @@ const rgb = [...Array(16).keys()].map((i) => {
   return [dac(e.r), dac(e.g), dac(e.b)] as const;
 });
 
+/** The sprite's own bank, as RGBA, for the denoise's colour distance. */
+const paletteRgba = new Uint8Array(256 * 4);
+for (let i = 0; i < 16; i++) {
+  const [r, g, b] = rgb[i]!;
+  paletteRgba[i * 4] = r;
+  paletteRgba[i * 4 + 1] = g;
+  paletteRgba[i * 4 + 2] = b;
+  paletteRgba[i * 4 + 3] = 255;
+}
+
 const shots: Shot[] = [];
 for (const entry of kid.entries.slice().sort((a, b) => a.id - b.id)) {
   if (entry.id <= 400) continue;
@@ -89,7 +99,9 @@ for (const entry of kid.entries.slice().sort((a, b) => a.id - b.id)) {
     pixels: img.pixels,
     vecs: SHARP
       ? [vectorize(img.pixels, img.width, img.height, { transparent: 0, sharp: true })]
-      : VARIANTS.map(([, o]) => vectorize(img.pixels, img.width, img.height, o)),
+      : VARIANTS.map(([, o]) => vectorize(
+        img.pixels, img.width, img.height, { ...o, palette: paletteRgba },
+      )),
   });
 }
 console.log(`${shots.length} sprites, scale ${SCALE}${SHARP ? ', sharp' : ''}`);

@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  vectorize, TOLERANCE, ROUND, CORNER_RUN, SPECK,
+  vectorize, TOLERANCE, SPECK, CORNER_ANGLE, DENOISE, MERGE,
 } from '../../src/render/vectorize.ts';
 import { DatFile } from '../../src/dat/container.ts';
 import { decodeImage, isImage, isEmptyPlaceholder } from '../../src/dat/image.ts';
@@ -101,9 +101,35 @@ describe('the tracer', () => {
 
   it('is the settings the sheets were chosen with', () => {
     expect(TOLERANCE).toBe(1);
-    expect(ROUND).toBe(1);
-    expect(CORNER_RUN, 'no corner is kept sharp; the head needs it').toBe(0);
     expect(SPECK).toBe(2.5);
+    expect(CORNER_ANGLE, 'gentler than this is carried by one curve').toBe(72);
+    expect(DENOISE, 'a patch this small may be the artist\'s dither').toBe(4);
+    expect(MERGE, 'and only if its colour is this close to its neighbour').toBe(170);
+  });
+
+  /**
+   * The dither goes and the face stays, which is the whole of the
+   * denoise and is the thing that was got wrong twice: once too
+   * timid -- the background got a vote, so a speck on the silhouette
+   * edge read as half air and nothing dissolved -- and once too
+   * greedy, which took the Prince's eye with it.
+   */
+  it('dissolves a speck of a near colour and keeps one of a far colour', () => {
+    const near = new Uint8Array(256 * 4);
+    near[1 * 4] = 250; near[1 * 4 + 1] = 250; near[1 * 4 + 2] = 240;
+    near[2 * 4] = 230; near[2 * 4 + 1] = 230; near[2 * 4 + 2] = 220;
+    near[3 * 4] = 40; near[3 * 4 + 1] = 20; near[3 * 4 + 2] = 20;
+    const { ix, w, h } = pic([
+      '11111',
+      '11211',
+      '11111',
+      '11311',
+      '11111',
+    ]);
+    const v = vectorize(ix, w, h, { palette: near });
+    const indices = new Set(v.layers.map((l) => l.index));
+    expect(indices.has(2), 'the dither speck is gone').toBe(false);
+    expect(indices.has(3), 'the dark speck stays').toBe(true);
   });
 });
 
@@ -130,8 +156,52 @@ describe('the Prince, traced', () => {
     for (const s of sprites) {
       const used = new Set(s.px);
       used.delete(0);
-      const v = vectorize(s.px, s.w, s.h, { transparent: 0 });
+      const v = vectorize(s.px, s.w, s.h, { transparent: 0, denoise: 0 });
       expect(new Set(v.layers.map((l) => l.index)), `sprite ${s.id}`).toEqual(used);
+    }
+  });
+
+  /**
+   * With the dither dissolved a sprite keeps fewer colours, and that
+   * is the point. What may **not** happen is a colour the sprite is
+   * actually drawn in going away: a colour whose largest connected
+   * patch is bigger than `DENOISE` is still a layer. A colour that
+   * exists only as scattered single pixels is dither by definition,
+   * however many of them there are, and it goes.
+   */
+  it('dissolves only small patches, never a colour the sprite is made of', () => {
+    for (const s of sprites) {
+      const biggest = new Map<number, number>();
+      const seen = new Int32Array(s.w * s.h).fill(-1);
+      for (let seed = 0; seed < s.w * s.h; seed++) {
+        if (seen[seed] !== -1) continue;
+        const index = s.px[seed]!;
+        const stack = [seed];
+        seen[seed] = seed;
+        let n = 0;
+        while (stack.length > 0) {
+          const cell = stack.pop()!;
+          n++;
+          const x = cell % s.w; const y = (cell - x) / s.w;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+            const nx = x + dx; const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= s.w || ny >= s.h) continue;
+            const to = ny * s.w + nx;
+            if (seen[to] !== -1 || s.px[to] !== index) continue;
+            seen[to] = seed;
+            stack.push(to);
+          }
+        }
+        if (index !== 0) biggest.set(index, Math.max(biggest.get(index) ?? 0, n));
+      }
+      const v = vectorize(s.px, s.w, s.h, { transparent: 0 });
+      const kept = new Set(v.layers.map((l) => l.index));
+      for (const [index, n] of biggest) {
+        if (n > DENOISE) expect(kept.has(index), `sprite ${s.id} index ${index}`).toBe(true);
+      }
+      for (const index of kept) {
+        expect(biggest.has(index), `sprite ${s.id} invented index ${index}`).toBe(true);
+      }
     }
   });
 
@@ -181,9 +251,11 @@ describe('the Prince, traced', () => {
   it('stays inside the sprite it came from, and keeps its weight', () => {
     for (const s of sprites) {
       const v = vectorize(s.px, s.w, s.h, { transparent: 0 });
+      // A spline's control points may reach a little outside the
+      // sprite's own box; the curve itself does not go far.
       for (const layer of v.layers) {
         for (const n of layer.path.match(/-?\d+(\.\d+)?/g) ?? []) {
-          expect(Number(n), `sprite ${s.id}`).toBeGreaterThanOrEqual(-0.01);
+          expect(Number(n), `sprite ${s.id}`).toBeGreaterThanOrEqual(-2);
         }
       }
       const opaque = [...s.px].filter((p) => p !== 0).length;
