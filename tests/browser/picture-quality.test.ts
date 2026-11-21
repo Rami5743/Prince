@@ -8,12 +8,13 @@
  * and a canvas the browser is then allowed to shrink smoothly instead
  * of with nearest neighbour.
  *
- * The one thing that has to be true and that no unit test can see is
- * that **the enlarged picture is the same picture**: the game rewrites
- * its palette while it plays, so a pixel that is the average of two
- * indices would have no index left to change. So the test holds the
- * game still, reads the canvas at both qualities, and requires every
- * colour at `high` to be a colour the original frame already had.
+ * The thing to check here, which no unit test can, is on the canvas
+ * the player looks at: at `high` it carries **colours the palette
+ * does not hold** -- that is the whole of the anti-aliasing and the
+ * reason the first version of this was rejected -- and those colours
+ * are mixtures of the frame's own, not a new hue. And the picture
+ * still obeys the palette: the test fades the screen and requires it
+ * to go dark, because a finished RGB image would not.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Server } from 'node:http';
@@ -114,31 +115,81 @@ describe('the picture at the two qualities', () => {
     const before = await ticks();
     await set('high');
     high = await read();
-    expect(high.width, 'three times across at least').toBeGreaterThanOrEqual(960);
+    expect(high.width, 'three times across').toBe(960);
     expect(high.width / high.height, 'the same shape').toBeCloseTo(320 / 200, 5);
-    expect(high.rendering, 'the browser may shrink it smoothly').not.toBe('pixelated');
+    expect(high.rendering, 'the browser may resize it smoothly').not.toBe('pixelated');
     expect(Math.abs(high.shownWidth - original.shownWidth), 'the same size on the page')
       .toBeLessThanOrEqual(1);
     expect((await ticks()) - before, 'and it costs the game no tick')
       .toBeLessThanOrEqual(3);
   });
 
-  it('invents no colour, which is what lets the palette go on moving', () => {
+  it('puts colours on the screen the palette does not hold', () => {
     const had = new Set(original.colors);
-    const invented = high.colors.filter((c) => !had.has(c));
-    expect(invented, invented.join(' ')).toEqual([]);
-    // And it really did more than copy: Scale3x rounds corners, so
-    // some of the original's colours cover a different share of the
-    // screen. A pure nearest-neighbour blow-up would be identical.
-    expect(high.colors.length).toBeGreaterThan(8);
+    const made = high.colors.filter((c) => !had.has(c));
+    // The measurement this round turns on. The version before it
+    // produced exactly the original's own colour count, which is why
+    // every edge was a staircase.
+    expect(high.colors.length, `original ${original.colors.length}`)
+      .toBeGreaterThan(original.colors.length * 3);
+    expect(made.length).toBeGreaterThan(0);
+  });
+
+  it('and every one of them is a mixture of the frame\'s own, not a new hue', () => {
+    const chans = original.colors.map((c) => c.split(',').map(Number));
+    const lo = [0, 1, 2].map((i) => Math.min(...chans.map((c) => c[i]!)));
+    const hi = [0, 1, 2].map((i) => Math.max(...chans.map((c) => c[i]!)));
+    for (const c of high.colors) {
+      const v = c.split(',').map(Number);
+      for (let i = 0; i < 3; i++) {
+        expect(v[i]!, `${c} channel ${i}`).toBeGreaterThanOrEqual(lo[i]! - 1);
+        expect(v[i]!, `${c} channel ${i}`).toBeLessThanOrEqual(hi[i]! + 1);
+      }
+    }
+  });
+
+  it('still fades, because the mixtures are of indices and not of colours', async () => {
+    // A finished RGB image would sit there bright while the game
+    // faded the screen underneath it. `shift+b` is the blind cheat,
+    // which blacks the room out through the palette and the drawing
+    // both; what matters is that the canvas goes dark at `high`.
+    const bright = (): Promise<number> => page.evaluate(() => {
+      const canvas = document.getElementById('screen') as HTMLCanvasElement;
+      const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i]! + d[i + 1]! + d[i + 2]!;
+      return sum / (d.length / 4);
+    });
+    const before = await bright();
+    expect(before, 'a lit room').toBeGreaterThan(30);
+    await page.evaluate(() => (window as unknown as {
+      __princeCommand(key: string): void;
+    }).__princeCommand('shift+b'));
+    await page.evaluate(() => (window as unknown as {
+      __princePause(on: boolean): void;
+    }).__princePause(false));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => (window as unknown as {
+      __princePause(on: boolean): void;
+    }).__princePause(true));
+    await page.waitForTimeout(150);
+    expect(await bright(), 'and the lights go out').toBeLessThan(before / 2);
+    await page.evaluate(() => (window as unknown as {
+      __princeCommand(key: string): void;
+    }).__princeCommand('shift+b'));
+    await page.waitForTimeout(200);
   });
 
   it('gives the original pixels back', async () => {
     await set('original');
+    await page.waitForTimeout(250);
     const back = await read();
     expect(back.width).toBe(320);
     expect(back.rendering).toBe('pixelated');
-    expect(new Set(back.colors)).toEqual(new Set(original.colors));
+    // Every colour is one of the palette's again: nothing of the
+    // anti-aliasing is left on the canvas.
+    const had = new Set(original.colors);
+    expect(back.colors.filter((c) => !had.has(c))).toEqual([]);
   });
 
   it('said nothing to the console through any of it', () => {

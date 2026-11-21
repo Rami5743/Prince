@@ -8,20 +8,13 @@
  */
 import { SCREEN_WIDTH, SCREEN_HEIGHT, Surface } from './surface.ts';
 import { fitLine, type OverlayItem } from './text.ts';
-import { upscale, type UpscaleFactor } from './upscale.ts';
+import {
+  antialias, composeAntialiased, AA_FACTOR,
+  type Antialiased, type AntialiasScratch,
+} from './upscale.ts';
 
 export type AspectMode = 'original-4-3' | 'square-pixels';
 export type PictureQuality = 'original' | 'high';
-
-/**
- * The most the picture is ever enlarged before the browser scales it.
- *
- * Six is Scale3x and then Scale2x, which is 1920 by 1200 -- more than
- * any window this game is played in, and four times the work of three.
- * `chooseFactor` only asks for it when the canvas really is shown that
- * big, which on an ordinary desktop window it is not.
- */
-const MAX_FACTOR: UpscaleFactor = 6;
 
 /**
  * The faces the crisp pass asks for, best first.
@@ -70,27 +63,28 @@ export class Display {
    *
    * The words went onto a second canvas because a letter wants a
    * vector face and the game has none; the picture cannot do that --
-   * there is nothing to draw it from but the art in the data files --
-   * so what it gets instead is `src/render/upscale.ts`, which rounds
-   * the corners of the art in palette indices and hands the canvas
-   * three or six times as many pixels. The browser then scales that
-   * down to the size the picture is shown at smoothly rather than
-   * with nearest neighbour, and the steps go out of the edges.
+   * there is nothing to draw it from but the art in the data files.
+   * What it gets instead is `src/render/upscale.ts`: the art drawn
+   * nine times as fine and sampled back down three by three, so the
+   * canvas is three times as big **and** its edges carry colours the
+   * palette does not hold -- measured, 24 colours on a dungeon frame
+   * become 229. They are kept as mixtures of indices rather than as
+   * finished colours, so a fade still fades them.
    *
    * At `original` none of this exists: the canvas is 320 by 200 and
    * `image-rendering: pixelated`, exactly as it was.
    */
   private quality: PictureQuality = 'original';
-  private factor: UpscaleFactor = 1;
-  /** The last surface upscaled, and what it came out as. */
+  /** The last surface anti-aliased, so a frame is filtered only once. */
   private hiFrom: Uint8Array | null = null;
-  private hiPixels: Uint8Array | null = null;
+  private hiPicture: Antialiased | null = null;
+  private hiScratch: AntialiasScratch = {};
   private hiImage: ImageData | null = null;
   /**
    * The last thing presented, so a resize can put it back.
    *
-   * Changing a canvas's backing store **clears it**, and the factor
-   * changes when the window crosses a size. The game presents every
+   * Changing a canvas's backing store **clears it**, and the quality
+   * changes its size. The game presents every
    * tick so it would not show for long -- but a paused game and a
    * scene that has stopped present nothing at all, and those would
    * be left looking at a blank canvas until something else moved.
@@ -135,34 +129,16 @@ export class Display {
   }
 
   /**
-   * How much to enlarge, from how big the picture is really shown.
+   * Give the canvas the backing store this quality asks for.
    *
-   * There is nothing to be had from more pixels than the screen has,
-   * so this asks for the first factor that covers the canvas's own
-   * displayed size times the device's pixel ratio -- the same number
-   * the crisp-text canvas uses -- and stops at six. On a 1000-pixel
-   * window at ratio 1 that is three; on the same window on a retina
-   * screen it is six.
+   * There is one size at `high` and it is three times the game's,
+   * which is also the size the anti-aliasing samples down from. A
+   * bigger canvas would want a bigger sampling to be worth having,
+   * and the measurement for that is in `upscale.ts`: a quarter of a
+   * second a frame, against a tenth of a core for this.
    */
-  private chooseFactor(): UpscaleFactor {
-    if (this.quality !== 'high') return 1;
-    const dpr = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
-    const shown = (this.canvas.clientWidth || this.canvas.offsetWidth || SCREEN_WIDTH) * dpr;
-    const want = shown / SCREEN_WIDTH;
-    if (want <= 2) return 2;
-    if (want <= 3) return 3;
-    return MAX_FACTOR;
-  }
-
-  /** Give the canvas the backing store this quality asks for. */
   private sizeCanvas(): void {
-    const factor = this.chooseFactor();
-    if (factor !== this.factor) {
-      this.factor = factor;
-      this.hiFrom = null;
-      this.hiPixels = null;
-      this.hiImage = null;
-    }
+    const factor = this.quality === 'high' ? AA_FACTOR : 1;
     const width = SCREEN_WIDTH * factor;
     const height = SCREEN_HEIGHT * factor;
     let cleared = false;
@@ -170,12 +146,15 @@ export class Display {
       this.canvas.width = width;
       this.canvas.height = height;
       this.ctx.imageSmoothingEnabled = false;
+      this.hiFrom = null;
+      this.hiPicture = null;
+      this.hiImage = null;
       cleared = true;
     }
     // Nearest neighbour is the original's own look and is what
-    // `quality: original` is for; an enlarged picture is handed to the
-    // browser to shrink, and that has to be smooth or the enlarging
-    // bought nothing.
+    // `quality: original` is for; an anti-aliased picture is handed
+    // to the browser to resize, and that has to be smooth or the
+    // anti-aliasing is thrown away on the way to the glass.
     this.canvas.style.imageRendering = factor === 1 ? 'pixelated' : 'auto';
     if (cleared && this.last) this.present(this.last.surface, this.last.palette);
   }
@@ -290,7 +269,7 @@ export class Display {
 
   present(surface: Surface, paletteRgba: Uint8Array): void {
     this.last = { surface, palette: paletteRgba };
-    if (this.factor > 1) this.presentHigh(surface, paletteRgba);
+    if (this.quality === 'high') this.presentHigh(surface, paletteRgba);
     else {
       surface.toRgba(paletteRgba, this.imageData.data);
       this.ctx.putImageData(this.imageData, 0, 0);
@@ -299,23 +278,26 @@ export class Display {
   }
 
   /**
-   * The same picture, enlarged, in the palette it was drawn with.
+   * The same picture, three times as big and with its edges
+   * anti-aliased, in the palette it was drawn with.
    *
-   * The enlarging is done on the **indices** and only when the
+   * The **filtering** is done on the indices and only when the
    * indices have moved, which is what makes this affordable: the
    * flash puts the screen up twice inside one tick and a fade writes
-   * a new palette every other sixtieth, and neither of them changes a
-   * pixel of the surface. Only the expansion to RGBA runs again for
-   * those, which is the part that has to.
+   * a new palette every other sixtieth, and neither of them changes
+   * a pixel of the surface. What runs on every frame is the compose,
+   * and that is the flat fill the display always did plus the four
+   * per cent of pixels that are a mixture -- measured at 1.8 ms and
+   * 0.8 ms on a palace room.
    */
   private presentHigh(surface: Surface, paletteRgba: Uint8Array): void {
-    const factor = this.factor;
-    const width = surface.width * factor;
-    const height = surface.height * factor;
+    const width = surface.width * AA_FACTOR;
+    const height = surface.height * AA_FACTOR;
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
       this.ctx.imageSmoothingEnabled = false;
+      this.hiImage = null;
     }
     const src = surface.pixels;
     let moved = this.hiFrom === null || this.hiFrom.length !== src.length;
@@ -325,24 +307,15 @@ export class Display {
         if (was[i] !== src[i]) { moved = true; break; }
       }
     }
-    if (moved || !this.hiPixels) {
-      this.hiPixels = upscale(src, surface.width, surface.height, factor, this.hiPixels ?? undefined);
+    if (moved || !this.hiPicture) {
+      this.hiPicture = antialias(src, surface.width, surface.height, this.hiScratch);
       this.hiFrom = this.hiFrom?.length === src.length ? this.hiFrom : new Uint8Array(src.length);
       this.hiFrom.set(src);
     }
     if (!this.hiImage || this.hiImage.width !== width || this.hiImage.height !== height) {
       this.hiImage = this.ctx.createImageData(width, height);
     }
-    const dst = this.hiImage.data;
-    const ix = this.hiPixels;
-    for (let i = 0; i < ix.length; i++) {
-      const c = ix[i]! * 4;
-      const o = i * 4;
-      dst[o] = paletteRgba[c]!;
-      dst[o + 1] = paletteRgba[c + 1]!;
-      dst[o + 2] = paletteRgba[c + 2]!;
-      dst[o + 3] = 255;
-    }
+    composeAntialiased(this.hiPicture, paletteRgba, this.hiImage.data);
     this.ctx.putImageData(this.hiImage, 0, 0);
   }
 

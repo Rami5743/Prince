@@ -41,6 +41,106 @@
 ## ============================================================
 
 
+## AN UPSCALER THAT MAY NOT MIX A COLOUR CANNOT MAKE ONE, AND THAT WAS THE WHOLE FAULT
+
+    measured   32260 of 33047   98%   (unmoved, run for run)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+
+    colours on the glass at `quality: high`
+                        original   Scale3x   now
+        dungeon            24        24      229
+        running            19        19      171
+        palace             35        35      393
+        guard              25        25      246
+
+The player looked at `quality: high` and said it was not very
+successful: it wanted more colours, and the lines wanted going over.
+Both halves of that are one sentence of arithmetic. **The round above
+this one forbade the upscaler to mix a colour, and a filter that may
+only copy an index cannot put anything on an edge but the original's
+own colours** -- so an edge was a staircase however finely it was
+cut, and the colour count came out at exactly what the frame started
+with. Measured, and it is the four numbers in the middle column.
+
+### 1. The rule was right and the conclusion from it was wrong
+
+The rule: the game is drawn in palette **indices** and the palette
+moves while it plays -- `set_bg_attr` for the flash, sixty-four
+shades of every fade, `gen_palace_wall_colors` for a palace. A pixel
+that is a finished RGB average of two indices has no index left to
+change, so it would sit there bright while the screen faded.
+
+The conclusion drawn from it, and it does not follow: *therefore no
+pixel may be a mix*. It may, as long as the **mix is kept as
+indices** and turned into a colour against the palette that is live
+at that moment. Then a fade fades it and the flash flashes it, which
+is the whole of what the rule was protecting.
+`tests/render/upscale.test.ts` pins that directly: halve every entry
+of the palette and every pixel of the picture halves with it.
+
+### 2. Supersampling, which is the oldest anti-aliasing there is
+
+Scale3x for the shape -- 960 by 600, whose corners are clean -- and
+then **Scale3x's own rule a second time over that picture, with the
+nine answers averaged instead of written out**. That is a 2880 by
+1800 rendering of the art sampled down three by three. The average is
+a mixture of at most five indices, because Scale3x's nine answers are
+only ever the centre and its four edge neighbours, and that is what
+makes the whole thing cheap to store and to compose.
+
+Three other filters were tried against it on the same four frames and
+all three lose, which is worth having written down:
+
+* **Eagle2x** eats single pixels and this art is full of them.
+* **xBR level 2 with the blending removed** came out thinner than
+  the original everywhere and lost the shape of the torch handle:
+  with no blend its edge weighting has nothing to put at an edge but
+  a neighbour's flat colour.
+* **x18 geometry sampled down to x6** is a shade better again and
+  costs about 26 million writes a frame -- a quarter of a second.
+  The x9-into-x3 picture, resized by the browser, is a hair softer
+  and is affordable.
+
+### 3. Four per cent of the pixels are a mixture, and that is the design
+
+    mixed pixels   23059 of 576000   4.0%   (a palace room)
+
+So the answer is not an image of mixtures. It is `base` -- the
+Scale3x picture, one index a pixel, as before -- plus a list of the
+pixels that are a mixture and the nine-ninths that make each one up.
+The compose fills the whole frame from `base` through the palette,
+exactly as the display always did, and then writes over the four per
+cent. The neighbours are not stored at all: they are read back out of
+`base`, which is where they came from.
+
+Measured in this machine's JS on the palace frame:
+
+    Scale3x                      0.7 ms
+    the mixture pass over it     4.1 ms    only when the art moves
+    compose, flat                1.8 ms
+    compose, the mixtures        0.8 ms    every frame
+
+The art moves twelve times a second and the screen is presented about
+twenty-four, so **about a tenth of a core** -- less than the x6
+Scale3x path it replaces, which spent 10 ms of compose on every one
+of those twenty-four frames. And the canvas has one size at `high`
+now, 960 by 600, where it had two: a bigger one would want a bigger
+sampling behind it to be worth having, and that is the quarter of a
+second above.
+
+### 4. What the tests had to stop saying
+
+`tests/browser/picture-quality.test.ts` required every colour at
+`high` to be a colour the original frame already had. That assertion
+**was the bug, written down as a test**, and it passed throughout.
+It now requires the opposite -- more than three times as many colours
+as the frame has, every channel of every one of them inside the range
+the frame's own palette spans, so a mixture and not a new hue -- and
+it blacks the room out with `shift+b` and requires the canvas to go
+dark, because a finished RGB image would not.
+
+
 ## THE PICTURE AT `quality: high`: AN UPSCALER THAT MAY NOT MIX A COLOUR
 
     measured   32260 of 33047   98%   (unmoved, run for run)
@@ -62,6 +162,16 @@ with nearest neighbour. The steps go out of the edges and the art is
 the art.
 
 ### 1. The one rule: every pixel out is a pixel that went in
+
+**THE RULE IS RIGHT AND THIS CONCLUSION FROM IT IS WRONG; see the
+section above this one.** A pixel may be a mixture as long as the
+mixture is kept as **indices** and turned into a colour against the
+palette that is live at that moment, and that is what the picture
+does now. What follows is kept because the measurements in it are
+still measurements -- Eagle2x, xBR without its blend, the costs --
+but a filter that may only copy an index puts nothing on an edge
+but the original's own colours, which is why the player rejected
+this and asked for more of them.
 
 The game is drawn in palette **indices** and the palette moves while
 it plays -- `set_bg_attr` for the flash, sixty-four shades of every

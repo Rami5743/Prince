@@ -1,18 +1,26 @@
 /**
  * The picture enlarged for `quality: high`.
  *
- * The one property that matters is that **no index is invented**: the
- * game rewrites the palette while it plays, so a pixel that is the
- * average of two indices would have nothing left to change and would
- * stay bright through a fade. Everything else here is Scale2x's and
- * Scale3x's own published rules, and a run over fourteen real rooms
- * of the game to say the property holds on the art and not only on a
- * three-by-three test pattern.
+ * Two halves. `scale2x`/`scale3x` are the shape, and they invent no
+ * index -- that is Scale2x's and Scale3x's own published rules, with
+ * a run over fourteen real rooms to say it holds on the art and not
+ * only on a three-by-three test pattern.
+ *
+ * `antialias` is the colour, and it is allowed to invent one, which
+ * the first version of this file was not and which is why it was
+ * rejected: an edge made only of the original's own colours is a
+ * staircase however finely it is cut. What it may **not** do is
+ * invent a colour that stops obeying the palette -- the game rewrites
+ * the palette while it plays -- so the mixtures are kept as indices
+ * and the test that matters is that halving the palette halves the
+ * picture.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scale2x, scale3x, upscale } from '../../src/render/upscale.ts';
+import {
+  scale2x, scale3x, upscale, antialias, composeAntialiased, AA_FACTOR, MIX_PARTS,
+} from '../../src/render/upscale.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 import { GAME_DIR } from '../helpers/fixtures.ts';
@@ -143,6 +151,114 @@ describe('upscale', () => {
           expect(had.has(v), `level ${level} x${factor} invented index ${v}`).toBe(true);
         }
       }
+    }
+  }, 120000);
+});
+
+describe('antialias', () => {
+  const flatPalette = (): Uint8Array => {
+    // index 0 black, index 1 white, index 2 mid grey.
+    const p = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) p[i * 4 + 3] = 255;
+    p[4] = 255; p[5] = 255; p[6] = 255;
+    p[8] = 128; p[9] = 128; p[10] = 128;
+    return p;
+  };
+
+  it('finds no mixture in a flat picture', () => {
+    const { ix, w, h } = pic(['111', '111', '111']);
+    const aa = antialias(ix, w, h);
+    expect(aa.width).toBe(w * AA_FACTOR);
+    expect(aa.height).toBe(h * AA_FACTOR);
+    expect(aa.mixCount).toBe(0);
+    expect(new Set(aa.base)).toEqual(new Set([1]));
+  });
+
+  it('mixes along a diagonal, nine ninths every time', () => {
+    const { ix, w, h } = pic(['0000', '1000', '1100', '1110']);
+    const aa = antialias(ix, w, h);
+    expect(aa.mixCount, 'a diagonal has edges to soften').toBeGreaterThan(5);
+    for (let k = 0; k < aa.mixCount; k++) {
+      let sum = 0;
+      for (let j = 0; j < MIX_PARTS; j++) sum += aa.mixWeights[k * MIX_PARTS + j]!;
+      expect(sum, `mixture ${k}`).toBe(9);
+      // A mixture that is all centre would not be a mixture.
+      expect(aa.mixWeights[k * MIX_PARTS]).toBeLessThan(9);
+    }
+  });
+
+  it('puts colours on the edge that the palette does not hold', () => {
+    const { ix, w, h } = pic(['0000', '1000', '1100', '1110']);
+    const aa = antialias(ix, w, h);
+    const out = new Uint8ClampedArray(aa.width * aa.height * 4);
+    composeAntialiased(aa, flatPalette(), out);
+    const greys = new Set<number>();
+    for (let i = 0; i < out.length; i += 4) greys.add(out[i]!);
+    expect(greys.has(0), 'the black is still black').toBe(true);
+    expect(greys.has(255), 'the white is still white').toBe(true);
+    // And in between: the whole point of the round.
+    const between = [...greys].filter((v) => v > 0 && v < 255);
+    expect(between.length, `only ${[...greys].join()}`).toBeGreaterThan(2);
+  });
+
+  it('halves when the palette halves, which is what a fade is', () => {
+    const { ix, w, h } = pic(['0000', '1000', '1100', '1110']);
+    const aa = antialias(ix, w, h);
+    const full = flatPalette();
+    const half = new Uint8Array(full);
+    for (let i = 0; i < 256; i++) {
+      for (let c = 0; c < 3; c++) half[i * 4 + c] = full[i * 4 + c]! >> 1;
+    }
+    const a = new Uint8ClampedArray(aa.width * aa.height * 4);
+    const b = new Uint8ClampedArray(aa.width * aa.height * 4);
+    composeAntialiased(aa, full, a);
+    composeAntialiased(aa, half, b);
+    for (let i = 0; i < a.length; i += 4) {
+      // Within a unit of half, which is the rounding of the halved
+      // palette entries themselves.
+      expect(Math.abs(b[i]! - a[i]! / 2), `pixel ${i / 4}`).toBeLessThanOrEqual(1.5);
+    }
+  });
+
+  it('invents no colour outside the ones the frame uses, on real rooms', async () => {
+    const assets = new Assets(
+      async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))),
+    );
+    const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
+    for (const level of [1, 4, 9, 13]) {
+      const game = await PopGame.start(assets, exe, level, { minutesLeft: 60, seed: 1 });
+      for (let t = 0; t < 20; t++) { game.step({ x: 0, y: 0, shift: false }); game.render(); }
+      const surface = game.render();
+      const pal = game.scene.screenPalette.toRgba();
+      const aa = antialias(surface.pixels, surface.width, surface.height);
+      const out = new Uint8ClampedArray(aa.width * aa.height * 4);
+      composeAntialiased(aa, pal, out);
+
+      // Every channel of every output pixel is inside the range the
+      // frame's own palette entries span, so nothing is a new hue --
+      // it is a mixture of what was there.
+      const used = new Set(surface.pixels);
+      let lo = [255, 255, 255]; let hi = [0, 0, 0];
+      for (const i of used) {
+        for (let c = 0; c < 3; c++) {
+          const v = pal[i * 4 + c]!;
+          if (v < lo[c]!) lo[c] = v;
+          if (v > hi[c]!) hi[c] = v;
+        }
+      }
+      const colours = new Set<number>();
+      for (let i = 0; i < out.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          expect(out[i + c]!, `level ${level} channel ${c}`).toBeGreaterThanOrEqual(lo[c]! - 1);
+          expect(out[i + c]!, `level ${level} channel ${c}`).toBeLessThanOrEqual(hi[c]! + 1);
+        }
+        colours.add((out[i]! << 16) | (out[i + 1]! << 8) | out[i + 2]!);
+      }
+      // And there really are more of them than the frame started with:
+      // this is the measurement the round turns on.
+      expect(colours.size, `level ${level}`).toBeGreaterThan(used.size * 3);
+      expect(aa.mixCount / (aa.width * aa.height), `level ${level} mixed share`)
+        .toBeLessThan(0.25);
     }
   }, 120000);
 });
