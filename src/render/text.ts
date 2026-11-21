@@ -61,6 +61,32 @@ const HE_PATTERNS: readonly (readonly [RegExp, string])[] = [
   [/^Press Button to Continue$/, 'הקש מקש כדי להמשיך'],
 ];
 
+/**
+ * One of the two title cards that are words rather than artwork.
+ *
+ * `TITLE_PRESENTS` and `TITLE_GAME` are opaque patches of `TITLE.DAT`
+ * blitted over the title picture, and what is in them is
+ * `Broderbund Software / presents` and `a game by / Jordan Mechner`.
+ * They are pictures of words, so in Hebrew they are English words on
+ * the screen of a game the player asked to be in Hebrew -- which is
+ * the whole of what clause 1א says must not happen.
+ *
+ * `keepRows` is how many rows of the patch are **art** and are still
+ * blitted: the Broderbund crown is the top twenty rows of its patch,
+ * and the words begin under it. The rest of the patch is not drawn at
+ * all, so what shows through is the title picture the caller drew
+ * immediately before -- `show_title` is
+ * `draw_full_image(TITLE_MAIN); draw_full_image(TITLE_PRESENTS);`
+ * and the same for `TITLE_GAME`, so the background is already there
+ * and nothing has to be put back.
+ */
+export interface TitleCard {
+  /** Rows of the patch that are artwork and are blitted as before. */
+  readonly keepRows: number;
+  /** Each line: the row of the patch its glyphs start on, and the words. */
+  readonly lines: readonly (readonly [number, string])[];
+}
+
 /** The words of one story screen, broken into lines by hand. */
 export interface StoryScreen {
   readonly lines: readonly string[];
@@ -314,6 +340,28 @@ export function fitLine(
   return { size, baseline };
 }
 
+/**
+ * Where the words sit inside each card, measured off the pictures.
+ *
+ * Image 1 is 128 by 47: rows 0 to 19 are the crown, 20 to 28 are
+ * `Broderbund Software` and 35 to 45 are `presents`. Image 2 is 122
+ * by 30 and is nothing but words: 4 to 15 are `a game by` and 18 to
+ * 28 are `Jordan Mechner`. The Hebrew lines are put on the same rows,
+ * which is why the card still reads as the same card.
+ */
+const TITLE_CARDS: Readonly<Record<number, TitleCard>> = {
+  // full_image_id.TITLE_PRESENTS
+  1: {
+    keepRows: 20,
+    lines: [[21, 'ברודרבונד סופטוור'], [36, 'מציגה']],
+  },
+  // full_image_id.TITLE_GAME
+  2: {
+    keepRows: 0,
+    lines: [[5, 'משחק מאת'], [19, 'ג׳ורדן מכנר']],
+  },
+};
+
 /** The gap between the two columns of the credits. */
 const GUTTER = 8;
 
@@ -328,8 +376,33 @@ export class GameText {
   private readonly font: Font;
   private lang: TextLanguage;
   private qual: TextQuality;
-  /** Keyed, so that a line drawn again in the same place replaces it. */
+  /**
+   * The lines the **screen** is showing, keyed so that a line drawn
+   * again in the same place replaces it.
+   */
   private readonly lines = new Map<string, OverlayItem>();
+  /**
+   * The lines drawn into the **offscreen** surface, which the screen
+   * is not showing yet.
+   *
+   * A cutscene composes a picture offscreen and copies it over, and
+   * the two are a block apart: `show_title` draws `TITLE_PRESENTS`,
+   * waits, copies the rectangle to the screen, and only then paints
+   * the offscreen back to the plain picture. So a word drawn into the
+   * offscreen is on the screen from the **copy** until the next copy
+   * over the same rectangle -- not from the moment it was drawn.
+   *
+   * At `quality: original` that is free, because the words are
+   * pixels of the surface and the copy carries them. At `high` the
+   * words are not in the surface at all, so the overlay has to keep
+   * the same two sets and `commitOverlay` is the copy. Measured on
+   * the page before this: both Hebrew title cards and every story
+   * screen of the opening showed their words for two seconds and
+   * then lost them for three, while the picture under them stayed.
+   */
+  private readonly pendingLines = new Map<string, OverlayItem>();
+  /** `scr.target(true)`: which of the two the next line goes into. */
+  private offscreen = false;
   /**
    * The hall of fame's name box, while it is taking a name.
    *
@@ -372,6 +445,16 @@ export class GameText {
 
   /** Everything the canvas pass has to draw, oldest first. */
   get overlay(): readonly OverlayItem[] { return [...this.lines.values()]; }
+
+  /**
+   * `scr.target(offscreen)`, for the duration of one call.
+   *
+   * The caller sets it and puts it back, so a game that has one
+   * surface and never sets it writes to the screen's own list, which
+   * is what it did before there were two.
+   */
+  get drawingOffscreen(): boolean { return this.offscreen; }
+  set drawingOffscreen(on: boolean) { this.offscreen = on; }
 
   // --------------------------------------------------------------- words
 
@@ -448,19 +531,83 @@ export class GameText {
   }
 
   private remember(item: OverlayItem): void {
-    this.lines.delete(item.key);
-    this.lines.set(item.key, item);
+    const into = this.offscreen ? this.pendingLines : this.lines;
+    into.delete(item.key);
+    into.set(item.key, item);
   }
 
-  /** The whole list, for a screen that has just been painted over. */
-  clearOverlay(): void { this.lines.clear(); }
+  /** Both lists, for a screen that has just been painted over. */
+  clearOverlay(): void {
+    this.lines.clear();
+    this.pendingLines.clear();
+  }
 
-  /** Everything whose line sits inside this box. */
+  /** The screen's own list, for `pal_restore_free_fadeout`'s black. */
+  clearShownOverlay(): void { this.lines.clear(); }
+
+  /** Does this line have ink inside the box? */
+  private static touches(
+    item: OverlayItem, left: number, top: number, right: number, bottom: number,
+  ): boolean {
+    const itemTop = item.baseline - item.capHeight;
+    return item.right > left && item.left < right
+      && item.baseline + 2 > top && itemTop < bottom;
+  }
+
+  /** Everything whose line sits inside this box, on the surface in hand. */
   clearOverlayIn(left: number, top: number, right: number, bottom: number): void {
+    const from = this.offscreen ? this.pendingLines : this.lines;
+    for (const [key, item] of [...from]) {
+      if (GameText.touches(item, left, top, right, bottom)) from.delete(key);
+    }
+  }
+
+  /**
+   * `read_peel_from_screen`: the words inside the rectangle, kept.
+   *
+   * A peel is a rectangle of the screen put aside and painted back
+   * later, and the hall of fame uses one to take its name box away
+   * again. At `quality: original` the words in that rectangle are
+   * pixels and the peel carries them; at `high` they are not, so the
+   * peel has to carry them itself or the time beside the name is
+   * painted out and never comes back.
+   */
+  readPeelOverlay(
+    left: number, top: number, right: number, bottom: number,
+  ): readonly OverlayItem[] {
+    const from = this.offscreen ? this.pendingLines : this.lines;
+    const out: OverlayItem[] = [];
+    for (const item of from.values()) {
+      if (GameText.touches(item, left, top, right, bottom)) out.push(item);
+    }
+    return out;
+  }
+
+  /** `restore_peel`: the rectangle's words as they were when it was read. */
+  restorePeelOverlay(
+    left: number, top: number, right: number, bottom: number,
+    words: readonly OverlayItem[],
+  ): void {
+    this.clearOverlayIn(left, top, right, bottom);
+    const into = this.offscreen ? this.pendingLines : this.lines;
+    for (const item of words) into.set(item.key, item);
+  }
+
+  /**
+   * `method_1_blit_rect(onscreen_surface_, offscreen_surface, rect)`:
+   * the offscreen's words reach the screen.
+   *
+   * Whatever the screen was showing in that rectangle is painted over
+   * by the copy, and whatever the offscreen holds there is now shown.
+   * The offscreen keeps its own words, exactly as it keeps its own
+   * pixels.
+   */
+  commitOverlay(left: number, top: number, right: number, bottom: number): void {
     for (const [key, item] of [...this.lines]) {
-      const itemTop = item.baseline - item.capHeight;
-      if (item.right > left && item.left < right
-        && item.baseline + 2 > top && itemTop < bottom) this.lines.delete(key);
+      if (GameText.touches(item, left, top, right, bottom)) this.lines.delete(key);
+    }
+    for (const [key, item] of this.pendingLines) {
+      if (GameText.touches(item, left, top, right, bottom)) this.lines.set(key, item);
     }
   }
 
@@ -552,6 +699,24 @@ export class GameText {
     const words = this.translate(text);
     const rtl = hasRtl(words);
     const baseline = this.baselineIn(top, bottom, yAlign);
+    /**
+     * In Hebrew the two columns of a hall of fame row change sides.
+     *
+     * `show_hof` (`seg001:0E94`) draws the name against the left of
+     * the row and the time against the right, which is the order a
+     * left-to-right reader reads them in: who, then how long. A
+     * Hebrew reader starts at the other end, so the name belongs on
+     * the right and the time on the left -- and a Hebrew name left
+     * where the C puts it reads as the last column of the row rather
+     * than the first.
+     *
+     * The mirror is here and not in `seg001`, which may not learn
+     * that a player has preferences, and it is the whole of what it
+     * touches: `scr.show_text` has exactly one caller in the game and
+     * it is `show_hof_text`. Nothing moves in English, where
+     * `this.lang` is `en` and `xAlign` is the C's own.
+     */
+    if (this.lang === 'he') xAlign = -xAlign;
     const key = `t:${left},${top},${right},${bottom},${xAlign},${color}`;
     if (this.vector) {
       this.remember({
@@ -777,6 +942,30 @@ export class GameText {
     if (xAlign === 0) at = left + ((right - left - width) >> 1);
     else if (xAlign > 0) at = right - width;
     this.blitLine(surface, visual, at, top, color);
+  }
+
+  /**
+   * The Hebrew words of a title card, or null to blit the picture.
+   *
+   * English keeps the original's own artwork at both qualities: the
+   * card is a drawing of a logotype and there is nothing a redraw
+   * could add to it.
+   */
+  titleCard(id: number): TitleCard | null {
+    if (this.lang !== 'he') return null;
+    return TITLE_CARDS[id] ?? null;
+  }
+
+  /** The words of a title card, centred where the picture's are. */
+  drawTitleCard(
+    surface: Surface, id: number, left: number, top: number, right: number,
+    color: number,
+  ): void {
+    const card = TITLE_CARDS[id];
+    if (!card || this.lang !== 'he') return;
+    for (const [row, line] of card.lines) {
+      this.storyLine(surface, line, top + row, 0, color, `tc${id}:${row}`, left, right);
+    }
   }
 
   /** How wide a story line is drawn, for the test that pins they fit. */

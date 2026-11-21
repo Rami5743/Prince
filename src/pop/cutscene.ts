@@ -21,7 +21,7 @@ import {
   readFont, charWidth, lineWidth, textCenterY, drawTextCharacter, drawTextInRect,
   type Font,
 } from '../render/font.ts';
-import type { GameText } from '../render/text.ts';
+import type { GameText, OverlayItem } from '../render/text.ts';
 import { flipHorizontally } from '../render/room.ts';
 
 import { g, newChar, type RectType } from './state.ts';
@@ -87,6 +87,18 @@ const FULL_IMAGE: readonly {
  * a mono blit in colour 15 of the story bank's own row, which is 191.
  */
 const STORY_TEXT_COLOR = ROW.title40 * 16 + 15;
+
+/**
+ * A peel, and the words that were inside it.
+ *
+ * `Peel` is `seg008`'s and is the game's too, so the words are added
+ * here rather than there: at `quality: high` a line of text is not
+ * pixels of the surface, and a rectangle put aside and painted back
+ * has to carry its words the way it carries its pixels.
+ */
+interface PeelWithWords extends Peel {
+  words?: readonly OverlayItem[];
+}
 
 /** Which scene the player is playing, for the shell and for a test. */
 export type SceneName =
@@ -649,7 +661,7 @@ export class CutscenePlayer {
         // were in it with it -- which is how `input_str`'s name box
         // starts empty, and how a scene that paints itself out loses
         // the lines the canvas pass was still drawing.
-        if (this.text) this.text.noteFill(l, t, r, b, color);
+        if (this.text) this.aimed(() => this.text!.noteFill(l, t, r, b, color));
       },
       clear_screen: () => {
         this.offscreen.clear(0);
@@ -680,7 +692,8 @@ export class CutscenePlayer {
       },
       show_text: (l, t, r, b, xa, ya, text, color) => {
         if (this.text) {
-          this.text.showText(this.target, text, l, t, r, b, xa, ya, color);
+          this.aimed(() => this.text!
+            .showText(this.target, text, l, t, r, b, xa, ya, color));
           return;
         }
         if (!this.font) return;
@@ -694,7 +707,9 @@ export class CutscenePlayer {
         ? this.text.cstringWidth(text)
         : (this.font ? lineWidth(this.font, text) : 0)),
       draw_text_character: (x, y, ch, color) => {
-        if (this.text) return this.text.drawChar(this.target, x, y, ch, color);
+        if (this.text) {
+          return this.aimed(() => this.text!.drawChar(this.target, x, y, ch, color));
+        }
         return this.font
           ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color)
           : 0;
@@ -745,7 +760,12 @@ export class CutscenePlayer {
       pixels.set(this.target.pixels.subarray((y0 + y) * 320 + x0, (y0 + y) * 320 + x1),
         y * width);
     }
-    return { left: x0, top: y0, width, height, pixels } satisfies Peel;
+    // And the words inside it, which at `quality: high` are not
+    // pixels of the surface and so are not in `pixels`.
+    const words = this.text
+      ? this.aimed(() => this.text!.readPeelOverlay(x0, y0, x1, y1))
+      : undefined;
+    return { left: x0, top: y0, width, height, pixels, words } satisfies PeelWithWords;
   }
 
   private restoreTargetPeel(peel: ScreenPeel): void {
@@ -756,6 +776,23 @@ export class CutscenePlayer {
         p.pixels.subarray(y * p.width, (y + 1) * p.width),
         (p.top + y) * 320 + p.left,
       );
+    }
+    /**
+     * And the words, back as they were when the peel was read.
+     *
+     * The hall of fame reads a peel of the row off the offscreen --
+     * which already has the entry's name and time on it -- then
+     * paints a box over the row on the screen, takes a name into it,
+     * and puts the peel back. At `quality: high` the words in that
+     * rectangle are not pixels, so restoring the pixels alone left
+     * the typed name standing where the box had been and took the
+     * time beside it away for good. Screenshotted both ways.
+     */
+    const words = (p as PeelWithWords).words;
+    if (this.text) {
+      this.aimed(() => this.text!.restorePeelOverlay(
+        p.left, p.top, p.left + p.width, p.top + p.height, words ?? [],
+      ));
     }
   }
 
@@ -788,8 +825,33 @@ export class CutscenePlayer {
     else this.palette.setEntry(at, 0x20, 0x00, 0x00);
   }
 
+  /**
+   * Run one call of the text layer against the surface in hand.
+   *
+   * The layer keeps the screen's words and the offscreen's apart,
+   * because a cutscene composes a picture offscreen and copies it
+   * over a block later, so a word drawn now is on the screen from
+   * the **copy**. The flag is set for the one call and always put
+   * back, so a game that has one surface -- `PopGame`, which shares
+   * this layer -- never inherits it.
+   */
+  private aimed<T>(fn: () => T): T {
+    const text = this.text!;
+    text.drawingOffscreen = this.target === this.offscreen;
+    try {
+      return fn();
+    } finally {
+      text.drawingOffscreen = false;
+    }
+  }
+
   // seg000:1DF8
   private drawFullImage(id: number): void {
+    if (!this.text) { this.drawFullImageInner(id); return; }
+    this.aimed(() => this.drawFullImageInner(id));
+  }
+
+  private drawFullImageInner(id: number): void {
     const spec = FULL_IMAGE[id];
     if (!spec) return;
     const bank = spec.bank === 40 ? this.title40 : this.title50;
@@ -813,10 +875,47 @@ export class CutscenePlayer {
         this.text.clearOverlayIn(spec.xpos, spec.ypos,
           spec.xpos + image.width, spec.ypos + image.height);
         this.storyShowing = null;
+        /**
+         * And the card, for the same reason and in the same breath.
+         *
+         * Whatever is blitted opaquely over the card's rectangle has
+         * taken its words off the screen -- the title picture between
+         * one card and the next, and the story frame after them -- so
+         * a language change from here must not put them back. The
+         * card branch below sets it again when it really is a card.
+         */
+        this.titleShowing = null;
       }
       if (this.text.story(id)) {
         this.storyShowing = id;
         this.text.drawStory(this.target, id, STORY_TEXT_COLOR);
+        return;
+      }
+      /**
+       * The two title cards that are words rather than artwork.
+       *
+       * `TITLE_PRESENTS` and `TITLE_GAME` are opaque patches of
+       * `TITLE.DAT` whose content is `Broderbund Software / presents`
+       * and `a game by / Jordan Mechner`, and in Hebrew they were the
+       * last English left on the screen. `keepRows` is how much of
+       * the patch is a picture and is still blitted -- the Broderbund
+       * crown, which is the top twenty rows of its own -- and the
+       * rows under it are not drawn at all, so the title picture the
+       * line above drew shows through and the words go on top of it.
+       * The colour is the patch's own fifteenth entry, which is what
+       * the English letters are drawn in.
+       */
+      const card = this.text.titleCard(id);
+      if (card) {
+        if (card.keepRows > 0) {
+          const savedBottom = this.target.clipBottom;
+          this.target.clipBottom = Math.min(savedBottom, spec.ypos + card.keepRows);
+          this.target.blitOpaqueBlack(image, spec.xpos, spec.ypos, bank.paletteBase);
+          this.target.clipBottom = savedBottom;
+        }
+        this.titleShowing = id;
+        this.text.drawTitleCard(this.target, id, spec.xpos, spec.ypos,
+          spec.xpos + image.width, bank.paletteBase + 15);
         return;
       }
     }
@@ -841,17 +940,33 @@ export class CutscenePlayer {
    * rather than at the next scene.
    */
   refreshText(): void {
-    const id = this.storyShowing;
-    if (!this.text || id === null) return;
+    if (!this.text) return;
+    const story = this.storyShowing;
+    const title = this.titleShowing;
+    if (story === null && title === null) return;
     const saved = this.target;
     for (const surface of [this.offscreen, this.onscreen]) {
       this.target = surface;
-      this.drawFullImage(full_image_id.STORY_FRAME);
-      this.drawFullImage(id);
+      if (story !== null) {
+        this.drawFullImage(full_image_id.STORY_FRAME);
+        this.drawFullImage(story);
+      } else if (title !== null) {
+        // The card is a patch over the title picture, so the picture
+        // has to go back before the words do: in English the words
+        // are part of the patch and in Hebrew they are not, and
+        // whichever way the setting just moved, what was there has to
+        // be painted over.
+        this.drawFullImage(full_image_id.TITLE_MAIN);
+        this.drawFullImage(title);
+      }
     }
     this.target = saved;
-    this.storyShowing = id;
+    this.storyShowing = story;
+    this.titleShowing = title;
   }
+
+  /** Which title card is on the screen, for a language change. */
+  private titleShowing: number | null = null;
 
   /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */
   /** `clip_room`: a `load_intro` scene never reaches past row 191. */
@@ -867,6 +982,9 @@ export class CutscenePlayer {
         this.offscreen.pixels.subarray(y * 320 + x0, y * 320 + x1), y * 320 + x0,
       );
     }
+    // And the words with them: at `quality: high` they are not in the
+    // surface, so the copy has to carry them itself.
+    this.text?.commitOverlay(x0, y0, x1, y1);
   }
 
   private setBackground(color: number): void {
@@ -929,8 +1047,11 @@ export class CutscenePlayer {
     if (finished) {
       this.palette.loadBlock(0, this.rowsOf(f.original, 0, 256));
       this.fade = null;
-      // `pal_restore_free_fadeout`: the screen is left black.
+      // `pal_restore_free_fadeout`: the screen is left black, and the
+      // words on it go with it -- at `high` they are not pixels of
+      // the surface that was just blacked.
       this.onscreen.clear(0);
+      this.text?.clearShownOverlay();
     }
   }
 

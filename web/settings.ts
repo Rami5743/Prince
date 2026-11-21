@@ -131,11 +131,3 @@ function write(value: Settings): void {
   }
 }
 
-/** Has the player been through the opening page before? */
-export function hasChosen(): boolean {
-  try {
-    return window.localStorage.getItem(KEY) !== null;
-  } catch {
-    return false;
-  }
-}

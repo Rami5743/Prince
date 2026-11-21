@@ -261,6 +261,136 @@ describe('the words the game draws', () => {
     }
   });
 
+  /**
+   * `show_hof` draws the name against the left of the row and the
+   * time against the right, which is the order a left-to-right reader
+   * reads them in. A Hebrew reader starts at the other end.
+   */
+  it('turns a hall of fame row round in Hebrew and not in English', () => {
+    const row = { left: 72, top: 84, right: 248, bottom: 96 };
+    const inkColumns = (language: 'en' | 'he', text: string, xAlign: number):
+    [number, number] => {
+      const gt = new GameText(font, { language, quality: 'original' });
+      const surface = new Surface();
+      gt.showText(surface, text, row.left, row.top, row.right, row.bottom,
+        xAlign, 0, 15);
+      let first = -1;
+      let last = -1;
+      for (let x = 0; x < surface.width; x++) {
+        for (let y = row.top; y <= row.bottom; y++) {
+          if (surface.pixels[y * surface.width + x]) {
+            if (first < 0) first = x;
+            last = x;
+            break;
+          }
+        }
+      }
+      return [first, last];
+    };
+    const middle = (row.left + row.right) / 2;
+    // `show_hof_text(rect, -1, 0, name)` and `(rect, 1, 0, time)`.
+    const [enNameFirst] = inkColumns('en', 'JORDAN', -1);
+    const [, enTimeLast] = inkColumns('en', '42:17', 1);
+    expect(enNameFirst, 'the English name starts at the left').toBeLessThan(middle);
+    expect(enTimeLast, 'the English time ends at the right').toBeGreaterThan(middle);
+
+    const [heNameFirst] = inkColumns('he', 'הנסיך', -1);
+    const [, heTimeLast] = inkColumns('he', '42:17', 1);
+    expect(heNameFirst, 'the Hebrew name starts past the middle')
+      .toBeGreaterThan(middle);
+    expect(heTimeLast, 'the Hebrew time ends before the middle')
+      .toBeLessThan(middle);
+  });
+
+  /**
+   * `TITLE_PRESENTS` and `TITLE_GAME` are opaque patches of
+   * `TITLE.DAT` whose content is words, and in Hebrew they were the
+   * last English on the screen.
+   */
+  it('says the two title cards in Hebrew and leaves them as pictures in English', () => {
+    const he = new GameText(font, { language: 'he', quality: 'original' });
+    const en = new GameText(font, { language: 'en', quality: 'original' });
+    const enHigh = new GameText(font, { language: 'en', quality: 'high' });
+    for (const id of [1, 2]) {
+      expect(he.titleCard(id), `he ${id}`).not.toBeNull();
+      expect(en.titleCard(id), `en ${id}`).toBeNull();
+      expect(enHigh.titleCard(id), `en high ${id}`).toBeNull();
+    }
+    // Nothing else is a card: the logotype, the copyright line and
+    // the story screens stay pictures in both languages.
+    for (const id of [0, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      expect(he.titleCard(id), `he ${id}`).toBeNull();
+    }
+    // The patches are 128 and 122 wide and the words are centred on
+    // them; a line much wider than its patch would run off the card.
+    const widths: Record<number, number> = { 1: 128, 2: 122 };
+    for (const id of [1, 2]) {
+      for (const [, line] of he.titleCard(id)!.lines) {
+        expect(he.storyLineWidth(line), `${id}: ${line}`)
+          .toBeLessThanOrEqual(widths[id]! + 24);
+      }
+    }
+    // The Broderbund crown is the top twenty rows of its own patch and
+    // is still blitted; the card under it is nothing but words.
+    expect(he.titleCard(1)!.keepRows).toBe(20);
+    expect(he.titleCard(2)!.keepRows).toBe(0);
+  });
+
+  /**
+   * A cutscene composes its picture offscreen and copies it over a
+   * block later, so a word drawn now reaches the screen at the copy.
+   * At `quality: original` the copy carries the pixels; at `high`
+   * the words are not pixels and the overlay has to do it itself.
+   */
+  it('holds an offscreen line back until the copy that shows it', () => {
+    const text = new GameText(font, { language: 'en', quality: 'high' });
+    const surface = new Surface();
+    const box = { left: 72, top: 84, right: 248, bottom: 96 };
+    text.drawingOffscreen = true;
+    text.showText(surface, 'JORDAN', box.left, box.top, box.right, box.bottom,
+      -1, 0, 15);
+    text.drawingOffscreen = false;
+    expect(text.overlay.length, 'not on the screen yet').toBe(0);
+
+    text.commitOverlay(0, 0, 320, 200);
+    expect(text.overlay.map((i) => i.text), 'the copy shows it').toEqual(['JORDAN']);
+
+    // The offscreen painted back to its background: the screen keeps
+    // what it was given until the next copy.
+    text.drawingOffscreen = true;
+    text.clearOverlayIn(0, 0, 320, 200);
+    text.drawingOffscreen = false;
+    expect(text.overlay.length, 'the screen still shows it').toBe(1);
+    text.commitOverlay(0, 0, 320, 200);
+    expect(text.overlay.length, 'and the next copy takes it away').toBe(0);
+  });
+
+  /**
+   * `read_peel_from_screen` and `restore_peel`: the hall of fame
+   * takes a name into a box painted over its own row and then puts
+   * the row back.
+   */
+  it('carries the words of a peel and puts them back', () => {
+    const text = new GameText(font, { language: 'en', quality: 'high' });
+    const surface = new Surface();
+    const row = { left: 72, top: 84, right: 248, bottom: 96 };
+    text.showText(surface, '42:17', row.left, row.top, row.right, row.bottom,
+      1, 0, 15);
+    expect(text.overlay.length).toBe(1);
+    const peel = text.readPeelOverlay(row.left, row.top, row.right, row.bottom);
+    expect(peel.length, 'the peel holds the line').toBe(1);
+
+    // A box painted over the row, and a name typed into it.
+    text.noteFill(row.left, row.top, row.right, row.bottom, 0xB7);
+    expect(text.overlay.length, 'the box took the line with it').toBe(0);
+    text.showText(surface, 'NEW', row.left, row.top, row.right, row.bottom, -1, 0, 15);
+    expect(text.overlay.length).toBe(1);
+
+    text.restorePeelOverlay(row.left, row.top, row.right, row.bottom, peel);
+    expect(text.overlay.map((i) => i.text), 'the row is back as it was')
+      .toEqual(['42:17']);
+  });
+
   it('types a Hebrew name into the box from the right', () => {
     const text = new GameText(font, { language: 'he', quality: 'original' });
     const surface = new Surface();

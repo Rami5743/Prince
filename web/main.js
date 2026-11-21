@@ -1235,13 +1235,50 @@ function fitLine(baseline, size, top, bottom, measure) {
   if (baseline - ascent < top) return { size, baseline: top + ascent };
   return { size, baseline };
 }
+var TITLE_CARDS = {
+  // full_image_id.TITLE_PRESENTS
+  1: {
+    keepRows: 20,
+    lines: [[21, "\u05D1\u05E8\u05D5\u05D3\u05E8\u05D1\u05D5\u05E0\u05D3 \u05E1\u05D5\u05E4\u05D8\u05D5\u05D5\u05E8"], [36, "\u05DE\u05E6\u05D9\u05D2\u05D4"]]
+  },
+  // full_image_id.TITLE_GAME
+  2: {
+    keepRows: 0,
+    lines: [[5, "\u05DE\u05E9\u05D7\u05E7 \u05DE\u05D0\u05EA"], [19, "\u05D2\u05F3\u05D5\u05E8\u05D3\u05DF \u05DE\u05DB\u05E0\u05E8"]]
+  }
+};
 var GUTTER = 8;
 var GameText = class _GameText {
   font;
   lang;
   qual;
-  /** Keyed, so that a line drawn again in the same place replaces it. */
+  /**
+   * The lines the **screen** is showing, keyed so that a line drawn
+   * again in the same place replaces it.
+   */
   lines = /* @__PURE__ */ new Map();
+  /**
+   * The lines drawn into the **offscreen** surface, which the screen
+   * is not showing yet.
+   *
+   * A cutscene composes a picture offscreen and copies it over, and
+   * the two are a block apart: `show_title` draws `TITLE_PRESENTS`,
+   * waits, copies the rectangle to the screen, and only then paints
+   * the offscreen back to the plain picture. So a word drawn into the
+   * offscreen is on the screen from the **copy** until the next copy
+   * over the same rectangle -- not from the moment it was drawn.
+   *
+   * At `quality: original` that is free, because the words are
+   * pixels of the surface and the copy carries them. At `high` the
+   * words are not in the surface at all, so the overlay has to keep
+   * the same two sets and `commitOverlay` is the copy. Measured on
+   * the page before this: both Hebrew title cards and every story
+   * screen of the opening showed their words for two seconds and
+   * then lost them for three, while the picture under them stayed.
+   */
+  pendingLines = /* @__PURE__ */ new Map();
+  /** `scr.target(true)`: which of the two the next line goes into. */
+  offscreen = false;
   /**
    * The hall of fame's name box, while it is taking a name.
    *
@@ -1290,6 +1327,19 @@ var GameText = class _GameText {
   /** Everything the canvas pass has to draw, oldest first. */
   get overlay() {
     return [...this.lines.values()];
+  }
+  /**
+   * `scr.target(offscreen)`, for the duration of one call.
+   *
+   * The caller sets it and puts it back, so a game that has one
+   * surface and never sets it writes to the screen's own list, which
+   * is what it did before there were two.
+   */
+  get drawingOffscreen() {
+    return this.offscreen;
+  }
+  set drawingOffscreen(on) {
+    this.offscreen = on;
   }
   // --------------------------------------------------------------- words
   /** The words the game asked for, in the player's language. */
@@ -1351,18 +1401,70 @@ var GameText = class _GameText {
     }
   }
   remember(item) {
-    this.lines.delete(item.key);
-    this.lines.set(item.key, item);
+    const into = this.offscreen ? this.pendingLines : this.lines;
+    into.delete(item.key);
+    into.set(item.key, item);
   }
-  /** The whole list, for a screen that has just been painted over. */
+  /** Both lists, for a screen that has just been painted over. */
   clearOverlay() {
     this.lines.clear();
+    this.pendingLines.clear();
   }
-  /** Everything whose line sits inside this box. */
+  /** The screen's own list, for `pal_restore_free_fadeout`'s black. */
+  clearShownOverlay() {
+    this.lines.clear();
+  }
+  /** Does this line have ink inside the box? */
+  static touches(item, left, top, right, bottom) {
+    const itemTop = item.baseline - item.capHeight;
+    return item.right > left && item.left < right && item.baseline + 2 > top && itemTop < bottom;
+  }
+  /** Everything whose line sits inside this box, on the surface in hand. */
   clearOverlayIn(left, top, right, bottom) {
+    const from = this.offscreen ? this.pendingLines : this.lines;
+    for (const [key, item] of [...from]) {
+      if (_GameText.touches(item, left, top, right, bottom)) from.delete(key);
+    }
+  }
+  /**
+   * `read_peel_from_screen`: the words inside the rectangle, kept.
+   *
+   * A peel is a rectangle of the screen put aside and painted back
+   * later, and the hall of fame uses one to take its name box away
+   * again. At `quality: original` the words in that rectangle are
+   * pixels and the peel carries them; at `high` they are not, so the
+   * peel has to carry them itself or the time beside the name is
+   * painted out and never comes back.
+   */
+  readPeelOverlay(left, top, right, bottom) {
+    const from = this.offscreen ? this.pendingLines : this.lines;
+    const out2 = [];
+    for (const item of from.values()) {
+      if (_GameText.touches(item, left, top, right, bottom)) out2.push(item);
+    }
+    return out2;
+  }
+  /** `restore_peel`: the rectangle's words as they were when it was read. */
+  restorePeelOverlay(left, top, right, bottom, words) {
+    this.clearOverlayIn(left, top, right, bottom);
+    const into = this.offscreen ? this.pendingLines : this.lines;
+    for (const item of words) into.set(item.key, item);
+  }
+  /**
+   * `method_1_blit_rect(onscreen_surface_, offscreen_surface, rect)`:
+   * the offscreen's words reach the screen.
+   *
+   * Whatever the screen was showing in that rectangle is painted over
+   * by the copy, and whatever the offscreen holds there is now shown.
+   * The offscreen keeps its own words, exactly as it keeps its own
+   * pixels.
+   */
+  commitOverlay(left, top, right, bottom) {
     for (const [key, item] of [...this.lines]) {
-      const itemTop = item.baseline - item.capHeight;
-      if (item.right > left && item.left < right && item.baseline + 2 > top && itemTop < bottom) this.lines.delete(key);
+      if (_GameText.touches(item, left, top, right, bottom)) this.lines.delete(key);
+    }
+    for (const [key, item] of this.pendingLines) {
+      if (_GameText.touches(item, left, top, right, bottom)) this.lines.set(key, item);
     }
   }
   /**
@@ -1418,6 +1520,7 @@ var GameText = class _GameText {
     const words = this.translate(text2);
     const rtl = hasRtl(words);
     const baseline = this.baselineIn(top, bottom, yAlign);
+    if (this.lang === "he") xAlign = -xAlign;
     const key = `t:${left},${top},${right},${bottom},${xAlign},${color}`;
     if (this.vector) {
       this.remember({
@@ -1657,6 +1760,25 @@ var GameText = class _GameText {
     if (xAlign === 0) at = left + (right - left - width >> 1);
     else if (xAlign > 0) at = right - width;
     this.blitLine(surface, visual, at, top, color);
+  }
+  /**
+   * The Hebrew words of a title card, or null to blit the picture.
+   *
+   * English keeps the original's own artwork at both qualities: the
+   * card is a drawing of a logotype and there is nothing a redraw
+   * could add to it.
+   */
+  titleCard(id) {
+    if (this.lang !== "he") return null;
+    return TITLE_CARDS[id] ?? null;
+  }
+  /** The words of a title card, centred where the picture's are. */
+  drawTitleCard(surface, id, left, top, right, color) {
+    const card = TITLE_CARDS[id];
+    if (!card || this.lang !== "he") return;
+    for (const [row, line] of card.lines) {
+      this.storyLine(surface, line, top + row, 0, color, `tc${id}:${row}`, left, right);
+    }
   }
   /** How wide a story line is drawn, for the test that pins they fit. */
   storyLineWidth(text2) {
@@ -14411,7 +14533,7 @@ var CutscenePlayer = class _CutscenePlayer {
       },
       rect: (l, t, r, b, color) => {
         this.target.fillRect(l, t, r - l, b - t, color);
-        if (this.text) this.text.noteFill(l, t, r, b, color);
+        if (this.text) this.aimed(() => this.text.noteFill(l, t, r, b, color));
       },
       clear_screen: () => {
         this.offscreen.clear(0);
@@ -14444,7 +14566,7 @@ var CutscenePlayer = class _CutscenePlayer {
       },
       show_text: (l, t, r, b, xa, ya, text2, color) => {
         if (this.text) {
-          this.text.showText(this.target, text2, l, t, r, b, xa, ya, color);
+          this.aimed(() => this.text.showText(this.target, text2, l, t, r, b, xa, ya, color));
           return;
         }
         if (!this.font) return;
@@ -14454,7 +14576,9 @@ var CutscenePlayer = class _CutscenePlayer {
       char_width: (ch) => this.text ? this.text.charWidth(ch) : this.font ? charWidth(this.font, ch.charCodeAt(0)) : 0,
       cstring_width: (text2) => this.text ? this.text.cstringWidth(text2) : this.font ? lineWidth(this.font, text2) : 0,
       draw_text_character: (x, y, ch, color) => {
-        if (this.text) return this.text.drawChar(this.target, x, y, ch, color);
+        if (this.text) {
+          return this.aimed(() => this.text.drawChar(this.target, x, y, ch, color));
+        }
         return this.font ? drawTextCharacter(this.target, this.font, ch.charCodeAt(0), x, y, color) : 0;
       },
       read_peel: (l, t, r, b) => this.readTargetPeel(l, t, r, b),
@@ -14505,7 +14629,8 @@ var CutscenePlayer = class _CutscenePlayer {
         y * width
       );
     }
-    return { left: x0, top: y0, width, height, pixels };
+    const words = this.text ? this.aimed(() => this.text.readPeelOverlay(x0, y0, x1, y1)) : void 0;
+    return { left: x0, top: y0, width, height, pixels, words };
   }
   restoreTargetPeel(peel) {
     const p = peel;
@@ -14515,6 +14640,16 @@ var CutscenePlayer = class _CutscenePlayer {
         p.pixels.subarray(y * p.width, (y + 1) * p.width),
         (p.top + y) * 320 + p.left
       );
+    }
+    const words = p.words;
+    if (this.text) {
+      this.aimed(() => this.text.restorePeelOverlay(
+        p.left,
+        p.top,
+        p.left + p.width,
+        p.top + p.height,
+        words ?? []
+      ));
     }
   }
   /**
@@ -14543,8 +14678,34 @@ var CutscenePlayer = class _CutscenePlayer {
     if (bgcolor) this.palette.setEntry(at, 4, 0, 24);
     else this.palette.setEntry(at, 32, 0, 0);
   }
+  /**
+   * Run one call of the text layer against the surface in hand.
+   *
+   * The layer keeps the screen's words and the offscreen's apart,
+   * because a cutscene composes a picture offscreen and copies it
+   * over a block later, so a word drawn now is on the screen from
+   * the **copy**. The flag is set for the one call and always put
+   * back, so a game that has one surface -- `PopGame`, which shares
+   * this layer -- never inherits it.
+   */
+  aimed(fn) {
+    const text2 = this.text;
+    text2.drawingOffscreen = this.target === this.offscreen;
+    try {
+      return fn();
+    } finally {
+      text2.drawingOffscreen = false;
+    }
+  }
   // seg000:1DF8
   drawFullImage(id) {
+    if (!this.text) {
+      this.drawFullImageInner(id);
+      return;
+    }
+    this.aimed(() => this.drawFullImageInner(id));
+  }
+  drawFullImageInner(id) {
     const spec = FULL_IMAGE[id];
     if (!spec) return;
     const bank = spec.bank === 40 ? this.title40 : this.title50;
@@ -14559,10 +14720,30 @@ var CutscenePlayer = class _CutscenePlayer {
           spec.ypos + image.height
         );
         this.storyShowing = null;
+        this.titleShowing = null;
       }
       if (this.text.story(id)) {
         this.storyShowing = id;
         this.text.drawStory(this.target, id, STORY_TEXT_COLOR);
+        return;
+      }
+      const card = this.text.titleCard(id);
+      if (card) {
+        if (card.keepRows > 0) {
+          const savedBottom = this.target.clipBottom;
+          this.target.clipBottom = Math.min(savedBottom, spec.ypos + card.keepRows);
+          this.target.blitOpaqueBlack(image, spec.xpos, spec.ypos, bank.paletteBase);
+          this.target.clipBottom = savedBottom;
+        }
+        this.titleShowing = id;
+        this.text.drawTitleCard(
+          this.target,
+          id,
+          spec.xpos,
+          spec.ypos,
+          spec.xpos + image.width,
+          bank.paletteBase + 15
+        );
         return;
       }
     }
@@ -14586,17 +14767,27 @@ var CutscenePlayer = class _CutscenePlayer {
    * rather than at the next scene.
    */
   refreshText() {
-    const id = this.storyShowing;
-    if (!this.text || id === null) return;
+    if (!this.text) return;
+    const story = this.storyShowing;
+    const title = this.titleShowing;
+    if (story === null && title === null) return;
     const saved = this.target;
     for (const surface of [this.offscreen, this.onscreen]) {
       this.target = surface;
-      this.drawFullImage(full_image_id.STORY_FRAME);
-      this.drawFullImage(id);
+      if (story !== null) {
+        this.drawFullImage(full_image_id.STORY_FRAME);
+        this.drawFullImage(story);
+      } else if (title !== null) {
+        this.drawFullImage(full_image_id.TITLE_MAIN);
+        this.drawFullImage(title);
+      }
     }
     this.target = saved;
-    this.storyShowing = id;
+    this.storyShowing = story;
+    this.titleShowing = title;
   }
+  /** Which title card is on the screen, for a language change. */
+  titleShowing = null;
   /** `method_1_blit_rect(onscreen_surface_, offscreen_surface, ...)`. */
   /** `clip_room`: a `load_intro` scene never reaches past row 191. */
   roomOnly = false;
@@ -14611,6 +14802,7 @@ var CutscenePlayer = class _CutscenePlayer {
         y * 320 + x0
       );
     }
+    this.text?.commitOverlay(x0, y0, x1, y1);
   }
   setBackground(color) {
     if (color === 0) {
@@ -14672,6 +14864,7 @@ var CutscenePlayer = class _CutscenePlayer {
       this.palette.loadBlock(0, this.rowsOf(f.original, 0, 256));
       this.fade = null;
       this.onscreen.clear(0);
+      this.text?.clearShownOverlay();
     }
   }
   rowsOf(rgb6, from, count) {

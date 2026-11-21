@@ -41,6 +41,194 @@
 ## ============================================================
 
 
+## THE OVERLAY WAS A BLOCK BEHIND THE PICTURE, AND THE MARGIN CLIPPED ITS OWN WORDS
+
+    measured   32260 of 33047   98%   (unmoved, run for run)
+    all        34143 of 36814   93%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     890 -> 894
+
+    page-port.ts --scenes --cheats --entries --deaths --potion
+                 the page and the port draw the same game
+    fuzz 8 3000  no faults
+
+The owner's specification audited clause by clause in a real
+Chromium at seven window sizes in both languages, with the
+screenshots looked at. Six things were wrong and all six are fixed.
+Three of them nothing in the suite could have seen, and two of those
+three are the interesting ones: **a word at `quality: high` is not a
+pixel of the surface, so everything the game does to a rectangle of
+pixels has to be done to the words in it as well**, and two of the
+three things the game does to a rectangle -- the copy and the peel --
+were not.
+
+### 1. The overlay showed its words a block early and took them away a block early
+
+`show_title` is a double buffer used the way the original uses it:
+
+    draw_full_image(TITLE_PRESENTS);       // into the offscreen
+    do_wait(timer);                        // the screen still shows the last block
+    copy_screen_rect(24, 106, 296, 195);   // NOW the card is on the screen
+    draw_full_image(TITLE_MAIN);           // the offscreen goes back to the picture
+    do_wait(timer);                        // and the screen still shows the card
+
+So a word drawn into the offscreen reaches the screen at the **copy**
+and stays until the next copy over the same rectangle. At `quality:
+original` that is free: the words are pixels and the copy carries
+them. At `high` they are not in the surface at all, and the overlay
+put them up at the draw and took them away at the repaint -- one
+whole block early at both ends.
+
+Measured on the page, the overlay's ink and the surface's white
+through the title's own clock, a second at a time:
+
+    seconds            73-74   75-77   78-79   80-83   84-87
+    original, white      179     784     179     574     179
+    high, overlay ink      0    7165       0    6645       0   (after)
+    high, overlay ink   7165       0    6645       0       0   (before)
+
+-- so the words were on the screen in the **wrong two seconds** and
+absent in the right three. The same shape cost every story screen of
+the opening its words for the last two seconds before the next one.
+
+`GameText` keeps two lists now -- the screen's words and the
+offscreen's -- `scr.target` chooses which a line goes into, and
+`copy_screen_rect` is `commitOverlay`. The flag is set for the
+duration of one call and always put back (`CutscenePlayer.aimed`),
+because `PopGame` shares the same text layer and has one surface:
+a leaked `true` would have sent the strip under the room into the
+list nothing draws.
+
+### 2. A peel carries its pixels, and it has to carry its words
+
+The hall of fame reads a peel of its row **off the offscreen** --
+which already has the entry's name and its time on it -- paints a box
+over the row on the screen, takes a name into the box, and puts the
+peel back. At `high`, restoring the pixels alone did two things at
+once: it left the typed name standing where the box had been, and it
+rubbed out the time beside it for good. Screenshotted: `הנסיך` in the
+box's colour at x 204 and `הנסיך` in the row's colour at x 248, two
+columns apart, with no `0:00` anywhere.
+
+`read_peel_from_screen` takes a copy of the words inside its
+rectangle now and `restore_peel` puts them back, which is what it
+does with the pixels. Pinned as arithmetic in
+`tests/render/game-text.test.ts`, both halves.
+
+### 3. The hall of fame's columns change sides in Hebrew
+
+`show_hof` (`seg001:0E94`) draws the name against the left of the row
+and the time against the right -- who, then how long, which is the
+order a left-to-right reader reads them in. A Hebrew reader starts at
+the other end, and a Hebrew name left where the C puts it reads as
+the row's last column.
+
+`GameText.showText` mirrors `xAlign` in Hebrew, and that is the whole
+of what it touches: `scr.show_text` has exactly one caller in the
+game and it is `show_hof_text`. English is the C's own.
+
+### 4. The last English on a Hebrew screen was two pictures of words
+
+`TITLE_PRESENTS` and `TITLE_GAME` are opaque patches of `TITLE.DAT`
+reading `Broderbund Software / presents` and
+`a game by / Jordan Mechner`. Measured off the pictures: image 1 is
+128 by 47 with the Broderbund crown on rows 0 to 19, the first line
+on 20 to 28 and the second on 35 to 45; image 2 is 122 by 30 and is
+nothing but words.
+
+In Hebrew the crown is still blitted -- clipped to its own twenty
+rows -- and the word rows are **not drawn at all**, so what shows
+through is the title picture `show_title` drew the line before
+(`draw_full_image(TITLE_MAIN); draw_full_image(TITLE_PRESENTS);`).
+The Hebrew goes on top in the patch's own fifteenth colour, which is
+what the English letters were drawn in. English keeps the artwork at
+both qualities: a logotype is a drawing and a vector face would be a
+downgrade, not an upgrade.
+
+**`TITLE_MECHNER` stays English in both languages and that is a
+decision, not an oversight**: it is the copyright line, and a
+copyright line is not translated. `TITLE_POP` is the logotype.
+
+### 5. The margin was clipping its own words
+
+`#keys` was two columns in the title margin with
+`grid-template-columns: auto 1fr`. The first column takes the widest
+key name there is and a grid column's minimum is its content's, so
+the pair wanted **186 pixels in a 166-pixel margin** at 1280 by 860
+and 186 in a 133-pixel one at 1024 by 700; the margin's
+`overflow: hidden` took the difference and
+`move; a corner jumps that way` read `move; a corner jumps t way`.
+Twelve of the eighteen rows were cut the same way. Hebrew was clear
+of it only because Heebo is narrower than the mono face.
+
+`Save game` was the same fault in a button: **65 pixels in the 52** a
+slot button gets at 1024 by 700, with the last three letters gone.
+Hebrew had been given `שמירה`/`טעינה` a round ago and English had not.
+
+* the key list is a panel of its own, closed by default, with the key
+  on its own line and what it does under it;
+* the title margin holds the title and nothing else, which is clause
+  2's "drop all the current prose";
+* the two margins are `--title-w` (104..150px) and `--panel-w`
+  (140..196px) rather than one number, and the picture goes from
+  **907x680 to 945x709** at 1280 by 860 by that line alone.
+
+### 6. The status line was drawn on top of the game
+
+`#status` was `position: absolute; bottom: 2px` inside the stage,
+which is right only while the stage is taller than the picture. In
+the stacked layout at 780 by 620 it was drawn over the strip under
+the room: `מושהה — הקישו מקש כלשהו` on top of `המשחק מושהה`. It has a
+grid row of its own now, so the stage's own box -- which is what
+`Display.applyAspect` measures the canvas against -- is the smaller
+for it and nothing can overlap.
+
+### 7. Four Hebrew letters read as other letters
+
+Read off the screen at device pixel ratio 2, not reasoned about:
+
+    העריץ ג׳אפר  ->  הצריץ ג׳אפר     ayin as tsadi
+    בכל רחבי     ->  ככל רחכי        bet as kaf
+    מוטל מת      ->  כוטל כת         mem as kaf
+
+**bet** differed from kaf by one pixel of foot; it sticks out by two
+columns now, which is the face's own stem weight. **mem**'s top bar
+reached within one column of its left stroke and the eye closed the
+gap; the bar stops two columns short. **ayin** and **tsadi** differed
+by one row of one stroke: an ayin's left arm comes straight down for
+three rows and only then bends and its foot stops short of the left
+edge, where a tsadi's bends from the first row and its base runs the
+whole width. Final tsadi follows its own letter.
+
+### 8. What was measured and is right
+
+* **Every sound reads and plays at `high`.** All fifty-eight indices
+  read with no failure at either quality, and 54 of them start a node
+  -- 31, 34, 42 and 57 have no sound behind them at all, which is the
+  release's own table. At `high` the oscillator count doubles (the
+  second operator) and there is one low pass per tune: the title's
+  own tune is 200 nodes at `original` and 399 plus one filter at
+  `high`.
+* **The tools.** Stopping a recording writes the file on the stop
+  (`prince-keys-level1-<when>.json` arrives on the click, and there
+  is no second button); a game saved at x 77, played to x 132 and
+  loaded comes back at x 77, y 118, in three slots.
+* **No scrolling, in either direction, at 1280x860, 1440x900,
+  1024x700, 900x700, 800x640, 1920x1080, 1280x620 and 420x760**, in
+  both languages, with nothing clipped at any of them.
+
+### 9. What is left
+
+* **`quality: high` leaves the two title cards and the hall of fame's
+  logotype as artwork in English.** They are drawings of letterforms
+  rather than font text, so the vector path would replace a logotype
+  with Times; the story screens are a transcription and do get the
+  vector face.
+* **`potion.html`'s extra panel is English in both languages.** It is
+  a diagnostic page with its own link, written in
+  `tools/dev/build-pages.mjs` rather than in `web/strings.ts`.
+
 ## AN UPSCALER THAT MAY NOT MIX A COLOUR CANNOT MAKE ONE, AND THAT WAS THE WHOLE FAULT
 
     measured   32260 of 33047   98%   (unmoved, run for run)
