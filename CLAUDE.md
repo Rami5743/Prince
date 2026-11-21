@@ -1,5 +1,105 @@
 # Read this first
 
+## THE PRINCE IS OUTLINES NOW: 218 SPRITES TRACED, AND EVERY ONE LOOKED AT
+
+    npm test   897 -> 906
+    the trace, rasterized at the sprite's own size
+               **0 pixels wrong over all 218**, index for index
+
+    218 sprites traced   148 ms, 1805 layers, 787 KiB of path data
+
+The player asked for the artwork replaced by **vector** artwork,
+checked by eye, one kind of picture to begin with: `KID.DAT`, which
+is the Prince and nothing else -- 218 pictures, every frame of every
+move he makes. `src/render/vectorize.ts` is the tracer,
+`tools/dev/vector-sheets.ts` puts the original's own pixels beside
+the outline for looking at, and `tests/render/vectorize.test.ts`
+pins the three rules below.
+
+**The one rule it inherits** is the upscaler's: the game is drawn in
+palette **indices** and the palette moves while it plays, so a shape
+carries the index it was traced from and nothing else. The colour is
+looked up when it is drawn.
+
+### 1. Nothing lost, no seams, and the right index -- measured twice
+
+A region is traced by walking the unit edges between an inside pixel
+and an outside one, directed so that the inside is on the left, which
+makes an outer loop run clockwise and a hole run the other way; SVG's
+nonzero rule then takes the holes out without being told. Where two
+regions touch only at a corner the walk takes the **right-hand** turn,
+which reads the diagonal as joined, as an eye does.
+
+Two regions traced separately and filled leave a hairline of
+background between them in every rasterizer there is, so **the layers
+are stacked**: layer k is the union of its own index and every index
+drawn after it, and each paints over the last. The partition is
+rebuilt exactly and there is nothing between them to show through.
+
+Checked from both ends:
+
+* **in Chromium**, which is what the page draws with: every sprite's
+  trace rasterized at its own size, against the index it started as
+  -- `vector-sheets.ts --sharp --exact` reads **0 pixels wrong over
+  218 sprites**, alpha and colour both;
+* **as geometry**, with a point-in-polygon walk in the test, so the
+  property holds of the shapes and not of one rasterizer's rounding.
+
+### 2. Three things were wrong, and the sheets found all three
+
+Each was found by looking at a contact sheet, and each is a number
+in the file now.
+
+* **A chain of beads down every diagonal.** Rounding each turn at
+  half its arm turns a one-pixel step into a bulge, and a diagonal is
+  nothing but one-pixel steps. **A diagonal is a line the artist
+  drew**, so it has to become one segment before anything is rounded:
+  `simplify` is Douglas-Peucker over the closed loop, with
+  `TOLERANCE` above the 0.707 that a 45-degree lattice path strays
+  from its own line.
+* **The lighter shade along the Prince's edge came out as circles.**
+  It is a chain of single pixels, and a radius of half an arm makes a
+  one-pixel square a disc. The radius is a **distance** now --
+  `min(ROUND, half the shorter arm)` -- and a loop of area `SPECK` or
+  less is drawn as it is: a speck is a speck.
+* **His head stayed a staircase.** A rule that kept a turn sharp when
+  both arms were three pixels or longer counted every turn in his
+  hair, which is drawn in runs of three and four. Three settings were
+  put side by side on one sheet: `CORNER_RUN` is **nought**, there is
+  no such rule, and the cap at half the shorter arm is what keeps a
+  real corner.
+
+And the tolerance itself was measured the same way: at 0.75 the
+sword blade of frames **569 and 570** -- a staircase of two-pixel
+steps -- could not be straightened and came out a **wave**; at 1.4 a
+shoulder began to lose its notch. It is **1**.
+
+### 3. Every one of the 218 was looked at
+
+Ten contact sheets, the original's pixels beside the outline, at the
+settings above. 401 to 619: the walk, the run, the jump, the climb,
+the hang, the fall, the sword, the drink, the death and its blood,
+the crumbs, the star. **One was wrong** -- 569's wavy blade -- and
+the tolerance that fixed it was chosen by putting three of them on
+one sheet. Everything else is the same figure, smoother.
+
+    npx tsx tools/dev/vector-sheets.ts <outdir> [--scale 8] [--per 24]
+           [--sharp] [--exact] [--ids 569,611]
+
+### 4. What it costs, and what it is not yet
+
+Tracing all 218 takes **148 ms** and yields 1805 layers and 787 KiB
+of path data -- about four and a half characters a pixel -- so it is
+a thing to do once at load rather than to ship, exactly as the
+upscaler is. It is **not wired into the game**: the renderer still
+blits the original's pixels into a 320 by 200 indexed surface, and
+drawing outlines instead means the blit, the rect and the peel have
+to exist at the display's own size, which is the thing §3 of the
+upscaler's section named as the round it would cost. The tracer, its
+measurements and its test are in; the display is not changed, and
+the three scores are untouched because nothing in `src` reads it yet.
+
+
 ## THE GUARD HAS NO PALETTE OF HIS OWN, AND THE LAST ENGLISH ON THE PAGE WAS IN THE SCRIPT THAT WRITES IT
 
     measured   32260 of 33047   98%   (unmoved)
