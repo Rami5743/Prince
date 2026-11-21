@@ -48,9 +48,13 @@ const ROWS: Readonly<Record<string, readonly string[]>> = {
     '##....',
   ],
   // bet: the foot sticks out to the left, which is the whole of what
-  // tells it from a kaf.
+  // tells it from a kaf -- so it sticks out by **two** columns, which
+  // is the face's own stem weight, and not by one. Read on the screen
+  // at one column, `בכל` came out `ככל` and `בין` came out `כין`: a
+  // single pixel of foot against a kaf's rounded corner is not a
+  // difference the eye makes at this size.
   'ב': [
-    '.######',
+    '..#####',
     '.....##',
     '.....##',
     '.....##',
@@ -173,10 +177,13 @@ const ROWS: Readonly<Record<string, readonly string[]>> = {
     '##..##',
     '######',
   ],
-  // mem: the left stroke is angled and clear of the bar; a final mem's
-  // is neither.
+  // mem: a bet's shape with the short left stroke a bet has not, and
+  // the gap at the top left that a final mem has not. Measured on the
+  // screen, `מוטל מת` read `כוטל כת` while the top bar reached within
+  // one column of the left stroke: the eye joined the two and read a
+  // closed kaf. The bar stops two columns short of it now.
   'מ': [
-    '.######',
+    '..#####',
     '.....##',
     '.....##',
     '##...##',
@@ -214,14 +221,24 @@ const ROWS: Readonly<Record<string, readonly string[]>> = {
     '##..##',
     '.####.',
   ],
+  /*
+   * ayin: the left arm comes **straight down** and only then bends
+   * into the stem, and the stem carries on below the join to a foot
+   * that stops short of the left edge.
+   *
+   * A tsadi's arm bends from the first row and its base runs the whole
+   * width. Read on the story screen, `העריץ` came out `הצריץ` while
+   * the two differed by one row of one stroke; they differ by three
+   * rows and by the base now.
+   */
   'ע': [
-    '##..##',
-    '##..##',
-    '.#..##',
-    '.##.##',
-    '..####',
-    '....##',
-    '..####',
+    '##...##',
+    '##...##',
+    '##...##',
+    '.##..##',
+    '..#####',
+    '.....##',
+    '..#####',
   ],
   'ף': [
     '######',
@@ -244,24 +261,24 @@ const ROWS: Readonly<Record<string, readonly string[]>> = {
     '######',
   ],
   'ץ': [
-    '##..##',
-    '.#..##',
-    '.##.##',
-    '..####',
-    '....##',
-    '....##',
-    '....##',
-    '....##',
-    '....##',
+    '##...##',
+    '.##..##',
+    '..##.##',
+    '...####',
+    '.....##',
+    '.....##',
+    '.....##',
+    '.....##',
+    '.....##',
   ],
   'צ': [
-    '##..##',
-    '.#..##',
-    '.##.##',
-    '..####',
-    '....##',
-    '....##',
-    '######',
+    '##...##',
+    '.##..##',
+    '..##.##',
+    '...####',
+    '.....##',
+    '.....##',
+    '#######',
   ],
   // qof: the stem stops on the line and the left leg carries on under it.
   'ק': [

@@ -783,9 +783,13 @@ var ROWS = {
     "##...."
   ],
   // bet: the foot sticks out to the left, which is the whole of what
-  // tells it from a kaf.
+  // tells it from a kaf -- so it sticks out by **two** columns, which
+  // is the face's own stem weight, and not by one. Read on the screen
+  // at one column, `בכל` came out `ככל` and `בין` came out `כין`: a
+  // single pixel of foot against a kaf's rounded corner is not a
+  // difference the eye makes at this size.
   "\u05D1": [
-    ".######",
+    "..#####",
     ".....##",
     ".....##",
     ".....##",
@@ -908,10 +912,13 @@ var ROWS = {
     "##..##",
     "######"
   ],
-  // mem: the left stroke is angled and clear of the bar; a final mem's
-  // is neither.
+  // mem: a bet's shape with the short left stroke a bet has not, and
+  // the gap at the top left that a final mem has not. Measured on the
+  // screen, `מוטל מת` read `כוטל כת` while the top bar reached within
+  // one column of the left stroke: the eye joined the two and read a
+  // closed kaf. The bar stops two columns short of it now.
   "\u05DE": [
-    ".######",
+    "..#####",
     ".....##",
     ".....##",
     "##...##",
@@ -949,14 +956,24 @@ var ROWS = {
     "##..##",
     ".####."
   ],
+  /*
+   * ayin: the left arm comes **straight down** and only then bends
+   * into the stem, and the stem carries on below the join to a foot
+   * that stops short of the left edge.
+   *
+   * A tsadi's arm bends from the first row and its base runs the whole
+   * width. Read on the story screen, `העריץ` came out `הצריץ` while
+   * the two differed by one row of one stroke; they differ by three
+   * rows and by the base now.
+   */
   "\u05E2": [
-    "##..##",
-    "##..##",
-    ".#..##",
-    ".##.##",
-    "..####",
-    "....##",
-    "..####"
+    "##...##",
+    "##...##",
+    "##...##",
+    ".##..##",
+    "..#####",
+    ".....##",
+    "..#####"
   ],
   "\u05E3": [
     "######",
@@ -979,24 +996,24 @@ var ROWS = {
     "######"
   ],
   "\u05E5": [
-    "##..##",
-    ".#..##",
-    ".##.##",
-    "..####",
-    "....##",
-    "....##",
-    "....##",
-    "....##",
-    "....##"
+    "##...##",
+    ".##..##",
+    "..##.##",
+    "...####",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".....##",
+    ".....##"
   ],
   "\u05E6": [
-    "##..##",
-    ".#..##",
-    ".##.##",
-    "..####",
-    "....##",
-    "....##",
-    "######"
+    "##...##",
+    ".##..##",
+    "..##.##",
+    "...####",
+    ".....##",
+    ".....##",
+    "#######"
   ],
   // qof: the stem stops on the line and the left leg carries on under it.
   "\u05E7": [
@@ -1648,41 +1665,8 @@ var GameText = class _GameText {
 };
 
 // src/render/upscale.ts
-function scale2x(src, width, height, out2) {
-  const w2 = width * 2;
-  const dst = out2 ?? new Uint8Array(w2 * height * 2);
-  for (let y = 0; y < height; y++) {
-    const up = (y > 0 ? y - 1 : 0) * width;
-    const mid = y * width;
-    const down = (y + 1 < height ? y + 1 : height - 1) * width;
-    const row0 = y * 2 * w2;
-    const row1 = (y * 2 + 1) * w2;
-    for (let x = 0; x < width; x++) {
-      const left = x > 0 ? x - 1 : 0;
-      const right = x + 1 < width ? x + 1 : width - 1;
-      const e = src[mid + x];
-      const b = src[up + x];
-      const h = src[down + x];
-      const d = src[mid + left];
-      const f = src[mid + right];
-      let e0 = e;
-      let e1 = e;
-      let e2 = e;
-      let e3 = e;
-      if (b !== h && d !== f) {
-        if (d === b) e0 = d;
-        if (b === f) e1 = f;
-        if (d === h) e2 = d;
-        if (h === f) e3 = f;
-      }
-      dst[row0 + x * 2] = e0;
-      dst[row0 + x * 2 + 1] = e1;
-      dst[row1 + x * 2] = e2;
-      dst[row1 + x * 2 + 1] = e3;
-    }
-  }
-  return dst;
-}
+var AA_FACTOR = 3;
+var MIX_PARTS = 5;
 function scale3x(src, width, height, out2) {
   const w3 = width * 3;
   const dst = out2 ?? new Uint8Array(w3 * height * 3);
@@ -1691,8 +1675,8 @@ function scale3x(src, width, height, out2) {
     const mid = y * width;
     const down = (y + 1 < height ? y + 1 : height - 1) * width;
     const row0 = y * 3 * w3;
-    const row1 = (y * 3 + 1) * w3;
-    const row2 = (y * 3 + 2) * w3;
+    const row1 = row0 + w3;
+    const row2 = row1 + w3;
     for (let x = 0; x < width; x++) {
       const left = x > 0 ? x - 1 : 0;
       const right = x + 1 < width ? x + 1 : width - 1;
@@ -1736,16 +1720,107 @@ function scale3x(src, width, height, out2) {
   }
   return dst;
 }
-function upscale(src, width, height, factor, out2) {
-  const into = out2?.length === width * height * factor * factor ? out2 : void 0;
-  if (factor === 1) return src;
-  if (factor === 2) return scale2x(src, width, height, into);
-  if (factor === 3) return scale3x(src, width, height, into);
-  return scale2x(scale3x(src, width, height), width * 3, height * 3, into);
+function antialias(src, width, height, scratch = {}) {
+  const w = width * AA_FACTOR;
+  const h = height * AA_FACTOR;
+  const n = w * h;
+  const base = scratch.base?.length === n ? scratch.base : new Uint8Array(n);
+  scratch.base = base;
+  scale3x(src, width, height, base);
+  let at = scratch.mixAt?.length ? scratch.mixAt : new Uint32Array(n >> 3);
+  let weights = scratch.mixWeights?.length === at.length * MIX_PARTS ? scratch.mixWeights : new Uint8Array(at.length * MIX_PARTS);
+  let count = 0;
+  for (let y = 0; y < h; y++) {
+    const up = (y > 0 ? y - 1 : 0) * w;
+    const mid = y * w;
+    const down = (y + 1 < h ? y + 1 : h - 1) * w;
+    for (let x = 0; x < w; x++) {
+      const left = x > 0 ? x - 1 : 0;
+      const right = x + 1 < w ? x + 1 : w - 1;
+      const b = base[up + x];
+      const d = base[mid + left];
+      const e = base[mid + x];
+      const f = base[mid + right];
+      const hh = base[down + x];
+      if (b === hh || d === f) continue;
+      const a = base[up + left];
+      const c = base[up + right];
+      const g2 = base[down + left];
+      const i = base[down + right];
+      let nB = 0;
+      let nD = 0;
+      let nF = 0;
+      let nH = 0;
+      if (d === b) nD++;
+      if (d === b && e !== c || b === f && e !== a) nB++;
+      if (b === f) nF++;
+      if (d === b && e !== g2 || d === hh && e !== a) nD++;
+      if (b === f && e !== i || hh === f && e !== c) nF++;
+      if (d === hh) nD++;
+      if (d === hh && e !== i || hh === f && e !== g2) nH++;
+      if (hh === f) nF++;
+      const moved = nB + nD + nF + nH;
+      if (moved === 0) continue;
+      if (count === at.length) {
+        const bigger = new Uint32Array(at.length * 2);
+        bigger.set(at);
+        at = bigger;
+        const more = new Uint8Array(bigger.length * MIX_PARTS);
+        more.set(weights);
+        weights = more;
+      }
+      at[count] = mid + x;
+      const o = count * MIX_PARTS;
+      weights[o] = 9 - moved;
+      weights[o + 1] = nB;
+      weights[o + 2] = nD;
+      weights[o + 3] = nF;
+      weights[o + 4] = nH;
+      count++;
+    }
+  }
+  scratch.mixAt = at;
+  scratch.mixWeights = weights;
+  return { base, width: w, height: h, mixAt: at, mixCount: count, mixWeights: weights };
+}
+function composeAntialiased(aa, paletteRgba, out2) {
+  const { base, width: w, height: h, mixAt, mixCount, mixWeights } = aa;
+  const n = w * h;
+  for (let i = 0; i < n; i++) {
+    const c = base[i] * 4;
+    const o = i * 4;
+    out2[o] = paletteRgba[c];
+    out2[o + 1] = paletteRgba[c + 1];
+    out2[o + 2] = paletteRgba[c + 2];
+    out2[o + 3] = 255;
+  }
+  for (let k = 0; k < mixCount; k++) {
+    const i = mixAt[k];
+    const y = i / w | 0;
+    const x = i - y * w;
+    const up = (y > 0 ? y - 1 : 0) * w;
+    const down = (y + 1 < h ? y + 1 : h - 1) * w;
+    const left = x > 0 ? x - 1 : 0;
+    const right = x + 1 < w ? x + 1 : w - 1;
+    const e = base[i] * 4;
+    const b = base[up + x] * 4;
+    const d = base[y * w + left] * 4;
+    const f = base[y * w + right] * 4;
+    const hh = base[down + x] * 4;
+    const o = k * MIX_PARTS;
+    const wE = mixWeights[o];
+    const wB = mixWeights[o + 1];
+    const wD = mixWeights[o + 2];
+    const wF = mixWeights[o + 3];
+    const wH = mixWeights[o + 4];
+    const p = i * 4;
+    out2[p] = (paletteRgba[e] * wE + paletteRgba[b] * wB + paletteRgba[d] * wD + paletteRgba[f] * wF + paletteRgba[hh] * wH) / 9;
+    out2[p + 1] = (paletteRgba[e + 1] * wE + paletteRgba[b + 1] * wB + paletteRgba[d + 1] * wD + paletteRgba[f + 1] * wF + paletteRgba[hh + 1] * wH) / 9;
+    out2[p + 2] = (paletteRgba[e + 2] * wE + paletteRgba[b + 2] * wB + paletteRgba[d + 2] * wD + paletteRgba[f + 2] * wF + paletteRgba[hh + 2] * wH) / 9;
+  }
 }
 
 // src/render/display.ts
-var MAX_FACTOR = 6;
 var VECTOR_FACE = '"Frank Ruehl CLM", "David Libre", David, "Noto Serif Hebrew", "Times New Roman", "Liberation Serif", "FreeSerif", "DejaVu Serif", serif';
 var CAP_RATIO = 0.7;
 var Display = class {
@@ -1773,27 +1848,28 @@ var Display = class {
    *
    * The words went onto a second canvas because a letter wants a
    * vector face and the game has none; the picture cannot do that --
-   * there is nothing to draw it from but the art in the data files --
-   * so what it gets instead is `src/render/upscale.ts`, which rounds
-   * the corners of the art in palette indices and hands the canvas
-   * three or six times as many pixels. The browser then scales that
-   * down to the size the picture is shown at smoothly rather than
-   * with nearest neighbour, and the steps go out of the edges.
+   * there is nothing to draw it from but the art in the data files.
+   * What it gets instead is `src/render/upscale.ts`: the art drawn
+   * nine times as fine and sampled back down three by three, so the
+   * canvas is three times as big **and** its edges carry colours the
+   * palette does not hold -- measured, 24 colours on a dungeon frame
+   * become 229. They are kept as mixtures of indices rather than as
+   * finished colours, so a fade still fades them.
    *
    * At `original` none of this exists: the canvas is 320 by 200 and
    * `image-rendering: pixelated`, exactly as it was.
    */
   quality = "original";
-  factor = 1;
-  /** The last surface upscaled, and what it came out as. */
+  /** The last surface anti-aliased, so a frame is filtered only once. */
   hiFrom = null;
-  hiPixels = null;
+  hiPicture = null;
+  hiScratch = {};
   hiImage = null;
   /**
    * The last thing presented, so a resize can put it back.
    *
-   * Changing a canvas's backing store **clears it**, and the factor
-   * changes when the window crosses a size. The game presents every
+   * Changing a canvas's backing store **clears it**, and the quality
+   * changes its size. The game presents every
    * tick so it would not show for long -- but a paused game and a
    * scene that has stopped present nothing at all, and those would
    * be left looking at a blank canvas until something else moved.
@@ -1834,33 +1910,16 @@ var Display = class {
     this.sizeCanvas();
   }
   /**
-   * How much to enlarge, from how big the picture is really shown.
+   * Give the canvas the backing store this quality asks for.
    *
-   * There is nothing to be had from more pixels than the screen has,
-   * so this asks for the first factor that covers the canvas's own
-   * displayed size times the device's pixel ratio -- the same number
-   * the crisp-text canvas uses -- and stops at six. On a 1000-pixel
-   * window at ratio 1 that is three; on the same window on a retina
-   * screen it is six.
+   * There is one size at `high` and it is three times the game's,
+   * which is also the size the anti-aliasing samples down from. A
+   * bigger canvas would want a bigger sampling to be worth having,
+   * and the measurement for that is in `upscale.ts`: a quarter of a
+   * second a frame, against a tenth of a core for this.
    */
-  chooseFactor() {
-    if (this.quality !== "high") return 1;
-    const dpr = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
-    const shown = (this.canvas.clientWidth || this.canvas.offsetWidth || SCREEN_WIDTH) * dpr;
-    const want = shown / SCREEN_WIDTH;
-    if (want <= 2) return 2;
-    if (want <= 3) return 3;
-    return MAX_FACTOR;
-  }
-  /** Give the canvas the backing store this quality asks for. */
   sizeCanvas() {
-    const factor = this.chooseFactor();
-    if (factor !== this.factor) {
-      this.factor = factor;
-      this.hiFrom = null;
-      this.hiPixels = null;
-      this.hiImage = null;
-    }
+    const factor = this.quality === "high" ? AA_FACTOR : 1;
     const width = SCREEN_WIDTH * factor;
     const height = SCREEN_HEIGHT * factor;
     let cleared = false;
@@ -1868,6 +1927,9 @@ var Display = class {
       this.canvas.width = width;
       this.canvas.height = height;
       this.ctx.imageSmoothingEnabled = false;
+      this.hiFrom = null;
+      this.hiPicture = null;
+      this.hiImage = null;
       cleared = true;
     }
     this.canvas.style.imageRendering = factor === 1 ? "pixelated" : "auto";
@@ -1975,7 +2037,7 @@ var Display = class {
   }
   present(surface, paletteRgba) {
     this.last = { surface, palette: paletteRgba };
-    if (this.factor > 1) this.presentHigh(surface, paletteRgba);
+    if (this.quality === "high") this.presentHigh(surface, paletteRgba);
     else {
       surface.toRgba(paletteRgba, this.imageData.data);
       this.ctx.putImageData(this.imageData, 0, 0);
@@ -1983,23 +2045,26 @@ var Display = class {
     this.presentText(paletteRgba);
   }
   /**
-   * The same picture, enlarged, in the palette it was drawn with.
+   * The same picture, three times as big and with its edges
+   * anti-aliased, in the palette it was drawn with.
    *
-   * The enlarging is done on the **indices** and only when the
+   * The **filtering** is done on the indices and only when the
    * indices have moved, which is what makes this affordable: the
    * flash puts the screen up twice inside one tick and a fade writes
-   * a new palette every other sixtieth, and neither of them changes a
-   * pixel of the surface. Only the expansion to RGBA runs again for
-   * those, which is the part that has to.
+   * a new palette every other sixtieth, and neither of them changes
+   * a pixel of the surface. What runs on every frame is the compose,
+   * and that is the flat fill the display always did plus the four
+   * per cent of pixels that are a mixture -- measured at 1.8 ms and
+   * 0.8 ms on a palace room.
    */
   presentHigh(surface, paletteRgba) {
-    const factor = this.factor;
-    const width = surface.width * factor;
-    const height = surface.height * factor;
+    const width = surface.width * AA_FACTOR;
+    const height = surface.height * AA_FACTOR;
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
       this.ctx.imageSmoothingEnabled = false;
+      this.hiImage = null;
     }
     const src = surface.pixels;
     let moved = this.hiFrom === null || this.hiFrom.length !== src.length;
@@ -2012,24 +2077,15 @@ var Display = class {
         }
       }
     }
-    if (moved || !this.hiPixels) {
-      this.hiPixels = upscale(src, surface.width, surface.height, factor, this.hiPixels ?? void 0);
+    if (moved || !this.hiPicture) {
+      this.hiPicture = antialias(src, surface.width, surface.height, this.hiScratch);
       this.hiFrom = this.hiFrom?.length === src.length ? this.hiFrom : new Uint8Array(src.length);
       this.hiFrom.set(src);
     }
     if (!this.hiImage || this.hiImage.width !== width || this.hiImage.height !== height) {
       this.hiImage = this.ctx.createImageData(width, height);
     }
-    const dst = this.hiImage.data;
-    const ix = this.hiPixels;
-    for (let i = 0; i < ix.length; i++) {
-      const c = ix[i] * 4;
-      const o = i * 4;
-      dst[o] = paletteRgba[c];
-      dst[o + 1] = paletteRgba[c + 1];
-      dst[o + 2] = paletteRgba[c + 2];
-      dst[o + 3] = 255;
-    }
+    composeAntialiased(this.hiPicture, paletteRgba, this.hiImage.data);
     this.ctx.putImageData(this.hiImage, 0, 0);
   }
   /**
@@ -15001,8 +15057,10 @@ var EN = {
   record: "Record keys",
   recordStop: "Stop and save",
   recordSaved: "Recording saved",
-  saveGame: "Save game",
-  loadGame: "Load game",
+  saveGame: "Save",
+  loadGame: "Load",
+  saveGameFull: "Save game",
+  loadGameFull: "Load game",
   slot: "Slot",
   empty: "empty",
   saved: "Game saved",
@@ -15026,18 +15084,19 @@ var EN = {
   pressToBegin: "press any key to begin",
   keysTitle: "Keys",
   keys: [
-    ["Arrows / keypad", "move; a corner jumps that way"],
-    ["Shift", "step carefully, take hold of a ledge"],
-    ["Up while running", "a running jump"],
+    ["Arrows", "move; a corner jumps that way"],
+    ["Shift", "step carefully, hold a ledge"],
+    ["Up, running", "a running jump"],
     ["Space", "the time left"],
-    ["Esc", "pause, and again for one tick"],
+    ["Esc", "pause, again for one tick"],
     ["Ctrl+A", "begin the level again"],
     ["Ctrl+R", "back to the title"],
     ["Ctrl+S", "sound off and on"],
     ["Shift+L", "skip a level"],
     ["R", "raise a fallen Prince"],
     ["K", "fell the guard"],
-    ["Shift+T / Shift+S", "a flask / a hit point"],
+    ["Shift+T", "a flask"],
+    ["Shift+S", "a hit point"],
     ["Shift+W", "the feather"],
     ["Shift+I", "turn the screen over"],
     ["Shift+B", "put the lights out"],
@@ -15072,6 +15131,8 @@ var HE = {
   recordSaved: "\u05D4\u05D4\u05E7\u05DC\u05D8\u05D4 \u05E0\u05E9\u05DE\u05E8\u05D4",
   saveGame: "\u05E9\u05DE\u05D9\u05E8\u05D4",
   loadGame: "\u05D8\u05E2\u05D9\u05E0\u05D4",
+  saveGameFull: "\u05E9\u05DE\u05D9\u05E8\u05EA \u05DE\u05E9\u05D7\u05E7",
+  loadGameFull: "\u05D8\u05E2\u05D9\u05E0\u05EA \u05DE\u05E9\u05D7\u05E7",
   slot: "\u05DE\u05E9\u05D1\u05E6\u05EA",
   empty: "\u05E8\u05D9\u05E7\u05D4",
   saved: "\u05D4\u05DE\u05E9\u05D7\u05E7 \u05E0\u05E9\u05DE\u05E8",
@@ -15095,7 +15156,7 @@ var HE = {
   pressToBegin: "\u05D4\u05E7\u05D9\u05E9\u05D5 \u05DE\u05E7\u05E9 \u05DB\u05DC\u05E9\u05D4\u05D5 \u05DB\u05D3\u05D9 \u05DC\u05D4\u05EA\u05D7\u05D9\u05DC",
   keysTitle: "\u05DE\u05E7\u05E9\u05D9\u05DD",
   keys: [
-    ["\u05D7\u05D9\u05E6\u05D9\u05DD / \u05E1\u05E4\u05E8\u05D5\u05EA", "\u05EA\u05E0\u05D5\u05E2\u05D4; \u05DE\u05E7\u05E9 \u05E4\u05D9\u05E0\u05EA\u05D9 \u05E7\u05D5\u05E4\u05E5 \u05DC\u05D0\u05D5\u05EA\u05D5 \u05DB\u05D9\u05D5\u05D5\u05DF"],
+    ["\u05D7\u05D9\u05E6\u05D9\u05DD", "\u05EA\u05E0\u05D5\u05E2\u05D4; \u05DE\u05E7\u05E9 \u05E4\u05D9\u05E0\u05EA\u05D9 \u05E7\u05D5\u05E4\u05E5 \u05DC\u05D0\u05D5\u05EA\u05D5 \u05DB\u05D9\u05D5\u05D5\u05DF"],
     ["Shift", "\u05E6\u05E2\u05D9\u05D3\u05D4 \u05D6\u05D4\u05D9\u05E8\u05D4 \u05D5\u05D0\u05D7\u05D9\u05D6\u05D4 \u05D1\u05E7\u05E6\u05D4"],
     ["\u05DC\u05DE\u05E2\u05DC\u05D4 \u05D1\u05E8\u05D9\u05E6\u05D4", "\u05E7\u05E4\u05D9\u05E6\u05EA \u05E8\u05D9\u05E6\u05D4"],
     ["\u05E8\u05D5\u05D5\u05D7", "\u05D4\u05D6\u05DE\u05DF \u05E9\u05E0\u05D5\u05EA\u05E8"],
@@ -15106,7 +15167,8 @@ var HE = {
     ["Shift+L", "\u05D3\u05D9\u05DC\u05D5\u05D2 \u05E2\u05DC \u05E9\u05DC\u05D1"],
     ["R", "\u05D4\u05D7\u05D9\u05D9\u05D0\u05EA \u05D4\u05E0\u05E1\u05D9\u05DA"],
     ["K", "\u05D4\u05E4\u05DC\u05EA \u05D4\u05E9\u05D5\u05DE\u05E8"],
-    ["Shift+T / Shift+S", "\u05DB\u05D3 / \u05E0\u05E7\u05D5\u05D3\u05EA \u05D7\u05D9\u05D9\u05DD"],
+    ["Shift+T", "\u05DB\u05D3"],
+    ["Shift+S", "\u05E0\u05E7\u05D5\u05D3\u05EA \u05D7\u05D9\u05D9\u05DD"],
     ["Shift+W", "\u05D4\u05E0\u05D5\u05E6\u05D4"],
     ["Shift+I", "\u05D4\u05D9\u05E4\u05D5\u05DA \u05D4\u05DE\u05E1\u05DA"],
     ["Shift+B", "\u05DB\u05D9\u05D1\u05D5\u05D9 \u05D4\u05D0\u05D5\u05E8\u05D5\u05EA"],
@@ -15344,9 +15406,18 @@ var Chrome = class {
   get pageTitle() {
     return this.isPotionPage ? `${this.s.title} \u2014 ${this.s.potionRoom}` : this.s.title;
   }
+  /**
+   * The title margin, which is a title and nothing else.
+   *
+   * Clause 2 of the specification is "drop all the current prose", and
+   * the paragraph under the title was the last of it. It is still on
+   * the opening page, where it introduces the game; on the game page
+   * the margin is the name and the width it gives up goes to the
+   * picture.
+   */
   buildMargin() {
     text("page-title", this.pageTitle);
-    text("page-subtitle", this.s.subtitle);
+    text("keys-label", this.s.keysTitle);
     const keys = document.getElementById("keys");
     if (!keys) return;
     keys.replaceChildren();
@@ -15416,14 +15487,14 @@ var Chrome = class {
       label.title = label.textContent;
       const save = document.createElement("button");
       save.textContent = this.s.saveGame;
-      save.title = `${this.s.saveGame} \u2014 ${this.s.slot} ${n}`;
+      save.title = `${this.s.saveGameFull} \u2014 ${this.s.slot} ${n}`;
       save.onclick = () => {
         save.blur();
         this.hooks.save(n);
       };
       const load = document.createElement("button");
       load.textContent = this.s.loadGame;
-      load.title = `${this.s.loadGame} \u2014 ${this.s.slot} ${n}`;
+      load.title = `${this.s.loadGameFull} \u2014 ${this.s.slot} ${n}`;
       load.disabled = readSlot(n) === null;
       load.onclick = () => {
         load.blur();

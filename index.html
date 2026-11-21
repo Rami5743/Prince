@@ -27,7 +27,14 @@
     color-scheme: dark;
     --display: 'Amiri', 'Iowan Old Style', Georgia, serif;
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --margin-w: clamp(132px, 13vw, 190px);
+    /* Two widths, not one. The title margin holds a title and nothing
+       else, so it is given the width a title needs; the panels margin
+       holds four menus and three pairs of buttons and needs more. Every
+       pixel the title margin gives up goes to the picture, which is
+       what clause 2 asks for: measured at 1280 by 860, the game went
+       from 907x680 to 959x719 by this line alone. */
+    --title-w: clamp(104px, 9.5vw, 150px);
+    --panel-w: clamp(140px, 13.5vw, 196px);
     --gap: 10px;
     /* The shape of a pixel, which the Pixels setting moves. */
     --ar: 4 / 3;
@@ -53,7 +60,7 @@
     font-family: var(--mono);
     font-size: 13px;
     display: grid;
-    grid-template-columns: var(--margin-w) minmax(0, 1fr) var(--margin-w);
+    grid-template-columns: var(--title-w) minmax(0, 1fr) var(--panel-w);
     grid-template-areas: "title stage panels";
     gap: var(--gap);
     padding: var(--gap);
@@ -78,6 +85,8 @@
     gap: 14px;
   }
 
+  /* Clause 2: "drop all the current prose". What is left in this
+     margin is the name of the game. */
   #margin-title h1 {
     font-family: var(--display);
     font-weight: 700;
@@ -88,24 +97,37 @@
     color: var(--brass);
     text-wrap: balance;
   }
-  #margin-title p {
-    margin: 0;
-    font-family: var(--display);
-    font-size: 13px;
-    color: var(--dim);
-    line-height: 1.5;
-    text-wrap: pretty;
-  }
+  /* The keys.
+     They were two columns in the title margin and **the second column
+     was clipped**: `grid-template-columns: auto 1fr` gives the first
+     column the widest key name there is, and at 1280 by 860 that left
+     the description 51 pixels, so `move; a corner jumps that way` came
+     out reading `move; a corner jumps t way` with the rest cut off by
+     the margin's own `overflow: hidden`. Measured: the list wanted 186
+     pixels in a 166-pixel margin, and 186 in a 133-pixel one at 1024.
+
+     So the list is a panel of its own, where there is room for it, and
+     both columns may shrink and wrap -- `minmax(0, ...)` is what lets
+     a grid column go under its own content's width, and without it no
+     amount of margin fixes this. */
   #keys {
     margin: 0;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px 8px;
     font-size: 11px;
     line-height: 1.35;
   }
-  #keys dt { color: var(--brass); white-space: nowrap; }
-  #keys dd { margin: 0; color: var(--dim); }
+  /* The key on its own line and what it does under it, rather than the
+     two side by side. A margin is 140 to 196 pixels wide and a key name
+     is a third of that, so side by side left the description a word at
+     a time; given the whole width, most of them are one line. */
+  #keys dt { color: var(--brass); overflow-wrap: break-word; }
+  #keys dd {
+    margin: 0 0 5px;
+    padding-inline-start: 9px;
+    color: var(--dim);
+    overflow-wrap: break-word;
+  }
+  #keys dd:last-child { margin-bottom: 0; }
+  #panel-keys .panel-body { max-height: 46vh; overflow: hidden auto; scrollbar-width: thin; }
 
   /* ------------------------------------------------------- the stage */
 
@@ -209,10 +231,17 @@
   .slot-row > button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 3px 6px;
+    padding: 3px 4px;
     font-size: 11px;
     white-space: nowrap;
     text-align: center;
+    /* A button whose word is wider than its share is clipped by the
+       panel, not shrunk: measured at 1024 by 700, `Save game` wanted
+       65 pixels in a 52-pixel button and lost its last three letters.
+       The word on the button is short in both languages now and the
+       whole phrase is on its `title`; this is the belt for the braces. */
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .slot-row + .slot-row { margin-top: 7px; }
   #tool-note { font-size: 11px; color: var(--brass); min-height: 1.2em; }
@@ -301,7 +330,9 @@
       gap: 6px;
     }
     #margin-title { flex-direction: row; align-items: baseline; gap: 10px; }
-    #margin-title h1 { font-size: 17px; }
+    /* Clause 2: "drop all the current prose". What is left in this
+     margin is the name of the game. */
+  #margin-title h1 { font-size: 17px; }
     #margin-title p, #keys { display: none; }
     #margin-panels {
       flex-direction: row;
@@ -321,8 +352,6 @@
 <body>
 <aside class="margin" id="margin-title">
   <h1 id="page-title">Prince of Persia</h1>
-  <p id="page-subtitle"></p>
-  <dl id="keys"></dl>
 </aside>
 
 <main id="stage">
@@ -350,6 +379,12 @@
       <button id="record">Record keys</button>
       <div id="save-slots"></div>
       <div id="tool-note"></div>
+    </div>
+  </details>
+  <details class="panel" id="panel-keys">
+    <summary id="keys-label">Keys</summary>
+    <div class="panel-body">
+      <dl id="keys"></dl>
     </div>
   </details>
   <!--EXTRA-PANEL-->

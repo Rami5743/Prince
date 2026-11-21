@@ -36,8 +36,20 @@ export interface Strings {
   readonly record: string;
   readonly recordStop: string;
   readonly recordSaved: string;
+  /**
+   * The word on the button, which is short in both languages, and the
+   * whole phrase, which goes on its `title`.
+   *
+   * A slot row is a label and two buttons sharing one margin, and a
+   * margin is 140 to 196 pixels wide. `Save game` wanted 65 pixels in
+   * the 52 a button gets at 1024 by 700 and lost its last three
+   * letters; Hebrew had been given the short word already and English
+   * had not.
+   */
   readonly saveGame: string;
   readonly loadGame: string;
+  readonly saveGameFull: string;
+  readonly loadGameFull: string;
   readonly slot: string;
   readonly empty: string;
   readonly saved: string;
@@ -102,8 +114,10 @@ const EN: Strings = {
   record: 'Record keys',
   recordStop: 'Stop and save',
   recordSaved: 'Recording saved',
-  saveGame: 'Save game',
-  loadGame: 'Load game',
+  saveGame: 'Save',
+  loadGame: 'Load',
+  saveGameFull: 'Save game',
+  loadGameFull: 'Load game',
   slot: 'Slot',
   empty: 'empty',
   saved: 'Game saved',
@@ -131,18 +145,19 @@ const EN: Strings = {
   pressToBegin: 'press any key to begin',
   keysTitle: 'Keys',
   keys: [
-    ['Arrows / keypad', 'move; a corner jumps that way'],
-    ['Shift', 'step carefully, take hold of a ledge'],
-    ['Up while running', 'a running jump'],
+    ['Arrows', 'move; a corner jumps that way'],
+    ['Shift', 'step carefully, hold a ledge'],
+    ['Up, running', 'a running jump'],
     ['Space', 'the time left'],
-    ['Esc', 'pause, and again for one tick'],
+    ['Esc', 'pause, again for one tick'],
     ['Ctrl+A', 'begin the level again'],
     ['Ctrl+R', 'back to the title'],
     ['Ctrl+S', 'sound off and on'],
     ['Shift+L', 'skip a level'],
     ['R', 'raise a fallen Prince'],
     ['K', 'fell the guard'],
-    ['Shift+T / Shift+S', 'a flask / a hit point'],
+    ['Shift+T', 'a flask'],
+    ['Shift+S', 'a hit point'],
     ['Shift+W', 'the feather'],
     ['Shift+I', 'turn the screen over'],
     ['Shift+B', 'put the lights out'],
@@ -183,6 +198,8 @@ const HE: Strings = {
   recordSaved: 'ההקלטה נשמרה',
   saveGame: 'שמירה',
   loadGame: 'טעינה',
+  saveGameFull: 'שמירת משחק',
+  loadGameFull: 'טעינת משחק',
   slot: 'משבצת',
   empty: 'ריקה',
   saved: 'המשחק נשמר',
@@ -210,7 +227,7 @@ const HE: Strings = {
   pressToBegin: 'הקישו מקש כלשהו כדי להתחיל',
   keysTitle: 'מקשים',
   keys: [
-    ['חיצים / ספרות', 'תנועה; מקש פינתי קופץ לאותו כיוון'],
+    ['חיצים', 'תנועה; מקש פינתי קופץ לאותו כיוון'],
     ['Shift', 'צעידה זהירה ואחיזה בקצה'],
     ['למעלה בריצה', 'קפיצת ריצה'],
     ['רווח', 'הזמן שנותר'],
@@ -221,7 +238,8 @@ const HE: Strings = {
     ['Shift+L', 'דילוג על שלב'],
     ['R', 'החייאת הנסיך'],
     ['K', 'הפלת השומר'],
-    ['Shift+T / Shift+S', 'כד / נקודת חיים'],
+    ['Shift+T', 'כד'],
+    ['Shift+S', 'נקודת חיים'],
     ['Shift+W', 'הנוצה'],
     ['Shift+I', 'היפוך המסך'],
     ['Shift+B', 'כיבוי האורות'],

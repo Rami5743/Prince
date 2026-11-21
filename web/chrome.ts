@@ -90,9 +90,18 @@ export class Chrome {
     return this.isPotionPage ? `${this.s.title} — ${this.s.potionRoom}` : this.s.title;
   }
 
+  /**
+   * The title margin, which is a title and nothing else.
+   *
+   * Clause 2 of the specification is "drop all the current prose", and
+   * the paragraph under the title was the last of it. It is still on
+   * the opening page, where it introduces the game; on the game page
+   * the margin is the name and the width it gives up goes to the
+   * picture.
+   */
   private buildMargin(): void {
     text('page-title', this.pageTitle);
-    text('page-subtitle', this.s.subtitle);
+    text('keys-label', this.s.keysTitle);
     const keys = document.getElementById('keys');
     if (!keys) return;
     keys.replaceChildren();
@@ -170,12 +179,12 @@ export class Chrome {
 
       const save = document.createElement('button');
       save.textContent = this.s.saveGame;
-      save.title = `${this.s.saveGame} — ${this.s.slot} ${n}`;
+      save.title = `${this.s.saveGameFull} — ${this.s.slot} ${n}`;
       save.onclick = () => { save.blur(); this.hooks.save(n); };
 
       const load = document.createElement('button');
       load.textContent = this.s.loadGame;
-      load.title = `${this.s.loadGame} — ${this.s.slot} ${n}`;
+      load.title = `${this.s.loadGameFull} — ${this.s.slot} ${n}`;
       load.disabled = readSlot(n) === null;
       load.onclick = () => { load.blur(); this.hooks.load(n); };
 
