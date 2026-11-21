@@ -344,6 +344,30 @@ every PNG in it is coloured with that group's own palette.
     page, on a grey ground so that both the art's own black and the
     holes left by a transparent colour 0 can be seen.
 
+KID.DAT and PRINCE.DAT are not two names for the same thing
+-----------------------------------------------------------
+
+KID.DAT is the Prince, and nothing else: one group, 218 pictures,
+every frame of every move he makes.
+
+PRINCE.DAT is not a character at all. It is the game's shared file,
+named after the game: 57 pictures in two groups --
+
+  150   the torch flames, the potions, the loose sword lying on the
+        floor, and the bubbles in a flask
+  700   the sword in the Prince's hand, at every angle, and the
+        blood on it
+
+-- and three resources that are not pictures:
+
+  id   1   289 bytes
+  id   2    91 bytes
+  id  10   336 bytes   the guard's seven palettes, above
+
+Only 10 of those three is read by this port, and only to recolour
+the guard; the other two are listed here because they are in the
+file, not because anything is known about them.
+
 The guard, who is coloured from outside his own file
 ----------------------------------------------------
 

@@ -56,6 +56,41 @@ the measured level-to-colour table:
 and the shadow are their own groups with their own palettes and
 were always in colour.
 
+### 1b. And two of the groups in the same export were named after each other
+
+The player then asked what the difference is between `KID.DAT` and
+`PRINCE.DAT`, which is worth writing down because the answer is not
+what the names suggest and because checking it found a second fault
+in the same delivery.
+
+**KID.DAT is the Prince and nothing else**: one group, 218 pictures,
+every frame of every move he makes. **PRINCE.DAT is not a character
+at all** -- it is the game's shared file, named after the game: 57
+pictures in two groups, plus resources 1 (289 bytes), 2 (91) and 10
+(336, the guard's seven palettes), none of which is a picture.
+
+And the two groups were labelled the wrong way round, in
+`src/dat/groups.ts`, since the file was written:
+
+    150   called 'sword and blood'              IS the flames, the
+                                                potions, the loose
+                                                sword and the bubbles
+    700   called 'flame, potions, loose items'  IS the sword in hand
+
+Nothing noticed because **nothing but a person reads the string**:
+the engine loads a group by its header number, and `seg001`'s own
+calls say which is which --
+`assets.group('PRINCE.DAT', 700, ROW.sword * 16)` against
+`assets.group('PRINCE.DAT', 150, ROW.flame * 16)`. The contact
+sheets settle it by eye in two seconds, which is how it was found:
+150's sheet is torches and flasks, 700's is thirty-four blades.
+
+Five more were vague or wrong and are now the names the engine
+itself loads them under (`princessInStory`, `jaffarInStory`,
+`princessInCutscenes`, `princessRoom`, `princessBed`), and
+`TITLE.DAT` 40 is the story frame, the four story screens and the
+credits rather than "opening screen".
+
 ### 2. The potion page's panel was English because its words were in the generator
 
 `potion.html`'s extra panel was written as finished HTML by
