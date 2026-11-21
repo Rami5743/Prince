@@ -18,7 +18,18 @@ import { existsSync } from 'node:fs';
 import { serve } from '../../tools/dev/serve.mjs';
 import { REPO } from '../helpers/fixtures.ts';
 
-const PORT = 8127;
+/**
+ * The port is assigned, not chosen.
+ *
+ * Four pairs of these files had picked the same number by hand and
+ * `game-text.test.ts` shared 8147 with two others. Vitest runs the
+ * files in parallel, so whichever bound second got EADDRINUSE in its
+ * `beforeAll` -- which vitest reports as the whole file failing with
+ * its tests **skipped** and an `Errors 1` line, not as an assertion.
+ * That is the intermittent browser failure this suite has had: it is
+ * not contention for the machine and it is not the page.
+ */
+let PORT = 0;
 let server: Server;
 let browser: Browser;
 let page: Page;
@@ -32,7 +43,8 @@ interface SceneState {
 }
 
 beforeAll(async () => {
-  server = (await serve(PORT, REPO)) as Server;
+  server = (await serve(0, REPO)) as Server;
+  PORT = (server.address() as { port: number }).port;
   const preinstalled = '/opt/pw-browsers/chromium';
   browser = await chromium.launch(
     existsSync(preinstalled)

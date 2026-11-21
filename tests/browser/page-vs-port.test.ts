@@ -35,7 +35,18 @@ import { REPO, GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame } from '../../src/pop/game.ts';
 
-const PORT = 8147;
+/**
+ * The port is assigned, not chosen.
+ *
+ * Four pairs of these files had picked the same number by hand and
+ * `game-text.test.ts` shared 8147 with two others. Vitest runs the
+ * files in parallel, so whichever bound second got EADDRINUSE in its
+ * `beforeAll` -- which vitest reports as the whole file failing with
+ * its tests **skipped** and an `Errors 1` line, not as an assertion.
+ * That is the intermittent browser failure this suite has had: it is
+ * not contention for the machine and it is not the page.
+ */
+let PORT = 0;
 const TICKS = 200;
 /**
  * Level 1 because it is the one every other measurement is of, and
@@ -58,7 +69,8 @@ let page: Page;
 const consoleErrors: string[] = [];
 
 beforeAll(async () => {
-  server = (await serve(PORT, REPO)) as Server;
+  server = (await serve(0, REPO)) as Server;
+  PORT = (server.address() as { port: number }).port;
   const preinstalled = '/opt/pw-browsers/chromium';
   browser = await chromium.launch(
     existsSync(preinstalled)

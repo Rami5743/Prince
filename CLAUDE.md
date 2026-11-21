@@ -41,6 +41,40 @@
 ## ============================================================
 
 
+## THE SUITE'S INTERMITTENT BROWSER FAILURE WAS A PORT NUMBER, NOT THE MACHINE
+
+    npm test   895 of 895, three runs in a row   (was 1 file failed,
+               8 tests skipped, `Errors 1`, about one run in three)
+
+For a while a full `npm test` would sometimes come back with one
+browser file's tests **skipped** rather than failed, and an
+`Errors 1` line -- no assertion, a `beforeAll`. It was read as
+contention for the machine, because two of us were driving Chromium
+at once. It reproduced with nothing else running, so it was not.
+
+**Four pairs of browser test files had picked the same port number
+by hand**, and `game-text.test.ts` shared 8147 with two others:
+
+    8129  exit-door, pause
+    8133  every-sound-reads, feather
+    8143  sound-gate, tools-panel
+    8147  game-text, page-vs-port, picture-quality
+
+Vitest runs the files in parallel, so whichever bound second got
+`EADDRINUSE` out of `server.listen` -- an unhandled error in a hook,
+which is exactly "the file failed and its tests were skipped".
+`game-text` lost most often because it was one of three.
+
+Every browser test now calls `serve(0, REPO)` and reads the port the
+operating system gave it back off `server.address()`. **A number
+nobody chooses cannot collide**, which is better than seventeen
+unique numbers that the next test file has to know about.
+
+Worth keeping in mind for what it says about reading a flake: the
+first explanation to hand -- two agents, one machine -- was wrong,
+and the thing that settled it was running the suite alone.
+
+
 ## THE OVERLAY WAS A BLOCK BEHIND THE PICTURE, AND THE MARGIN CLIPPED ITS OWN WORDS
 
     measured   32260 of 33047   98%   (unmoved, run for run)
