@@ -36,7 +36,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { DatFile } from '../../src/dat/container.ts';
-import { parsePalette, PALETTE_SIZE, type Palette } from '../../src/dat/palette.ts';
+import {
+  parsePalette, PALETTE_SIZE, type Palette, type Rgb6,
+} from '../../src/dat/palette.ts';
 import { decodeImage, isImage, isEmptyPlaceholder } from '../../src/dat/image.ts';
 import { SPRITE_GROUPS, TILESET_GROUPS, TILESET_FILES } from '../../src/dat/groups.ts';
 
@@ -53,6 +55,61 @@ interface Group {
   readonly sprite: boolean;
   /** Where the palette comes from, if not this file's own header. */
   readonly paletteFile?: string;
+  /**
+   * Sixteen colours from somewhere that is not a shape-list header.
+   *
+   * Only the ordinary guard needs this, and it is not an oddity of
+   * this tool. **GUARD1.DAT's and GUARD2.DAT's headers hold sixteen
+   * entries of 0,0,0** -- measured, that is the release's own data --
+   * so a guard coloured from his own file comes out a silhouette.
+   * The engine never uses it either: `redraw_screen` opens with
+   *
+   *     set_chtab_palette(chtab_addrs[id_chtab_5_guard],
+   *                       &guard_palettes[0x30 * curr_guard_color - 0x30],
+   *                       0x10);
+   *
+   * and `guard_palettes` is PRINCE.DAT's resource 10 -- 336 bytes,
+   * seven palettes of sixteen -- with the colour taken from the room
+   * the guard is standing in.
+   */
+  readonly vga?: readonly Rgb6[];
+}
+
+/**
+ * Which levels ask for each of the guard's seven liveries.
+ *
+ * A level's guard record carries the colour in its low nibble
+ * (`enter_guard` masks with 0x0f) and the offset into the table is
+ * one-based, `(colour - 1) * 0x30`. Colour 0 means "leave the bank
+ * as it is", which is what a room with no ordinary guard says, and
+ * 15 is the 0x0f of an empty 0xFF slot. Measured off LEVELS.DAT:
+ */
+const GUARD_LEVELS: readonly string[] = [
+  'levels 1, 3, 8, 9, 10, 12',
+  'level 2',
+  'levels 3, 5, 8, 9, 11',
+  'levels 6, 9, 11',
+  'levels 9, 10, 12',
+  'levels 3, 5, 6, 8, 10, 11',
+  'levels 5, 6, 11',
+];
+
+/** The seven sixteen-colour liveries, out of PRINCE.DAT's resource 10. */
+function guardPalettes(table: Uint8Array): Rgb6[][] {
+  const out: Rgb6[][] = [];
+  for (let c = 0; (c + 1) * 0x30 <= table.length; c++) {
+    const at = c * 0x30;
+    const vga: Rgb6[] = [];
+    for (let i = 0; i < 16; i++) {
+      vga.push({
+        r: table[at + i * 3] ?? 0,
+        g: table[at + i * 3 + 1] ?? 0,
+        b: table[at + i * 3 + 2] ?? 0,
+      });
+    }
+    out.push(vga);
+  }
+  return out;
 }
 
 /**
@@ -75,9 +132,6 @@ const GROUPS: Group[] = [
     name: g.what,
     sprite: false,
   }))),
-  // GUARD.DAT carries the ordinary guard's sprites and no palette of
-  // its own: GUARD1.DAT and GUARD2.DAT are nothing but the header.
-  { file: 'GUARD.DAT', header: 750, name: 'guard', sprite: true, paletteFile: 'GUARD1.DAT' },
 ];
 
 const dats = new Map<string, DatFile>();
@@ -90,17 +144,31 @@ function dat(name: string): DatFile {
   return d;
 }
 
+// The ordinary guard, once per livery: his thirty-four sprites are
+// the same thirty-four seven times over, in the seven sets of
+// colours the game dresses him in.
+const GUARD_PALETTES = guardPalettes(dat('PRINCE.DAT').get(10));
+GUARD_PALETTES.forEach((vga, i) => {
+  GROUPS.push({
+    file: 'GUARD.DAT',
+    header: 750,
+    name: `guard colour ${i + 1}`,
+    sprite: true,
+    vga,
+  });
+});
+
 /** The hardware's own six-bit to eight-bit expansion. */
 function dac(v: number): number {
   return (v << 2) | (v >> 4);
 }
 
-function rgbaOf(pal: Palette): Uint8Array {
+function rgbaOf(vga: readonly Rgb6[]): Uint8Array {
   const out = new Uint8Array(16 * 4);
   for (let i = 0; i < 16; i++) {
-    out[i * 4] = dac(pal.vga[i]!.r);
-    out[i * 4 + 1] = dac(pal.vga[i]!.g);
-    out[i * 4 + 2] = dac(pal.vga[i]!.b);
+    out[i * 4] = dac(vga[i]!.r);
+    out[i * 4 + 1] = dac(vga[i]!.g);
+    out[i * 4 + 2] = dac(vga[i]!.b);
     out[i * 4 + 3] = 255;
   }
   return out;
@@ -176,17 +244,23 @@ let skipped = 0;
 
 for (const group of GROUPS) {
   const file = dat(group.file);
-  const headerFile = group.paletteFile ? dat(group.paletteFile) : file;
-  let pal: Palette;
-  try {
-    const raw = headerFile.get(group.header);
-    if (raw.length !== PALETTE_SIZE) throw new Error(`header is ${raw.length} bytes`);
-    pal = parsePalette(raw);
-  } catch (err) {
-    lines.push(`${group.file} ${group.header}  NO PALETTE: ${String(err)}`);
-    continue;
+  let vga: readonly Rgb6[];
+  if (group.vga) {
+    vga = group.vga;
+  } else {
+    const headerFile = group.paletteFile ? dat(group.paletteFile) : file;
+    let pal: Palette;
+    try {
+      const raw = headerFile.get(group.header);
+      if (raw.length !== PALETTE_SIZE) throw new Error(`header is ${raw.length} bytes`);
+      pal = parsePalette(raw);
+    } catch (err) {
+      lines.push(`${group.file} ${group.header}  NO PALETTE: ${String(err)}`);
+      continue;
+    }
+    vga = pal.vga;
   }
-  const rgba = rgbaOf(pal);
+  const rgba = rgbaOf(vga);
 
   // The group runs from the header to the next header in the file,
   // or to the end of it. `imageCount` in the header is what the
@@ -234,6 +308,10 @@ for (const group of GROUPS) {
   );
 }
 
+const guardTable = GUARD_PALETTES
+  .map((_, i) => `  colour ${i + 1}   ${GUARD_LEVELS[i]}`)
+  .join('\n');
+
 const readme = `The original's graphics, decoded
 ================================
 
@@ -250,8 +328,7 @@ How the original stores them, which is why they need decoding:
   * the colours are NOT in the picture. Each group of pictures opens
     with a "shape-list header" resource holding sixteen VGA entries,
     and which header governs which picture is a table hard-coded in
-    PRINCE.EXE. GUARD.DAT has no header of its own at all -- its
-    palette is GUARD1.DAT's and GUARD2.DAT's.
+    PRINCE.EXE.
 
 So a folder here is one group, named <header id>-<what it is>, and
 every PNG in it is coloured with that group's own palette.
@@ -266,6 +343,38 @@ every PNG in it is coloured with that group's own palette.
   * _contact-sheet.png in each folder is the whole group on one
     page, on a grey ground so that both the art's own black and the
     holes left by a transparent colour 0 can be seen.
+
+The guard, who is coloured from outside his own file
+----------------------------------------------------
+
+GUARD.DAT holds the ordinary guard's 34 sprites and **no usable
+palette**: GUARD1.DAT and GUARD2.DAT are nothing but a shape-list
+header, and measured, all sixteen of its VGA entries are 0,0,0. A
+guard coloured out of his own file is therefore a flat silhouette --
+which is the release's own data and not a decoding fault.
+
+The engine never reads it. redraw_screen opens with
+
+    set_chtab_palette(chtab_addrs[id_chtab_5_guard],
+                      &guard_palettes[0x30 * curr_guard_color - 0x30],
+                      0x10);
+
+and guard_palettes is PRINCE.DAT's resource 10: 336 bytes, which is
+**seven palettes of sixteen colours**. So he is recoloured on every
+redraw, out of the colour the room he is standing in asks for -- the
+low nibble of the level's guard record, one-based, which is why the
+offset is (colour - 1) * 0x30. Colour 0 means "leave the bank as it
+is" and is what a room with no ordinary guard in it says; 15 is the
+0x0f of an empty 0xFF slot.
+
+So his 34 sprites are written out seven times over, once per
+livery, and the levels that ask for each are:
+
+${guardTable}
+
+Jaffar, the skeleton, the fat guard and the shadow are not this
+guard: they are their own sprite groups with their own palettes,
+and they are in the list below.
 
 Not here, because they are not in the .DAT files: the **font**,
 which lives inside PRINCE.EXE (see src/render/font.ts), and the
