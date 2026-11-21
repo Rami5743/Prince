@@ -230,13 +230,22 @@
     flex: 1 1 100%;
     font-size: 11px;
     color: var(--dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* It wraps rather than ellipsizes. `Slot 1 - empty` wants 92
+       pixels and gets 74 in a margin that has a scrollbar at 420 by
+       760, and an ellipsis there says `Slot 1 - em...`, which is the
+       one thing the label is for. The row grows a line instead; the
+       margin is already a scroller of its own. */
+    overflow-wrap: break-word;
   }
   .slot-row > button {
-    flex: 1 1 0;
-    min-width: 0;
+    /* `max-content` rather than nought, so that two buttons that
+       cannot share a line **wrap** onto two lines instead of each
+       losing its last letters. A margin with a scrollbar is eleven
+       pixels narrower, and `potion.html` -- which has one panel more
+       than `index.html` -- has one at 420 by 760: enough to put
+       `שמירה` at 39 pixels into a 33-pixel button. */
+    flex: 1 1 auto;
+    min-width: max-content;
     padding: 3px 4px;
     font-size: 11px;
     white-space: nowrap;

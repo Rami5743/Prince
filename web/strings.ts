@@ -79,6 +79,25 @@ export interface Strings {
   readonly titleScreen: string;
 
   readonly potionRoom: string;
+  /**
+   * `potion.html`'s own panel, which `index.html` does not have.
+   *
+   * It was the last English left on a Hebrew page, and the reason is
+   * worth the line: its words lived in `tools/dev/build-pages.mjs` --
+   * the script that *writes* the page -- rather than here, so nothing
+   * relabelled them when the language changed. They are here now and
+   * `Chrome` draws the panel like every other.
+   */
+  readonly potionTitle: string;
+  readonly potionHp: string;
+  readonly potionFeather: string;
+  readonly potionUpside: string;
+  readonly potionRoomRow: string;
+  readonly potionYes: string;
+  readonly potionNo: string;
+  /** `3 of 3`, because the two numbers do not join the same way. */
+  readonly potionOf: string;
+  readonly potionHow: string;
   readonly loading: string;
   readonly pressToBegin: string;
   readonly keysTitle: string;
@@ -141,6 +160,17 @@ const EN: Strings = {
   titleScreen: 'title screen',
 
   potionRoom: 'the potion room',
+  potionTitle: 'Potions',
+  potionHp: 'hit points',
+  potionFeather: 'feather',
+  potionUpside: 'upside down',
+  potionRoomRow: 'room',
+  potionYes: 'yes',
+  potionNo: 'no',
+  potionOf: '{n} of {m}',
+  potionHow: 'Walk up to a flask and press Shift to drink it. The corridor '
+    + 'runs hurt, heal, life, feather, upside-down, and the one that opens '
+    + 'the gates. Ctrl+A lays them all out afresh.',
   loading: 'loading the game’s data files…',
   pressToBegin: 'press any key to begin',
   keysTitle: 'Keys',
@@ -223,6 +253,17 @@ const HE: Strings = {
   titleScreen: 'מסך הפתיחה',
 
   potionRoom: 'חדר השיקויים',
+  potionTitle: 'שיקויים',
+  potionHp: 'נקודות חיים',
+  potionFeather: 'נוצה',
+  potionUpside: 'היפוך',
+  potionRoomRow: 'חדר',
+  potionYes: 'כן',
+  potionNo: 'לא',
+  potionOf: '{n} מתוך {m}',
+  potionHow: 'גשו אל הכד והקישו Shift כדי לשתות. המסדרון מסודר: פגיעה, '
+    + 'ריפוי, נקודת חיים, נוצה, היפוך, והשיקוי שפותח את השערים. '
+    + 'Ctrl+A פורס את כולם מחדש.',
   loading: 'טוען את קובצי המשחק…',
   pressToBegin: 'הקישו מקש כלשהו כדי להתחיל',
   keysTitle: 'מקשים',

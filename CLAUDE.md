@@ -1,5 +1,99 @@
 # Read this first
 
+## THE GUARD HAS NO PALETTE OF HIS OWN, AND THE LAST ENGLISH ON THE PAGE WAS IN THE SCRIPT THAT WRITES IT
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     895 -> 897
+
+    page-port.ts --scenes --cheats --entries --deaths --potion
+                 the page and the port draw the same game
+
+Two things the player found by **looking at what was delivered**,
+neither of which any score could see.
+
+### 1. "Why are the guard's files one bit and not in colour?"
+
+They are not one bit: his images are depth 4, sixteen colours, like
+every other. What is one bit, in effect, is the **palette**, and it
+is not a decoding fault -- it is the release's own data:
+
+    GUARD1.DAT  resource 750   colorCount 16   imageCount 34
+                all sixteen VGA entries:  0,0,0
+    GUARD2.DAT  the same
+
+A lookup of sixteen blacks turns every index black, so
+`tools/dev/export-graphics.ts`, which coloured him out of his own
+file's header, wrote out thirty-four silhouettes. Swept: no other
+group in the game has an all-black header.
+
+The engine never reads it either. `redraw_screen` opens with
+
+    set_chtab_palette(chtab_addrs[id_chtab_5_guard],
+                      &guard_palettes[0x30 * curr_guard_color - 0x30],
+                      0x10);
+
+and `guard_palettes` is **PRINCE.DAT's resource 10: 336 bytes,
+seven palettes of sixteen**. The colour is the low nibble of the
+room's guard record (`enter_guard` masks with 0x0f) and the offset
+is one-based. `curr_guard_color` is nought for anyone who is not an
+ordinary guard, which is what "leave the bank as it is" means.
+
+So the exporter writes his thirty-four sprites **seven times over**,
+one folder and one contact sheet per livery, and the README carries
+the measured level-to-colour table:
+
+    colour 1   levels 1, 3, 8, 9, 10, 12
+    colour 2   level 2
+    colour 3   levels 3, 5, 8, 9, 11
+    colour 4   levels 6, 9, 11
+    colour 5   levels 9, 10, 12
+    colour 6   levels 3, 5, 6, 8, 10, 11
+    colour 7   levels 5, 6, 11
+
+1335 images to 1539, 0 skipped. Jaffar, the skeleton, the fat guard
+and the shadow are their own groups with their own palettes and
+were always in colour.
+
+### 2. The potion page's panel was English because its words were in the generator
+
+`potion.html`'s extra panel was written as finished HTML by
+`tools/dev/build-pages.mjs` -- the script that *writes* the page --
+with its readout an inline `setInterval`. `Chrome` only knows about
+`web/strings.ts`, so nothing relabelled it: it was the one piece of
+either page that stayed English when the language changed.
+
+The page now carries the ids and no words. `Chrome.buildPotion`
+fills them and `Chrome.potionReadout` is the timer, so `yes`/`no`
+and `3 of 3` change with everything else. Measured on the page, the
+language switched live with no reload:
+
+    en   Potions      hit points 3 of 3    feather no
+    he   שיקויים      נקודות חיים 3 מתוך 3   נוצה לא
+
+### 3. And a margin with a scrollbar is eleven pixels narrower
+
+The potion page has one panel more than `index.html`, so at 420 by
+760 its panel margin scrolls and `index.html`'s does not -- and a
+scrollbar takes the eleven pixels off the **content**. Measured, in
+Hebrew:
+
+    שמירה    39 pixels in a 33-pixel button
+    משבצת 1 — ריקה   79 in 74
+
+`index.html` was clean at the same size, which is why the sweep that
+found none of this passed. The slot buttons are `flex: 1 1 auto`
+with `min-width: max-content` now, so two that cannot share a line
+**wrap onto two** instead of each losing its last letters, and the
+slot label wraps rather than ellipsizing -- an ellipsis there says
+`Slot 1 - em...`, which is the one thing the label is for.
+
+Swept again, both pages, both languages, eight window sizes: nothing
+in either margin is wider than its box, the page scrolls in neither
+direction, and the picture is unmoved at 945x709 at 1280 by 860.
+
+
 ## ============================================================
 ## NEVER STOP WHILE A BUG YOU KNOW ABOUT IS STILL THERE
 ## ============================================================
@@ -271,9 +365,8 @@ whole width. Final tsadi follows its own letter.
   rather than font text, so the vector path would replace a logotype
   with Times; the story screens are a transcription and do get the
   vector face.
-* **`potion.html`'s extra panel is English in both languages.** It is
-  a diagnostic page with its own link, written in
-  `tools/dev/build-pages.mjs` rather than in `web/strings.ts`.
+* ~~**`potion.html`'s extra panel is English in both languages.**~~
+  Fixed; see the section at the top of this file.
 
 ## AN UPSCALER THAT MAY NOT MIX A COLOUR CANNOT MAKE ONE, AND THAT WAS THE WHOLE FAULT
 

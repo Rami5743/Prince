@@ -44,35 +44,27 @@ const potionSource = `<script type="module">
   window.__princePotionLevel = true;
 <\/script>`;
 
+/**
+ * The potion page's extra panel: a skeleton, with no words in it.
+ *
+ * The words it used to carry were written here, in the script that
+ * *generates* the page, and so were the one piece of the page that
+ * stayed English when the language changed -- nothing relabelled
+ * them, because `Chrome` only knows about `web/strings.ts`. The ids
+ * are what `Chrome.buildPotion` fills, and the readout is its own
+ * timer rather than an inline script, so `yes`/`no` and `3 of 3`
+ * change language with everything else.
+ */
 const potionPanel = `<details class="panel" id="panel-potion" open>
-  <summary>Potions</summary>
+  <summary id="potion-label"></summary>
   <div class="panel-body" style="font-variant-numeric: tabular-nums">
-    <div>hit points <strong id="pl-hp">-</strong></div>
-    <div>feather <strong id="pl-feather">no</strong></div>
-    <div>upside down <strong id="pl-upside">no</strong></div>
-    <div>room <strong id="pl-room">-</strong></div>
-    <div style="color: var(--dim); font-size: 11px; line-height: 1.4">
-      Walk up to a flask and press Shift to drink it. The corridor runs
-      hurt, heal, life, feather, upside-down, and the one that opens the
-      gates. <strong>Ctrl+A</strong> lays them all out afresh.
-    </div>
+    <div><span id="pl-label-hp"></span> <strong id="pl-hp">-</strong></div>
+    <div><span id="pl-label-feather"></span> <strong id="pl-feather">-</strong></div>
+    <div><span id="pl-label-upside"></span> <strong id="pl-upside">-</strong></div>
+    <div><span id="pl-label-room"></span> <strong id="pl-room">-</strong></div>
+    <div id="pl-how" style="color: var(--dim); font-size: 11px; line-height: 1.4"></div>
   </div>
-</details>
-
-<script type="module">
-  const set = (id, text) => {
-    const el = document.getElementById(id);
-    if (el && el.textContent !== text) el.textContent = text;
-  };
-  setInterval(() => {
-    const s = window.__princeState?.();
-    if (!s) return;
-    set('pl-hp', \`\${s.hitPoints} of \${s.maxHitPoints}\`);
-    set('pl-feather', s.featherFall ? 'yes' : 'no');
-    set('pl-upside', s.upsideDown ? 'yes' : 'no');
-    set('pl-room', String(s.room));
-  }, 100);
-<\/script>`;
+</details>`;
 
 const potionBody = shell
   .replace('<!--DATA-SOURCE-->', potionSource)

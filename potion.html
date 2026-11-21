@@ -235,13 +235,22 @@
     flex: 1 1 100%;
     font-size: 11px;
     color: var(--dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* It wraps rather than ellipsizes. `Slot 1 - empty` wants 92
+       pixels and gets 74 in a margin that has a scrollbar at 420 by
+       760, and an ellipsis there says `Slot 1 - em...`, which is the
+       one thing the label is for. The row grows a line instead; the
+       margin is already a scroller of its own. */
+    overflow-wrap: break-word;
   }
   .slot-row > button {
-    flex: 1 1 0;
-    min-width: 0;
+    /* `max-content` rather than nought, so that two buttons that
+       cannot share a line **wrap** onto two lines instead of each
+       losing its last letters. A margin with a scrollbar is eleven
+       pixels narrower, and `potion.html` -- which has one panel more
+       than `index.html` -- has one at 420 by 760: enough to put
+       `שמירה` at 39 pixels into a 33-pixel button. */
+    flex: 1 1 auto;
+    min-width: max-content;
     padding: 3px 4px;
     font-size: 11px;
     white-space: nowrap;
@@ -400,34 +409,15 @@
     </div>
   </details>
   <details class="panel" id="panel-potion" open>
-  <summary>Potions</summary>
+  <summary id="potion-label"></summary>
   <div class="panel-body" style="font-variant-numeric: tabular-nums">
-    <div>hit points <strong id="pl-hp">-</strong></div>
-    <div>feather <strong id="pl-feather">no</strong></div>
-    <div>upside down <strong id="pl-upside">no</strong></div>
-    <div>room <strong id="pl-room">-</strong></div>
-    <div style="color: var(--dim); font-size: 11px; line-height: 1.4">
-      Walk up to a flask and press Shift to drink it. The corridor runs
-      hurt, heal, life, feather, upside-down, and the one that opens the
-      gates. <strong>Ctrl+A</strong> lays them all out afresh.
-    </div>
+    <div><span id="pl-label-hp"></span> <strong id="pl-hp">-</strong></div>
+    <div><span id="pl-label-feather"></span> <strong id="pl-feather">-</strong></div>
+    <div><span id="pl-label-upside"></span> <strong id="pl-upside">-</strong></div>
+    <div><span id="pl-label-room"></span> <strong id="pl-room">-</strong></div>
+    <div id="pl-how" style="color: var(--dim); font-size: 11px; line-height: 1.4"></div>
   </div>
 </details>
-
-<script type="module">
-  const set = (id, text) => {
-    const el = document.getElementById(id);
-    if (el && el.textContent !== text) el.textContent = text;
-  };
-  setInterval(() => {
-    const s = window.__princeState?.();
-    if (!s) return;
-    set('pl-hp', `${s.hitPoints} of ${s.maxHitPoints}`);
-    set('pl-feather', s.featherFall ? 'yes' : 'no');
-    set('pl-upside', s.upsideDown ? 'yes' : 'no');
-    set('pl-room', String(s.room));
-  }, 100);
-</script>
 </aside>
 
 <div id="opening">

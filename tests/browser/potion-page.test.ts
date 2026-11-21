@@ -255,4 +255,109 @@ describe('the potion page', () => {
     });
     expect(consoleErrors).toEqual([]);
   }, 240000);
+
+  /**
+   * The panel's own words, in both languages.
+   *
+   * They used to be written into the page by
+   * `tools/dev/build-pages.mjs` -- the script that generates it --
+   * with the readout an inline script, so this was the one piece of
+   * the page that stayed English when the language changed. They are
+   * in `web/strings.ts` now and `Chrome` draws them, which is what
+   * this pins: the labels, the readout's `yes`/`no` and its `n of m`,
+   * and that the change needs no reload.
+   */
+  it('says its own words in whichever language is chosen', async () => {
+    const read = (): Promise<Record<string, string>> => page.evaluate(() => {
+      const g = (id: string): string => document.getElementById(id)?.textContent ?? '';
+      return {
+        dir: document.documentElement.dir,
+        title: g('potion-label'),
+        hp: `${g('pl-label-hp')} ${g('pl-hp')}`,
+        feather: `${g('pl-label-feather')} ${g('pl-feather')}`,
+        upside: `${g('pl-label-upside')} ${g('pl-upside')}`,
+        room: `${g('pl-label-room')} ${g('pl-room')}`,
+        how: g('pl-how'),
+      };
+    });
+
+    await page.selectOption('#setting-language', 'en');
+    await page.evaluate(() => (window as unknown as {
+      __princeDismissOpening(): void;
+    }).__princeDismissOpening());
+    // The readout is a tenth-of-a-second timer, so give it one.
+    await page.waitForTimeout(300);
+    const en = await read();
+    // The numbers are whatever the tests above left behind -- one of
+    // them drinks the life potion -- so it is the shape that is
+    // pinned, which is what carries the words and their order.
+    expect(en.dir).toBe('ltr');
+    expect(en.title).toBe('Potions');
+    expect(en.hp).toMatch(/^hit points \d+ of \d+$/);
+    expect(en.feather).toMatch(/^feather (yes|no)$/);
+    expect(en.upside).toMatch(/^upside down (yes|no)$/);
+    expect(en.room).toMatch(/^room \d+$/);
+    expect(en.how).toContain('Shift');
+
+    await page.selectOption('#setting-language', 'he');
+    await page.waitForTimeout(300);
+    const he = await read();
+    expect(he.dir).toBe('rtl');
+    expect(he.title).toBe('שיקויים');
+    expect(he.hp).toMatch(/^נקודות חיים \d+ מתוך \d+$/);
+    expect(he.feather).toMatch(/^נוצה (כן|לא)$/);
+    expect(he.upside).toMatch(/^היפוך (כן|לא)$/);
+    expect(he.room).toMatch(/^חדר \d+$/);
+    expect(he.how).toContain('כד');
+    // Not one English word left in the panel's own labels.
+    for (const [key, value] of Object.entries(he)) {
+      if (key === 'dir' || key === 'how') continue;
+      expect(/[A-Za-z]/.test(value), `${key}: ${value}`).toBe(false);
+    }
+
+    await page.selectOption('#setting-language', 'en');
+    await page.waitForTimeout(300);
+    expect(consoleErrors).toEqual([]);
+  }, 120000);
+
+  /**
+   * The margin at 420 by 760, where the potion page has a scrollbar
+   * and `index.html` does not.
+   *
+   * A margin with a scrollbar is eleven pixels narrower, which took
+   * the Hebrew save button from 39 pixels to a 33-pixel box and the
+   * slot label from 92 to 74. The buttons wrap onto two lines now and
+   * the label wraps rather than ellipsizing, so nothing in either
+   * margin is wider than the box it is in -- and the page still does
+   * not scroll, which is clause 3.
+   */
+  it('clips nothing in the margin at 420 by 760, in either language', async () => {
+    const narrow = await browser.newPage({ viewport: { width: 420, height: 760 } });
+    try {
+      await narrow.goto(`http://localhost:${PORT}/potion.html`, { waitUntil: 'load' });
+      await narrow.waitForFunction('window.__princeReady === true', null, { timeout: 30000 });
+      for (const lang of ['en', 'he'] as const) {
+        await narrow.selectOption('#setting-language', lang);
+        await narrow.evaluate(() => (window as unknown as {
+          __princeDismissOpening(): void;
+        }).__princeDismissOpening());
+        await narrow.waitForTimeout(300);
+        const got = await narrow.evaluate(() => {
+          const d = document.documentElement;
+          return {
+            over: [...document.querySelectorAll('.margin *')]
+              .filter((e) => e.scrollWidth - e.clientWidth > 1)
+              .map((e) => `${e.id || e.tagName}: ${e.scrollWidth} in ${e.clientWidth}`),
+            scrollY: d.scrollHeight - d.clientHeight,
+            scrollX: d.scrollWidth - d.clientWidth,
+          };
+        });
+        expect(got.over, `${lang}: ${got.over.join(', ')}`).toEqual([]);
+        expect(got.scrollY, lang).toBeLessThanOrEqual(1);
+        expect(got.scrollX, lang).toBeLessThanOrEqual(1);
+      }
+    } finally {
+      await narrow.close();
+    }
+  }, 120000);
 });

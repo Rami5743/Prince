@@ -55,6 +55,9 @@ export class Chrome {
       if (key === 'aspect') this.applyAspect();
     });
     this.applyAspect();
+    if (document.getElementById('panel-potion')) {
+      window.setInterval(() => this.potionReadout(), 100);
+    }
   }
 
   /** Hebrew turns the page over: the title goes to the right-hand margin. */
@@ -78,6 +81,45 @@ export class Chrome {
     this.buildMargin();
     this.buildOpening();
     this.buildPanels();
+    this.buildPotion();
+  }
+
+  /**
+   * `potion.html`'s extra panel, which `index.html` does not have.
+   *
+   * Its words used to be written into the page by
+   * `tools/dev/build-pages.mjs`, with its readout an inline script --
+   * so it was the one piece of the page that stayed English when the
+   * language changed. The page now carries the ids and nothing else,
+   * and the readout is `potionReadout` below, which reads `this.s`
+   * every tenth of a second and so relabels itself.
+   */
+  private buildPotion(): void {
+    if (!document.getElementById('panel-potion')) return;
+    text('potion-label', this.s.potionTitle);
+    text('pl-label-hp', this.s.potionHp);
+    text('pl-label-feather', this.s.potionFeather);
+    text('pl-label-upside', this.s.potionUpside);
+    text('pl-label-room', this.s.potionRoomRow);
+    text('pl-how', this.s.potionHow);
+  }
+
+  /** The four numbers, in whichever language is current. */
+  private potionReadout(): void {
+    const state = (window as unknown as {
+      __princeState?: () => {
+        hitPoints: number; maxHitPoints: number;
+        featherFall: boolean; upsideDown: boolean; room: number;
+      } | null;
+    }).__princeState?.();
+    if (!state) return;
+    const yesNo = (on: boolean): string => (on ? this.s.potionYes : this.s.potionNo);
+    text('pl-hp', this.s.potionOf
+      .replace('{n}', String(state.hitPoints))
+      .replace('{m}', String(state.maxHitPoints)));
+    text('pl-feather', yesNo(state.featherFall));
+    text('pl-upside', yesNo(state.upsideDown));
+    text('pl-room', String(state.room));
   }
 
   /** `potion.html` is the same page with one level record swapped. */
