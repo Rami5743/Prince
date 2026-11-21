@@ -828,10 +828,23 @@ export class GameText {
     const right = box.right - GameText.BOX_INSET;
     const baseline = this.baselineIn(box.top, box.bottom, 0);
     if (this.vector) {
+      /**
+       * In the **text's** colour, never in the box's.
+       *
+       * `input_str` erases the cursor by drawing `_` again in
+       * `bgcolor`, so one call in two arrives here with the box's own
+       * colour -- and the whole line is redrawn from that call, not
+       * just the cursor. Drawn in `bgcolor` the line is the box, so
+       * at `quality: high` a Hebrew name typed into the hall of fame
+       * was invisible for half of every blink and the screenshot
+       * caught an empty box. The bitmap path below has had the same
+       * fallback since it was written.
+       */
       this.remember({
         key: 'name', left: box.left + GameText.BOX_INSET, right,
         baseline, xAlign: 1, text: this.typed + (this.cursorUp ? '_' : ''),
-        rtl: true, color, capHeight: TEXT_CAP_HEIGHT,
+        rtl: true, color: color === box.bg ? this.textColour : color,
+        capHeight: TEXT_CAP_HEIGHT,
       });
       return;
     }

@@ -1641,7 +1641,7 @@ var GameText = class _GameText {
         xAlign: 1,
         text: this.typed + (this.cursorUp ? "_" : ""),
         rtl: true,
-        color,
+        color: color === box.bg ? this.textColour : color,
         capHeight: TEXT_CAP_HEIGHT
       });
       return;

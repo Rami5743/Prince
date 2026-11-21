@@ -391,6 +391,35 @@ describe('the words the game draws', () => {
       .toEqual(['42:17']);
   });
 
+  /**
+   * `input_str` erases its cursor by drawing `_` again in `bgcolor`,
+   * and the Hebrew path redraws the **whole line** from that call.
+   * In `bgcolor` the line is the box, so at `quality: high` the name
+   * was invisible for half of every blink.
+   */
+  it('never draws the typed name in the box’s own colour', () => {
+    const text = new GameText(font, { language: 'he', quality: 'high' });
+    const surface = new Surface();
+    const box = { left: 86, top: 69, right: 226, bottom: 79 };
+    const bg = 0xB7;
+    const ink = 0xBE;
+    text.beginTextInput(box.left, box.top, box.right, box.bottom);
+    text.noteFill(box.left, box.top, box.right, box.bottom, bg);
+    let x = box.left + 4;
+    for (const ch of 'הנסיך') {
+      text.drawChar(surface, x, 76, '_', bg); // the cursor, erased
+      x += text.drawChar(surface, x, 76, ch, ink);
+    }
+    // And the blink: the cursor goes up, then is erased again.
+    text.drawChar(surface, x, 76, '_', ink);
+    text.drawChar(surface, x, 76, '_', bg);
+    const line = text.overlay.find((i) => i.key === 'name');
+    expect(line, 'the box has a line in it').toBeDefined();
+    expect(line!.text.startsWith('הנסיך'), line!.text).toBe(true);
+    expect(line!.color, 'and it is not drawn in the background').not.toBe(bg);
+    expect(line!.color).toBe(ink);
+  });
+
   it('types a Hebrew name into the box from the right', () => {
     const text = new GameText(font, { language: 'he', quality: 'original' });
     const surface = new Surface();

@@ -116,6 +116,18 @@ rectangle now and `restore_peel` puts them back, which is what it
 does with the pixels. Pinned as arithmetic in
 `tests/render/game-text.test.ts`, both halves.
 
+### 2b. And a name typed into the box was drawn in the box's colour
+
+`input_str` erases its cursor by drawing `_` again in `bgcolor`, so
+one call in two reaches the text layer with the box's own colour --
+and the Hebrew path redraws the **whole line** from that call rather
+than the one glyph, because `input_str` draws left to right and a
+Hebrew name cannot. Drawn in `bgcolor` the line is the box, so at
+`quality: high` a Hebrew name typed into the hall of fame was
+invisible for half of every blink; screenshotted mid-blink, the box
+was empty. The bitmap path has had the `textColour` fallback since
+it was written and the vector path had not.
+
 ### 3. The hall of fame's columns change sides in Hebrew
 
 `show_hof` (`seg001:0E94`) draws the name against the left of the row
