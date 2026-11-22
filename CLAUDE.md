@@ -1,5 +1,86 @@
 # Read this first
 
+## A REAL ALTERNATIVE MAP AT LAST: SIX NEW LEVELS, AND "100%" WAS SIX OF ELEVEN
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     928 -> 933
+
+    Map   The game's own | 4-D Prince of Persia (1994)
+    מפה    של המשחק עצמו  | 4-D Prince of Persia (1994)
+
+Three archives were handed over in one sitting, each asked the same
+question -- is there a different map in here -- and the answer was
+**no, no, and yes**.
+
+### 1. The two that were not
+
+Both uploads of 1.4 hold the same 24 files, and its `LEVELS.DAT` is
+**byte for byte** this repository's own. See the section below for
+what 1.4 really changed, which is the artwork.
+
+### 2. The one that is: `KIRILL.DAT`
+
+`PRINCE1.zip` is not a release at all. It has no `LEVELS.DAT`; it
+has `KIRILL.DAT` of exactly the same 37031 bytes, a patched
+`4D_PRIN.EXE`, extra artwork (`EPALACE2/3/4`, `GUARD3/4/5`, `FAT2`,
+`DIGISND4/5/6`) and a scene `.NFO`. Its own `FILE_ID.DIZ` says
+
+    4-D Prince Of Persia Ver.1
+    100% new levels and FX!
+
+-- a 1994 Russian modification released by Drink Or Die. **The
+"100%" is the only part of that which is not true**, and the file
+says so itself, record by record:
+
+    level    foreground tiles changed   room links changed
+      1            0 of 720                   0 of 96
+      2          423                         80
+      3          616                         86
+      4          570                         84
+      5          501                         63
+      6          484                         90
+      7          463                         62
+      8..11        0                          0
+
+**Six levels are new -- 2 to 7 -- and five are the original's own.**
+
+### 3. And it is eleven levels, which is why the map is built
+
+The index is the same sixteen entries at the same offset, but only
+2000 to 2010 have a payload:
+
+    ours     2000..2015, every one 2305 bytes
+    KIRILL   2000..2010 of 2305, then five `id 0, offset 0, size 0`
+
+So levels 12, 13, 14, Jaffar and the princess are **not in it**, and
+serving it whole would be a game that cannot be finished.
+`levelsDatWithFourD` puts its eleven records into the original's
+sixteen -- the checksum byte and the payload copied as bytes,
+because both files have the same record size, so nothing is parsed
+or re-checksummed -- and the five it has not got stay the game's
+own. Neither file on disc is written to. It is the trick
+`levelsDatWithPotionLevel` already plays with one record.
+
+What is offered is **the mod's map, not the mod**: its extra artwork
+is read by its own patched executable, by rules this port has no
+knowledge of.
+
+### 4. `web/` was not typechecked, and it nearly cost this round
+
+The section below noted the hole; this round fell in it. The import
+of `levelsDatWithFourD` into `web/main.ts` did not land -- a regex
+missed a multi-line import -- and **`npx tsc --noEmit` passed and
+`npm run build` succeeded**, because `tsconfig.json`'s `include` was
+`["src", "tests", "tools"]` and esbuild strips types without
+resolving a missing name. The page would have thrown
+`ReferenceError` on load for anyone who chose the new map.
+
+`include` is `["src", "tests", "tools", "web"]` now and the whole of
+it is clean. **Twice is enough: anything the player loads has to be
+under the typechecker.**
+
 ## 1.4 IS NOT A DIFFERENT MAP, AND ITS GREEN DUNGEON IS ONE RESOURCE 1.0 HAS NOT GOT
 
     measured   32260 of 33047   98%   (unmoved)

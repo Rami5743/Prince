@@ -20,7 +20,7 @@ export type Language = 'en' | 'he';
 export type Quality = 'original' | 'high';
 export type Graphics = 'original' | '1.4';
 export type Music = 'original' | '1.3';
-export type MapChoice = 'original';
+export type MapChoice = 'original' | '4d';
 export type Aspect = 'original-4-3' | 'square-pixels';
 
 export interface Settings {
@@ -43,7 +43,12 @@ export interface Settings {
    * quality: the quality is the voice, this is which sound wins.
    */
   music: Music;
-  /** Which fourteen levels. Only the game's own, for now. */
+  /**
+   * Which levels. `original` is the game's own; `4d` is the map of
+   * "4-D Prince of Persia", a 1994 modification, whose six new levels
+   * are 2 to 7 -- the rest of its eleven are the original's, and the
+   * five records it has not got are the original's too.
+   */
   map: MapChoice;
   /** The shape of a pixel: as a CRT drew it, or square. */
   aspect: Aspect;
@@ -64,7 +69,7 @@ export const CHOICES = {
   quality: ['original', 'high'],
   graphics: ['original', '1.4'],
   music: ['original', '1.3'],
-  map: ['original'],
+  map: ['original', '4d'],
   aspect: ['original-4-3', 'square-pixels'],
 } as const satisfies { [K in keyof Settings]: readonly Settings[K][] };
 

@@ -306,6 +306,9 @@ export class Chrome {
     if (key === 'graphics') {
       return value === '1.4' ? this.s.graphics14 : this.s.graphicsOriginal;
     }
+    if (key === 'map') {
+      return value === '4d' ? this.s.map4d : this.s.mapOriginal;
+    }
     return this.s.original;
   }
 }

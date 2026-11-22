@@ -4759,6 +4759,7 @@ var TILES_PER_ROOM = ROOM_WIDTH * ROOM_HEIGHT;
 var LEVEL_TILE_COUNT = ROOM_COUNT * TILES_PER_ROOM;
 var LEVEL_PAYLOAD_SIZE = 2305;
 var FIRST_LEVEL_RESOURCE = 2e3;
+var LAST_LEVEL_RESOURCE = 2015;
 var OFF_FG = 0;
 var OFF_BG = 720;
 var OFF_DOORLINKS1 = 1440;
@@ -15193,6 +15194,26 @@ function levelsDatWithPotionLevel(bytes) {
   throw new Error(`LEVELS.DAT has no resource ${want}`);
 }
 
+// src/dat/fourd-level.ts
+var FOURD_FIRST = 2e3;
+var FOURD_LAST = 2010;
+function levelsDatWithFourD(original, kirill) {
+  const out2 = original.slice();
+  const dst = new DatFile(out2, "LEVELS.DAT");
+  const src = new DatFile(kirill, "KIRILL.DAT");
+  let taken = 0;
+  for (let id = FIRST_LEVEL_RESOURCE; id <= LAST_LEVEL_RESOURCE; id++) {
+    if (id < FOURD_FIRST || id > FOURD_LAST) continue;
+    const from = src.entries.find((e) => e.id === id && e.size > 0);
+    const to = dst.entries.find((e) => e.id === id);
+    if (!from || !to || from.size !== to.size) continue;
+    out2.set(kirill.subarray(from.offset, from.offset + 1 + from.size), to.offset);
+    taken++;
+  }
+  if (taken === 0) throw new Error("KIRILL.DAT: no level record could be used");
+  return out2;
+}
+
 // web/settings.ts
 var DEFAULTS = {
   language: "en",
@@ -15207,7 +15228,7 @@ var CHOICES = {
   quality: ["original", "high"],
   graphics: ["original", "1.4"],
   music: ["original", "1.3"],
-  map: ["original"],
+  map: ["original", "4d"],
   aspect: ["original-4-3", "square-pixels"]
 };
 var KEY = "prince.settings.v1";
@@ -15287,6 +15308,8 @@ var EN = {
   qualityOriginal: "Original",
   qualityHigh: "High",
   original: "Original",
+  mapOriginal: "The game's own",
+  map4d: "4-D Prince of Persia (1994)",
   graphicsOriginal: "As released (1.0)",
   graphics14: "Version 1.4",
   musicOriginal: "As released (1.0)",
@@ -15372,6 +15395,8 @@ var HE = {
   qualityOriginal: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
   qualityHigh: "\u05D2\u05D1\u05D5\u05D4\u05D4",
   original: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
+  mapOriginal: "\u05E9\u05DC \u05D4\u05DE\u05E9\u05D7\u05E7 \u05E2\u05E6\u05DE\u05D5",
+  map4d: "4-D Prince of Persia (1994)",
   graphicsOriginal: "\u05DB\u05E4\u05D9 \u05E9\u05D9\u05E6\u05D0 (1.0)",
   graphics14: "\u05D2\u05E8\u05E1\u05D4 1.4",
   musicOriginal: "\u05DB\u05E4\u05D9 \u05E9\u05D9\u05E6\u05D0 (1.0)",
@@ -15869,6 +15894,9 @@ var Chrome = class {
     if (key === "graphics") {
       return value === "1.4" ? this.s.graphics14 : this.s.graphicsOriginal;
     }
+    if (key === "map") {
+      return value === "4d" ? this.s.map4d : this.s.mapOriginal;
+    }
     return this.s.original;
   }
 };
@@ -15912,7 +15940,15 @@ async function boot() {
   ]);
   const art14 = custom ?? browserFetcher(`${DATA_URL.replace(/prince1$/, "prince14")}`);
   const fromDisc = settings.get("graphics") === "1.4" && custom === void 0 ? async (name) => ART_1_4.has(name) ? art14(name) : plain(name) : plain;
-  const fetchFile = POTION_PAGE ? async (name) => name === "LEVELS.DAT" ? levelsDatWithPotionLevel(await fromDisc(name)) : fromDisc(name) : fromDisc;
+  const fourD = settings.get("map") === "4d" && custom === void 0;
+  const kirill = fourD ? browserFetcher(`${DATA_URL.replace(/prince1$/, "fourd")}`)("KIRILL.DAT") : void 0;
+  const fetchFile = async (name) => {
+    if (name !== "LEVELS.DAT") return fromDisc(name);
+    let levels = await fromDisc(name);
+    if (kirill) levels = levelsDatWithFourD(levels, await kirill);
+    if (POTION_PAGE) levels = levelsDatWithPotionLevel(levels);
+    return levels;
+  };
   const assets = new Assets(fetchFile);
   const exe = await fetchFile("UNCRKD.EXE");
   const gameText = new GameText(readFont(exe), {

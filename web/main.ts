@@ -30,6 +30,7 @@ import { readExeConstants } from '../src/game/exe-constants.ts';
 import {
   levelsDatWithPotionLevel, POTION_LEVEL_NUMBER,
 } from '../src/dat/potion-level.ts';
+import { levelsDatWithFourD } from '../src/dat/fourd-level.ts';
 import { GameText } from '../src/render/text.ts';
 import { readFont } from '../src/render/font.ts';
 import { SettingsStore } from './settings.ts';
@@ -125,11 +126,28 @@ async function boot(): Promise<void> {
       ? art14(name)
       : plain(name))
     : plain;
-  const fetchFile = POTION_PAGE
-    ? async (name: string): Promise<Uint8Array> => (name === 'LEVELS.DAT'
-      ? levelsDatWithPotionLevel(await fromDisc(name))
-      : fromDisc(name))
-    : fromDisc;
+  /**
+   * The map of "4-D Prince of Persia", built rather than served.
+   *
+   * That 1994 modification's own level file holds **eleven** records
+   * and not sixteen -- 2011 and the four after it are written as
+   * blank index entries -- so serving it whole would leave the game
+   * with no level 12, no Jaffar and no princess. `levelsDatWithFourD`
+   * puts its eleven into the original's sixteen, which is the only
+   * way the game can be finished, and neither file on disc is
+   * touched. Six of those eleven are really new: levels 2 to 7.
+   */
+  const fourD = settings.get('map') === '4d' && custom === undefined;
+  const kirill = fourD
+    ? browserFetcher(`${DATA_URL.replace(/prince1$/, 'fourd')}`)('KIRILL.DAT')
+    : undefined;
+  const fetchFile = async (name: string): Promise<Uint8Array> => {
+    if (name !== 'LEVELS.DAT') return fromDisc(name);
+    let levels = await fromDisc(name);
+    if (kirill) levels = levelsDatWithFourD(levels, await kirill);
+    if (POTION_PAGE) levels = levelsDatWithPotionLevel(levels);
+    return levels;
+  };
   const assets = new Assets(fetchFile);
   const exe = await fetchFile('UNCRKD.EXE');
   /**

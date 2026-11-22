@@ -30,6 +30,8 @@ export interface Strings {
   readonly qualityOriginal: string;
   readonly qualityHigh: string;
   readonly original: string;
+  readonly mapOriginal: string;
+  readonly map4d: string;
   readonly graphicsOriginal: string;
   readonly graphics14: string;
   readonly musicOriginal: string;
@@ -131,6 +133,8 @@ const EN: Strings = {
   qualityOriginal: 'Original',
   qualityHigh: 'High',
   original: 'Original',
+  mapOriginal: "The game's own",
+  map4d: '4-D Prince of Persia (1994)',
   graphicsOriginal: 'As released (1.0)',
   graphics14: 'Version 1.4',
   musicOriginal: 'As released (1.0)',
@@ -228,6 +232,8 @@ const HE: Strings = {
   qualityOriginal: 'מקורית',
   qualityHigh: 'גבוהה',
   original: 'מקורית',
+  mapOriginal: 'של המשחק עצמו',
+  map4d: '4-D Prince of Persia (1994)',
   graphicsOriginal: 'כפי שיצא (1.0)',
   graphics14: 'גרסה 1.4',
   musicOriginal: 'כפי שיצא (1.0)',
