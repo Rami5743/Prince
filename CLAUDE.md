@@ -5,7 +5,7 @@
     measured   32260 of 33047   98%   (unmoved)
     scenes      2442 of  2601   94%   (unmoved)
     sounds       493 of   494         (unmoved)
-    npm test     933 -> 945
+    npm test     933 -> 946
 
     one __princeStep, Chromium at 1280x860, device pixel ratio 1
         original   0.24 ms      high, with the painting   2.68 ms
@@ -83,7 +83,24 @@ whole painting, and the most a partly hidden Prince can bleed over
 his occluder is a single surface pixel, which is the resolution the
 occluder's own edge has.
 
-### 4. What it costs
+### 4. The whole set is read in behind the play
+
+Fetching each sprite the first time the game draws it is what the
+first version did, and it is wrong for a reason the local machine
+hides: a frame whose art has not arrived is the **original's pixels**
+for that tick, and at 83 ms a tick over a real network that is
+several ticks for every new frame of the walk. The first seconds of
+play flicker between the painting and the blit.
+
+So at `high` all 219 are fetched eight at a time in id order -- which
+is the order the game needs them in, 401 being the standing frames --
+starting when the level does. One is about 44 KiB and the set is nine
+and a half megabytes. Measured in Chromium, entering level 1:
+**219 PNGs at `high`, all 200, no page errors; 0 at `original`**.
+`tests/browser/kid-hires.test.ts` pins both numbers and that the same
+tick at the two qualities is not the same picture.
+
+### 5. What it costs
 
 A sprite is scaled to the display's factor once and kept, because the
 art is ten times the game's size and the canvas is three: without the

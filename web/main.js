@@ -640,6 +640,8 @@ var Surface = class {
 // src/render/kid-hires.ts
 var KID_BANK = 112;
 var BANK_SIZE = 16;
+var KID_FIRST_SPRITE = 401;
+var KID_SPRITE_COUNT = 219;
 var KID_HIRES_DIR = "graphics/kid-10x";
 var KID_HIRES_SCALE = 10;
 function fadeOf(live, base) {
@@ -16185,10 +16187,10 @@ async function boot() {
   const kidAsked = /* @__PURE__ */ new Set();
   let kidDrawn = [];
   const kidDir = `${DATA_URL.replace(/original\/prince1$/, "")}${KID_HIRES_DIR}`;
-  const fetchKid = (id) => {
+  const fetchKid = async (id) => {
     if (kidAsked.has(id)) return;
     kidAsked.add(id);
-    void (async () => {
+    {
       try {
         const res = await fetch(`${kidDir}/${String(id).padStart(4, "0")}.png`);
         if (!res.ok) return;
@@ -16200,12 +16202,24 @@ async function boot() {
         kidArt.put(id, cx.getImageData(0, 0, bmp.width, bmp.height));
       } catch {
       }
-    })();
+    }
+  };
+  let kidPrefetched = false;
+  const prefetchKid = () => {
+    if (kidPrefetched) return;
+    kidPrefetched = true;
+    const ids = [];
+    for (let i = 0; i < KID_SPRITE_COUNT; i++) ids.push(KID_FIRST_SPRITE + i);
+    let next = 0;
+    const pump = async () => {
+      while (next < ids.length) await fetchKid(ids[next++]);
+    };
+    for (let lane = 0; lane < 8; lane++) void pump();
   };
   const onKidSprite = (id, x, y, flipped) => {
     if (settings.get("quality") !== "high") return;
     if (!kidArt.has(id)) {
-      fetchKid(id);
+      void fetchKid(id);
       return;
     }
     kidDrawn.push({ id, x, y, flipped });
@@ -16385,6 +16399,7 @@ async function boot() {
         { effects, seamless: carry.seamless, text: gameText, onKidSprite }
       );
       const kidBank = game.scene.chtabs.kid?.palette.vga ?? [];
+      if (settings.get("quality") === "high") prefetchKid();
       display.setKidHiRes(kidArt, kidSource, kidBank.flatMap((e) => [
         e.r << 2 | e.r >> 4,
         e.g << 2 | e.g >> 4,
@@ -17110,6 +17125,7 @@ async function boot() {
     quality: (value) => {
       gameText.quality = value;
       display.setQuality(value);
+      if (value === "high") prefetchKid();
       if (sound) sound.quality = value;
       relabelTheGame();
     },

@@ -32,7 +32,8 @@ import {
 } from '../src/dat/potion-level.ts';
 import { levelsDatWithFourD } from '../src/dat/fourd-level.ts';
 import { GameText } from '../src/render/text.ts';
-import { KidHiRes, KID_HIRES_DIR, type KidSprite } from '../src/render/kid-hires.ts';
+import { KidHiRes, KID_HIRES_DIR, KID_FIRST_SPRITE, KID_SPRITE_COUNT,
+  type KidSprite } from '../src/render/kid-hires.ts';
 import { readFont } from '../src/render/font.ts';
 import { SettingsStore } from './settings.ts';
 import { Chrome } from './chrome.ts';
@@ -176,19 +177,29 @@ async function boot(): Promise<void> {
    * palette bank so that whatever is in front of him still covers
    * him, and multiplies it by how far the palette has been faded.
    *
-   * They are fetched **one at a time, as the game first draws
-   * each**, because a level uses a few dozen of the 219 and the set
-   * is nine megabytes. A frame whose art has not arrived yet is
-   * simply the original's pixels for that one tick.
+   * A frame whose art has not arrived yet is simply the original's
+   * pixels for that tick, so the page is never held up by the
+   * artwork -- but that fallback must not be what the player sees.
+   * Fetching each sprite the first time the game draws it means every
+   * new frame of the walk is pixel-art until its PNG lands, and at
+   * 83 ms a tick over a real network that is several ticks apiece:
+   * the whole first few seconds of play flickers between the painted
+   * Prince and the blocky one.
+   *
+   * So at `quality: high` the 219 are **read in behind the play**,
+   * eight at a time, in id order -- which is the order the game needs
+   * them in, 401 being the standing frames. One is 44 KiB and the set
+   * is nine and a half megabytes. At `original` not one is asked
+   * for, and the prefetch starts if the player moves the setting.
    */
   const kidArt = new KidHiRes();
   const kidAsked = new Set<number>();
   let kidDrawn: KidSprite[] = [];
   const kidDir = `${DATA_URL.replace(/original\/prince1$/, '')}${KID_HIRES_DIR}`;
-  const fetchKid = (id: number): void => {
+  const fetchKid = async (id: number): Promise<void> => {
     if (kidAsked.has(id)) return;
     kidAsked.add(id);
-    void (async (): Promise<void> => {
+    {
       try {
         const res = await fetch(`${kidDir}/${String(id).padStart(4, '0')}.png`);
         if (!res.ok) return;
@@ -201,11 +212,24 @@ async function boot(): Promise<void> {
       } catch {
         // No artwork for this frame: the original's pixels stand.
       }
-    })();
+    }
+  };
+  /** Read all 219 in behind the play, eight at a time. */
+  let kidPrefetched = false;
+  const prefetchKid = (): void => {
+    if (kidPrefetched) return;
+    kidPrefetched = true;
+    const ids: number[] = [];
+    for (let i = 0; i < KID_SPRITE_COUNT; i++) ids.push(KID_FIRST_SPRITE + i);
+    let next = 0;
+    const pump = async (): Promise<void> => {
+      while (next < ids.length) await fetchKid(ids[next++]!);
+    };
+    for (let lane = 0; lane < 8; lane++) void pump();
   };
   const onKidSprite = (id: number, x: number, y: number, flipped: boolean): void => {
     if (settings.get('quality') !== 'high') return;
-    if (!kidArt.has(id)) { fetchKid(id); return; }
+    if (!kidArt.has(id)) { void fetchKid(id); return; }
     kidDrawn.push({ id, x, y, flipped });
   };
   const kidSource = (): readonly KidSprite[] => {
@@ -564,6 +588,7 @@ async function boot(): Promise<void> {
       // `KID.DAT`'s own sixteen, DAC-expanded: what `fadeOf` reads
       // the live palette against, so a fade fades the painting too.
       const kidBank = game.scene.chtabs.kid?.palette.vga ?? [];
+      if (settings.get('quality') === 'high') prefetchKid();
       display.setKidHiRes(kidArt, kidSource, kidBank
         .flatMap((e) => [(e.r << 2) | (e.r >> 4), (e.g << 2) | (e.g >> 4),
           (e.b << 2) | (e.b >> 4)]));
@@ -1763,6 +1788,7 @@ async function boot(): Promise<void> {
       // canvas, the picture gets more pixels of its own art, and the
       // tunes get the shape the hardware's voice had.
       display.setQuality(value);
+      if (value === 'high') prefetchKid();
       if (sound) sound.quality = value;
       relabelTheGame();
     },

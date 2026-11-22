@@ -67,6 +67,10 @@ import type { Surface } from './surface.ts';
 export const KID_BANK = 112;
 const BANK_SIZE = 16;
 
+/** `KID.DAT`'s own resources: 401 to 619, and every one is painted. */
+export const KID_FIRST_SPRITE = 401;
+export const KID_SPRITE_COUNT = 219;
+
 /** Where the sprites live, relative to the page. */
 export const KID_HIRES_DIR = 'graphics/kid-10x';
 
