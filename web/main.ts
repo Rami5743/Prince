@@ -95,7 +95,36 @@ async function boot(): Promise<void> {
   const custom = (window as unknown as {
     __princeFetcher?: (name: string) => Promise<Uint8Array>;
   }).__princeFetcher;
-  const fromDisc = custom ?? browserFetcher(DATA_URL);
+  const plain = custom ?? browserFetcher(DATA_URL);
+  /**
+   * The five files Prince of Persia 1.4 draws differently.
+   *
+   * The player supplied a copy of the last DOS release and every one
+   * of its files was compared with this repository's 1.0. **Its
+   * `LEVELS.DAT` is byte for byte identical**, so 1.4 is not a
+   * different map, a different hour or a different starting position
+   * -- what it changed is the artwork: 72 of `VDUNGEON.DAT`'s 218
+   * resources, 14 of `VPALACE.DAT`'s 238, 3 of `TITLE.DAT`'s 12 and
+   * 5 of `SKEL.DAT`'s 29, and a `PRINCE.DAT` that grows from 3278
+   * bytes to 25600 and carries resource 20, the five alternate level
+   * palettes 1.0 has not got at all.
+   *
+   * It is one wrapper round the fetcher and nothing more, which is
+   * why `src/pop` never learns of it: the engine asks `Assets` for a
+   * file by name, exactly as it always did, and the name is answered
+   * out of a different directory. Every headless tool and every
+   * capture comparison keeps 1.0 by construction, because only this
+   * page ever wraps the fetcher.
+   */
+  const ART_1_4 = new Set([
+    'PRINCE.DAT', 'TITLE.DAT', 'VDUNGEON.DAT', 'VPALACE.DAT', 'SKEL.DAT',
+  ]);
+  const art14 = custom ?? browserFetcher(`${DATA_URL.replace(/prince1$/, 'prince14')}`);
+  const fromDisc = settings.get('graphics') === '1.4' && custom === undefined
+    ? async (name: string): Promise<Uint8Array> => (ART_1_4.has(name)
+      ? art14(name)
+      : plain(name))
+    : plain;
   const fetchFile = POTION_PAGE
     ? async (name: string): Promise<Uint8Array> => (name === 'LEVELS.DAT'
       ? levelsDatWithPotionLevel(await fromDisc(name))

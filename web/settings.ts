@@ -1,10 +1,11 @@
 /**
  * What the player has chosen, and how the rest of the page hears about it.
  *
- * Five settings, all of them stored in the browser so that a reload opens
- * on the same game the player left. Four of the five can be changed while
- * the game is running; `map` cannot, because a different map is a
- * different game, and the opening page is the only place it is offered.
+ * Six settings, all of them stored in the browser so that a reload opens
+ * on the same game the player left. Four of them can be changed while the
+ * game is running; `map` and `graphics` cannot -- a different map is a
+ * different game, and a level's sprites are built once when it loads --
+ * so the opening page is the only place those two are offered.
  *
  * **Nothing in `src/pop` reads any of this.** The engine is measured
  * against captures of a real PRINCE.EXE and must not learn that a player
@@ -17,7 +18,7 @@
 
 export type Language = 'en' | 'he';
 export type Quality = 'original' | 'high';
-export type Graphics = 'original';
+export type Graphics = 'original' | '1.4';
 export type Music = 'original' | '1.3';
 export type MapChoice = 'original';
 export type Aspect = 'original-4-3' | 'square-pixels';
@@ -27,7 +28,13 @@ export interface Settings {
   language: Language;
   /** `original` is the 320x200 the game shipped with. */
   quality: Quality;
-  /** Which set of pictures. Only the game's own, for now. */
+  /**
+   * Which release's artwork. `original` is 1.0; `1.4` is the last DOS
+   * release's own `VDUNGEON`, `VPALACE`, `TITLE`, `SKEL` and
+   * `PRINCE.DAT`. It is **not** a different map: 1.4's `LEVELS.DAT`
+   * is byte for byte 1.0's. Like `map`, it is chosen before the game
+   * starts, because a level's sprites are built once when it loads.
+   */
   graphics: Graphics;
   /**
    * Which DOS release's sound rules. `original` is 1.0, the release
@@ -55,7 +62,7 @@ export const DEFAULTS: Settings = {
 export const CHOICES = {
   language: ['en', 'he'],
   quality: ['original', 'high'],
-  graphics: ['original'],
+  graphics: ['original', '1.4'],
   music: ['original', '1.3'],
   map: ['original'],
   aspect: ['original-4-3', 'square-pixels'],

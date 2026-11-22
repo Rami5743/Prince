@@ -1,5 +1,87 @@
 # Read this first
 
+## 1.4 IS NOT A DIFFERENT MAP, AND ITS GREEN DUNGEON IS ONE RESOURCE 1.0 HAS NOT GOT
+
+    measured   32260 of 33047   98%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     921 -> 928
+
+    Graphics   As released (1.0) | Version 1.4
+    גרפיקה      כפי שיצא (1.0)     | גרסה 1.4
+
+The player supplied a copy of the last DOS release, believing it
+might hold a different map, and asked for it under **map** if so.
+**It does not**, and every file of it was compared rather than
+argued about.
+
+### 1. The map is the same map, byte for byte
+
+`LEVELS.DAT` is **identical** to this repository's own -- same 37031
+bytes, same every byte -- so the levels, the hour, the hit points
+and every starting position are 1.0's. Identical too: `KID.DAT`,
+`GUARD.DAT`, `GUARD1/2.DAT`, `PV.DAT`, `VIZIER.DAT`, `SHADOW.DAT`,
+`FAT.DAT` and **`IBM_SND1/2.DAT`** -- so the PC speaker tunes did
+not change either, and the "altered music" of the later releases is
+in `MIDISND*` and `DIGISND*` alone.
+
+So there is no `1.4` under the map, because it would change nothing.
+
+### 2. "The bytes differ" is not "the picture differs", and that is the finding
+
+    VDUNGEON.DAT   72 of 218 resources differ in bytes
+                   **0 of them differ as a picture**
+    VPALACE.DAT    14 differ in bytes, 9 as a picture
+    TITLE.DAT       3 and 3 (one is 51, the title screen itself)
+    SKEL.DAT        5 and 5
+    PRINCE.DAT      3278 -> 25600 bytes; one resource differs and
+                   nothing here reads it, and **20 is new**
+
+1.4 **re-packed** the dungeon tiles and redrew none of them, which
+is where its 3287 saved bytes went -- and the first screenshot said
+so before the decoder did: a level 3 room drawn from 1.4's own
+`VDUNGEON.DAT` was **0 pixels** different.
+
+So the green dungeon of 1.3 and 1.4 is not redrawn art. It is
+`PRINCE.DAT` **resource 20**: 240 bytes, five palettes of sixteen,
+`level_var_palettes`, which 1.0 has not got at all.
+
+### 3. The engine still reads no setting, and that is the data's doing
+
+`redraw_screen`'s own guard is `level_var_palettes != NULL`: the
+release without the resource does not recolour. `buildLevelScene`
+does exactly that -- it asks `PRINCE.DAT` for resource 20 and
+returns early when there is none. 1.0's has none, so every headless
+tool and every capture comparison keeps 1.0's colours **by
+construction**, and the three scores are unmoved run for run.
+
+The table is the C's, `{0,0,0,1,0,0,0,1,2,2,0,0,3,3,4,0}`, and the
+wall takes the block **after** the environment's for a palace and
+the same one for a dungeon. Level 3 reads colour 1, which is
+precisely the "level 3 dungeon is dark green" the later releases are
+described by, and the screenshots show it: level 3 blue -> green,
+levels 8 and 9 blue -> olive.
+
+**One line of it is not optional and the C says why in a comment
+naming the level.** `set_chtab_palette`: "Color 0 of the palette
+data is not used, it is replaced by the background color. Needed for
+correct alternate colors (v1.3) of level 8." Taken from the data,
+colour nought is pale -- and level 8's dark alcoves and the squares
+behind its torches came out **white**, screenshotted on 8 and 9
+before the line went in.
+
+### 4. One wrapper round the fetcher, and nothing else
+
+`Assets` takes a `Fetcher`, a name to bytes, so a release is a
+directory: the page answers those five names out of
+`original/prince14/` and everything else out of `original/prince1/`.
+Nothing in `src/pop` is touched and no other code path can see the
+choice.
+
+Like `map`, it is offered on the **opening page only**: a level's
+sprites and its palette are built once when the level loads, so a
+release cannot be swapped under a running level without rebuilding
+the scene around live state.
+
 ## THE TAB WAS BLANK ON PURPOSE, AND THE ICON IS THE TITLE SCREEN'S OWN DOME
 
     npm test   916 -> 921

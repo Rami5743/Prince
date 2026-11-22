@@ -48,6 +48,82 @@ export function tilesetFileFor(levelType: number, prefix = 'V'): string {
   return `${prefix}${levelType ? 'PALACE' : 'DUNGEON'}.DAT`;
 }
 
+/**
+ * The alternate level colours, which 1.0 has not got at all.
+ *
+ * `redraw_screen`'s own lines, from `seg000.c`:
+ *
+ *     if (graphics_mode == gmMcgaVga && level_var_palettes != NULL) {
+ *         int level_color = custom->tbl_level_color[current_level];
+ *         if (level_color != 0) {
+ *             byte* env_pal = level_var_palettes + 0x30*(level_color-1);
+ *             byte* wall_pal = env_pal + 0x30 * tbl_level_type[current_level];
+ *             set_pal_arr(0x50, 0x10, env_pal);
+ *             set_pal_arr(0x60, 0x10, wall_pal);
+ *             ...
+ *
+ * `level_var_palettes` is `PRINCE.DAT` **resource 20**, and the guard
+ * on it is `!= NULL`: the release that has no such resource simply
+ * does not recolour. That is exactly how this works, and it is why
+ * nothing here reads a setting. 1.0's `PRINCE.DAT` is 3278 bytes and
+ * has resources 1, 2, 10, 150..173 and 700..734 -- **no 20** -- so a
+ * port given 1.0's files keeps 1.0's colours by construction, every
+ * headless tool and every capture comparison included. 1.4's is
+ * 25600 bytes and its resource 20 is 240: five palettes of sixteen,
+ * which is the whole of the "new colour scheme on some levels" the
+ * later releases are described by.
+ *
+ * The wall takes the block **after** the environment's for a palace
+ * and the same one for a dungeon, which is what the `0x30 *
+ * tbl_level_type` does, so a palace reads two consecutive blocks.
+ */
+const TBL_LEVEL_COLOUR: readonly number[] =
+  [0, 0, 0, 1, 0, 0, 0, 1, 2, 2, 0, 0, 3, 3, 4, 0];
+
+/** `PRINCE.DAT` resource 20, or nothing where the release has none. */
+async function levelPalettes(assets: Assets): Promise<Uint8Array | undefined> {
+  try {
+    const princeDat = await assets.dat('PRINCE.DAT');
+    return princeDat.has(20) ? princeDat.get(20) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function applyLevelColour(
+  palette: ScreenPalette,
+  blocks: Uint8Array | undefined,
+  levelNumber: number,
+  levelType: number,
+): void {
+  if (!blocks) return;
+  const colour = TBL_LEVEL_COLOUR[levelNumber] ?? 0;
+  if (colour === 0) return;
+  const env = 0x30 * (colour - 1);
+  const wall = env + 0x30 * levelType;
+  if (wall + 0x30 > blocks.length) return; // a shorter resource than the table wants
+  /**
+   * Colour nought of an alternate block is **not** the block's own.
+   *
+   * `set_chtab_palette` says so in a comment that names the very
+   * level it was written for: "Color 0 of the palette data is not
+   * used, it is replaced by the background color. Needed for correct
+   * alternate colors (v1.3) of level 8." Taken from the data it is
+   * pale, and level 8's dark alcoves and the squares behind its
+   * torches come out **white** -- which is what this looked like
+   * before the line went in, screenshotted on levels 8 and 9.
+   */
+  const entries = (at: number): { r: number; g: number; b: number }[] => {
+    const out = [{ r: 0, g: 0, b: 0 }];
+    for (let i = 1; i < 16; i++) {
+      out.push({ r: blocks[at + i * 3]!, g: blocks[at + i * 3 + 1]!, b: blocks[at + i * 3 + 2]! });
+    }
+    return out;
+  };
+  palette.loadBlock(PALETTE_BASE.environment, entries(env));
+  palette.loadBlock(PALETTE_BASE.environmentWall, entries(wall));
+}
+
 export async function buildLevelScene(
   assets: Assets,
   exe: Uint8Array,
@@ -89,6 +165,7 @@ export async function buildLevelScene(
   for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
     screenPalette.loadBlock(set.paletteBase, set.palette.vga);
   }
+  applyLevelColour(screenPalette, await levelPalettes(assets), levelNumber, levelType);
   if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
 
   const state = new LevelState(level);

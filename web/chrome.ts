@@ -34,7 +34,7 @@ export interface ChromeHooks {
 /** The settings offered in both places, in the order they are shown. */
 const OPENING_FIELDS = ['language', 'quality', 'graphics', 'music', 'map'] as const;
 /** `map` is not among them: a different map is a different game. */
-const PANEL_FIELDS = ['language', 'quality', 'graphics', 'music', 'aspect'] as const;
+const PANEL_FIELDS = ['language', 'quality', 'music', 'aspect'] as const;
 
 export class Chrome {
   private readonly settings: SettingsStore;
@@ -302,6 +302,9 @@ export class Chrome {
     }
     if (key === 'music') {
       return value === '1.3' ? this.s.music13 : this.s.musicOriginal;
+    }
+    if (key === 'graphics') {
+      return value === '1.4' ? this.s.graphics14 : this.s.graphicsOriginal;
     }
     return this.s.original;
   }

@@ -132,17 +132,19 @@ describe('the page around the game', () => {
     const there = await page.evaluate(() => ({
       settings: document.getElementById('panel-settings') !== null,
       tools: document.getElementById('panel-tools') !== null,
-      // Every setting but the map, which the opening page alone offers.
+      // Every setting but the map and the artwork, which the opening
+      // page alone offers: a level's sprites and its palette are built
+      // once when it loads, so a release cannot be swapped mid-level.
       fields: [...document.querySelectorAll('#settings-fields select')].map((s) => s.id),
       opening: [...document.querySelectorAll('#opening-fields select')].map((s) => s.id),
     }));
     expect(there.settings).toBe(true);
     expect(there.tools).toBe(true);
     expect(there.fields).toEqual([
-      'setting-language', 'setting-quality', 'setting-graphics',
-      'setting-music', 'setting-aspect',
+      'setting-language', 'setting-quality', 'setting-music', 'setting-aspect',
     ]);
-    expect(there.opening, 'the map is chosen before the game begins').toEqual([
+    expect(there.opening,
+      'the map and the artwork are chosen before the game begins').toEqual([
       'setting-language', 'setting-quality', 'setting-graphics',
       'setting-music', 'setting-map',
     ]);

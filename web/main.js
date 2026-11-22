@@ -4929,6 +4929,32 @@ var PALETTE_BASE = {
 function tilesetFileFor(levelType3, prefix = "V") {
   return `${prefix}${levelType3 ? "PALACE" : "DUNGEON"}.DAT`;
 }
+var TBL_LEVEL_COLOUR = [0, 0, 0, 1, 0, 0, 0, 1, 2, 2, 0, 0, 3, 3, 4, 0];
+async function levelPalettes(assets) {
+  try {
+    const princeDat = await assets.dat("PRINCE.DAT");
+    return princeDat.has(20) ? princeDat.get(20) : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function applyLevelColour(palette, blocks, levelNumber, levelType3) {
+  if (!blocks) return;
+  const colour = TBL_LEVEL_COLOUR[levelNumber] ?? 0;
+  if (colour === 0) return;
+  const env = 48 * (colour - 1);
+  const wall = env + 48 * levelType3;
+  if (wall + 48 > blocks.length) return;
+  const entries = (at) => {
+    const out2 = [{ r: 0, g: 0, b: 0 }];
+    for (let i = 1; i < 16; i++) {
+      out2.push({ r: blocks[at + i * 3], g: blocks[at + i * 3 + 1], b: blocks[at + i * 3 + 2] });
+    }
+    return out2;
+  };
+  palette.loadBlock(PALETTE_BASE.environment, entries(env));
+  palette.loadBlock(PALETTE_BASE.environmentWall, entries(wall));
+}
 async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   const constants = readExeConstants(exe);
   const levelsDat = await assets.dat("LEVELS.DAT");
@@ -4956,6 +4982,7 @@ async function buildLevelScene(assets, exe, levelNumber, prefix = "V") {
   for (const set of [environment, environmentWall, flameSwordPotion, kid, sword]) {
     screenPalette.loadBlock(set.paletteBase, set.palette.vga);
   }
+  applyLevelColour(screenPalette, await levelPalettes(assets), levelNumber, levelType3);
   if (guard) screenPalette.loadBlock(guard.paletteBase, guard.palette.vga);
   const state = new LevelState(level);
   const tiles2 = {
@@ -15178,7 +15205,7 @@ var DEFAULTS = {
 var CHOICES = {
   language: ["en", "he"],
   quality: ["original", "high"],
-  graphics: ["original"],
+  graphics: ["original", "1.4"],
   music: ["original", "1.3"],
   map: ["original"],
   aspect: ["original-4-3", "square-pixels"]
@@ -15260,6 +15287,8 @@ var EN = {
   qualityOriginal: "Original",
   qualityHigh: "High",
   original: "Original",
+  graphicsOriginal: "As released (1.0)",
+  graphics14: "Version 1.4",
   musicOriginal: "As released (1.0)",
   music13: "Version 1.3",
   aspectCrt: "4:3, as on a CRT",
@@ -15343,6 +15372,8 @@ var HE = {
   qualityOriginal: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
   qualityHigh: "\u05D2\u05D1\u05D5\u05D4\u05D4",
   original: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
+  graphicsOriginal: "\u05DB\u05E4\u05D9 \u05E9\u05D9\u05E6\u05D0 (1.0)",
+  graphics14: "\u05D2\u05E8\u05E1\u05D4 1.4",
   musicOriginal: "\u05DB\u05E4\u05D9 \u05E9\u05D9\u05E6\u05D0 (1.0)",
   music13: "\u05D2\u05E8\u05E1\u05D4 1.3",
   aspectCrt: "4:3, \u05DB\u05DE\u05D5 \u05D1\u05DE\u05E1\u05DA \u05E7\u05EA\u05D5\u05D3\u05D9",
@@ -15587,7 +15618,7 @@ function writeSlot(n, save) {
 
 // web/chrome.ts
 var OPENING_FIELDS = ["language", "quality", "graphics", "music", "map"];
-var PANEL_FIELDS = ["language", "quality", "graphics", "music", "aspect"];
+var PANEL_FIELDS = ["language", "quality", "music", "aspect"];
 var Chrome = class {
   settings;
   hooks;
@@ -15835,6 +15866,9 @@ var Chrome = class {
     if (key === "music") {
       return value === "1.3" ? this.s.music13 : this.s.musicOriginal;
     }
+    if (key === "graphics") {
+      return value === "1.4" ? this.s.graphics14 : this.s.graphicsOriginal;
+    }
     return this.s.original;
   }
 };
@@ -15868,7 +15902,16 @@ async function boot() {
     status.textContent = line();
   };
   const custom = window.__princeFetcher;
-  const fromDisc = custom ?? browserFetcher(DATA_URL);
+  const plain = custom ?? browserFetcher(DATA_URL);
+  const ART_1_4 = /* @__PURE__ */ new Set([
+    "PRINCE.DAT",
+    "TITLE.DAT",
+    "VDUNGEON.DAT",
+    "VPALACE.DAT",
+    "SKEL.DAT"
+  ]);
+  const art14 = custom ?? browserFetcher(`${DATA_URL.replace(/prince1$/, "prince14")}`);
+  const fromDisc = settings.get("graphics") === "1.4" && custom === void 0 ? async (name) => ART_1_4.has(name) ? art14(name) : plain(name) : plain;
   const fetchFile = POTION_PAGE ? async (name) => name === "LEVELS.DAT" ? levelsDatWithPotionLevel(await fromDisc(name)) : fromDisc(name) : fromDisc;
   const assets = new Assets(fetchFile);
   const exe = await fetchFile("UNCRKD.EXE");
