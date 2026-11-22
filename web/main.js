@@ -4261,11 +4261,11 @@ var Tune = class {
     if (rich) {
       const attack = Math.min(0.012, (stop - start) / 4);
       const decay = Math.min(0.09, (stop - start) / 2);
-      const release = Math.min(0.045, (stop - start) / 3);
+      const release2 = Math.min(0.045, (stop - start) / 3);
       g2.setValueAtTime(0, start);
       g2.linearRampToValueAtTime(peak, start + attack);
       g2.linearRampToValueAtTime(peak * 0.72, start + attack + decay);
-      g2.setValueAtTime(peak * 0.72, Math.max(start + attack + decay, stop - release));
+      g2.setValueAtTime(peak * 0.72, Math.max(start + attack + decay, stop - release2));
       g2.linearRampToValueAtTime(0, stop);
     } else {
       g2.setValueAtTime(0, start);
@@ -4440,10 +4440,25 @@ var INTERRUPTIBLE = [
   0,
   0
 ];
-var priorityOf = (i) => PRIORITY[i] ?? 255;
-var soundPriority = priorityOf;
+var priority = Uint8Array.from(PRIORITY);
 var interruptible = new Uint8Array(64);
-for (let i = 0; i < interruptible.length; i++) interruptible[i] = INTERRUPTIBLE[i] ?? 1;
+var release = "1.0";
+function setSoundRelease(which) {
+  release = which;
+  priority.set(PRIORITY);
+  for (let i = 0; i < interruptible.length; i++) interruptible[i] = INTERRUPTIBLE[i] ?? 1;
+  if (which === "1.3") {
+    interruptible[49] = 1;
+    priority[48] = 21;
+    priority[10] = 13;
+  }
+}
+function soundRelease() {
+  return release;
+}
+var priorityOf = (i) => i >= 0 && i < priority.length ? priority[i] : 255;
+var soundPriority = priorityOf;
+setSoundRelease("1.0");
 var interruptibleOf = (i) => (interruptible[i] ?? 1) !== 0;
 function setSoundInterruptible(index, value) {
   if (index >= 0 && index < interruptible.length) interruptible[index] = value ? 1 : 0;
@@ -15164,7 +15179,7 @@ var CHOICES = {
   language: ["en", "he"],
   quality: ["original", "high"],
   graphics: ["original"],
-  music: ["original"],
+  music: ["original", "1.3"],
   map: ["original"],
   aspect: ["original-4-3", "square-pixels"]
 };
@@ -15245,6 +15260,8 @@ var EN = {
   qualityOriginal: "Original",
   qualityHigh: "High",
   original: "Original",
+  musicOriginal: "As released (1.0)",
+  music13: "Version 1.3",
   aspectCrt: "4:3, as on a CRT",
   aspectSquare: "Square",
   record: "Record keys",
@@ -15326,6 +15343,8 @@ var HE = {
   qualityOriginal: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
   qualityHigh: "\u05D2\u05D1\u05D5\u05D4\u05D4",
   original: "\u05DE\u05E7\u05D5\u05E8\u05D9\u05EA",
+  musicOriginal: "\u05DB\u05E4\u05D9 \u05E9\u05D9\u05E6\u05D0 (1.0)",
+  music13: "\u05D2\u05E8\u05E1\u05D4 1.3",
   aspectCrt: "4:3, \u05DB\u05DE\u05D5 \u05D1\u05DE\u05E1\u05DA \u05E7\u05EA\u05D5\u05D3\u05D9",
   aspectSquare: "\u05DE\u05E8\u05D5\u05D1\u05E2\u05D9\u05DD",
   record: "\u05D4\u05E7\u05DC\u05D8\u05EA \u05DE\u05E7\u05E9\u05D9\u05DD",
@@ -15784,6 +15803,7 @@ var Chrome = class {
       if (key === "aspect") this.hooks.aspect(value);
       if (key === "language") this.hooks.language(value);
       if (key === "quality") this.hooks.quality(value);
+      if (key === "music") this.hooks.music(value);
     };
     label.append(name, select);
     return label;
@@ -15811,6 +15831,9 @@ var Chrome = class {
     }
     if (key === "aspect") {
       return value === "square-pixels" ? this.s.aspectSquare : this.s.aspectCrt;
+    }
+    if (key === "music") {
+      return value === "1.3" ? this.s.music13 : this.s.musicOriginal;
     }
     return this.s.original;
   }
@@ -15863,6 +15886,7 @@ async function boot() {
       if (!Context) return;
       sound = new SoundPlayer(assets, new Context());
       sound.quality = settings.get("quality");
+      setSoundRelease(settings.get("music") === "1.3" ? "1.3" : "1.0");
       const ALL_SOUNDS = Array.from({ length: 57 }, (_, i) => i);
       void sound.preloadAll([
         ...Object.values(SOUND),
@@ -16708,6 +16732,7 @@ async function boot() {
     return sound ? [...sound.failed.entries()] : [];
   };
   w.__princeHeard = () => sound ? [...sound.started] : [];
+  w.__princeSoundRelease = () => soundRelease();
   w.__princePlaySound = (which) => {
     wakeSound();
     sound?.stop();
@@ -16743,6 +16768,9 @@ async function boot() {
       display.setQuality(value);
       if (sound) sound.quality = value;
       relabelTheGame();
+    },
+    music: (value) => {
+      setSoundRelease(value === "1.3" ? "1.3" : "1.0");
     },
     toggleRecording,
     save: (slot2) => {

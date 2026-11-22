@@ -1,5 +1,111 @@
 # Read this first
 
+## THE SOUND OF 1.3 IS THREE BYTES, AND THE PLAYER CAN NOW ASK FOR THEM
+
+    measured   32260 of 33047   98%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     912 -> 916
+
+    Music   As released (1.0) | Version 1.3
+    מוזיקה   כפי שיצא (1.0)    | גרסה 1.3
+
+The player asked for 1.3's sound as a setting, the same at either
+quality. It is, and the whole of it is three assignments.
+
+### 1. What the later release changed, and what it did not
+
+`fix_sound_priorities()` in `sdlpop/src/seg000.c` is the entire
+difference in which sound wins a tick:
+
+    sound_interruptible[sound_49_spikes]        = 1;
+    sound_prio_table[sound_48_spiked]           = 0x15;
+    sound_prio_table[sound_10_sword_vs_sword]   = 0x0D;
+
+In play: in 1.3 the noise of someone being spiked cuts the spikes
+off, and a hit that lands on the same tick as a parry is **heard**;
+in 1.0 the clash is worth more and the hit is refused. That is what
+popuw's own 1.0-against-1.3 comparison is pointing at when it says
+two sounds differ -- "sword vs. sword" and "something spiked" -- and
+it names exactly indices 10 and 48, from the other side.
+
+**It is not the whole of 1.3's sound, and the setting must not claim
+to be.** That release also ships two different *recordings* and
+slightly altered tunes, and those are data in its own `DIGISND*.DAT`
+and `IBM_SND*.DAT`, which this repository has not got. What is here
+is 1.3's **behaviour**, not 1.3's waveforms.
+
+### 2. 1.0 is the default by construction, not by promise
+
+`setSoundRelease` is in `src/render/audio.ts` and `src/pop` never
+calls it. The module initialises itself with `setSoundRelease('1.0')`,
+so every headless tool, every test and every comparison against a
+capture reads the bytes of this repository's own `PRINCE.EXE` unless
+the page says otherwise -- exactly as `SoundPlayer.quality` starts at
+`original`. Measured either way: pictures 32260 of 33047 and sounds
+493 of 494, run for run.
+
+Both tables are **rebuilt** from the release's bytes rather than
+patched, so switching back and forth cannot leave a value behind --
+including the ones `animate_leveldoor` writes while it plays.
+
+### 3. And it is not the quality
+
+The quality is which **voice** plays a sound; the release is which
+**sound wins the tick**. They are separate controls and
+`tests/browser/sound-release.test.ts` requires moving the quality to
+`high` to leave the release where it was.
+
+The browser test is the other half of the unit test and sees what no
+unit test can: that the store, the panel and the renderer are joined
+up, that a stored `1.3` is in force before the player touches
+anything, and that the panel moves it both ways with no reload.
+`__princeSoundRelease()` is the instrument, because the tables live
+in the renderer and there is nothing on the game to look at.
+
+### 4. 1.4 is NOT a different map, and the question is worth recording
+
+The player asked whether 1.4 differs from 1.3 in the levels -- the
+map, the time, the lives, the starting positions. **It does not.**
+Three independent readings agree:
+
+* popuw's own version page says of 1.4 "Levels and color scheme
+  identical to v1.3", and elsewhere "they all contain the same set of
+  levels";
+* `sdlpop` has one `LEVELS.DAT` model and one default level-options
+  table, with no per-release variant anywhere in it;
+* the only 1.4-specific line in the whole C reference is in
+  `seg001.c`'s hall of fame -- "if the time limit expired (from PoP
+  1.4)", which writes `min = 1, tick = 0` for an entry whose time ran
+  out. That is a row of the hall of fame, not a level.
+
+What 1.4 really changed is the machine it runs on: VGA forced, the
+CGA and EGA tilesets and the Roland MT-32 files deleted from the
+directory, the sound drivers moved into `SNDDRVRS`, and a cut-down
+setup program. **So a `1.4` choice under the map would change
+nothing**, and a setting that changes nothing is worse than no
+setting.
+
+### 5. What is still missing, and why
+
+1.3's own data. `popuw.com/files/prince13.zip` and `prince14.zip`
+answer **403** to a plain `curl`, and the one obvious way round that
+-- sending a browser's user-agent and a referer -- is working around
+an access control, so it was not done. Without those files the
+alternate level palettes cannot be read either: they are
+`PRINCE.DAT` resource 20, which `sdlpop` reads as
+`level_var_palettes`, 0x30 bytes per colour, and **this repository's
+`PRINCE.DAT` has no resource 20** -- measured: it holds 1, 2, 10,
+150..173 and 700..734 and nothing else.
+
+### 6. And `web/` is not typechecked
+
+Found while doing this: `tsconfig.json`'s `include` is
+`["src", "tests", "tools"]`, so `npx tsc --noEmit` never looks at
+`web/`. A type used there and never imported raises nothing --
+`Music` was missing from `chrome.ts`'s import list and both the
+typecheck and the build passed. esbuild strips types without checking
+them, so the bundle was fine; the next such slip may not be.
+
 ## AND THE PLAYER SAID IT WAS UGLY: A FILED-DOWN STAIRCASE IS STILL A STAIRCASE
 
     218 sprites traced   219 ms, 1456 layers, 564 KiB

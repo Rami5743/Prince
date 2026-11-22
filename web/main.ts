@@ -20,7 +20,7 @@ import {
  */
 import { PopGame as Game } from '../src/pop/game.ts';
 import { CutscenePlayer, type SceneName } from '../src/pop/cutscene.ts';
-import { SoundPlayer } from '../src/render/audio.ts';
+import { SoundPlayer, setSoundRelease, soundRelease } from '../src/render/audio.ts';
 import { set_seed as setSeed } from '../src/pop/seg009.ts';
 import { PROOM_RANDOM_PIXELS } from '../src/pop/seg001.ts';
 import { SOUND } from '../src/game/traps.ts';
@@ -138,6 +138,10 @@ async function boot(): Promise<void> {
       // The sound's own half of `quality`, which the player may have
       // chosen before ever touching the page.
       sound.quality = settings.get('quality');
+      // And the sound's other half, which is not a quality at all:
+      // `original` is 1.0's two tables and `1.3` is the three bytes
+      // the later release moved. It is the same at either quality.
+      setSoundRelease(settings.get('music') === '1.3' ? '1.3' : '1.0');
       /**
        * Every index the game ever raises, read in behind the play.
        *
@@ -1581,6 +1585,14 @@ async function boot(): Promise<void> {
    * where.
    */
   w.__princeHeard = (): number[] => (sound ? [...sound.started] : []);
+  /**
+   * Which release's sound tables the page has put in force.
+   *
+   * The tables live in the renderer and are read by the engine through
+   * `soundPriority`, so there is nothing on the game to look at; this
+   * is how a browser test can see that the setting reached them.
+   */
+  w.__princeSoundRelease = (): string => soundRelease();
   /** Play one sound through the page's own channel, by index. */
   w.__princePlaySound = (which: number): void => {
     wakeSound();
@@ -1651,6 +1663,12 @@ async function boot(): Promise<void> {
       display.setQuality(value);
       if (sound) sound.quality = value;
       relabelTheGame();
+    },
+    music: (value) => {
+      // Which sound wins a tick, not which voice plays it: the tables
+      // live in the renderer and the engine reads them through
+      // `soundPriority`, so nothing in `src/pop` learns of the choice.
+      setSoundRelease(value === '1.3' ? '1.3' : '1.0');
     },
     toggleRecording,
     save: (slot) => {

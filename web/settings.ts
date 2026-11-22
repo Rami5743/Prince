@@ -18,7 +18,7 @@
 export type Language = 'en' | 'he';
 export type Quality = 'original' | 'high';
 export type Graphics = 'original';
-export type Music = 'original';
+export type Music = 'original' | '1.3';
 export type MapChoice = 'original';
 export type Aspect = 'original-4-3' | 'square-pixels';
 
@@ -29,7 +29,12 @@ export interface Settings {
   quality: Quality;
   /** Which set of pictures. Only the game's own, for now. */
   graphics: Graphics;
-  /** Which set of tunes. Only the game's own, for now. */
+  /**
+   * Which DOS release's sound rules. `original` is 1.0, the release
+   * every measurement in this project is taken against; `1.3` is the
+   * three bytes the later release moved. It is the same at either
+   * quality: the quality is the voice, this is which sound wins.
+   */
   music: Music;
   /** Which fourteen levels. Only the game's own, for now. */
   map: MapChoice;
@@ -51,7 +56,7 @@ export const CHOICES = {
   language: ['en', 'he'],
   quality: ['original', 'high'],
   graphics: ['original'],
-  music: ['original'],
+  music: ['original', '1.3'],
   map: ['original'],
   aspect: ['original-4-3', 'square-pixels'],
 } as const satisfies { [K in keyof Settings]: readonly Settings[K][] };

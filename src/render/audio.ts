@@ -154,8 +154,70 @@ const INTERRUPTIBLE: readonly number[] = [
   0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0,
 ];
+/**
+ * Which DOS release's two tables are in force.
+ *
+ * `1.0` is the release this whole project is measured against, and it
+ * is the default **by construction**: every headless tool, every test
+ * and every comparison against a capture reads the bytes of
+ * `PRINCE.EXE` unless the page says otherwise, exactly as
+ * `SoundPlayer.quality` starts at `original`.
+ *
+ * `1.3` is the three bytes `fix_sound_priorities()` names, and they
+ * are the whole of what the later release changed about which sound
+ * wins a tick. SDLPoP's own comments say what each is for:
+ *
+ *     sound_interruptible[sound_49_spikes] = 1;
+ *     sound_prio_table[sound_48_spiked] = 0x15;  // moved above spikes
+ *     sound_prio_table[sound_10_sword_vs_sword] = 0x0D;
+ *                                      // moved below hit_user/hit_guard
+ *
+ * -- so in 1.3 the sound of someone being spiked cuts the spikes off,
+ * and a hit that lands on the same tick as a parry is heard, where in
+ * 1.0 the clash is worth more and the hit is refused.
+ *
+ * It is **not** the whole of 1.3's sound. That release also ships two
+ * different recordings (the sword clash and the spiking) and slightly
+ * altered tunes, and those are data in its own `DIGISND*.DAT` and
+ * `IBM_SND*.DAT`, which this repository does not have. What is here is
+ * 1.3's behaviour, not 1.3's waveforms.
+ */
+export type SoundRelease = '1.0' | '1.3';
+
+/** The releases offered, in the order they came out. */
+export const SOUND_RELEASES: readonly SoundRelease[] = ['1.0', '1.3'];
+
+const priority = Uint8Array.from(PRIORITY);
+const interruptible = new Uint8Array(64);
+let release: SoundRelease = '1.0';
+
+/**
+ * Put one release's tables in force, and undo the other's.
+ *
+ * Both tables are rebuilt from the release's own bytes rather than
+ * patched, so switching back and forth cannot leave a value behind --
+ * including the ones `animate_leveldoor` writes while it plays, which
+ * it writes again before each of its own `play_sound` calls anyway.
+ */
+export function setSoundRelease(which: SoundRelease): void {
+  release = which;
+  priority.set(PRIORITY);
+  for (let i = 0; i < interruptible.length; i++) interruptible[i] = INTERRUPTIBLE[i] ?? 1;
+  if (which === '1.3') {
+    interruptible[49] = 1; // sound_49_spikes
+    priority[48] = 0x15; // sound_48_spiked, above the spikes
+    priority[10] = 0x0d; // sound_10_sword_vs_sword, below the two hurts
+  }
+}
+
+/** Which release's tables are in force. */
+export function soundRelease(): SoundRelease {
+  return release;
+}
+
 /** An index the tables do not reach is as unimportant as a footstep. */
-const priorityOf = (i: number): number => PRIORITY[i] ?? 0xff;
+const priorityOf = (i: number): number =>
+  i >= 0 && i < priority.length ? priority[i]! : 0xff;
 /**
  * `sound_prio_table[i]`, for the queue in front of the device.
  *
@@ -175,8 +237,7 @@ export const soundPriority = priorityOf;
  * forty-three of its ticks and the falling one does not. The port had
  * the table as a constant and both lines were missing.
  */
-const interruptible = new Uint8Array(64);
-for (let i = 0; i < interruptible.length; i++) interruptible[i] = INTERRUPTIBLE[i] ?? 1;
+setSoundRelease('1.0');
 const interruptibleOf = (i: number): boolean => (interruptible[i] ?? 1) !== 0;
 
 /** `sound_interruptible[index] = value`, which `animate_leveldoor` does. */

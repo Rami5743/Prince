@@ -30,11 +30,13 @@
  * the reason everything after it reads two bytes early. What can be
  * read is checked; what cannot is named.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_DIR } from '../helpers/fixtures.ts';
-import { soundPriority, soundInterruptible } from '../../src/render/audio.ts';
+import {
+  soundPriority, soundInterruptible, setSoundRelease, soundRelease, SOUND_RELEASES,
+} from '../../src/render/audio.ts';
 
 /** The first ten entries of `sound_prio_table`, which are intact. */
 const PRIO_HEAD = [0x14, 0x1e, 0x23, 0x66, 0x32, 0x37, 0x30, 0x30, 0x4b, 0x50];
@@ -150,5 +152,81 @@ describe('the sounds a PC speaker cannot make', () => {
     // but for 11, which the pointer table ate.
     expect(Array.from(exe.subarray(at + 10, at + 17))).toEqual([1, 1, 1, 1, 1, 1, 1]);
     expect(Array.from(exe.subarray(at + 17, at + 21))).toEqual([0, 0, 0, 0]);
+  });
+});
+
+/**
+ * The 1.3 tables, which the page may ask for and nothing else may.
+ *
+ * `fix_sound_priorities()` is three assignments and that is the whole
+ * of what the later release changed about which sound wins a tick:
+ *
+ *     sound_interruptible[sound_49_spikes] = 1;
+ *     sound_prio_table[sound_48_spiked] = 0x15;
+ *     sound_prio_table[sound_10_sword_vs_sword] = 0x0D;
+ *
+ * The default must stay 1.0, because that is the release every
+ * capture in this project was taken from: a headless tool that never
+ * mentions a release has to hear 1.0's channel by construction, the
+ * same way `SoundPlayer.quality` starts at `original`.
+ */
+describe('the DOS release the sound tables come from', () => {
+  afterEach(() => setSoundRelease('1.0'));
+
+  it('is 1.0 until something says otherwise', () => {
+    expect(soundRelease()).toBe('1.0');
+    expect(SOUND_RELEASES).toEqual(['1.0', '1.3']);
+  });
+
+  it('moves exactly the three bytes 1.3 moved, and no others', () => {
+    const before = {
+      prio: Array.from({ length: 58 }, (_, i) => soundPriority(i)),
+      stop: Array.from({ length: 58 }, (_, i) => soundInterruptible(i)),
+    };
+    setSoundRelease('1.3');
+    const after = {
+      prio: Array.from({ length: 58 }, (_, i) => soundPriority(i)),
+      stop: Array.from({ length: 58 }, (_, i) => soundInterruptible(i)),
+    };
+    expect(soundRelease()).toBe('1.3');
+
+    const movedPrio = before.prio
+      .map((v, i) => (v === after.prio[i] ? -1 : i))
+      .filter((i) => i >= 0);
+    const movedStop = before.stop
+      .map((v, i) => (v === after.stop[i] ? -1 : i))
+      .filter((i) => i >= 0);
+    expect(movedPrio).toEqual([10, 48]);
+    expect(movedStop).toEqual([49]);
+
+    expect(before.prio[10]).toBe(0x0a);
+    expect(after.prio[10]).toBe(0x0d);
+    expect(before.prio[48]).toBe(0x19);
+    expect(after.prio[48]).toBe(0x15);
+    expect(before.stop[49]).toBe(false);
+    expect(after.stop[49]).toBe(true);
+  });
+
+  it('puts 1.0 back exactly, byte for byte', () => {
+    const was = Array.from({ length: 58 }, (_, i) => [
+      soundPriority(i), soundInterruptible(i),
+    ]);
+    setSoundRelease('1.3');
+    setSoundRelease('1.0');
+    const now = Array.from({ length: 58 }, (_, i) => [
+      soundPriority(i), soundInterruptible(i),
+    ]);
+    expect(now).toEqual(was);
+  });
+
+  it('leaves the spiking louder than the spikes in 1.3 and quieter in 1.0', () => {
+    // `play_next_sound` takes the new sound when the old one may be
+    // interrupted and the new one is at least as important. 1.0
+    // refuses on both counts; 1.3 passes both.
+    const takes = (): boolean =>
+      soundInterruptible(49) && soundPriority(48) <= soundPriority(49);
+    expect(takes()).toBe(false);
+    setSoundRelease('1.3');
+    expect(takes()).toBe(true);
   });
 });

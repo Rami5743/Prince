@@ -11,7 +11,8 @@
  * caller passes in; what a control *offers* comes from `settings.ts`.
  */
 import {
-  CHOICES, type Aspect, type Language, type Quality, type Settings, type SettingsStore,
+  CHOICES, type Aspect, type Language, type Music, type Quality, type Settings,
+  type SettingsStore,
 } from './settings.ts';
 import { stringsFor, type Strings } from './strings.ts';
 import { readSlot, SLOTS, type SaveGame } from './savegame.ts';
@@ -22,6 +23,8 @@ export interface ChromeHooks {
   aspect(value: Aspect): void;
   language(value: Language): void;
   quality(value: Quality): void;
+  /** Which release's sound rules. */
+  music(value: Music): void;
   /** Returns true if a recording is running after the click. */
   toggleRecording(): boolean;
   save(slot: number): void;
@@ -272,6 +275,7 @@ export class Chrome {
       if (key === 'aspect') this.hooks.aspect(value as Aspect);
       if (key === 'language') this.hooks.language(value as Language);
       if (key === 'quality') this.hooks.quality(value as Quality);
+      if (key === 'music') this.hooks.music(value as Music);
     };
     label.append(name, select);
     return label;
@@ -295,6 +299,9 @@ export class Chrome {
     }
     if (key === 'aspect') {
       return value === 'square-pixels' ? this.s.aspectSquare : this.s.aspectCrt;
+    }
+    if (key === 'music') {
+      return value === '1.3' ? this.s.music13 : this.s.musicOriginal;
     }
     return this.s.original;
   }

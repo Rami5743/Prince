@@ -30,6 +30,8 @@ export interface Strings {
   readonly qualityOriginal: string;
   readonly qualityHigh: string;
   readonly original: string;
+  readonly musicOriginal: string;
+  readonly music13: string;
   readonly aspectCrt: string;
   readonly aspectSquare: string;
 
@@ -127,6 +129,8 @@ const EN: Strings = {
   qualityOriginal: 'Original',
   qualityHigh: 'High',
   original: 'Original',
+  musicOriginal: 'As released (1.0)',
+  music13: 'Version 1.3',
   aspectCrt: '4:3, as on a CRT',
   aspectSquare: 'Square',
 
@@ -220,6 +224,8 @@ const HE: Strings = {
   qualityOriginal: 'מקורית',
   qualityHigh: 'גבוהה',
   original: 'מקורית',
+  musicOriginal: 'כפי שיצא (1.0)',
+  music13: 'גרסה 1.3',
   aspectCrt: '4:3, כמו במסך קתודי',
   aspectSquare: 'מרובעים',
 
