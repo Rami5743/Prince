@@ -8,3 +8,4 @@ tests/__artifacts__/
 tests/golden/**/_work/
 .scratch/
 __pycache__/
+sdlpop/
