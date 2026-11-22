@@ -1,5 +1,80 @@
 # Read this first
 
+## THE TAB WAS BLANK ON PURPOSE, AND THE ICON IS THE TITLE SCREEN'S OWN DOME
+
+    npm test   916 -> 921
+
+    web/icons/icon-16.png   icon-32.png   icon-180.png
+    favicon.ico             (16 and 32)
+
+Every page carried `<link rel="icon" href="data:,">` -- a deliberately
+**blank** icon -- so the tab showed the browser's empty-page glyph.
+`tools/dev/make-icon.ts` cuts a real one out of the game's own opening
+screen: `TITLE.DAT` resource 51, through the title's own palette
+(group 50) and the DAC's `(v << 2) | (v >> 4)`, exactly as the game
+draws it.
+
+### 1. A favicon is sixteen pixels, so the crop is the thing
+
+The title screen is 320 by 200 of fine ornament and squeezed whole
+into sixteen it is a brown smudge. Five crops were put side by side at
+16, 24 and 32 and **looked at**:
+
+    the whole arch     200x200   a brown blob at 16; at 32 the arch
+                                 reads and nothing inside it does
+    the arch's head    120x120   the ogee reads, the palace is dust
+    the palace          80x80    good at 32, soft at 16
+    the palace          64x64    good at 32, soft at 16
+    the dome            36x36    reads at 16 AND at 32
+
+So the subject is **the dome**, not the palace and not the arch. At
+`(126, 42)`, 36 by 36, the frame holds the great dome, the minaret
+beside it and the terrace below -- the most of the picture that
+survives being made sixteen pixels wide.
+
+A border was tried, in the frame's own gold and in its blue, on a
+light tab bar and a dark one. It buys nothing the mid-tone ochre does
+not already give and it costs two of the sixteen pixels. There is
+none.
+
+### 2. Down with a box filter, up with none
+
+Shrinking is an **average**: nearest-neighbour throws away eight of
+every nine pixels and turns the dome into noise, which the first sheet
+showed plainly. Enlarging is nearest, because the thing being enlarged
+is pixel art and a soft 180-pixel dome would be a lie about what this
+game looks like -- and 180 is exactly five times 36.
+
+### 3. The one path that could not be one path
+
+`web/index.html` is **generated** from `web/artifact.html`, so an edit
+to it is overwritten by the next build -- which is what happened, and
+the browser then asked for `/web/web/icons/icon-32.png` and got 404
+twice. The shell is written for the repository root, where the page
+sits beside `favicon.ico` and `web/`; the development page sits one
+level down inside `web/`, and no single relative path serves both.
+`build-pages.mjs` rewrites those two hrefs for that one output, beside
+the `game.js` / `main.js` rewrite it already did.
+
+Checked in Chromium: on `index.html`, `potion.html` and
+`web/index.html`, every `link[rel*=icon]` the page declares answers
+**200**.
+
+### 4. What the test pins, and why each half is needed
+
+`tests/render/icon.test.ts` runs the generator again and requires the
+four committed files to come back **byte for byte**, so the icon
+cannot drift from the artwork and an icon edited by hand fails. It
+requires the four sizes, the `.ico` to be a real icon directory with a
+16 and a 32 in it and a PNG signature at each offset, every page to
+link them, and **no page to contain `rel="icon" href="data:,"` again**.
+
+And one that is about the picture rather than the plumbing: the 16 has
+to have more than 90 of luminance between its darkest and brightest
+pixel, with the brightest in the top half. A crop that slid off the
+dome onto the sky would still be 16 by 16 and still be made of the
+title screen's own colours -- flat, and passing everything else.
+
 ## THE SOUND OF 1.3 IS THREE BYTES, AND THE PLAYER CAN NOW ASK FOR THEM
 
     measured   32260 of 33047   98%   (unmoved)

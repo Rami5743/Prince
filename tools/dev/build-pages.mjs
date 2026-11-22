@@ -88,7 +88,12 @@ writeFileSync('potion.html', wrap(potionBody));
 writeFileSync('web/index.html', wrap(shell
   .replace('<!--DATA-SOURCE-->', '')
   .replace('<script type="module" src="./game.js"></script>',
-           '<script type="module" src="./main.js"></script>')));
+           '<script type="module" src="./main.js"></script>')
+  // The icons are the one thing whose path differs by depth: the
+  // shell is written for the root, where the page sits beside
+  // `favicon.ico` and `web/`, and this one sits inside `web/`.
+  .replaceAll('"./web/icons/', '"./icons/')
+  .replace('"./favicon.ico"', '"../favicon.ico"')));
 
 writeFileSync('.nojekyll', '');
 console.log('wrote index.html, potion.html and game.js for GitHub Pages');
