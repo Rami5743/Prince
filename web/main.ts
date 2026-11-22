@@ -32,6 +32,7 @@ import {
 } from '../src/dat/potion-level.ts';
 import { levelsDatWithFourD } from '../src/dat/fourd-level.ts';
 import { GameText } from '../src/render/text.ts';
+import { KidHiRes, KID_HIRES_DIR, type KidSprite } from '../src/render/kid-hires.ts';
 import { readFont } from '../src/render/font.ts';
 import { SettingsStore } from './settings.ts';
 import { Chrome } from './chrome.ts';
@@ -164,6 +165,54 @@ async function boot(): Promise<void> {
     quality: settings.get('quality'),
   });
   display.setTextSource(() => gameText.overlay);
+
+  /**
+   * The repainted Prince: `graphics/kid-10x/`, drawn at `high`.
+   *
+   * 219 sprites painted at ten times the original's size, each one
+   * exactly ten times its own frame, from the `gpt` branch. The
+   * engine reports what it drew through `onKidSprite` and knows
+   * nothing else about it; the display masks the artwork by his own
+   * palette bank so that whatever is in front of him still covers
+   * him, and multiplies it by how far the palette has been faded.
+   *
+   * They are fetched **one at a time, as the game first draws
+   * each**, because a level uses a few dozen of the 219 and the set
+   * is nine megabytes. A frame whose art has not arrived yet is
+   * simply the original's pixels for that one tick.
+   */
+  const kidArt = new KidHiRes();
+  const kidAsked = new Set<number>();
+  let kidDrawn: KidSprite[] = [];
+  const kidDir = `${DATA_URL.replace(/original\/prince1$/, '')}${KID_HIRES_DIR}`;
+  const fetchKid = (id: number): void => {
+    if (kidAsked.has(id)) return;
+    kidAsked.add(id);
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch(`${kidDir}/${String(id).padStart(4, '0')}.png`);
+        if (!res.ok) return;
+        const bmp = await createImageBitmap(await res.blob());
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const cx = c.getContext('2d');
+        if (!cx) return;
+        cx.drawImage(bmp, 0, 0);
+        kidArt.put(id, cx.getImageData(0, 0, bmp.width, bmp.height));
+      } catch {
+        // No artwork for this frame: the original's pixels stand.
+      }
+    })();
+  };
+  const onKidSprite = (id: number, x: number, y: number, flipped: boolean): void => {
+    if (settings.get('quality') !== 'high') return;
+    if (!kidArt.has(id)) { fetchKid(id); return; }
+    kidDrawn.push({ id, x, y, flipped });
+  };
+  const kidSource = (): readonly KidSprite[] => {
+    const was = kidDrawn;
+    kidDrawn = [];
+    return was;
+  };
   /** `custom->first_level`, which is what a key during the demo starts. */
   const firstLevel = readExeConstants(exe).firstLevel;
 
@@ -511,7 +560,13 @@ async function boot(): Promise<void> {
     building += 1;
     try {
       game = await Game.start(assets, exe, v.level,
-        { effects, seamless: carry.seamless, text: gameText });
+        { effects, seamless: carry.seamless, text: gameText, onKidSprite });
+      // `KID.DAT`'s own sixteen, DAC-expanded: what `fadeOf` reads
+      // the live palette against, so a fade fades the painting too.
+      const kidBank = game.scene.chtabs.kid?.palette.vga ?? [];
+      display.setKidHiRes(kidArt, kidSource, kidBank
+        .flatMap((e) => [(e.r << 2) | (e.r >> 4), (e.g << 2) | (e.g >> 4),
+          (e.b << 2) | (e.b >> 4)]));
     } finally {
       building -= 1;
     }

@@ -7,6 +7,7 @@
  * display offers both the true 4:3 shape and an unstretched 1:1 mode.
  */
 import { SCREEN_WIDTH, SCREEN_HEIGHT, Surface } from './surface.ts';
+import { type KidHiRes, type KidSprite, fadeOf } from './kid-hires.ts';
 import { fitLine, type OverlayItem } from './text.ts';
 import {
   antialias, composeAntialiased, AA_FACTOR,
@@ -58,6 +59,11 @@ export class Display {
   private overlay: HTMLCanvasElement | null = null;
   private overlayCtx: CanvasRenderingContext2D | null = null;
   private textSource: (() => readonly OverlayItem[]) | null = null;
+  /** The repainted Prince, and where the engine said it drew him. */
+  private kid: KidHiRes | null = null;
+  private kidSource: (() => readonly KidSprite[]) | null = null;
+  /** `KID.DAT`'s own sixteen, DAC-expanded: the fade is read against it. */
+  private kidBase: readonly number[] = [];
   /**
    * `quality: high` for the **picture**, which is a bigger canvas.
    *
@@ -260,6 +266,25 @@ export class Display {
     this.textSource = source;
   }
 
+  /**
+   * Where the repainted Prince comes from, which only the page sets.
+   *
+   * `source` is asked once a frame for the sprites the engine
+   * reported through `PopOptions.onKidSprite`, `art` holds the
+   * artwork and `base` is the bank it was painted for. With none of
+   * them -- which is every test and every tool that does not ask --
+   * `presentHigh` is exactly what it was.
+   */
+  setKidHiRes(
+    art: KidHiRes | null,
+    source: (() => readonly KidSprite[]) | null,
+    base: readonly number[] = [],
+  ): void {
+    this.kid = art;
+    this.kidSource = source;
+    this.kidBase = base;
+  }
+
   /** Follow the box the page gives the game, which a resize changes. */
   private watch(): void {
     const parent = this.canvas.parentElement;
@@ -316,6 +341,16 @@ export class Display {
       this.hiImage = this.ctx.createImageData(width, height);
     }
     composeAntialiased(this.hiPicture, paletteRgba, this.hiImage.data);
+    // The repainted Prince, over the finished picture and inside it:
+    // masked by his own palette bank on the surface, so whatever the
+    // game drew in front of him still covers him, and multiplied by
+    // how dark that bank has been faded to, so he fades with the
+    // screen he is on rather than staying bright through it.
+    const sprites = this.kidSource?.();
+    if (this.kid && sprites && sprites.length > 0 && this.kidBase.length > 0) {
+      this.kid.draw(this.hiImage.data, AA_FACTOR, surface, sprites,
+        fadeOf(paletteRgba, this.kidBase));
+    }
     this.ctx.putImageData(this.hiImage, 0, 0);
   }
 

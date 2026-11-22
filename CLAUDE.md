@@ -1,5 +1,98 @@
 # Read this first
 
+## THE PRINCE IS PAINTED AT `quality: high`, AND THE GHOST WAS THE SOFT EDGE
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     933 -> 945
+
+    one __princeStep, Chromium at 1280x860, device pixel ratio 1
+        original   0.24 ms      high, with the painting   2.68 ms
+
+`graphics/kid-10x/` is all 219 of `KID.DAT`'s sprites repainted at
+**ten times** the original's size, each one exactly ten times its own
+frame so that a position in the game's own coordinates is a position
+in the artwork. They came in on the `gpt` branch and the brief they
+were painted to is `graphics/KID-ART.md`. At `quality: high` the page
+now draws them over the picture; at `original` it fetches none of
+them and nothing is different.
+
+### 1. Nothing in `src/pop` knows, which is why the scores cannot move
+
+`PopOptions.onKidSprite` is optional and `web/main.ts` is the only
+thing that passes one. The engine blits into the 320 by 200 surface
+exactly as it always did and the callback is a **report** of what it
+put there -- the resource id, where, and whether it was flipped --
+so every headless tool and every capture comparison is unmoved **by
+construction**, as `GameText` is. `tests/render/kid-hires.test.ts`
+requires it in fact as well: sixty ticks of level 1 with the callback
+and without draw the same surface, byte for byte.
+
+The seam is one test inside `blit`, and it is narrow on purpose:
+`chtab === id_chtab_2_kid` **and** the blitter is `10h_transp`. The
+shadow of levels 4, 5, 6 and 12 comes through the same chtab with
+`or` and `xor` and is not a picture of him.
+
+### 2. The art is not in the palette, so the fade is one number
+
+Measured over all 219: **74550 distinct opaque colours, exactly one
+of which is one of `KID.DAT`'s own sixteen**, and 864817 pixels that
+are partly transparent. That is what the upscaler's own section warns
+about -- a finished RGB pixel has no index left to change, so it
+would stay bright through a `fade_out_2`.
+
+Quantising it back to sixteen would throw the painting away. What is
+done instead is arithmetic: a fade walks every entry of a bank
+towards black **together**, so the sixteen keep their ratios and only
+their common scale moves. `fadeOf` sums the live bank against the
+bank the sprites were painted for and returns that ratio, and every
+pixel is multiplied by it. Pinned four ways -- the same palette is 1,
+a halved one is 0.5, a black screen is 0, and a brightened one is
+still 1, so a flash cannot blow the painting out.
+
+### 3. The mask was got wrong twice, and the second way was worse
+
+He has to go **behind** what the game drew after him. His bank is
+`PALETTE_BASE.kid`, 112 to 127, so an index in that range is a pixel
+of his that survived -- the pillar, the gate, the level door and
+`paint.clip` all read the same way.
+
+* **Too strict, and the painting got its staircase back.** A painted
+  outline is anti-aliased and its edge pixel is half air, so asking
+  "is this surface pixel his?" of the soft edge threw the whole edge
+  away. Screenshotted: the smooth figure cut back to the blit's own
+  blocky silhouette.
+* **Too loose, and he left a ghost.** Letting every soft pixel
+  through instead was the other fault. On **five ticks of the climb
+  at the top of level 1's room 1 the game draws no Prince at all** --
+  the ledge is over the whole of him, and 326 of his 326 solid pixels
+  are somebody else's -- and the rule that guarded only the solid
+  ones drew his outline in mid-air over the stone. Measured on every
+  level, holding Right: the worst tick of each is 207 to 357
+  occluded pixels and on six of the fourteen it is **all** of them.
+
+So `kept` is the solid pixels whose index is still his, and the soft
+edge is painted only **within one surface pixel of one of those**.
+Where `kept` is empty the sprite is not drawn at all.
+
+**One is the right radius and it is measured, not chosen.** Over all
+219 sprites, the ink outside the blocky silhouette is **19163 pixels
+at a distance of one and 118 at two or more** -- so one carries the
+whole painting, and the most a partly hidden Prince can bleed over
+his occluder is a single surface pixel, which is the resolution the
+occluder's own edge has.
+
+### 4. What it costs
+
+A sprite is scaled to the display's factor once and kept, because the
+art is ten times the game's size and the canvas is three: without the
+cache every frame would average eleven source pixels for each of
+thirteen thousand. The coverage map is cached the same way. With all
+that, `quality: high` goes from 0.24 ms a step to **2.68 ms** -- the
+same order as the upscaler it draws on top of, and about a quarter of
+a tick.
+
 ## A REAL ALTERNATIVE MAP AT LAST: SIX NEW LEVELS, AND "100%" WAS SIX OF ELEVEN
 
     measured   32260 of 33047   98%   (unmoved)

@@ -637,6 +637,195 @@ var Surface = class {
   }
 };
 
+// src/render/kid-hires.ts
+var KID_BANK = 112;
+var BANK_SIZE = 16;
+var KID_HIRES_DIR = "graphics/kid-10x";
+var KID_HIRES_SCALE = 10;
+function fadeOf(live, base) {
+  let top = 0;
+  let bottom = 0;
+  for (let i = 0; i < BANK_SIZE; i++) {
+    const at = (KID_BANK + i) * 4;
+    top += live[at] + live[at + 1] + live[at + 2];
+    bottom += base[i * 3] + base[i * 3 + 1] + base[i * 3 + 2];
+  }
+  if (bottom === 0) return 1;
+  return Math.min(1, top / bottom);
+}
+function near(mask, w, h, x, y) {
+  for (let dy = -1; dy <= 1; dy++) {
+    const yy = y + dy;
+    if (yy < 0 || yy >= h) continue;
+    for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx;
+      if (xx < 0 || xx >= w) continue;
+      if (mask[yy * w + xx]) return true;
+    }
+  }
+  return false;
+}
+var KidHiRes = class {
+  source = /* @__PURE__ */ new Map();
+  scaled = /* @__PURE__ */ new Map();
+  covers = /* @__PURE__ */ new Map();
+  /** The bank the sprites were painted for: sixteen RGB triples, 0..255. */
+  base = [];
+  /** The sixteen colours of `KID.DAT`'s own header, DAC-expanded. */
+  setBasePalette(rgb) {
+    this.base = rgb;
+  }
+  /** Is there artwork for this frame yet? */
+  has(id) {
+    return this.source.has(id);
+  }
+  /** Keep one decoded sprite. The page fetches and decodes them. */
+  put(id, image) {
+    this.source.set(id, image);
+  }
+  /**
+   * Draw every sprite the game drew into the composed frame.
+   *
+   * `rgba` is the finished picture at `factor` times the surface,
+   * which is what `presentHigh` has just composed; `surface` is the
+   * 320 by 200 the game itself drew, and is the mask.
+   */
+  draw(rgba, factor, surface, sprites, fade) {
+    let drawn = 0;
+    const w = surface.width;
+    const h = surface.height;
+    const pitch = w * factor;
+    for (const s of sprites) {
+      const art = this.at(s.id, factor, s.flipped);
+      const cover = this.coverage(s.id, s.flipped);
+      if (!art || !cover) continue;
+      const cw = cover.width;
+      const ch = cover.length / cw;
+      const kept = new Uint8Array(cw * ch);
+      let any = false;
+      for (let y = 0; y < ch; y++) {
+        const py = s.y + y;
+        if (py < 0 || py >= h) continue;
+        for (let x = 0; x < cw; x++) {
+          if (!cover[y * cw + x]) continue;
+          const px = s.x + x;
+          if (px < 0 || px >= w) continue;
+          const index = surface.pixels[py * w + px];
+          if (index >= KID_BANK && index < KID_BANK + BANK_SIZE) {
+            kept[y * cw + x] = 1;
+            any = true;
+          }
+        }
+      }
+      if (!any) continue;
+      drawn++;
+      for (let sy = 0; sy < art.height; sy++) {
+        const y = s.y * factor + sy;
+        if (y < 0 || y >= h * factor) continue;
+        const row = (y / factor | 0) - s.y;
+        for (let sx = 0; sx < art.width; sx++) {
+          const x = s.x * factor + sx;
+          if (x < 0 || x >= pitch) continue;
+          const col = (x / factor | 0) - s.x;
+          if (row < 0 || row >= ch || col < 0 || col >= cw) continue;
+          if (cover[row * cw + col]) {
+            if (!kept[row * cw + col]) continue;
+          } else if (!near(kept, cw, ch, col, row)) {
+            continue;
+          }
+          const a = art.rgba[(sy * art.width + sx) * 4 + 3] / 255;
+          if (a <= 4e-3) continue;
+          const d = (y * pitch + x) * 4;
+          for (let c = 0; c < 3; c++) {
+            const paint2 = art.rgba[(sy * art.width + sx) * 4 + c] * fade;
+            rgba[d + c] = paint2 * a + rgba[d + c] * (1 - a);
+          }
+        }
+      }
+    }
+    return drawn;
+  }
+  /**
+   * Where the sprite is solid, at the surface's own resolution.
+   *
+   * One byte a surface pixel: 1 where the artwork is mostly opaque
+   * over that whole pixel, which is where the game's own blit must
+   * have written something, and 0 at the soft edge and outside. It is
+   * the half of the mask that says "a pixel of his belongs here", and
+   * `draw` only asks who owns a surface pixel where this says so.
+   */
+  coverage(id, flipped) {
+    const key = `${id}:${flipped ? 1 : 0}`;
+    const had = this.covers.get(key);
+    if (had) return had;
+    const src = this.source.get(id);
+    if (!src) return null;
+    const w = Math.round(src.width / KID_HIRES_SCALE);
+    const h = Math.round(src.height / KID_HIRES_SCALE);
+    const out2 = Object.assign(new Uint8Array(w * h), { width: w });
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const sx = flipped ? w - 1 - x : x;
+        let sum = 0;
+        let n = 0;
+        for (let yy = y * KID_HIRES_SCALE; yy < (y + 1) * KID_HIRES_SCALE; yy++) {
+          for (let xx = sx * KID_HIRES_SCALE; xx < (sx + 1) * KID_HIRES_SCALE; xx++) {
+            sum += src.data[(yy * src.width + xx) * 4 + 3];
+            n++;
+          }
+        }
+        out2[y * w + x] = sum / n > 160 ? 1 : 0;
+      }
+    }
+    this.covers.set(key, out2);
+    return out2;
+  }
+  /** One sprite at one factor, scaled and flipped on first use. */
+  at(id, factor, flipped) {
+    const key = `${id}:${factor}:${flipped ? 1 : 0}`;
+    const had = this.scaled.get(key);
+    if (had) return had;
+    const src = this.source.get(id);
+    if (!src) return null;
+    const w = Math.round(src.width / KID_HIRES_SCALE * factor);
+    const h = Math.round(src.height / KID_HIRES_SCALE * factor);
+    const out2 = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.floor(y * src.height / h);
+      const y1 = Math.max(Math.floor((y + 1) * src.height / h), y0 + 1);
+      for (let x = 0; x < w; x++) {
+        const sx = flipped ? w - 1 - x : x;
+        const x0 = Math.floor(sx * src.width / w);
+        const x1 = Math.max(Math.floor((sx + 1) * src.width / w), x0 + 1);
+        let r = 0;
+        let g2 = 0;
+        let b = 0;
+        let a = 0;
+        let n = 0;
+        for (let yy = y0; yy < y1; yy++) {
+          for (let xx = x0; xx < x1; xx++) {
+            const i = (yy * src.width + xx) * 4;
+            const al = src.data[i + 3] / 255;
+            r += src.data[i] * al;
+            g2 += src.data[i + 1] * al;
+            b += src.data[i + 2] * al;
+            a += al;
+            n++;
+          }
+        }
+        const d = (y * w + x) * 4;
+        out2[d] = a > 0 ? r / a : 0;
+        out2[d + 1] = a > 0 ? g2 / a : 0;
+        out2[d + 2] = a > 0 ? b / a : 0;
+        out2[d + 3] = a / n * 255;
+      }
+    }
+    const made = { width: w, height: h, rgba: out2 };
+    this.scaled.set(key, made);
+    return made;
+  }
+};
+
 // src/render/font.ts
 var FONT_OFFSET = 107020;
 function looksLikeGlyph(exe, o) {
@@ -1965,6 +2154,11 @@ var Display = class {
   overlay = null;
   overlayCtx = null;
   textSource = null;
+  /** The repainted Prince, and where the engine said it drew him. */
+  kid = null;
+  kidSource = null;
+  /** `KID.DAT`'s own sixteen, DAC-expanded: the fade is read against it. */
+  kidBase = [];
   /**
    * `quality: high` for the **picture**, which is a bigger canvas.
    *
@@ -2151,6 +2345,20 @@ var Display = class {
   setTextSource(source) {
     this.textSource = source;
   }
+  /**
+   * Where the repainted Prince comes from, which only the page sets.
+   *
+   * `source` is asked once a frame for the sprites the engine
+   * reported through `PopOptions.onKidSprite`, `art` holds the
+   * artwork and `base` is the bank it was painted for. With none of
+   * them -- which is every test and every tool that does not ask --
+   * `presentHigh` is exactly what it was.
+   */
+  setKidHiRes(art, source, base = []) {
+    this.kid = art;
+    this.kidSource = source;
+    this.kidBase = base;
+  }
   /** Follow the box the page gives the game, which a resize changes. */
   watch() {
     const parent = this.canvas.parentElement;
@@ -2208,6 +2416,16 @@ var Display = class {
       this.hiImage = this.ctx.createImageData(width, height);
     }
     composeAntialiased(this.hiPicture, paletteRgba, this.hiImage.data);
+    const sprites = this.kidSource?.();
+    if (this.kid && sprites && sprites.length > 0 && this.kidBase.length > 0) {
+      this.kid.draw(
+        this.hiImage.data,
+        AA_FACTOR,
+        surface,
+        sprites,
+        fadeOf(paletteRgba, this.kidBase)
+      );
+    }
     this.ctx.putImageData(this.hiImage, 0, 0);
   }
   /**
@@ -11996,6 +12214,7 @@ function link() {
 
 // src/pop/game.ts
 var GAMEPLAY_HEIGHT = 192;
+var KID_FIRST_RESOURCE = 401;
 var CHTAB_NAME = [
   "sword",
   "flameSwordPotion",
@@ -12049,6 +12268,8 @@ var PopGame = class _PopGame {
    * original's own words in the original's own font by construction.
    */
   text;
+  /** The shell's listener for the Prince's own sprites; see the option. */
+  onKidSprite;
   /** The last thing `display_text_bottom` asked for, for a relabel. */
   bottomText = null;
   /** `draw_level_first` has still to put the hit points up. */
@@ -12119,6 +12340,7 @@ var PopGame = class _PopGame {
     game.minutesLeft = options.minutesLeft ?? 60;
     game.seed = options.seed;
     game.text = options.text;
+    game.onKidSprite = options.onKidSprite;
     game.install(exe);
     const carried = options.carried;
     if (carried) {
@@ -12151,7 +12373,7 @@ var PopGame = class _PopGame {
       assets,
       exe,
       this.levelNumber,
-      { effects: this.effects, carried, text: this.text }
+      { effects: this.effects, carried, text: this.text, onKidSprite: this.onKidSprite }
     );
     g.need_level1_music = 0;
     return game;
@@ -12379,6 +12601,9 @@ var PopGame = class _PopGame {
   blit(chtab, id, x, y, blit) {
     const found = this.spriteOf(chtab, id);
     if (!found) return;
+    if (this.onKidSprite && chtab === chtabs.id_chtab_2_kid && (blit & ~FLIPPED) === blitters.blitters_10h_transp) {
+      this.onKidSprite(KID_FIRST_RESOURCE + id, x, y, (blit & FLIPPED) !== 0);
+    }
     let sprite = found.image;
     if (blit & FLIPPED) {
       sprite = flipHorizontally(sprite);
@@ -15956,6 +16181,40 @@ async function boot() {
     quality: settings.get("quality")
   });
   display.setTextSource(() => gameText.overlay);
+  const kidArt = new KidHiRes();
+  const kidAsked = /* @__PURE__ */ new Set();
+  let kidDrawn = [];
+  const kidDir = `${DATA_URL.replace(/original\/prince1$/, "")}${KID_HIRES_DIR}`;
+  const fetchKid = (id) => {
+    if (kidAsked.has(id)) return;
+    kidAsked.add(id);
+    void (async () => {
+      try {
+        const res = await fetch(`${kidDir}/${String(id).padStart(4, "0")}.png`);
+        if (!res.ok) return;
+        const bmp = await createImageBitmap(await res.blob());
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const cx = c.getContext("2d");
+        if (!cx) return;
+        cx.drawImage(bmp, 0, 0);
+        kidArt.put(id, cx.getImageData(0, 0, bmp.width, bmp.height));
+      } catch {
+      }
+    })();
+  };
+  const onKidSprite = (id, x, y, flipped) => {
+    if (settings.get("quality") !== "high") return;
+    if (!kidArt.has(id)) {
+      fetchKid(id);
+      return;
+    }
+    kidDrawn.push({ id, x, y, flipped });
+  };
+  const kidSource = () => {
+    const was = kidDrawn;
+    kidDrawn = [];
+    return was;
+  };
   const firstLevel = readExeConstants(exe).firstLevel;
   let sound = null;
   const wakeSound = () => {
@@ -16123,8 +16382,14 @@ async function boot() {
         assets,
         exe,
         v.level,
-        { effects, seamless: carry.seamless, text: gameText }
+        { effects, seamless: carry.seamless, text: gameText, onKidSprite }
       );
+      const kidBank = game.scene.chtabs.kid?.palette.vga ?? [];
+      display.setKidHiRes(kidArt, kidSource, kidBank.flatMap((e) => [
+        e.r << 2 | e.r >> 4,
+        e.g << 2 | e.g >> 4,
+        e.b << 2 | e.b >> 4
+      ]));
     } finally {
       building -= 1;
     }

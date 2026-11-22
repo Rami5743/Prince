@@ -76,6 +76,13 @@ export interface Controls {
 }
 
 /** What the shell can tell the game about itself. */
+/**
+ * `KID.DAT`'s group header is 400 and its images follow it, so image
+ * index nought is resource 401 -- which is what the repainted
+ * sprites in `graphics/kid-10x/` are named after.
+ */
+export const KID_FIRST_RESOURCE = 401;
+
 export interface PopOptions {
   readonly prefix?: string;
   readonly effects?: PopEffects;
@@ -152,6 +159,17 @@ export interface PopOptions {
    * before there was such a thing as a setting.
    */
   readonly text?: GameText;
+  /**
+   * Told what the Prince's own sprites were drawn, and where.
+   *
+   * The shell's, and the shell's alone: the engine blits into the
+   * 320 by 200 surface exactly as it always did and this is a
+   * report of what it put there, so every headless tool and every
+   * capture comparison is unmoved **by construction** -- none of
+   * them passes one. `web/main.ts` uses it at `quality: high` to
+   * draw `graphics/kid-10x/` over the finished picture.
+   */
+  readonly onKidSprite?: (id: number, x: number, y: number, flipped: boolean) => void;
 }
 
 /** `play_sound` and `stop_sounds`, for a shell that has a speaker. */
@@ -297,6 +315,8 @@ export class PopGame {
    * original's own words in the original's own font by construction.
    */
   private text?: GameText;
+  /** The shell's listener for the Prince's own sprites; see the option. */
+  private onKidSprite?: (id: number, x: number, y: number, flipped: boolean) => void;
   /** The last thing `display_text_bottom` asked for, for a relabel. */
   private bottomText: string | null = null;
   /** `draw_level_first` has still to put the hit points up. */
@@ -375,6 +395,7 @@ export class PopGame {
     game.minutesLeft = options.minutesLeft ?? 60;
     game.seed = options.seed;
     game.text = options.text;
+    game.onKidSprite = options.onKidSprite;
     game.install(exe);
     /**
      * **Before `startLevel`, which is where `do_startpos` reads them.**
@@ -420,7 +441,7 @@ export class PopGame {
     };
     const game = await PopGame.start(
       assets, exe, this.levelNumber,
-      { effects: this.effects, carried, text: this.text },
+      { effects: this.effects, carried, text: this.text, onKidSprite: this.onKidSprite },
     );
     // Beginning a level again is not an opening, and does not wait for
     // one: the Prince stands straight up.
@@ -798,6 +819,14 @@ export class PopGame {
   private blit(chtab: number, id: number, x: number, y: number, blit: number): void {
     const found = this.spriteOf(chtab, id);
     if (!found) return;
+    // The Prince's own ordinary draw, reported to whoever asked. The
+    // shadow of levels 4, 5, 6 and 12 comes through the same chtab
+    // and is left out: it is drawn with `or` and `xor` and is not a
+    // picture of him.
+    if (this.onKidSprite && chtab === chtabs.id_chtab_2_kid
+      && (blit & ~FLIPPED) === blitters.blitters_10h_transp) {
+      this.onKidSprite(KID_FIRST_RESOURCE + id, x, y, (blit & FLIPPED) !== 0);
+    }
     let sprite = found.image;
     if (blit & FLIPPED) {
       sprite = flipHorizontally(sprite);
