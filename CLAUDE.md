@@ -1,5 +1,65 @@
 # Read this first
 
+## "HE LOOKS DIFFERENT IN THE GAME": THE BLIT WAS SHOWING ROUND THE PAINTING
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     949 -> 952
+
+The player was shown the standing frame out of `graphics/kid-10x/`
+and said the Prince in the game is not that: something sticks out at
+the neck and there is a **strange curl at the back of his head**.
+Both are one fault and it is not the artwork's.
+
+### 1. The painting is narrower than the blit, so the blit shows
+
+A sprite the engine blits and a painting of that sprite do not have
+the same silhouette, and the painting is drawn **over** the composed
+picture: where it has no ink, what is underneath is the game's own
+blocky pixels. Measured, game pixel by game pixel, over all 219
+frames:
+
+    pixels the engine's blit writes          71237
+    of them, pixels the painting leaves
+      transparent                             3163   4.4%
+    frames that leave nothing behind             2   of 219
+
+So **217 of the 219 frames leave something behind**. The standing
+frame 415 leaves 25 pixels and they are all in one place -- the back
+of the head, where the blit's hair is a solid rectangle two pixels
+wider than the painted hair. Drawn, it is a flat saturated gold
+wedge beside shaded painted hair, which is exactly "a strange curl".
+The worst are 472 with 64, 619 with 63, and 419 and 421 with 48.
+
+### 2. The painting replaces his blit, so the blit is rubbed out
+
+There is nothing to put in those pixels' place but the picture round
+them. A pixel the engine drew **him** on, inside the painting's own
+box, that the painting does not fill, now takes the nearest pixel
+that is **not** him, read out of the frame already composed. Three
+surface pixels is as far as it looks: past that the guess would be a
+smear and the blit is left alone.
+
+Three things make it safe:
+
+* it costs nothing where the painting does cover him, which is the
+  other 95.6 per cent -- the colour is only read when the paint
+  there is not opaque;
+* **it cannot touch an occluder**: the only pixels rubbed out are
+  ones whose index is in his own bank, so a pillar, a gate and the
+  level door keep every pixel of theirs;
+* a frame nothing of his survived is still not drawn at all, so the
+  ghost of the round below cannot come back as an erase either.
+
+And the soft edge is now blended against the **background** rather
+than against his old pixels, which is what an anti-aliased edge is
+for.
+
+`tests/render/kid-hires.test.ts` pins the three cases: his bare
+pixel takes the room behind it, a pixel that was never his is left
+alone, and a pixel somebody else drew over him keeps their colour.
+
 ## THE SWORD IS PAINTED TOO, AND A ONE-PIXEL BLADE NEEDS A PIXEL OF SLACK
 
     measured   32260 of 33047   98%   (unmoved)

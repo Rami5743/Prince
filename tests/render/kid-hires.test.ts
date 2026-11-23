@@ -215,6 +215,58 @@ describe('the sword', () => {
   });
 });
 
+/**
+ * **The painting replaces the engine's Prince.** Measured over all
+ * 219 frames, 3163 of the 71237 pixels the blit writes are pixels
+ * the painting leaves transparent, and 217 of the 219 leave
+ * something behind -- which the player saw as a blocky gold wedge
+ * at the back of the standing Prince's head.
+ */
+describe('the blit round the painting', () => {
+  const S = KID_HIRES_SCALE;
+  // Two game pixels wide: the painting fills the first and not the
+  // second, where the engine's own blit wrote him all the same.
+  const art = image(2 * S, 1 * S, (x) => (x < S ? [250, 40, 40, 255] : [0, 0, 0, 0]));
+
+  function paint(indices: ReadonlyArray<number>): Uint8ClampedArray {
+    const surface = new Surface(6, 1);
+    indices.forEach((v, x) => { surface.pixels[x] = v; });
+    const rgba = new Uint8ClampedArray(6 * 4);
+    // the room behind him: green everywhere
+    for (let i = 0; i < 6; i++) { rgba[i * 4 + 1] = 200; rgba[i * 4 + 3] = 255; }
+    // and his own blit, in the composed picture: blue
+    indices.forEach((v, x) => {
+      if (v >= KID_BANK && v < KID_BANK + 16) { rgba[x * 4 + 1] = 0; rgba[x * 4 + 2] = 220; }
+    });
+    const kid = new KidHiRes();
+    kid.put(401, art);
+    kid.draw(rgba, 1, surface, [{ id: 401, x: 0, y: 0, flipped: false }], 1);
+    return rgba;
+  }
+
+  it('rubs his blit out where the painting does not cover it', () => {
+    const rgba = paint([KID_BANK + 1, KID_BANK + 2, 5, 5, 5, 5]);
+    // x 0 is painted, x 1 is his and bare: it takes the room behind.
+    expect(rgba[0]).toBe(250);
+    expect(rgba[4 + 2]).toBe(0);
+    expect(rgba[4 + 1]).toBe(200);
+  });
+
+  it('leaves a pixel that is nobody else\u2019s alone', () => {
+    // Nothing of his at x 1, so there is nothing to rub out.
+    const rgba = paint([KID_BANK + 1, 5, 5, 5, 5, 5]);
+    expect(rgba[4 + 1]).toBe(200);
+    expect(rgba[4 + 2]).toBe(0);
+  });
+
+  it('does not rub out a pixel somebody else drew over him', () => {
+    // x 0 is a pillar's: the sprite keeps nothing there and the
+    // pillar's own colour stands.
+    const rgba = paint([5, KID_BANK + 2, 5, 5, 5, 5]);
+    expect(rgba[1]).toBe(200);
+  });
+});
+
 describe('the seam', () => {
   async function run(sprites?: Array<[number, number, number, boolean]>): Promise<Uint8Array> {
     const game = await PopGame.start(assets, exe, 1, sprites

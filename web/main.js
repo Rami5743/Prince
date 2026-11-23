@@ -793,6 +793,10 @@ var KidHiRes = class {
           }
           let at = (sy * scaled.width + sx) * 4;
           let a = scaled.rgba[at + 3] / 255;
+          const col0 = x / factor | 0;
+          const row0 = y / factor | 0;
+          const idx0 = surface.pixels[row0 * w + col0];
+          const his = idx0 >= KID_BANK && idx0 < KID_BANK + BANK_SIZE || art.sword && idx0 >= SWORD_BANK && idx0 < SWORD_BANK + BANK_SIZE;
           if (a < 0.5 && art.sword && !cover[cy * cw + cx]) {
             const idx = surface.pixels[(y / factor | 0) * w + (x / factor | 0)];
             if (idx >= SWORD_BANK && idx < SWORD_BANK + BANK_SIZE) {
@@ -815,8 +819,29 @@ var KidHiRes = class {
               }
             }
           }
-          if (a <= 4e-3) continue;
           const d = (y * pitch + x) * 4;
+          let under = -1;
+          if (his && a < 0.999) {
+            for (let r = 1; r <= 3 && under < 0; r++) {
+              for (let dy = -r; dy <= r && under < 0; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                  if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                  const qc = col0 + dx;
+                  const qr = row0 + dy;
+                  if (qc < 0 || qr < 0 || qc >= w || qr >= h) continue;
+                  const v = surface.pixels[qr * w + qc];
+                  if (v >= KID_BANK && v < KID_BANK + BANK_SIZE) continue;
+                  if (art.sword && v >= SWORD_BANK && v < SWORD_BANK + BANK_SIZE) continue;
+                  under = ((y + dy * factor) * pitch + (x + dx * factor)) * 4;
+                  break;
+                }
+              }
+            }
+            if (under >= 0) {
+              for (let c = 0; c < 3; c++) rgba[d + c] = rgba[under + c];
+            }
+          }
+          if (a <= 4e-3) continue;
           for (let c = 0; c < 3; c++) {
             const paint2 = scaled.rgba[at + c] * fade;
             rgba[d + c] = paint2 * a + rgba[d + c] * (1 - a);
