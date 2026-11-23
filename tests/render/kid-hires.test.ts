@@ -216,54 +216,56 @@ describe('the sword', () => {
 });
 
 /**
- * **The painting replaces the engine's Prince.** Measured over all
- * 219 frames, 3163 of the 71237 pixels the blit writes are pixels
- * the painting leaves transparent, and 217 of the 219 leave
- * something behind -- which the player saw as a blocky gold wedge
- * at the back of the standing Prince's head.
+ * **The upscaler must not see the engine's Prince.**
+ *
+ * `antialias` mixes a pixel with its four neighbours, so his blit
+ * bleeds his colours one surface pixel outside his own silhouette --
+ * and the painting covers the silhouette, not the ring. Measured on
+ * one frame of level 2, the running Prince against the black air:
+ * 103 display pixels beside him carried his colours, 53 of them over
+ * black; with his blit taken out first, 53 and **18**. What is left
+ * is the background's own edges, which belong there.
  */
-describe('the blit round the painting', () => {
+describe('taking his blit out before the upscale', () => {
   const S = KID_HIRES_SCALE;
-  // Two game pixels wide: the painting fills the first and not the
-  // second, where the engine's own blit wrote him all the same.
-  const art = image(2 * S, 1 * S, (x) => (x < S ? [250, 40, 40, 255] : [0, 0, 0, 0]));
+  const art = image(3 * S, 1 * S, () => [200, 180, 150, 255]);
 
-  function paint(indices: ReadonlyArray<number>): Uint8ClampedArray {
-    const surface = new Surface(6, 1);
+  function clean(indices: ReadonlyArray<number>): Uint8Array {
+    const surface = new Surface(indices.length, 1);
     indices.forEach((v, x) => { surface.pixels[x] = v; });
-    const rgba = new Uint8ClampedArray(6 * 4);
-    // the room behind him: green everywhere
-    for (let i = 0; i < 6; i++) { rgba[i * 4 + 1] = 200; rgba[i * 4 + 3] = 255; }
-    // and his own blit, in the composed picture: blue
-    indices.forEach((v, x) => {
-      if (v >= KID_BANK && v < KID_BANK + 16) { rgba[x * 4 + 1] = 0; rgba[x * 4 + 2] = 220; }
-    });
     const kid = new KidHiRes();
     kid.put(401, art);
-    kid.draw(rgba, 1, surface, [{ id: 401, x: 0, y: 0, flipped: false }], 1);
-    return rgba;
+    const into = new Uint8Array(indices.length);
+    return kid.erased(surface, [{ id: 401, x: 1, y: 0, flipped: false }], into)!;
   }
 
-  it('rubs his blit out where the painting does not cover it', () => {
-    const rgba = paint([KID_BANK + 1, KID_BANK + 2, 5, 5, 5, 5]);
-    // x 0 is painted, x 1 is his and bare: it takes the room behind.
-    expect(rgba[0]).toBe(250);
-    expect(rgba[4 + 2]).toBe(0);
-    expect(rgba[4 + 1]).toBe(200);
+  it('replaces his pixels with the nearest that is not his', () => {
+    // x 0 is the room, x 1..3 are his: all three take the room's.
+    expect([...clean([7, KID_BANK + 1, KID_BANK + 2, KID_BANK + 3, 9])])
+      .toEqual([7, 7, 7, 9, 9]);
   });
 
-  it('leaves a pixel that is nobody else\u2019s alone', () => {
-    // Nothing of his at x 1, so there is nothing to rub out.
-    const rgba = paint([KID_BANK + 1, 5, 5, 5, 5, 5]);
-    expect(rgba[4 + 1]).toBe(200);
-    expect(rgba[4 + 2]).toBe(0);
+  it('leaves everything that is not his alone', () => {
+    expect([...clean([7, 7, SWORD_BANK + 1, 7, 9])]).toEqual([7, 7, SWORD_BANK + 1, 7, 9]);
   });
 
-  it('does not rub out a pixel somebody else drew over him', () => {
-    // x 0 is a pillar's: the sprite keeps nothing there and the
-    // pillar's own colour stands.
-    const rgba = paint([5, KID_BANK + 2, 5, 5, 5, 5]);
-    expect(rgba[1]).toBe(200);
+  it('leaves him where nothing but him is within three pixels', () => {
+    const all = new Array(9).fill(KID_BANK + 1);
+    const surface = new Surface(9, 1);
+    all.forEach((v, x) => { surface.pixels[x] = v; });
+    const kid = new KidHiRes();
+    kid.put(401, image(9 * S, 1 * S, () => [200, 180, 150, 255]));
+    const out = kid.erased(surface, [{ id: 401, x: 0, y: 0, flipped: false }],
+      new Uint8Array(9))!;
+    expect([...out]).toEqual(all);
+  });
+
+  it('does nothing at all for a frame whose artwork has not arrived', () => {
+    const surface = new Surface(4, 1);
+    surface.pixels.fill(KID_BANK + 1);
+    const kid = new KidHiRes();
+    expect(kid.erased(surface, [{ id: 402, x: 0, y: 0, flipped: false }],
+      new Uint8Array(4))).toBeNull();
   });
 });
 

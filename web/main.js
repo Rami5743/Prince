@@ -709,6 +709,76 @@ var KidHiRes = class {
     return body ? { image: body, ox: 0, oy: 0, sword: false } : null;
   }
   /**
+   * The surface with the engine's own Prince taken out of it.
+   *
+   * **This is what the upscaler must see.** `antialias` mixes a
+   * pixel with its four neighbours, so his blit bleeds his colours
+   * one surface pixel **outside** his own silhouette -- and the
+   * painting covers his silhouette and not the ring round it.
+   * Measured on one frame of level 2, the running Prince against the
+   * black air: **283 display pixels beside him carry his colours
+   * where the background's belong, 181 of them over black**. That is
+   * the pale fringe the player saw, and it is not in the artwork:
+   * the files' alpha is straight, not premultiplied -- over all 219,
+   * a partly transparent pixel is 0.88 to 0.96 of the brightest
+   * opaque pixel beside it at every alpha, where premultiplied would
+   * track the alpha down to nothing.
+   *
+   * So his pixels are replaced, **before** the upscale, by the
+   * nearest pixel that is not his: three surface pixels is as far as
+   * it looks, and past that the blit is left where it is. The box is
+   * the painting's own, so a frame whose artwork has not arrived is
+   * not touched -- the engine's Prince is all there is then.
+   *
+   * `draw` still reads the **original** surface for its mask, so
+   * what the game drew in front of him still covers him.
+   */
+  erased(surface, sprites, into) {
+    let any = false;
+    for (const s of sprites) if (this.artOf(s.id)) {
+      any = true;
+      break;
+    }
+    if (!any) return null;
+    const w = surface.width;
+    const h = surface.height;
+    const src = surface.pixels;
+    into.set(src);
+    for (const s of sprites) {
+      const art = this.artOf(s.id);
+      if (!art) continue;
+      const mine = (v) => v >= KID_BANK && v < KID_BANK + BANK_SIZE || art.sword && v >= SWORD_BANK && v < SWORD_BANK + BANK_SIZE;
+      const bodyW = this.body.get(s.id)?.width ?? art.image.width;
+      const ox = s.flipped ? bodyW - (art.ox + art.image.width) : art.ox;
+      const x0 = Math.round(s.x + ox / KID_HIRES_SCALE);
+      const y0 = Math.round(s.y + art.oy / KID_HIRES_SCALE);
+      const bw = Math.round(art.image.width / KID_HIRES_SCALE);
+      const bh = Math.round(art.image.height / KID_HIRES_SCALE);
+      for (let y = Math.max(0, y0); y < Math.min(h, y0 + bh); y++) {
+        for (let x = Math.max(0, x0); x < Math.min(w, x0 + bw); x++) {
+          if (!mine(src[y * w + x])) continue;
+          let found = -1;
+          for (let r = 1; r <= 3 && found < 0; r++) {
+            for (let dy = -r; dy <= r && found < 0; dy++) {
+              for (let dx = -r; dx <= r; dx++) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                const qx = x + dx;
+                const qy = y + dy;
+                if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+                const q = src[qy * w + qx];
+                if (mine(q)) continue;
+                found = q;
+                break;
+              }
+            }
+          }
+          if (found >= 0) into[y * w + x] = found;
+        }
+      }
+    }
+    return into;
+  }
+  /**
    * Draw every sprite the game drew into the composed frame.
    *
    * `rgba` is the finished picture at `factor` times the surface,
@@ -791,56 +861,9 @@ var KidHiRes = class {
           } else if (!near(kept, cw, ch, cx, cy)) {
             continue;
           }
-          let at = (sy * scaled.width + sx) * 4;
-          let a = scaled.rgba[at + 3] / 255;
-          const col0 = x / factor | 0;
-          const row0 = y / factor | 0;
-          const idx0 = surface.pixels[row0 * w + col0];
-          const his = idx0 >= KID_BANK && idx0 < KID_BANK + BANK_SIZE || art.sword && idx0 >= SWORD_BANK && idx0 < SWORD_BANK + BANK_SIZE;
-          if (a < 0.5 && art.sword && !cover[cy * cw + cx]) {
-            const idx = surface.pixels[(y / factor | 0) * w + (x / factor | 0)];
-            if (idx >= SWORD_BANK && idx < SWORD_BANK + BANK_SIZE) {
-              let best = -1;
-              let far = factor + 1;
-              for (let ny = Math.max(0, sy - factor); ny <= Math.min(scaled.height - 1, sy + factor); ny++) {
-                for (let nx = Math.max(0, sx - factor); nx <= Math.min(scaled.width - 1, sx + factor); nx++) {
-                  const o = (ny * scaled.width + nx) * 4;
-                  if (scaled.rgba[o + 3] < 128) continue;
-                  const dd = Math.abs(ny - sy) + Math.abs(nx - sx);
-                  if (dd < far) {
-                    far = dd;
-                    best = o;
-                  }
-                }
-              }
-              if (best >= 0) {
-                at = best;
-                a = 1;
-              }
-            }
-          }
+          const at = (sy * scaled.width + sx) * 4;
+          const a = scaled.rgba[at + 3] / 255;
           const d = (y * pitch + x) * 4;
-          let under = -1;
-          if (his && a < 0.999) {
-            for (let r = 1; r <= 3 && under < 0; r++) {
-              for (let dy = -r; dy <= r && under < 0; dy++) {
-                for (let dx = -r; dx <= r; dx++) {
-                  if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-                  const qc = col0 + dx;
-                  const qr = row0 + dy;
-                  if (qc < 0 || qr < 0 || qc >= w || qr >= h) continue;
-                  const v = surface.pixels[qr * w + qc];
-                  if (v >= KID_BANK && v < KID_BANK + BANK_SIZE) continue;
-                  if (art.sword && v >= SWORD_BANK && v < SWORD_BANK + BANK_SIZE) continue;
-                  under = ((y + dy * factor) * pitch + (x + dx * factor)) * 4;
-                  break;
-                }
-              }
-            }
-            if (under >= 0) {
-              for (let c = 0; c < 3; c++) rgba[d + c] = rgba[under + c];
-            }
-          }
           if (a <= 4e-3) continue;
           for (let c = 0; c < 3; c++) {
             const paint2 = scaled.rgba[at + c] * fade;
@@ -2279,6 +2302,8 @@ var Display = class {
   quality = "original";
   /** The last surface anti-aliased, so a frame is filtered only once. */
   hiFrom = null;
+  /** The surface with his blit taken out, kept so it is not re-made. */
+  hiClean = null;
   hiPicture = null;
   hiScratch = {};
   hiImage = null;
@@ -2497,7 +2522,15 @@ var Display = class {
       this.ctx.imageSmoothingEnabled = false;
       this.hiImage = null;
     }
-    const src = surface.pixels;
+    const sprites = this.kidSource?.();
+    const painting = this.kid !== null && sprites !== void 0 && sprites.length > 0 && this.kidBase.length > 0;
+    let src = surface.pixels;
+    if (painting) {
+      if (!this.hiClean || this.hiClean.length !== src.length) {
+        this.hiClean = new Uint8Array(src.length);
+      }
+      src = this.kid.erased(surface, sprites, this.hiClean) ?? surface.pixels;
+    }
     let moved = this.hiFrom === null || this.hiFrom.length !== src.length;
     if (!moved) {
       const was = this.hiFrom;
@@ -2517,8 +2550,7 @@ var Display = class {
       this.hiImage = this.ctx.createImageData(width, height);
     }
     composeAntialiased(this.hiPicture, paletteRgba, this.hiImage.data);
-    const sprites = this.kidSource?.();
-    if (this.kid && sprites && sprites.length > 0 && this.kidBase.length > 0) {
+    if (painting) {
       this.kid.draw(
         this.hiImage.data,
         AA_FACTOR,

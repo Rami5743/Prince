@@ -205,6 +205,76 @@ export class KidHiRes {
   }
 
   /**
+   * The surface with the engine's own Prince taken out of it.
+   *
+   * **This is what the upscaler must see.** `antialias` mixes a
+   * pixel with its four neighbours, so his blit bleeds his colours
+   * one surface pixel **outside** his own silhouette -- and the
+   * painting covers his silhouette and not the ring round it.
+   * Measured on one frame of level 2, the running Prince against the
+   * black air: **283 display pixels beside him carry his colours
+   * where the background's belong, 181 of them over black**. That is
+   * the pale fringe the player saw, and it is not in the artwork:
+   * the files' alpha is straight, not premultiplied -- over all 219,
+   * a partly transparent pixel is 0.88 to 0.96 of the brightest
+   * opaque pixel beside it at every alpha, where premultiplied would
+   * track the alpha down to nothing.
+   *
+   * So his pixels are replaced, **before** the upscale, by the
+   * nearest pixel that is not his: three surface pixels is as far as
+   * it looks, and past that the blit is left where it is. The box is
+   * the painting's own, so a frame whose artwork has not arrived is
+   * not touched -- the engine's Prince is all there is then.
+   *
+   * `draw` still reads the **original** surface for its mask, so
+   * what the game drew in front of him still covers him.
+   */
+  erased(surface: Surface, sprites: readonly KidSprite[], into: Uint8Array): Uint8Array | null {
+    let any = false;
+    for (const s of sprites) if (this.artOf(s.id)) { any = true; break; }
+    if (!any) return null;
+    const w = surface.width;
+    const h = surface.height;
+    const src = surface.pixels;
+    into.set(src);
+    for (const s of sprites) {
+      const art = this.artOf(s.id);
+      if (!art) continue;
+      const mine = (v: number): boolean =>
+        (v >= KID_BANK && v < KID_BANK + BANK_SIZE)
+        || (art.sword && v >= SWORD_BANK && v < SWORD_BANK + BANK_SIZE);
+      const bodyW = this.body.get(s.id)?.width ?? art.image.width;
+      const ox = s.flipped ? bodyW - (art.ox + art.image.width) : art.ox;
+      const x0 = Math.round(s.x + ox / KID_HIRES_SCALE);
+      const y0 = Math.round(s.y + art.oy / KID_HIRES_SCALE);
+      const bw = Math.round(art.image.width / KID_HIRES_SCALE);
+      const bh = Math.round(art.image.height / KID_HIRES_SCALE);
+      for (let y = Math.max(0, y0); y < Math.min(h, y0 + bh); y++) {
+        for (let x = Math.max(0, x0); x < Math.min(w, x0 + bw); x++) {
+          if (!mine(src[y * w + x]!)) continue;
+          let found = -1;
+          for (let r = 1; r <= 3 && found < 0; r++) {
+            for (let dy = -r; dy <= r && found < 0; dy++) {
+              for (let dx = -r; dx <= r; dx++) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                const qx = x + dx;
+                const qy = y + dy;
+                if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+                const q = src[qy * w + qx]!;
+                if (mine(q)) continue;
+                found = q;
+                break;
+              }
+            }
+          }
+          if (found >= 0) into[y * w + x] = found;
+        }
+      }
+    }
+    return into;
+  }
+
+  /**
    * Draw every sprite the game drew into the composed frame.
    *
    * `rgba` is the finished picture at `factor` times the surface,
@@ -323,86 +393,9 @@ export class KidHiRes {
             // Soft: only beside a pixel of his that survived.
             continue;
           }
-          let at = (sy * scaled.width + sx) * 4;
-          let a = scaled.rgba[at + 3]! / 255;
-          const col0 = (x / factor) | 0;
-          const row0 = (y / factor) | 0;
-          const idx0 = surface.pixels[row0 * w + col0]!;
-          const his = (idx0 >= KID_BANK && idx0 < KID_BANK + BANK_SIZE)
-            || (art.sword && idx0 >= SWORD_BANK && idx0 < SWORD_BANK + BANK_SIZE);
-          /**
-           * **The painting covers the game's own sword.**
-           *
-           * The blade the engine blits is two pixels of cream and
-           * the painted one is a thinner line of steel, so the old
-           * one showed as a pale fringe along the new one -- about
-           * seventeen game pixels of it on frame 584. A pixel the
-           * game drew the **sword** on, inside the painting's own
-           * box and off the body, is the painting's to cover: it
-           * takes the nearest ink within one surface pixel, which
-           * at that distance is the blade and nothing else.
-           */
-          if (a < 0.5 && art.sword && !cover[cy * cw + cx]) {
-            const idx = surface.pixels[((y / factor) | 0) * w + ((x / factor) | 0)]!;
-            if (idx >= SWORD_BANK && idx < SWORD_BANK + BANK_SIZE) {
-              let best = -1;
-              let far = factor + 1;
-              for (let ny = Math.max(0, sy - factor); ny <= Math.min(scaled.height - 1, sy + factor); ny++) {
-                for (let nx = Math.max(0, sx - factor); nx <= Math.min(scaled.width - 1, sx + factor); nx++) {
-                  const o = (ny * scaled.width + nx) * 4;
-                  if (scaled.rgba[o + 3]! < 128) continue;
-                  const dd = Math.abs(ny - sy) + Math.abs(nx - sx);
-                  if (dd < far) { far = dd; best = o; }
-                }
-              }
-              if (best >= 0) { at = best; a = 1; }
-            }
-          }
+          const at = (sy * scaled.width + sx) * 4;
+          const a = scaled.rgba[at + 3]! / 255;
           const d = (y * pitch + x) * 4;
-          /**
-           * **The painting replaces the engine's Prince, so his
-           * blit must not show round it.**
-           *
-           * Measured over all 219 frames: 3163 of the 71237 pixels
-           * the engine's own blit writes -- 4.4 per cent -- are
-           * pixels the painting leaves transparent, and **217 of the
-           * 219 leave something behind**. The player saw it on the
-           * standing frame as a blocky gold wedge at the back of the
-           * head, flat where the painted hair is shaded: 415 leaves
-           * 25 pixels, 472 leaves 64 and 619 leaves 63.
-           *
-           * There is nothing to put in their place but the picture
-           * round them, so a pixel the engine drew **him** on and
-           * the painting does not fill takes the nearest pixel that
-           * is not him, out of the frame already composed. Three
-           * surface pixels is as far as it looks: past that the
-           * guess would be a smear and the blit is left alone.
-           *
-           * It costs nothing where the painting does cover him,
-           * which is the other 95.6 per cent, and it cannot touch an
-           * occluder: only his own pixels are rubbed out.
-           */
-          let under = -1;
-          if (his && a < 0.999) {
-            for (let r = 1; r <= 3 && under < 0; r++) {
-              for (let dy = -r; dy <= r && under < 0; dy++) {
-                for (let dx = -r; dx <= r; dx++) {
-                  if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-                  const qc = col0 + dx;
-                  const qr = row0 + dy;
-                  if (qc < 0 || qr < 0 || qc >= w || qr >= h) continue;
-                  const v = surface.pixels[qr * w + qc]!;
-                  if (v >= KID_BANK && v < KID_BANK + BANK_SIZE) continue;
-                  if (art.sword && v >= SWORD_BANK && v < SWORD_BANK + BANK_SIZE) continue;
-                  under = ((y + dy * factor) * pitch + (x + dx * factor)) * 4;
-                  break;
-                }
-              }
-            }
-            if (under >= 0) {
-              for (let c = 0; c < 3; c++) rgba[d + c] = rgba[under + c]!;
-            }
-          }
           if (a <= 0.004) continue;
           for (let c = 0; c < 3; c++) {
             const paint = scaled.rgba[at + c]! * fade;

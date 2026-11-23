@@ -83,6 +83,8 @@ export class Display {
   private quality: PictureQuality = 'original';
   /** The last surface anti-aliased, so a frame is filtered only once. */
   private hiFrom: Uint8Array | null = null;
+  /** The surface with his blit taken out, kept so it is not re-made. */
+  private hiClean: Uint8Array | null = null;
   private hiPicture: Antialiased | null = null;
   private hiScratch: AntialiasScratch = {};
   private hiImage: ImageData | null = null;
@@ -324,7 +326,25 @@ export class Display {
       this.ctx.imageSmoothingEnabled = false;
       this.hiImage = null;
     }
-    const src = surface.pixels;
+    /**
+     * **The upscaler must not see the engine's Prince.**
+     *
+     * `antialias` mixes a pixel with its four neighbours, so his
+     * blit bleeds his colours one surface pixel outside his own
+     * silhouette -- and the painting covers the silhouette and not
+     * the ring. `KidHiRes.erased` takes him out first; the mask
+     * still reads the surface itself, so an occluder still cuts him.
+     */
+    const sprites = this.kidSource?.();
+    const painting = this.kid !== null && sprites !== undefined
+      && sprites.length > 0 && this.kidBase.length > 0;
+    let src = surface.pixels;
+    if (painting) {
+      if (!this.hiClean || this.hiClean.length !== src.length) {
+        this.hiClean = new Uint8Array(src.length);
+      }
+      src = this.kid!.erased(surface, sprites!, this.hiClean) ?? surface.pixels;
+    }
     let moved = this.hiFrom === null || this.hiFrom.length !== src.length;
     if (!moved) {
       const was = this.hiFrom!;
@@ -346,9 +366,8 @@ export class Display {
     // game drew in front of him still covers him, and multiplied by
     // how dark that bank has been faded to, so he fades with the
     // screen he is on rather than staying bright through it.
-    const sprites = this.kidSource?.();
-    if (this.kid && sprites && sprites.length > 0 && this.kidBase.length > 0) {
-      this.kid.draw(this.hiImage.data, AA_FACTOR, surface, sprites,
+    if (painting) {
+      this.kid!.draw(this.hiImage.data, AA_FACTOR, surface, sprites!,
         fadeOf(paletteRgba, this.kidBase));
     }
     this.ctx.putImageData(this.hiImage, 0, 0);

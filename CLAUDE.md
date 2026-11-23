@@ -1,5 +1,86 @@
 # Read this first
 
+## THE PALE FRINGE WAS THE UPSCALER, AND THE ANSWER IS TO TAKE HIS BLIT OUT
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     952 -> 953
+
+The player: there are still pixels that blend badly with the black
+background -- is it the artwork or the fitting? **The fitting**, and
+the artwork was cleared by measurement before anything was changed.
+
+### 1. The artwork is not premultiplied, and that is measured
+
+The classic cause of a dark or pale fringe is a file whose colour is
+already multiplied by its alpha. Over all 219, every partly
+transparent pixel against the brightest opaque pixel beside it:
+
+    alpha      0-10%  10-20%  30-40%  50-60%  70-80%  90-100%
+    mine/his    0.88    0.91    0.95    0.96    0.95     0.95
+
+Premultiplied would track the alpha down to nothing. It does not:
+the files carry straight colour at every alpha. **The artwork is
+innocent.**
+
+### 2. `antialias` mixes a pixel with its neighbours, and he is one of them
+
+The upscaler's whole point is that a pixel may be a mixture of its
+four neighbours. So the engine's blit of the Prince bleeds **his**
+colours one surface pixel **outside** his own silhouette -- and the
+painting covers the silhouette and not the ring round it. Measured
+on one frame of level 2, the running Prince against the black air of
+the room, display pixels beside him that carry his colours where the
+background's belong:
+
+    on the raw surface      103, of them over black   53
+    with his blit taken out  53, of them over black   18
+
+Screenshotted at twelve times: a row of saturated gold blocks along
+the back of his hair and a cream block at his neck, both of them the
+engine's own palette, both against black. What is left is the
+background's own edges, which belong there.
+
+### 3. So the upscaler is not shown him at all
+
+`KidHiRes.erased` makes a copy of the surface with his pixels
+replaced by the nearest pixel that is **not** his -- three surface
+pixels is as far as it looks -- and `presentHigh` hands **that** to
+`antialias`. The mask still reads the real surface, so an occluder
+still cuts him off exactly where it did.
+
+It is the same rule as the round below this one, moved to where it
+belongs: before the upscale rather than after it. Two passes go away
+with it -- the per-pixel erase and the one that covered the engine's
+sword with the painting's nearest ink -- because a blade that is not
+in the picture needs no covering. Frame 582 against black is a fine
+painted blade with no cream round it.
+
+It only touches a sprite the page is **going to draw**: a frame whose
+artwork has not arrived yet is left alone, blit and all, or the
+Prince would vanish while it loaded.
+
+### 4. What it costs, and a correction to the round below
+
+Timed on a walking Prince, one present of a 320 by 200 frame in this
+machine's JS:
+
+    erased               0.145 ms   <- the new work
+    antialias            3.876 ms
+    composeAntialiased   2.966 ms
+    kid.draw             0.812 ms
+
+So the clean is **under two per cent** of the present.
+
+**And the 2.68 ms written below for `quality: high` is not wrong but
+it is not the whole picture**: it was measured with the Prince
+standing still on level 1, where the surface does not move and
+`antialias` is skipped. With him walking, one `__princeStep` in
+Chromium is 0.40 ms at `original` and **8.53 ms** at `high` -- which
+is the upscaler's own price, paid since it went in, and not the
+painting's.
+
 ## "HE LOOKS DIFFERENT IN THE GAME": THE BLIT WAS SHOWING ROUND THE PAINTING
 
     measured   32260 of 33047   98%   (unmoved)
