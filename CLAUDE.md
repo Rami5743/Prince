@@ -1,5 +1,85 @@
 # Read this first
 
+## THE BLOCK OF WALL ON HIS BACK: THE PAINTING IS WIDER THAN THE BLIT, AND THE SURFACE CANNOT SAY SO
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     953 -> 960
+
+The player, on the standing Prince: there is a **strange bulge on his
+back**, and it should not be in the updated artwork. Both halves of
+that are right -- it is not in the artwork, and it is not a bulge: it
+is a square of the **room's own wall** showing through a hole in the
+painting, at the back of his neck, one game pixel of it.
+
+### 1. The artwork is current, and 0415 has not changed
+
+`origin/gpt` had moved again -- `0bb1bf8`, "Raise the far right hand
+in Kid 495" -- so the first question is whether what is in the
+repository is what the artist last drew. Every one of the 219 files
+compared byte for byte against the branch's own zip:
+
+    changed since the merge   1   (0495)
+    0415, the standing frame  identical
+
+So the standing frame in play is the standing frame on the branch.
+0495 is merged in with this round.
+
+### 2. 1868 solid cells of 206 frames are paint the blit never wrote
+
+The mask's rule was: a cell the painting is **solid** over is drawn
+only where the surface still holds one of his own sixteen. That is
+right for a cell the engine's blit covers -- it is how a pillar cuts
+him off -- and it is **wrong for a cell the blit never wrote at all**,
+because there the surface holds the room, and the room is not an
+occluder.
+
+Measured over all 219 frames, the painting's solid cells that fall
+outside the blit's own silhouette:
+
+    cells   1868, over 206 of the 219 frames
+    by distance to the nearest blit pixel
+            1: 1804    2: 59    3: 4    4: 1
+    worst   560: 69   472: 39   473: 39   424: 35   440: 33
+    0415    exactly one -- and it is the one the player saw
+
+### 3. The silhouette is the thing the surface cannot tell you
+
+A pixel of the room beside him and a pixel of his that a pillar took
+look **the same** on the finished surface. What tells them apart is
+the sprite the engine would have blitted, so `KidHiRes.putBlit` takes
+it -- `assets.group('KID.DAT', 400)`, which the page has open
+already -- a byte a game pixel, mirrored when the engine mirrors the
+sprite. The rule is then three ways rather than two:
+
+* the blit covers the cell and the surface is still his -- **kept**;
+* the blit covers it and the surface is somebody else's -- **hidden**,
+  and the painting stays off it, exactly as before;
+* the blit never wrote it -- painted **only** if it stands beside a
+  cell that is being painted and beside no hidden one, which is then
+  run again until it stops growing, because 64 of the 1868 are two
+  or more pixels out and the rim has to carry itself. So a Prince
+  half behind a pillar cannot gain a pixel over the pillar -- the
+  rim stops at the occluder's own edge -- and where nothing of him
+  survived nothing is drawn at all, as the ghost of the round below
+  requires.
+
+With no silhouette handed in, nothing changes: the page is the only
+thing that hands one in, and `src/pop` is untouched, so the three
+scores are unmoved run for run.
+
+### 4. What it is worth, in play
+
+Fourteen levels, 150 ticks apiece with Right held, the frame composed
+twice and compared:
+
+    22321 display pixels over 625 of 2100 ticks
+    = 4.0 game pixels a tick, where it shows at all
+
+Small, and all of it is the holes: the back of a neck, the edge of a
+sleeve, the outside of a heel.
+
 ## THE PALE FRINGE WAS THE UPSCALER, AND THE ANSWER IS TO TAKE HIS BLIT OUT
 
     measured   32260 of 33047   98%   (unmoved)

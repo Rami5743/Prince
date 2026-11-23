@@ -162,6 +162,123 @@ describe('the mask', () => {
 });
 
 /**
+ * **The painting is wider than the blit**, and where it is, the room
+ * showed through it: 1868 solid cells of 206 of the 219 frames are
+ * paint the engine's own blit never wrote, and the standing 415's one
+ * such cell put a block of the wall on the back of his neck.
+ *
+ * The finished surface cannot tell such a cell from a pixel of his a
+ * pillar took, so the engine's silhouette is handed in and says
+ * which is which.
+ */
+describe('the cells the blit never wrote', () => {
+  const S = KID_HIRES_SCALE;
+  // Two solid game pixels, a soft one, an empty one, two rows deep.
+  const alphaOf = (col: number): number => (col < 2 ? 255 : col === 2 ? 100 : 0);
+  const art = image(4 * S, 2 * S, (x) => [255, 0, 0, alphaOf((x / S) | 0)]);
+
+  /** An 8 by 8 surface: his only where given, somebody else's elsewhere. */
+  function scene(kid: ReadonlyArray<readonly [number, number]>): Surface {
+    const surface = new Surface(8, 8);
+    surface.pixels.fill(5);
+    for (const [x, y] of kid) surface.pixels[y * 8 + x] = KID_BANK + 3;
+    return surface;
+  }
+
+  /** The blit's own silhouette over the painting's 4 by 2 box. */
+  function blit(on: ReadonlyArray<readonly [number, number]>): Uint8Array {
+    const mask = new Uint8Array(4 * 2);
+    for (const [x, y] of on) mask[y * 4 + x] = 1;
+    return mask;
+  }
+
+  function paint(surface: Surface, silhouette: Uint8Array | null): Uint8ClampedArray {
+    const rgba = new Uint8ClampedArray(8 * 8 * 4);
+    const kid = new KidHiRes();
+    kid.put(401, art);
+    if (silhouette) kid.putBlit(401, silhouette, 4, 2);
+    kid.draw(rgba, 1, surface, [{ id: 401, x: 0, y: 0, flipped: false }], 1);
+    return rgba;
+  }
+
+  const red = (rgba: Uint8ClampedArray, x: number, y: number): number => rgba[(y * 8 + x) * 4]!;
+
+  it('paints a solid cell the blit never wrote, beside one of his', () => {
+    // (0,0) is his; (1,0) the blit never wrote, so the room is there.
+    const rgba = paint(scene([[0, 0]]), blit([[0, 0]]));
+    expect(red(rgba, 1, 0)).toBe(255);
+  });
+
+  it('leaves it alone when it also stands beside a pixel of his that was taken', () => {
+    // The blit wrote (1,1) and the surface there is somebody else's,
+    // so something is in front of him next to this cell.
+    const rgba = paint(scene([[0, 0]]), blit([[0, 0], [1, 1]]));
+    expect(red(rgba, 1, 0)).toBe(0);
+  });
+
+  it('leaves it alone with no silhouette handed in', () => {
+    expect(red(paint(scene([[0, 0]]), null), 1, 0)).toBe(0);
+  });
+
+  it('still draws nothing at all when none of him survived', () => {
+    const kid = new KidHiRes();
+    kid.put(401, art);
+    kid.putBlit(401, blit([[0, 0], [1, 0]]), 4, 2);
+    const rgba = new Uint8ClampedArray(8 * 8 * 4);
+    expect(kid.draw(rgba, 1, scene([]), [{ id: 401, x: 0, y: 0, flipped: false }], 1)).toBe(0);
+    expect(rgba.every((v) => v === 0)).toBe(true);
+  });
+
+  /**
+   * 64 of the 1868 cells are two or more game pixels out from the
+   * blit -- 26 of them on frame 560 alone -- so the rim has to carry
+   * itself: a cell beside one that is being painted is painted too,
+   * as long as it is beside nothing hidden.
+   */
+  it('carries the rim out past one pixel', () => {
+    const solid = image(4 * S, 1 * S, () => [255, 0, 0, 255]);
+    const surface = scene([[0, 0]]);
+    const rgba = new Uint8ClampedArray(8 * 8 * 4);
+    const kid = new KidHiRes();
+    kid.put(401, solid);
+    const mask = new Uint8Array(4);
+    mask[0] = 1;
+    kid.putBlit(401, mask, 4, 1);
+    kid.draw(rgba, 1, surface, [{ id: 401, x: 0, y: 0, flipped: false }], 1);
+    expect(red(rgba, 1, 0)).toBe(255);
+    expect(red(rgba, 2, 0)).toBe(255);
+    expect(red(rgba, 3, 0)).toBe(255);
+  });
+
+  it('stops the rim at a cell of his that something took', () => {
+    const solid = image(4 * S, 1 * S, () => [255, 0, 0, 255]);
+    // The blit wrote (0,0) and (2,0); (2,0) is somebody else's now,
+    // so (1,0) stands beside a hidden cell and the rim stops there.
+    const rgba = new Uint8ClampedArray(8 * 8 * 4);
+    const kid = new KidHiRes();
+    kid.put(401, solid);
+    const mask = new Uint8Array(4);
+    mask[0] = 1; mask[2] = 1;
+    kid.putBlit(401, mask, 4, 1);
+    kid.draw(rgba, 1, scene([[0, 0]]), [{ id: 401, x: 0, y: 0, flipped: false }], 1);
+    expect(red(rgba, 1, 0)).toBe(0);
+    expect(red(rgba, 3, 0)).toBe(0);
+  });
+
+  it('mirrors the silhouette when the engine mirrored the sprite', () => {
+    // Facing left, the blit's (0,0) is the box's (3,0): the cell the
+    // blit never wrote is now (2,0), beside his own (3,0).
+    const surface = scene([[3, 0]]);
+    const rgba = new Uint8ClampedArray(8 * 8 * 4);
+    const kid = new KidHiRes();
+    kid.put(401, art);
+    kid.putBlit(401, blit([[0, 0]]), 4, 2);
+    kid.draw(rgba, 1, surface, [{ id: 401, x: 0, y: 0, flipped: true }], 1);
+    expect(red(rgba, 2, 0)).toBe(255);
+  });
+});
+
+/**
  * The fighting frames are painted a second time **with the sword**,
  * at an offset of their own, because the blade reaches out of the box
  * the engine blits him in.

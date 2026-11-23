@@ -116,6 +116,13 @@ interface Art {
   readonly sword: boolean;
 }
 
+/** The game's own blit silhouette for a frame, a byte a game pixel. */
+interface Blit {
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
 /**
  * How dark the palette is against the bank the sprites were painted
  * for, as one number in 0..1.
@@ -166,6 +173,9 @@ export class KidHiRes {
   private readonly armed = new Map<number, Art>();
   private readonly scaled = new Map<string, Scaled>();
   private readonly covers = new Map<string, Uint8Array & { width: number }>();
+  /** The engine's own silhouette per frame, and its mirror. */
+  private readonly blits = new Map<number, Blit>();
+  private readonly mirrored = new Map<number, Blit>();
   /** The bank the sprites were painted for: sixteen RGB triples, 0..255. */
   private base: readonly number[] = [];
 
@@ -194,6 +204,45 @@ export class KidHiRes {
    */
   putSword(id: number, image: ImageData, ox: number, oy: number): void {
     this.armed.set(id, { image, ox, oy, sword: true });
+  }
+
+  /** Has the engine's own silhouette for this frame been handed in? */
+  hasBlit(id: number): boolean {
+    return this.blits.has(id);
+  }
+
+  /**
+   * The silhouette of the game's own blit for one frame.
+   *
+   * It says which game pixels the engine would have written if
+   * nothing were in front of him, which is the one thing the
+   * finished surface cannot say: a pixel of the room beside him and
+   * a pixel of him painted over by a pillar look the same there.
+   * `pixels` is the sprite's own indices, nought being transparent.
+   */
+  putBlit(id: number, pixels: ArrayLike<number>, width: number, height: number): void {
+    if (this.blits.has(id)) return;
+    const mask = new Uint8Array(width * height);
+    for (let i = 0; i < mask.length; i++) mask[i] = pixels[i] ? 1 : 0;
+    this.blits.set(id, { mask, width, height });
+  }
+
+  /** That silhouette, mirrored when the engine mirrored the sprite. */
+  private blitAt(id: number, flipped: boolean): Blit | null {
+    const had = this.blits.get(id);
+    if (!had || !flipped) return had ?? null;
+    const was = this.mirrored.get(id);
+    if (was) return was;
+    const { width, height } = had;
+    const mask = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        mask[y * width + x] = had.mask[y * width + (width - 1 - x)]!;
+      }
+    }
+    const out: Blit = { mask, width, height };
+    this.mirrored.set(id, out);
+    return out;
   }
 
   /** Which painting a frame is drawn from, and where. */
@@ -341,6 +390,31 @@ export class KidHiRes {
       const bodyShift = Math.round(ox / KID_HIRES_SCALE);
       const bw = bodyCover ? bodyCover.width : 0;
       const bh = bodyCover ? bodyCover.length / bw : 0;
+      /**
+       * **The painting is wider than the blit, and where it is, the
+       * room showed through.**
+       *
+       * Asking every solid cell for his own index under it is right
+       * only for the cells the engine's blit covers. Measured over
+       * all 219 frames, **1868 cells of 206 of them are solid paint
+       * the blit never wrote** -- the back of the neck of the
+       * standing 415 is one such cell, and a block of the wall stood
+       * in it. 1804 of the 1868 are within one surface pixel of the
+       * blit.
+       *
+       * The surface cannot tell those from a pixel of his that a
+       * pillar took, so the silhouette says instead: a solid cell
+       * the blit never wrote is painted when it sits beside a pixel
+       * of his that **survived** and beside none that is **hidden**;
+       * and then again from the cells that reaches, because 64 of
+       * the 1868 are two or more pixels out and the rim has to carry
+       * them. Where no silhouette has been handed in, nothing
+       * changes.
+       */
+      const shape = this.blitAt(s.id, s.flipped);
+      const shiftY = Math.round(art.oy / KID_HIRES_SCALE);
+      const hidden = new Uint8Array(cw * ch);
+      const extra = new Uint8Array(cw * ch);
       const mine = (px: number, py: number, slack: number): boolean => {
         for (let dy = -slack; dy <= slack; dy++) {
           const qy = py + dy;
@@ -363,19 +437,40 @@ export class KidHiRes {
           const px = ((x0 + cx * factor + half) / factor) | 0;
           if (px < 0 || px >= w) continue;
           let slack = 0;
+          let onBody = true;
           if (bodyCover) {
             const bx = cx + bodyShift;
-            const by = cy + Math.round(art.oy / KID_HIRES_SCALE);
-            const onBody = bx >= 0 && by >= 0 && bx < bw && by < bh && bodyCover[by * bw + bx];
+            const by = cy + shiftY;
+            onBody = bx >= 0 && by >= 0 && bx < bw && by < bh && bodyCover[by * bw + bx] === 1;
             if (!onBody) slack = 1;
           }
           if (mine(px, py, slack)) {
             kept[cy * cw + cx] = 1;
             any = true;
+          } else if (onBody && shape) {
+            const bx = cx + bodyShift;
+            const by = cy + shiftY;
+            const on = bx >= 0 && by >= 0 && bx < shape.width && by < shape.height
+              && shape.mask[by * shape.width + bx] === 1;
+            if (on) hidden[cy * cw + cx] = 1;
+            else extra[cy * cw + cx] = 1;
           }
         }
       }
       if (!any) continue;
+      const paint = new Uint8Array(kept);
+      for (let pass = 0, grew = true; grew && pass < 8; pass++) {
+        grew = false;
+        for (let cy = 0; cy < ch; cy++) {
+          for (let cx = 0; cx < cw; cx++) {
+            if (!extra[cy * cw + cx] || paint[cy * cw + cx]) continue;
+            if (near(paint, cw, ch, cx, cy) && !near(hidden, cw, ch, cx, cy)) {
+              paint[cy * cw + cx] = 1;
+              grew = true;
+            }
+          }
+        }
+      }
       drawn++;
       for (let sy = 0; sy < scaled.height; sy++) {
         const y = y0 + sy;
@@ -387,10 +482,11 @@ export class KidHiRes {
           const cx = (sx / factor) | 0;
           if (cy >= ch || cx >= cw) continue;
           if (cover[cy * cw + cx]) {
-            // Solid: his if and only if the surface still says so.
-            if (!kept[cy * cw + cx]) continue;
-          } else if (!near(kept, cw, ch, cx, cy)) {
-            // Soft: only beside a pixel of his that survived.
+            // Solid: his where the surface still says so, and over
+            // the cells the blit never wrote that stand beside one.
+            if (!paint[cy * cw + cx]) continue;
+          } else if (!near(paint, cw, ch, cx, cy)) {
+            // Soft: only beside solid paint that is being drawn.
             continue;
           }
           const at = (sy * scaled.width + sx) * 4;

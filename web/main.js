@@ -676,6 +676,9 @@ var KidHiRes = class {
   armed = /* @__PURE__ */ new Map();
   scaled = /* @__PURE__ */ new Map();
   covers = /* @__PURE__ */ new Map();
+  /** The engine's own silhouette per frame, and its mirror. */
+  blits = /* @__PURE__ */ new Map();
+  mirrored = /* @__PURE__ */ new Map();
   /** The bank the sprites were painted for: sixteen RGB triples, 0..255. */
   base = [];
   /** The sixteen colours of `KID.DAT`'s own header, DAC-expanded. */
@@ -700,6 +703,42 @@ var KidHiRes = class {
    */
   putSword(id, image, ox, oy) {
     this.armed.set(id, { image, ox, oy, sword: true });
+  }
+  /** Has the engine's own silhouette for this frame been handed in? */
+  hasBlit(id) {
+    return this.blits.has(id);
+  }
+  /**
+   * The silhouette of the game's own blit for one frame.
+   *
+   * It says which game pixels the engine would have written if
+   * nothing were in front of him, which is the one thing the
+   * finished surface cannot say: a pixel of the room beside him and
+   * a pixel of him painted over by a pillar look the same there.
+   * `pixels` is the sprite's own indices, nought being transparent.
+   */
+  putBlit(id, pixels, width, height) {
+    if (this.blits.has(id)) return;
+    const mask = new Uint8Array(width * height);
+    for (let i = 0; i < mask.length; i++) mask[i] = pixels[i] ? 1 : 0;
+    this.blits.set(id, { mask, width, height });
+  }
+  /** That silhouette, mirrored when the engine mirrored the sprite. */
+  blitAt(id, flipped) {
+    const had = this.blits.get(id);
+    if (!had || !flipped) return had ?? null;
+    const was = this.mirrored.get(id);
+    if (was) return was;
+    const { width, height } = had;
+    const mask = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        mask[y * width + x] = had.mask[y * width + (width - 1 - x)];
+      }
+    }
+    const out2 = { mask, width, height };
+    this.mirrored.set(id, out2);
+    return out2;
   }
   /** Which painting a frame is drawn from, and where. */
   artOf(id) {
@@ -811,6 +850,10 @@ var KidHiRes = class {
       const bodyShift = Math.round(ox / KID_HIRES_SCALE);
       const bw = bodyCover ? bodyCover.width : 0;
       const bh = bodyCover ? bodyCover.length / bw : 0;
+      const shape = this.blitAt(s.id, s.flipped);
+      const shiftY = Math.round(art.oy / KID_HIRES_SCALE);
+      const hidden = new Uint8Array(cw * ch);
+      const extra = new Uint8Array(cw * ch);
       const mine = (px, py, slack) => {
         for (let dy = -slack; dy <= slack; dy++) {
           const qy = py + dy;
@@ -833,19 +876,39 @@ var KidHiRes = class {
           const px = (x0 + cx * factor + half) / factor | 0;
           if (px < 0 || px >= w) continue;
           let slack = 0;
+          let onBody = true;
           if (bodyCover) {
             const bx = cx + bodyShift;
-            const by = cy + Math.round(art.oy / KID_HIRES_SCALE);
-            const onBody = bx >= 0 && by >= 0 && bx < bw && by < bh && bodyCover[by * bw + bx];
+            const by = cy + shiftY;
+            onBody = bx >= 0 && by >= 0 && bx < bw && by < bh && bodyCover[by * bw + bx] === 1;
             if (!onBody) slack = 1;
           }
           if (mine(px, py, slack)) {
             kept[cy * cw + cx] = 1;
             any = true;
+          } else if (onBody && shape) {
+            const bx = cx + bodyShift;
+            const by = cy + shiftY;
+            const on = bx >= 0 && by >= 0 && bx < shape.width && by < shape.height && shape.mask[by * shape.width + bx] === 1;
+            if (on) hidden[cy * cw + cx] = 1;
+            else extra[cy * cw + cx] = 1;
           }
         }
       }
       if (!any) continue;
+      const paint2 = new Uint8Array(kept);
+      for (let pass = 0, grew = true; grew && pass < 8; pass++) {
+        grew = false;
+        for (let cy = 0; cy < ch; cy++) {
+          for (let cx = 0; cx < cw; cx++) {
+            if (!extra[cy * cw + cx] || paint2[cy * cw + cx]) continue;
+            if (near(paint2, cw, ch, cx, cy) && !near(hidden, cw, ch, cx, cy)) {
+              paint2[cy * cw + cx] = 1;
+              grew = true;
+            }
+          }
+        }
+      }
       drawn++;
       for (let sy = 0; sy < scaled.height; sy++) {
         const y = y0 + sy;
@@ -857,8 +920,8 @@ var KidHiRes = class {
           const cx = sx / factor | 0;
           if (cy >= ch || cx >= cw) continue;
           if (cover[cy * cw + cx]) {
-            if (!kept[cy * cw + cx]) continue;
-          } else if (!near(kept, cw, ch, cx, cy)) {
+            if (!paint2[cy * cw + cx]) continue;
+          } else if (!near(paint2, cw, ch, cx, cy)) {
             continue;
           }
           const at = (sy * scaled.width + sx) * 4;
@@ -866,8 +929,8 @@ var KidHiRes = class {
           const d = (y * pitch + x) * 4;
           if (a <= 4e-3) continue;
           for (let c = 0; c < 3; c++) {
-            const paint2 = scaled.rgba[at + c] * fade;
-            rgba[d + c] = paint2 * a + rgba[d + c] * (1 - a);
+            const paint3 = scaled.rgba[at + c] * fade;
+            rgba[d + c] = paint3 * a + rgba[d + c] * (1 - a);
           }
         }
       }
@@ -16346,6 +16409,17 @@ async function boot() {
     } catch {
     }
   };
+  const loadKidBlits = async () => {
+    try {
+      const set = await assets.group("KID.DAT", 400);
+      for (let i = 0; i < KID_SPRITE_COUNT; i++) {
+        const id = KID_FIRST_SPRITE + i;
+        const sprite = set.images[id - 400];
+        if (sprite) kidArt.putBlit(id, sprite.pixels, sprite.width, sprite.height);
+      }
+    } catch {
+    }
+  };
   let kidPrefetched = false;
   const prefetchKid = () => {
     if (kidPrefetched) return;
@@ -16362,6 +16436,7 @@ async function boot() {
         if (res.ok) swordAt = await res.json();
       } catch {
       }
+      await loadKidBlits();
       for (let lane = 0; lane < 8; lane++) void pump();
     })();
   };

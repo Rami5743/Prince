@@ -230,6 +230,28 @@ async function boot(): Promise<void> {
       // No artwork for this frame: the original's pixels stand.
     }
   };
+  /**
+   * The engine's own silhouettes, straight out of `KID.DAT`.
+   *
+   * The finished surface cannot tell a pixel of the room beside him
+   * from a pixel of his a pillar took, and the painting is wider
+   * than the blit in 1868 cells of 206 of the 219 frames -- which
+   * is what put a block of the wall on the standing Prince's back.
+   * The sprites say which pixels the blit would have written, and
+   * `Assets` has the file open already.
+   */
+  const loadKidBlits = async (): Promise<void> => {
+    try {
+      const set = await assets.group('KID.DAT', 400);
+      for (let i = 0; i < KID_SPRITE_COUNT; i++) {
+        const id = KID_FIRST_SPRITE + i;
+        const sprite = set.images[id - 400];
+        if (sprite) kidArt.putBlit(id, sprite.pixels, sprite.width, sprite.height);
+      }
+    } catch {
+      // Without them the painting keeps to the blit, as it did.
+    }
+  };
   /** Read all 219 in behind the play, eight at a time. */
   let kidPrefetched = false;
   const prefetchKid = (): void => {
@@ -250,6 +272,7 @@ async function boot(): Promise<void> {
       } catch {
         // No offsets: the fighting frames keep the original's sword.
       }
+      await loadKidBlits();
       for (let lane = 0; lane < 8; lane++) void pump();
     })();
   };
