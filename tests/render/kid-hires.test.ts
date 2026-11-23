@@ -28,7 +28,8 @@ import { GAME_DIR } from '../helpers/fixtures.ts';
 import { Assets } from '../../src/render/assets.ts';
 import { PopGame, KID_FIRST_RESOURCE } from '../../src/pop/game.ts';
 import { Surface } from '../../src/render/surface.ts';
-import { KidHiRes, fadeOf, KID_BANK, KID_HIRES_SCALE } from '../../src/render/kid-hires.ts';
+import { KidHiRes, fadeOf, KID_BANK, SWORD_BANK,
+  KID_HIRES_SCALE } from '../../src/render/kid-hires.ts';
 
 const assets = new Assets(async (n: string) => new Uint8Array(readFileSync(join(GAME_DIR, n))));
 const exe = new Uint8Array(readFileSync(join(GAME_DIR, 'UNCRKD.EXE')));
@@ -157,6 +158,60 @@ describe('the mask', () => {
     const rgba = new Uint8ClampedArray(8 * 8 * 4);
     expect(kid.draw(rgba, 1, scene([]), [{ id: 402, x: 0, y: 0, flipped: false }], 1)).toBe(0);
     expect(rgba.every((v) => v === 0)).toBe(true);
+  });
+});
+
+/**
+ * The fighting frames are painted a second time **with the sword**,
+ * at an offset of their own, because the blade reaches out of the box
+ * the engine blits him in.
+ */
+describe('the sword', () => {
+  const S = KID_HIRES_SCALE;
+  // Two game pixels of body, and a blade three to its left, in a
+  // painting that begins four pixels left of the body's own box.
+  const body = image(2 * S, 1 * S, () => [200, 180, 150, 255]);
+  const armed = image(6 * S, 1 * S, (x) => {
+    const cell = (x / S) | 0;
+    if (cell >= 4) return [200, 180, 150, 255];   // the body
+    if (cell >= 1) return [120, 120, 130, 255];   // the blade
+    return [0, 0, 0, 0];
+  });
+
+  function paint(indices: ReadonlyArray<number>): Uint8ClampedArray {
+    const surface = new Surface(10, 2);
+    surface.pixels.fill(5);
+    indices.forEach((v, x) => { surface.pixels[x] = v; });
+    const rgba = new Uint8ClampedArray(10 * 2 * 4);
+    const kid = new KidHiRes();
+    kid.put(401, body);
+    kid.putSword(401, armed, -4 * S, 0);
+    kid.draw(rgba, 1, surface, [{ id: 401, x: 4, y: 0, flipped: false }], 1);
+    return rgba;
+  }
+  const blue = (rgba: Uint8ClampedArray, x: number): number => rgba[x * 4 + 2]!;
+
+  it('paints the blade where the engine drew its own sword', () => {
+    // x 0..3 is the painting's blade, 4..5 his body. The engine's
+    // sword is one pixel thinner, which is exactly the case the
+    // slack is for: it is at 2 and 3 and the painting reaches 1.
+    const rgba = paint([5, 5, SWORD_BANK + 1, SWORD_BANK + 1, KID_BANK + 1, KID_BANK + 1]);
+    expect(blue(rgba, 1)).toBeGreaterThan(100);
+    expect(blue(rgba, 2)).toBeGreaterThan(100);
+    expect(blue(rgba, 3)).toBeGreaterThan(100);
+  });
+
+  it('does not paint a blade the engine drew nowhere near', () => {
+    const rgba = paint([5, 5, 5, 5, KID_BANK + 1, KID_BANK + 1]);
+    expect(blue(rgba, 1)).toBe(0);
+    expect(blue(rgba, 2)).toBe(0);
+  });
+
+  it('keeps the body on the exact test, so a pillar still cuts him', () => {
+    // His own second body pixel is somebody else's: it stays theirs.
+    const rgba = paint([5, 5, SWORD_BANK + 1, SWORD_BANK + 1, KID_BANK + 1, 5]);
+    expect(rgba[4 * 4]).toBeGreaterThan(100);
+    expect(rgba[5 * 4]).toBe(0);
   });
 });
 

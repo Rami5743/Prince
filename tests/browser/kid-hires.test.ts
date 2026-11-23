@@ -38,14 +38,18 @@ afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
 });
 
-interface Run { asked: number; canvas: string; }
+interface Run { asked: number; swords: number; canvas: string; }
 
 /** Open the page at one quality, play a little, and report. */
 async function visit(quality: string, settle = 4000): Promise<Run> {
   const port = (server.address() as { port: number }).port;
   const page: Page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
   const asked = new Set<string>();
-  page.on('response', (r) => { if (r.url().includes('kid-10x')) asked.add(r.url()); });
+  const swords = new Set<string>();
+  page.on('response', (r) => {
+    if (r.url().includes('kid-sword-10x/0')) swords.add(r.url());
+    else if (r.url().includes('kid-10x')) asked.add(r.url());
+  });
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.addInitScript((q) => {
     try {
@@ -82,7 +86,7 @@ async function visit(quality: string, settle = 4000): Promise<Run> {
     return `${el.width}x${el.height}:${(h >>> 0).toString(16)}`;
   });
   await page.close();
-  return { asked: asked.size, canvas };
+  return { asked: asked.size, swords: swords.size, canvas };
 }
 
 describe('the repainted Prince on the page', () => {
@@ -92,6 +96,9 @@ describe('the repainted Prince on the page', () => {
     // All 219 of `KID.DAT`'s sprites, not the handful this level draws.
     expect(high.asked).toBe(219);
     expect(original.asked).toBe(0);
+    // And the 32 fighting frames painted with the sword in them.
+    expect(high.swords).toBe(32);
+    expect(original.swords).toBe(0);
     // And the painting really is on the glass: a bigger canvas, and
     // not the same picture.
     expect(high.canvas).not.toBe(original.canvas);

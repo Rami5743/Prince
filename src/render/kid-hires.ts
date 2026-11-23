@@ -4,10 +4,14 @@
  * `graphics/kid-10x/` holds all 219 of `KID.DAT`'s sprites repainted
  * at **ten times** the original's size, each one exactly ten times
  * its own frame so that a position in the game's own coordinates is
- * a position here. They came from the `gpt` branch; the working
- * notes are `graphics/KID-ART.md`.
+ * a position here. `graphics/kid-sword-10x/` holds 32 more -- the
+ * fighting frames 561 to 592 **with the sword in them** -- and
+ * `offsets.json` says where each of those sits against its own body
+ * frame, in the artwork's own tenths of a game pixel. They came in
+ * on the `gpt` branch; the brief they were painted to is
+ * `graphics/KID-ART.md`.
  *
- * ## Two things stand between that artwork and the screen
+ * ## Three things stand between that artwork and the screen
  *
  * **It is not in the game's palette.** Measured over all 219: 74550
  * distinct opaque colours, of which exactly **one** is one of
@@ -22,15 +26,16 @@
  * towards black **together**, so the whole of it is one number:
  * `fadeOf` reads the live palette against the bank it was loaded
  * with and returns that ratio, and every pixel of the sprite is
- * multiplied by it. A faded screen fades him with it.
+ * multiplied by it.
  *
  * **It has to go behind what is in front of him.** The Prince is
  * blitted into the 320 by 200 surface and the foreground tiles --
  * a pillar, a gate, the level door -- are drawn *after* him, so on
  * the finished surface his pixels are only where he is visible. His
- * bank is `PALETTE_BASE.kid`, 112 to 127, and the guard's is 128, so
- * **an index in that range is a pixel of his that survived**. The
- * repainted sprite is drawn only there.
+ * bank is `PALETTE_BASE.kid`, 112 to 127, so **an index in that
+ * range is a pixel of his that survived**, and the sword's own bank
+ * is `PALETTE_BASE.sword`, 32 to 47, which is what a frame painted
+ * with the sword in it is allowed to stand on as well.
  *
  * That one test does the clipping too: the level door cuts him off
  * by `paint.clip`, and a pixel that was clipped away was never
@@ -65,14 +70,22 @@ import type { Surface } from './surface.ts';
 
 /** `PALETTE_BASE.kid`: his sixteen entries begin here. */
 export const KID_BANK = 112;
+/** `PALETTE_BASE.sword`: the blade the game blits as its own object. */
+export const SWORD_BANK = 32;
 const BANK_SIZE = 16;
 
 /** `KID.DAT`'s own resources: 401 to 619, and every one is painted. */
 export const KID_FIRST_SPRITE = 401;
 export const KID_SPRITE_COUNT = 219;
 
+/** The fighting frames that are painted with the sword in them. */
+export const SWORD_FIRST = 561;
+export const SWORD_LAST = 592;
+
 /** Where the sprites live, relative to the page. */
 export const KID_HIRES_DIR = 'graphics/kid-10x';
+/** And the same frames with the sword, which carry an offset. */
+export const KID_SWORD_DIR = 'graphics/kid-sword-10x';
 
 /** The size the artwork was painted at, times the original's. */
 export const KID_HIRES_SCALE = 10;
@@ -91,6 +104,16 @@ interface Scaled {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8ClampedArray;
+}
+
+/** One painting, and where it sits against the frame's own box. */
+interface Art {
+  readonly image: ImageData;
+  /** Offset from the body frame's top left, in artwork pixels. */
+  readonly ox: number;
+  readonly oy: number;
+  /** May it stand on the sword's palette bank as well as his own? */
+  readonly sword: boolean;
 }
 
 /**
@@ -137,7 +160,10 @@ function near(mask: Uint8Array, w: number, h: number, x: number, y: number): boo
  * average eleven source pixels for each of thirteen thousand.
  */
 export class KidHiRes {
-  private readonly source = new Map<number, ImageData>();
+  /** The body alone, 401..619, at the frame's own box. */
+  private readonly body = new Map<number, ImageData>();
+  /** 561..592 with the sword, at an offset from that box. */
+  private readonly armed = new Map<number, Art>();
   private readonly scaled = new Map<string, Scaled>();
   private readonly covers = new Map<string, Uint8Array & { width: number }>();
   /** The bank the sprites were painted for: sixteen RGB triples, 0..255. */
@@ -150,12 +176,32 @@ export class KidHiRes {
 
   /** Is there artwork for this frame yet? */
   has(id: number): boolean {
-    return this.source.has(id);
+    return this.body.has(id);
   }
 
   /** Keep one decoded sprite. The page fetches and decodes them. */
   put(id: number, image: ImageData): void {
-    this.source.set(id, image);
+    this.body.set(id, image);
+  }
+
+  /**
+   * Keep one fighting frame painted with its sword.
+   *
+   * `ox` and `oy` are the artwork's own, in tenths of a game pixel,
+   * measured from the top left of the body frame -- so the blade
+   * reaches out of the box the game blits him in, which is exactly
+   * what the game's own second object does.
+   */
+  putSword(id: number, image: ImageData, ox: number, oy: number): void {
+    this.armed.set(id, { image, ox, oy, sword: true });
+  }
+
+  /** Which painting a frame is drawn from, and where. */
+  private artOf(id: number): Art | null {
+    const armed = this.armed.get(id);
+    if (armed) return armed;
+    const body = this.body.get(id);
+    return body ? { image: body, ox: 0, oy: 0, sword: false } : null;
   }
 
   /**
@@ -176,55 +222,141 @@ export class KidHiRes {
     const w = surface.width;
     const h = surface.height;
     const pitch = w * factor;
+    const half = factor >> 1;
     for (const s of sprites) {
-      const art = this.at(s.id, factor, s.flipped);
-      const cover = this.coverage(s.id, s.flipped);
-      if (!art || !cover) continue;
+      const art = this.artOf(s.id);
+      if (!art) continue;
+      const key = `${s.id}:${art.sword ? 'w' : 'b'}:${s.flipped ? 1 : 0}`;
+      const scaled = this.at(key, art.image, factor, s.flipped);
+      const cover = this.coverage(key, art.image, s.flipped);
+      if (!scaled || !cover) continue;
       const cw = cover.width;
       const ch = cover.length / cw;
+      /**
+       * A flip is about the **body's** box, not the painting's.
+       *
+       * The engine mirrors the sprite inside the box it blits and
+       * works the sword object's own x out from the character's, so
+       * the whole figure turns over about that box. The artwork's
+       * offset was measured facing right, so facing left it is what
+       * is left over on the other side.
+       */
+      const bodyW = this.body.get(s.id)?.width ?? art.image.width;
+      const ox = s.flipped ? bodyW - (art.ox + art.image.width) : art.ox;
+      const x0 = Math.round((s.x + ox / KID_HIRES_SCALE) * factor);
+      const y0 = Math.round((s.y + art.oy / KID_HIRES_SCALE) * factor);
       // What survived: the pixels the artwork is solid over and the
       // game's own blit still owns. Nothing survived means something
       // is drawn over the whole of him and the painting is not his
       // to put back.
       const kept = new Uint8Array(cw * ch);
       let any = false;
-      for (let y = 0; y < ch; y++) {
-        const py = s.y + y;
+      /**
+       * **The blade needs a pixel of slack and the body does not.**
+       *
+       * The game's own sword is a one-pixel diagonal and the painted
+       * one is its own line, so asking each cell of the blade for the
+       * sword's bank under that very pixel throws most of it away:
+       * measured over thirteen fighting frames of `gate2`, 3 of 13
+       * cells of frame 575's blade agreed, and 3 of 31 of 589's. At
+       * **one surface pixel of slack every one of them agrees** --
+       * 41 of 41, 13 of 13, 33 of 33 -- so that is the rule, and it
+       * is given only to the cells the body is not standing on. The
+       * body keeps the exact test, which is what cuts him off at a
+       * pillar's own edge.
+       */
+      const bodyArt = art.sword ? this.body.get(s.id) : undefined;
+      const bodyCover = bodyArt
+        ? this.coverage(`${s.id}:b:${s.flipped ? 1 : 0}`, bodyArt, s.flipped) : null;
+      const bodyShift = Math.round(ox / KID_HIRES_SCALE);
+      const bw = bodyCover ? bodyCover.width : 0;
+      const bh = bodyCover ? bodyCover.length / bw : 0;
+      const mine = (px: number, py: number, slack: number): boolean => {
+        for (let dy = -slack; dy <= slack; dy++) {
+          const qy = py + dy;
+          if (qy < 0 || qy >= h) continue;
+          for (let dx = -slack; dx <= slack; dx++) {
+            const qx = px + dx;
+            if (qx < 0 || qx >= w) continue;
+            const index = surface.pixels[qy * w + qx]!;
+            if (index >= KID_BANK && index < KID_BANK + BANK_SIZE) return true;
+            if (art.sword && index >= SWORD_BANK && index < SWORD_BANK + BANK_SIZE) return true;
+          }
+        }
+        return false;
+      };
+      for (let cy = 0; cy < ch; cy++) {
+        const py = ((y0 + cy * factor + half) / factor) | 0;
         if (py < 0 || py >= h) continue;
-        for (let x = 0; x < cw; x++) {
-          if (!cover[y * cw + x]) continue;
-          const px = s.x + x;
+        for (let cx = 0; cx < cw; cx++) {
+          if (!cover[cy * cw + cx]) continue;
+          const px = ((x0 + cx * factor + half) / factor) | 0;
           if (px < 0 || px >= w) continue;
-          const index = surface.pixels[py * w + px]!;
-          if (index >= KID_BANK && index < KID_BANK + BANK_SIZE) {
-            kept[y * cw + x] = 1;
+          let slack = 0;
+          if (bodyCover) {
+            const bx = cx + bodyShift;
+            const by = cy + Math.round(art.oy / KID_HIRES_SCALE);
+            const onBody = bx >= 0 && by >= 0 && bx < bw && by < bh && bodyCover[by * bw + bx];
+            if (!onBody) slack = 1;
+          }
+          if (mine(px, py, slack)) {
+            kept[cy * cw + cx] = 1;
             any = true;
           }
         }
       }
       if (!any) continue;
       drawn++;
-      for (let sy = 0; sy < art.height; sy++) {
-        const y = s.y * factor + sy;
+      for (let sy = 0; sy < scaled.height; sy++) {
+        const y = y0 + sy;
         if (y < 0 || y >= h * factor) continue;
-        const row = ((y / factor) | 0) - s.y;
-        for (let sx = 0; sx < art.width; sx++) {
-          const x = s.x * factor + sx;
+        const cy = (sy / factor) | 0;
+        for (let sx = 0; sx < scaled.width; sx++) {
+          const x = x0 + sx;
           if (x < 0 || x >= pitch) continue;
-          const col = ((x / factor) | 0) - s.x;
-          if (row < 0 || row >= ch || col < 0 || col >= cw) continue;
-          if (cover[row * cw + col]) {
+          const cx = (sx / factor) | 0;
+          if (cy >= ch || cx >= cw) continue;
+          if (cover[cy * cw + cx]) {
             // Solid: his if and only if the surface still says so.
-            if (!kept[row * cw + col]) continue;
-          } else if (!near(kept, cw, ch, col, row)) {
+            if (!kept[cy * cw + cx]) continue;
+          } else if (!near(kept, cw, ch, cx, cy)) {
             // Soft: only beside a pixel of his that survived.
             continue;
           }
-          const a = art.rgba[(sy * art.width + sx) * 4 + 3]! / 255;
+          let at = (sy * scaled.width + sx) * 4;
+          let a = scaled.rgba[at + 3]! / 255;
+          /**
+           * **The painting covers the game's own sword.**
+           *
+           * The blade the engine blits is two pixels of cream and
+           * the painted one is a thinner line of steel, so the old
+           * one showed as a pale fringe along the new one -- about
+           * seventeen game pixels of it on frame 584. A pixel the
+           * game drew the **sword** on, inside the painting's own
+           * box and off the body, is the painting's to cover: it
+           * takes the nearest ink within one surface pixel, which
+           * at that distance is the blade and nothing else.
+           */
+          if (a < 0.5 && art.sword && !cover[cy * cw + cx]) {
+            const idx = surface.pixels[((y / factor) | 0) * w + ((x / factor) | 0)]!;
+            if (idx >= SWORD_BANK && idx < SWORD_BANK + BANK_SIZE) {
+              let best = -1;
+              let far = factor + 1;
+              for (let ny = Math.max(0, sy - factor); ny <= Math.min(scaled.height - 1, sy + factor); ny++) {
+                for (let nx = Math.max(0, sx - factor); nx <= Math.min(scaled.width - 1, sx + factor); nx++) {
+                  const o = (ny * scaled.width + nx) * 4;
+                  if (scaled.rgba[o + 3]! < 128) continue;
+                  const dd = Math.abs(ny - sy) + Math.abs(nx - sx);
+                  if (dd < far) { far = dd; best = o; }
+                }
+              }
+              if (best >= 0) { at = best; a = 1; }
+            }
+          }
           if (a <= 0.004) continue;
           const d = (y * pitch + x) * 4;
           for (let c = 0; c < 3; c++) {
-            const paint = art.rgba[(sy * art.width + sx) * 4 + c]! * fade;
+            const paint = scaled.rgba[at + c]! * fade;
             rgba[d + c] = paint * a + rgba[d + c]! * (1 - a);
           }
         }
@@ -234,20 +366,19 @@ export class KidHiRes {
   }
 
   /**
-   * Where the sprite is solid, at the surface's own resolution.
+   * Where the sprite is solid, at the game's own resolution.
    *
-   * One byte a surface pixel: 1 where the artwork is mostly opaque
-   * over that whole pixel, which is where the game's own blit must
-   * have written something, and 0 at the soft edge and outside. It is
-   * the half of the mask that says "a pixel of his belongs here", and
+   * One byte a game pixel: 1 where the artwork is mostly opaque over
+   * that whole pixel, which is where the game's own blit must have
+   * written something, and 0 at the soft edge and outside. It is the
+   * half of the mask that says "a pixel of his belongs here", and
    * `draw` only asks who owns a surface pixel where this says so.
    */
-  private coverage(id: number, flipped: boolean): (Uint8Array & { width: number }) | null {
-    const key = `${id}:${flipped ? 1 : 0}`;
+  private coverage(
+    key: string, src: ImageData, flipped: boolean,
+  ): (Uint8Array & { width: number }) | null {
     const had = this.covers.get(key);
     if (had) return had;
-    const src = this.source.get(id);
-    if (!src) return null;
     const w = Math.round(src.width / KID_HIRES_SCALE);
     const h = Math.round(src.height / KID_HIRES_SCALE);
     const out = Object.assign(new Uint8Array(w * h), { width: w });
@@ -270,12 +401,10 @@ export class KidHiRes {
   }
 
   /** One sprite at one factor, scaled and flipped on first use. */
-  private at(id: number, factor: number, flipped: boolean): Scaled | null {
-    const key = `${id}:${factor}:${flipped ? 1 : 0}`;
-    const had = this.scaled.get(key);
+  private at(key: string, src: ImageData, factor: number, flipped: boolean): Scaled | null {
+    const at = `${key}:${factor}`;
+    const had = this.scaled.get(at);
     if (had) return had;
-    const src = this.source.get(id);
-    if (!src) return null;
     const w = Math.round((src.width / KID_HIRES_SCALE) * factor);
     const h = Math.round((src.height / KID_HIRES_SCALE) * factor);
     const out = new Uint8ClampedArray(w * h * 4);
@@ -308,7 +437,7 @@ export class KidHiRes {
       }
     }
     const made: Scaled = { width: w, height: h, rgba: out };
-    this.scaled.set(key, made);
+    this.scaled.set(at, made);
     return made;
   }
 }

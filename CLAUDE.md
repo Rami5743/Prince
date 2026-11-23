@@ -1,5 +1,82 @@
 # Read this first
 
+## THE SWORD IS PAINTED TOO, AND A ONE-PIXEL BLADE NEEDS A PIXEL OF SLACK
+
+    measured   32260 of 33047   98%   (unmoved)
+    scenes      2442 of  2601   94%   (unmoved)
+    sounds       493 of   494         (unmoved)
+    npm test     946 -> 949
+
+    graphics/kid-10x/         219 frames, 43 of them repainted again
+    graphics/kid-sword-10x/    32 frames, 561..592, with the sword
+                               in them, and `offsets.json`
+
+The `gpt` branch had eleven more commits. Two things came over: **43
+of the 219 were painted again** -- the turn poses 472 and 473, the
+reaching hands of 513 and 514, the whole climb 550 to 555, the
+drinking frames 593 to 607, 611's loose pixels -- and a **new set**,
+the fighting frames painted with the sword in them.
+
+### 1. The sword is the engine's second object, so the painting has an offset
+
+The Prince's blade is not part of his frame: `add_objtable` puts it
+on the screen as its own sprite out of `PRINCE.DAT` group 700, at a
+position the engine works out from his. So the artwork for 561 to
+592 is **wider and taller than the body's own box** and
+`offsets.json` says by how much, in the artwork's own tenths of a
+game pixel -- `-247, -1` for 565, whose blade reaches twenty-four
+pixels out to the side.
+
+`KidHiRes` takes those as a second painting per frame and places it
+at `round((x + ox/10) * factor)`, so the offset is kept to the
+display's pixel and not rounded to the game's. **A flip is about the
+body's box, not the painting's**: the engine mirrors the sprite
+inside the box it blits and computes the sword object's own x from
+the character's, so the whole figure turns over about that box and
+the offset becomes `bodyWidth - (ox + paintingWidth)`. Checked on the
+screen, left-facing and right-facing, in a real fight on level 2.
+
+### 2. Measured: the exact mask keeps a quarter of the blade
+
+The mask asks "is this surface pixel still his?". For the body that
+is right and it is what cuts him off at a pillar's edge. For the
+**blade** it is far too strict, because the engine's sword is a
+one-pixel diagonal and the painted one is its own line a pixel off.
+Over thirteen fighting frames of `gate2`, cells of the painting that
+are solid and are **not** on the body:
+
+    frame    575    576    577    578    580    584    589    582
+    exact   3/13   5/10  19/33  16/34    2/9  14/26   3/31  35/41
+    slack 1 13/13  10/10  33/33  30/34    9/9  26/26  31/31  41/41
+
+So the sword-only cells get **one surface pixel of slack** and the
+body keeps the exact test. The slack is given by where the body's
+own painting is solid, which `KidHiRes` already computes for the
+mask -- so it is the artwork that decides which half of the picture
+is the blade, not a rectangle.
+
+### 3. And the painting covers the game's own sword
+
+That is still not enough to look at. The engine's blade is two
+pixels of cream and the painted one is a thinner line of steel, so
+the old one showed as a **pale fringe along the new one** -- about
+seventeen game pixels of it on frame 584, screenshotted.
+
+A pixel the engine drew the **sword** on, inside the painting's own
+box and off the body, is the painting's to cover: it takes the
+nearest ink within one surface pixel, which at that distance is the
+blade and nothing else. With that the blade is clean steel end to
+end, and the only pale sword left on the screen is the **guard's**,
+which is nobody's painting yet.
+
+### 4. What it does not touch
+
+`onKidSprite` is still the only seam and `src/pop` still knows
+nothing, so the three scores are unmoved run for run. At
+`quality: original` the page asks for none of it -- 219 body frames
+and 32 sword frames at `high`, 0 and 0 at `original`, measured in
+Chromium and pinned in `tests/browser/kid-hires.test.ts`.
+
 ## THE PRINCE IS PAINTED AT `quality: high`, AND THE GHOST WAS THE SOFT EDGE
 
     measured   32260 of 33047   98%   (unmoved)

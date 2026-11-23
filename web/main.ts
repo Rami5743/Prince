@@ -32,7 +32,7 @@ import {
 } from '../src/dat/potion-level.ts';
 import { levelsDatWithFourD } from '../src/dat/fourd-level.ts';
 import { GameText } from '../src/render/text.ts';
-import { KidHiRes, KID_HIRES_DIR, KID_FIRST_SPRITE, KID_SPRITE_COUNT,
+import { KidHiRes, KID_HIRES_DIR, KID_SWORD_DIR, KID_FIRST_SPRITE, KID_SPRITE_COUNT,
   type KidSprite } from '../src/render/kid-hires.ts';
 import { readFont } from '../src/render/font.ts';
 import { SettingsStore } from './settings.ts';
@@ -195,23 +195,39 @@ async function boot(): Promise<void> {
   const kidArt = new KidHiRes();
   const kidAsked = new Set<number>();
   let kidDrawn: KidSprite[] = [];
-  const kidDir = `${DATA_URL.replace(/original\/prince1$/, '')}${KID_HIRES_DIR}`;
+  const root = DATA_URL.replace(/original\/prince1$/, '');
+  const kidDir = `${root}${KID_HIRES_DIR}`;
+  const swordDir = `${root}${KID_SWORD_DIR}`;
+  /** The sword frames' own offsets, in tenths of a game pixel. */
+  let swordAt: Record<string, [number, number]> = {};
+  const decode = async (url: string): Promise<ImageData | null> => {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const bmp = await createImageBitmap(await res.blob());
+    const c = new OffscreenCanvas(bmp.width, bmp.height);
+    const cx = c.getContext('2d');
+    if (!cx) return null;
+    cx.drawImage(bmp, 0, 0);
+    return cx.getImageData(0, 0, bmp.width, bmp.height);
+  };
   const fetchKid = async (id: number): Promise<void> => {
     if (kidAsked.has(id)) return;
     kidAsked.add(id);
-    {
-      try {
-        const res = await fetch(`${kidDir}/${String(id).padStart(4, '0')}.png`);
-        if (!res.ok) return;
-        const bmp = await createImageBitmap(await res.blob());
-        const c = new OffscreenCanvas(bmp.width, bmp.height);
-        const cx = c.getContext('2d');
-        if (!cx) return;
-        cx.drawImage(bmp, 0, 0);
-        kidArt.put(id, cx.getImageData(0, 0, bmp.width, bmp.height));
-      } catch {
-        // No artwork for this frame: the original's pixels stand.
+    const name = String(id).padStart(4, '0');
+    try {
+      const body = await decode(`${kidDir}/${name}.png`);
+      if (body) kidArt.put(id, body);
+      // 561..592 are painted a second time with the sword in them,
+      // at an offset of their own: the blade reaches out of the box
+      // the game blits him in, which is what its own second object
+      // does.
+      const at = swordAt[String(id)];
+      if (at) {
+        const armed = await decode(`${swordDir}/${name}.png`);
+        if (armed) kidArt.putSword(id, armed, at[0], at[1]);
       }
+    } catch {
+      // No artwork for this frame: the original's pixels stand.
     }
   };
   /** Read all 219 in behind the play, eight at a time. */
@@ -225,7 +241,17 @@ async function boot(): Promise<void> {
     const pump = async (): Promise<void> => {
       while (next < ids.length) await fetchKid(ids[next++]!);
     };
-    for (let lane = 0; lane < 8; lane++) void pump();
+    void (async (): Promise<void> => {
+      // The offsets first: a frame fetched without them would be
+      // kept as a body alone and never asked for again.
+      try {
+        const res = await fetch(`${swordDir}/offsets.json`);
+        if (res.ok) swordAt = (await res.json()) as Record<string, [number, number]>;
+      } catch {
+        // No offsets: the fighting frames keep the original's sword.
+      }
+      for (let lane = 0; lane < 8; lane++) void pump();
+    })();
   };
   const onKidSprite = (id: number, x: number, y: number, flipped: boolean): void => {
     if (settings.get('quality') !== 'high') return;

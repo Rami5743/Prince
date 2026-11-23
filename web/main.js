@@ -639,10 +639,12 @@ var Surface = class {
 
 // src/render/kid-hires.ts
 var KID_BANK = 112;
+var SWORD_BANK = 32;
 var BANK_SIZE = 16;
 var KID_FIRST_SPRITE = 401;
 var KID_SPRITE_COUNT = 219;
 var KID_HIRES_DIR = "graphics/kid-10x";
+var KID_SWORD_DIR = "graphics/kid-sword-10x";
 var KID_HIRES_SCALE = 10;
 function fadeOf(live, base) {
   let top = 0;
@@ -668,7 +670,10 @@ function near(mask, w, h, x, y) {
   return false;
 }
 var KidHiRes = class {
-  source = /* @__PURE__ */ new Map();
+  /** The body alone, 401..619, at the frame's own box. */
+  body = /* @__PURE__ */ new Map();
+  /** 561..592 with the sword, at an offset from that box. */
+  armed = /* @__PURE__ */ new Map();
   scaled = /* @__PURE__ */ new Map();
   covers = /* @__PURE__ */ new Map();
   /** The bank the sprites were painted for: sixteen RGB triples, 0..255. */
@@ -679,11 +684,29 @@ var KidHiRes = class {
   }
   /** Is there artwork for this frame yet? */
   has(id) {
-    return this.source.has(id);
+    return this.body.has(id);
   }
   /** Keep one decoded sprite. The page fetches and decodes them. */
   put(id, image) {
-    this.source.set(id, image);
+    this.body.set(id, image);
+  }
+  /**
+   * Keep one fighting frame painted with its sword.
+   *
+   * `ox` and `oy` are the artwork's own, in tenths of a game pixel,
+   * measured from the top left of the body frame -- so the blade
+   * reaches out of the box the game blits him in, which is exactly
+   * what the game's own second object does.
+   */
+  putSword(id, image, ox, oy) {
+    this.armed.set(id, { image, ox, oy, sword: true });
+  }
+  /** Which painting a frame is drawn from, and where. */
+  artOf(id) {
+    const armed = this.armed.get(id);
+    if (armed) return armed;
+    const body = this.body.get(id);
+    return body ? { image: body, ox: 0, oy: 0, sword: false } : null;
   }
   /**
    * Draw every sprite the game drew into the composed frame.
@@ -697,49 +720,105 @@ var KidHiRes = class {
     const w = surface.width;
     const h = surface.height;
     const pitch = w * factor;
+    const half = factor >> 1;
     for (const s of sprites) {
-      const art = this.at(s.id, factor, s.flipped);
-      const cover = this.coverage(s.id, s.flipped);
-      if (!art || !cover) continue;
+      const art = this.artOf(s.id);
+      if (!art) continue;
+      const key = `${s.id}:${art.sword ? "w" : "b"}:${s.flipped ? 1 : 0}`;
+      const scaled = this.at(key, art.image, factor, s.flipped);
+      const cover = this.coverage(key, art.image, s.flipped);
+      if (!scaled || !cover) continue;
       const cw = cover.width;
       const ch = cover.length / cw;
+      const bodyW = this.body.get(s.id)?.width ?? art.image.width;
+      const ox = s.flipped ? bodyW - (art.ox + art.image.width) : art.ox;
+      const x0 = Math.round((s.x + ox / KID_HIRES_SCALE) * factor);
+      const y0 = Math.round((s.y + art.oy / KID_HIRES_SCALE) * factor);
       const kept = new Uint8Array(cw * ch);
       let any = false;
-      for (let y = 0; y < ch; y++) {
-        const py = s.y + y;
+      const bodyArt = art.sword ? this.body.get(s.id) : void 0;
+      const bodyCover = bodyArt ? this.coverage(`${s.id}:b:${s.flipped ? 1 : 0}`, bodyArt, s.flipped) : null;
+      const bodyShift = Math.round(ox / KID_HIRES_SCALE);
+      const bw = bodyCover ? bodyCover.width : 0;
+      const bh = bodyCover ? bodyCover.length / bw : 0;
+      const mine = (px, py, slack) => {
+        for (let dy = -slack; dy <= slack; dy++) {
+          const qy = py + dy;
+          if (qy < 0 || qy >= h) continue;
+          for (let dx = -slack; dx <= slack; dx++) {
+            const qx = px + dx;
+            if (qx < 0 || qx >= w) continue;
+            const index = surface.pixels[qy * w + qx];
+            if (index >= KID_BANK && index < KID_BANK + BANK_SIZE) return true;
+            if (art.sword && index >= SWORD_BANK && index < SWORD_BANK + BANK_SIZE) return true;
+          }
+        }
+        return false;
+      };
+      for (let cy = 0; cy < ch; cy++) {
+        const py = (y0 + cy * factor + half) / factor | 0;
         if (py < 0 || py >= h) continue;
-        for (let x = 0; x < cw; x++) {
-          if (!cover[y * cw + x]) continue;
-          const px = s.x + x;
+        for (let cx = 0; cx < cw; cx++) {
+          if (!cover[cy * cw + cx]) continue;
+          const px = (x0 + cx * factor + half) / factor | 0;
           if (px < 0 || px >= w) continue;
-          const index = surface.pixels[py * w + px];
-          if (index >= KID_BANK && index < KID_BANK + BANK_SIZE) {
-            kept[y * cw + x] = 1;
+          let slack = 0;
+          if (bodyCover) {
+            const bx = cx + bodyShift;
+            const by = cy + Math.round(art.oy / KID_HIRES_SCALE);
+            const onBody = bx >= 0 && by >= 0 && bx < bw && by < bh && bodyCover[by * bw + bx];
+            if (!onBody) slack = 1;
+          }
+          if (mine(px, py, slack)) {
+            kept[cy * cw + cx] = 1;
             any = true;
           }
         }
       }
       if (!any) continue;
       drawn++;
-      for (let sy = 0; sy < art.height; sy++) {
-        const y = s.y * factor + sy;
+      for (let sy = 0; sy < scaled.height; sy++) {
+        const y = y0 + sy;
         if (y < 0 || y >= h * factor) continue;
-        const row = (y / factor | 0) - s.y;
-        for (let sx = 0; sx < art.width; sx++) {
-          const x = s.x * factor + sx;
+        const cy = sy / factor | 0;
+        for (let sx = 0; sx < scaled.width; sx++) {
+          const x = x0 + sx;
           if (x < 0 || x >= pitch) continue;
-          const col = (x / factor | 0) - s.x;
-          if (row < 0 || row >= ch || col < 0 || col >= cw) continue;
-          if (cover[row * cw + col]) {
-            if (!kept[row * cw + col]) continue;
-          } else if (!near(kept, cw, ch, col, row)) {
+          const cx = sx / factor | 0;
+          if (cy >= ch || cx >= cw) continue;
+          if (cover[cy * cw + cx]) {
+            if (!kept[cy * cw + cx]) continue;
+          } else if (!near(kept, cw, ch, cx, cy)) {
             continue;
           }
-          const a = art.rgba[(sy * art.width + sx) * 4 + 3] / 255;
+          let at = (sy * scaled.width + sx) * 4;
+          let a = scaled.rgba[at + 3] / 255;
+          if (a < 0.5 && art.sword && !cover[cy * cw + cx]) {
+            const idx = surface.pixels[(y / factor | 0) * w + (x / factor | 0)];
+            if (idx >= SWORD_BANK && idx < SWORD_BANK + BANK_SIZE) {
+              let best = -1;
+              let far = factor + 1;
+              for (let ny = Math.max(0, sy - factor); ny <= Math.min(scaled.height - 1, sy + factor); ny++) {
+                for (let nx = Math.max(0, sx - factor); nx <= Math.min(scaled.width - 1, sx + factor); nx++) {
+                  const o = (ny * scaled.width + nx) * 4;
+                  if (scaled.rgba[o + 3] < 128) continue;
+                  const dd = Math.abs(ny - sy) + Math.abs(nx - sx);
+                  if (dd < far) {
+                    far = dd;
+                    best = o;
+                  }
+                }
+              }
+              if (best >= 0) {
+                at = best;
+                a = 1;
+              }
+            }
+          }
           if (a <= 4e-3) continue;
           const d = (y * pitch + x) * 4;
           for (let c = 0; c < 3; c++) {
-            const paint2 = art.rgba[(sy * art.width + sx) * 4 + c] * fade;
+            const paint2 = scaled.rgba[at + c] * fade;
             rgba[d + c] = paint2 * a + rgba[d + c] * (1 - a);
           }
         }
@@ -748,20 +827,17 @@ var KidHiRes = class {
     return drawn;
   }
   /**
-   * Where the sprite is solid, at the surface's own resolution.
+   * Where the sprite is solid, at the game's own resolution.
    *
-   * One byte a surface pixel: 1 where the artwork is mostly opaque
-   * over that whole pixel, which is where the game's own blit must
-   * have written something, and 0 at the soft edge and outside. It is
-   * the half of the mask that says "a pixel of his belongs here", and
+   * One byte a game pixel: 1 where the artwork is mostly opaque over
+   * that whole pixel, which is where the game's own blit must have
+   * written something, and 0 at the soft edge and outside. It is the
+   * half of the mask that says "a pixel of his belongs here", and
    * `draw` only asks who owns a surface pixel where this says so.
    */
-  coverage(id, flipped) {
-    const key = `${id}:${flipped ? 1 : 0}`;
+  coverage(key, src, flipped) {
     const had = this.covers.get(key);
     if (had) return had;
-    const src = this.source.get(id);
-    if (!src) return null;
     const w = Math.round(src.width / KID_HIRES_SCALE);
     const h = Math.round(src.height / KID_HIRES_SCALE);
     const out2 = Object.assign(new Uint8Array(w * h), { width: w });
@@ -783,12 +859,10 @@ var KidHiRes = class {
     return out2;
   }
   /** One sprite at one factor, scaled and flipped on first use. */
-  at(id, factor, flipped) {
-    const key = `${id}:${factor}:${flipped ? 1 : 0}`;
-    const had = this.scaled.get(key);
+  at(key, src, factor, flipped) {
+    const at = `${key}:${factor}`;
+    const had = this.scaled.get(at);
     if (had) return had;
-    const src = this.source.get(id);
-    if (!src) return null;
     const w = Math.round(src.width / KID_HIRES_SCALE * factor);
     const h = Math.round(src.height / KID_HIRES_SCALE * factor);
     const out2 = new Uint8ClampedArray(w * h * 4);
@@ -823,7 +897,7 @@ var KidHiRes = class {
       }
     }
     const made = { width: w, height: h, rgba: out2 };
-    this.scaled.set(key, made);
+    this.scaled.set(at, made);
     return made;
   }
 };
@@ -16186,22 +16260,33 @@ async function boot() {
   const kidArt = new KidHiRes();
   const kidAsked = /* @__PURE__ */ new Set();
   let kidDrawn = [];
-  const kidDir = `${DATA_URL.replace(/original\/prince1$/, "")}${KID_HIRES_DIR}`;
+  const root = DATA_URL.replace(/original\/prince1$/, "");
+  const kidDir = `${root}${KID_HIRES_DIR}`;
+  const swordDir = `${root}${KID_SWORD_DIR}`;
+  let swordAt = {};
+  const decode = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const bmp = await createImageBitmap(await res.blob());
+    const c = new OffscreenCanvas(bmp.width, bmp.height);
+    const cx = c.getContext("2d");
+    if (!cx) return null;
+    cx.drawImage(bmp, 0, 0);
+    return cx.getImageData(0, 0, bmp.width, bmp.height);
+  };
   const fetchKid = async (id) => {
     if (kidAsked.has(id)) return;
     kidAsked.add(id);
-    {
-      try {
-        const res = await fetch(`${kidDir}/${String(id).padStart(4, "0")}.png`);
-        if (!res.ok) return;
-        const bmp = await createImageBitmap(await res.blob());
-        const c = new OffscreenCanvas(bmp.width, bmp.height);
-        const cx = c.getContext("2d");
-        if (!cx) return;
-        cx.drawImage(bmp, 0, 0);
-        kidArt.put(id, cx.getImageData(0, 0, bmp.width, bmp.height));
-      } catch {
+    const name = String(id).padStart(4, "0");
+    try {
+      const body = await decode(`${kidDir}/${name}.png`);
+      if (body) kidArt.put(id, body);
+      const at = swordAt[String(id)];
+      if (at) {
+        const armed = await decode(`${swordDir}/${name}.png`);
+        if (armed) kidArt.putSword(id, armed, at[0], at[1]);
       }
+    } catch {
     }
   };
   let kidPrefetched = false;
@@ -16214,7 +16299,14 @@ async function boot() {
     const pump = async () => {
       while (next < ids.length) await fetchKid(ids[next++]);
     };
-    for (let lane = 0; lane < 8; lane++) void pump();
+    void (async () => {
+      try {
+        const res = await fetch(`${swordDir}/offsets.json`);
+        if (res.ok) swordAt = await res.json();
+      } catch {
+      }
+      for (let lane = 0; lane < 8; lane++) void pump();
+    })();
   };
   const onKidSprite = (id, x, y, flipped) => {
     if (settings.get("quality") !== "high") return;
