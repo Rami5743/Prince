@@ -18,10 +18,13 @@ const dataSource = `<script type="module">
 
 const shell = readFileSync('web/artifact.html', 'utf8');
 
-/** The skeleton an artifact host adds, which Pages does not. */
+/** The skeleton an artifact host adds, which Pages does not -- and, on
+ *  Pages only, the shared visit counter of rami5743.github.io (an artifact
+ *  host would refuse its script anyway). */
 const wrap = (body) => body
   .replace(/^/, '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
-    + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n')
+    + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+    + '<script async src="https://rami5743.github.io/count.js"></script>\n')
   .replace('<aside class="margin" id="margin-title">',
            '</head>\n<body>\n<aside class="margin" id="margin-title">')
   + '\n</body>\n</html>\n';
